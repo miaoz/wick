@@ -1,6 +1,6 @@
-# CandleMenuBar
+# Wick
 
-一个原生的 macOS 菜单栏应用：在系统菜单栏显示 `🕯️` 图标，点击后弹出一个下拉面板，展示日、周、月、年剩余时间百分比。
+`Wick` 是一个原生的 macOS 菜单栏应用：在系统菜单栏显示 `🕯️` 图标，点击后弹出一个下拉面板，展示日、周、月、年剩余时间百分比。
 
 ## 功能
 
@@ -14,14 +14,14 @@
 ## 默认构建
 
 ```bash
-cd /Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/CandleMenuBar
+cd /Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/Wick
 ./build.sh
 ```
 
 或者直接：
 
 ```bash
-cd /Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/CandleMenuBar
+cd /Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/Wick
 make
 ```
 
@@ -32,14 +32,14 @@ make
 ## 导出 zip 安装包
 
 ```bash
-cd /Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/CandleMenuBar
+cd /Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/Wick
 ./scripts/package_zip.sh
 ```
 
 或者直接：
 
 ```bash
-cd /Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/CandleMenuBar
+cd /Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/Wick
 make package
 ```
 
@@ -48,39 +48,39 @@ make package
 zip 输出位置：
 
 ```bash
-/Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/CandleMenuBar/dist/CandleMenuBar-macOS.zip
+/Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/Wick/dist/Wick-macOS.zip
 ```
 
 ## 开发运行
 
 ```bash
-cd /Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/CandleMenuBar
+cd /Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/Wick
 swift run
 ```
 
 ## 生成图标
 
 ```bash
-cd /Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/CandleMenuBar
+cd /Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/Wick
 ./scripts/generate_icon_assets.sh
 ```
 
 图标输出位置：
 
 ```bash
-/Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/CandleMenuBar/assets/AppIcon-master.png
-/Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/CandleMenuBar/assets/AppIcon.icns
+/Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/Wick/assets/AppIcon-master.png
+/Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/Wick/assets/AppIcon.icns
 ```
 
 ## 打包成通用 `.app`
 
 ```bash
-cd /Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/CandleMenuBar
+cd /Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/Wick
 ./scripts/package_app.sh
 ```
 
 生成的应用位于：
 
 ```bash
-/Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/CandleMenuBar/dist/CandleMenuBar.app
+/Users/miaoz/Library/CloudStorage/Dropbox/dev/workspace/Wick/dist/Wick.app
 ```

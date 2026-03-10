@@ -2,11 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="CandleMenuBar"
-BUNDLE_ID="com.miaoz.CandleMenuBar"
+APP_NAME="Wick"
+LEGACY_APP_NAME="CandleMenuBar"
+BUNDLE_ID="com.miaoz.wick"
 MIN_SYSTEM_VERSION="13.0"
 DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/$APP_NAME.app"
+LEGACY_APP_DIR="$DIST_DIR/$LEGACY_APP_NAME.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
@@ -18,7 +20,7 @@ UNIVERSAL_DIR="$ROOT_DIR/.build/universal/release"
 UNIVERSAL_BIN="$UNIVERSAL_DIR/$APP_NAME"
 
 mkdir -p "$DIST_DIR"
-rm -rf "$APP_DIR"
+rm -rf "$APP_DIR" "$LEGACY_APP_DIR"
 mkdir -p "$UNIVERSAL_DIR"
 
 "$ROOT_DIR/scripts/generate_icon_assets.sh"

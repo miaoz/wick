@@ -162,7 +162,7 @@ private struct MetricProgressCard: View {
                     .foregroundStyle(panelTheme.primaryText)
             }
 
-            CandleProgressBar(value: item.fractionRemaining, theme: theme)
+            WickProgressBar(value: item.fractionRemaining, theme: theme)
                 .frame(height: 12)
 
             HStack {
@@ -204,7 +204,7 @@ private struct MetricProgressCard: View {
     }
 }
 
-private struct CandleProgressBar: View {
+private struct WickProgressBar: View {
     let value: Double
     let theme: MetricTheme
 

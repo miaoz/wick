@@ -2,19 +2,19 @@
 import PackageDescription
 
 let package = Package(
-    name: "CandleMenuBar",
+    name: "Wick",
     platforms: [
         .macOS(.v13)
     ],
     products: [
         .executable(
-            name: "CandleMenuBar",
-            targets: ["CandleMenuBar"]
+            name: "Wick",
+            targets: ["Wick"]
         )
     ],
     targets: [
         .executableTarget(
-            name: "CandleMenuBar"
+            name: "Wick"
         )
     ]
 )
