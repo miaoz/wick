@@ -65,12 +65,12 @@ struct JournalRootView: View {
 
     private var singleColumnLayout: some View {
         NavigationStack {
-            if store.selectedEntry != nil {
+            if store.selection != nil {
                 JournalEditorPane()
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button {
-                                store.selectEntry(id: nil)
+                                store.selection = nil
                             } label: {
                                 Label(
                                     L10n.string(.back, language: settings.language),
@@ -97,9 +97,16 @@ private struct JournalTimelineSidebar: View {
         VStack(spacing: 0) {
             filterBar
             Divider()
-            listContent
+            if store.isItemScoped {
+                itemScopedList
+            } else {
+                dayScopedList
+            }
         }
         .background(JournalChrome.sidebarBackground(for: colorScheme))
+        .onChange(of: store.searchText) { _ in
+            store.handleFilterChange()
+        }
     }
 
     private var filterBar: some View {
@@ -115,7 +122,7 @@ private struct JournalTimelineSidebar: View {
 
                 if !store.searchText.isEmpty {
                     Button {
-                        store.searchText = ""
+                        store.clearSearch()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
@@ -152,29 +159,86 @@ private struct JournalTimelineSidebar: View {
                     }
                 }
             }
+
+            if store.isItemScoped {
+                Text(L10n.string(.journalItemScopeHint, language: settings.language))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
         }
         .padding(12)
     }
 
-    private var listContent: some View {
+    private var dayScopedList: some View {
         Group {
             if store.filteredEntries.isEmpty {
                 emptyState
             } else {
                 List(selection: Binding(
-                    get: { store.selectedEntryID },
-                    set: { store.selectEntry(id: $0) }
+                    get: {
+                        if case .day(let id) = store.selection { return id }
+                        return nil
+                    },
+                    set: { store.selectDay($0) }
                 )) {
-                    ForEach(groupedSections, id: \.title) { section in
+                    ForEach(daySections, id: \.title) { section in
                         Section(section.title) {
                             ForEach(section.entries) { entry in
-                                JournalTimelineRow(entry: entry)
+                                JournalDayTimelineRow(entry: entry)
                                     .tag(entry.id)
                                     .contextMenu {
                                         Button(role: .destructive) {
                                             store.deleteEntry(id: entry.id)
                                         } label: {
                                             Text(L10n.string(.journalDelete, language: settings.language))
+                                        }
+                                    }
+                            }
+                        }
+                    }
+                }
+                .listStyle(.sidebar)
+            }
+        }
+    }
+
+    private var itemScopedList: some View {
+        Group {
+            if store.filteredTimelineItems.isEmpty {
+                emptyFilterState
+            } else {
+                List(selection: Binding(
+                    get: {
+                        if case .item(let ref) = store.selection { return ref.id }
+                        return nil
+                    },
+                    set: { newID in
+                        guard let newID,
+                              let row = store.filteredTimelineItems.first(where: { $0.id == newID })
+                        else {
+                            store.selectItem(nil)
+                            return
+                        }
+                        store.selectItem(row.ref)
+                    }
+                )) {
+                    ForEach(itemSections, id: \.title) { section in
+                        Section(section.title) {
+                            ForEach(section.items) { row in
+                                JournalItemTimelineRow(row: row)
+                                    .tag(row.id)
+                                    .contextMenu {
+                                        Button(role: .destructive) {
+                                            store.deleteItem(itemID: row.ref.itemID, from: row.ref.entryID)
+                                        } label: {
+                                            Text(L10n.string(.journalDeleteItem, language: settings.language))
+                                        }
+                                        Button {
+                                            store.selectedTagFilter = nil
+                                            store.searchText = ""
+                                            store.selectDay(row.ref.entryID)
+                                        } label: {
+                                            Text(L10n.string(.journalOpenFullDay, language: settings.language))
                                         }
                                     }
                             }
@@ -211,40 +275,74 @@ private struct JournalTimelineSidebar: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private struct DaySection: Identifiable {
-        var id: String { title }
+    private var emptyFilterState: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 36, weight: .light))
+                .foregroundStyle(.secondary)
+            Text(L10n.string(.journalFilterEmptyTitle, language: settings.language))
+                .font(.headline)
+            Text(L10n.string(.journalFilterEmptySubtitle, language: settings.language))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private struct DaySection {
         let title: String
         let entries: [JournalEntry]
     }
 
-    private var groupedSections: [DaySection] {
+    private struct ItemSection {
+        let title: String
+        let items: [JournalTimelineItem]
+    }
+
+    private var daySections: [DaySection] {
         let calendar = Calendar.current
-        let locale = settings.locale
-        let language = settings.language
-
-        let grouped = Dictionary(grouping: store.filteredEntries) { entry in
-            calendar.startOfDay(for: entry.date)
+        let grouped = Dictionary(grouping: store.filteredEntries) {
+            calendar.startOfDay(for: $0.date)
         }
-
         return grouped.keys.sorted(by: >).map { day in
-            let title: String
-            if calendar.isDateInToday(day) {
-                title = L10n.string(.journalToday, language: language)
-            } else if calendar.isDateInYesterday(day) {
-                title = L10n.string(.journalYesterday, language: language)
-            } else {
-                title = day.formatted(
-                    .dateTime
-                    .year()
-                    .month()
-                    .day()
-                    .weekday(.wide)
-                    .locale(locale)
-                )
-            }
-            let entries = (grouped[day] ?? []).sorted { $0.updatedAt > $1.updatedAt }
-            return DaySection(title: title, entries: entries)
+            DaySection(
+                title: dayTitle(day),
+                entries: (grouped[day] ?? []).sorted { $0.updatedAt > $1.updatedAt }
+            )
         }
+    }
+
+    private var itemSections: [ItemSection] {
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: store.filteredTimelineItems) {
+            calendar.startOfDay(for: $0.date)
+        }
+        return grouped.keys.sorted(by: >).map { day in
+            ItemSection(title: dayTitle(day), items: grouped[day] ?? [])
+        }
+    }
+
+    private func dayTitle(_ day: Date) -> String {
+        let calendar = Calendar.current
+        let language = settings.language
+        if calendar.isDateInToday(day) {
+            return L10n.string(.journalToday, language: language)
+        }
+        if calendar.isDateInYesterday(day) {
+            return L10n.string(.journalYesterday, language: language)
+        }
+        return day.formatted(
+            .dateTime
+            .year()
+            .month()
+            .day()
+            .weekday(.wide)
+            .locale(settings.locale)
+        )
     }
 
     private func tagChip(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
@@ -270,7 +368,7 @@ private struct JournalTimelineSidebar: View {
     }
 }
 
-private struct JournalTimelineRow: View {
+private struct JournalDayTimelineRow: View {
     @EnvironmentObject private var settings: AppSettings
     let entry: JournalEntry
 
@@ -281,8 +379,16 @@ private struct JournalTimelineRow: View {
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .lineLimit(1)
                 Spacer(minLength: 8)
-                if !entry.imageFilenames.isEmpty {
-                    Label("\(entry.imageFilenames.count)", systemImage: "photo")
+                if entry.items.count > 1 {
+                    Text("\(entry.items.count)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.primary.opacity(0.08), in: Capsule())
+                }
+                if !entry.allImageFilenames.isEmpty {
+                    Label("\(entry.allImageFilenames.count)", systemImage: "photo")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .labelStyle(.titleAndIcon)
@@ -296,8 +402,8 @@ private struct JournalTimelineRow: View {
                     .lineLimit(1)
             }
 
-            if !previewBody.isEmpty {
-                Text(previewBody)
+            if !entry.previewBody.isEmpty {
+                Text(entry.previewBody)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -313,18 +419,49 @@ private struct JournalTimelineRow: View {
         }
         return preview
     }
+}
 
-    private var previewBody: String {
-        let body = entry.body.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !title.isEmpty, !body.isEmpty {
-            return body
+private struct JournalItemTimelineRow: View {
+    @EnvironmentObject private var settings: AppSettings
+    let row: JournalTimelineItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(tagTitle)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.accentColor)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if !row.item.imageFilenames.isEmpty {
+                    Label("\(row.item.imageFilenames.count)", systemImage: "photo")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .labelStyle(.titleAndIcon)
+                }
+            }
+
+            if !row.item.previewText.isEmpty {
+                Text(row.item.previewText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            } else if !row.entryTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(row.entryTitle)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
         }
-        if title.isEmpty {
-            // previewText already used body; avoid repeating when no tags either
-            return entry.tags.isEmpty ? "" : body
+        .padding(.vertical, 4)
+    }
+
+    private var tagTitle: String {
+        let tag = row.item.tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        if tag.isEmpty {
+            return L10n.string(.journalUntitledItem, language: settings.language)
         }
-        return body
+        return tag
     }
 }
 
@@ -336,32 +473,52 @@ private struct JournalEditorPane: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var draft = JournalEntry()
-    @State private var tagInput = ""
     @State private var saveTask: Task<Void, Never>?
-    @State private var isImportingImages = false
-    @State private var showDeleteConfirm = false
+    @State private var showDeleteDayConfirm = false
+    @State private var showDeleteItemConfirm = false
+    @State private var imageImportItemID: UUID?
+
+    /// When selection is `.item`, only this item is edited/shown.
+    private var isItemScopedEditor: Bool {
+        if case .item = store.selection { return true }
+        return false
+    }
+
+    private var visibleItemIDs: [UUID] {
+        if case .item(let ref) = store.selection {
+            return [ref.itemID]
+        }
+        return draft.items.map(\.id)
+    }
 
     var body: some View {
         Group {
-            if store.selectedEntry == nil {
+            if store.selection == nil || store.selectedEntry == nil {
                 noSelection
             } else {
                 editor
             }
         }
         .background(JournalChrome.background(for: colorScheme))
-        .onChange(of: store.selectedEntryID) { newID in
-            loadDraft(for: newID)
+        .onChange(of: store.selection) { _ in
+            loadDraft()
         }
         .onAppear {
-            loadDraft(for: store.selectedEntryID)
+            loadDraft()
         }
         .fileImporter(
-            isPresented: $isImportingImages,
+            isPresented: Binding(
+                get: { imageImportItemID != nil },
+                set: { if !$0 { imageImportItemID = nil } }
+            ),
             allowedContentTypes: [.image],
             allowsMultipleSelection: true
         ) { result in
-            guard case .success(let urls) = result, let id = store.selectedEntryID else {
+            guard case .success(let urls) = result,
+                  let entryID = store.selectedEntryID,
+                  let itemID = imageImportItemID
+            else {
+                imageImportItemID = nil
                 return
             }
             for url in urls {
@@ -371,18 +528,33 @@ private struct JournalEditorPane: View {
                         url.stopAccessingSecurityScopedResource()
                     }
                 }
-                _ = store.addImage(from: url, to: id)
+                _ = store.addImage(from: url, to: entryID, itemID: itemID)
             }
-            reloadDraftImages()
+            reloadDraftFromStore()
+            imageImportItemID = nil
         }
         .confirmationDialog(
             L10n.string(.journalDeleteConfirm, language: settings.language),
-            isPresented: $showDeleteConfirm,
+            isPresented: $showDeleteDayConfirm,
             titleVisibility: .visible
         ) {
             Button(L10n.string(.journalDelete, language: settings.language), role: .destructive) {
                 if let id = store.selectedEntryID {
                     store.deleteEntry(id: id)
+                }
+            }
+            Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
+        }
+        .confirmationDialog(
+            L10n.string(.journalDeleteItemConfirm, language: settings.language),
+            isPresented: $showDeleteItemConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.string(.journalDeleteItem, language: settings.language), role: .destructive) {
+                if case .item(let ref) = store.selection {
+                    saveTask?.cancel()
+                    store.updateEntry(draft)
+                    store.deleteItem(itemID: ref.itemID, from: ref.entryID)
                 }
             }
             Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
@@ -411,15 +583,64 @@ private struct JournalEditorPane: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
-                tagsSection
-                bodySection
-                imagesSection
-                footerActions
+
+                ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
+                    JournalItemEditorCard(
+                        index: displayIndex(for: item.id, fallback: index),
+                        item: binding(for: item.id),
+                        canDelete: isItemScopedEditor || draft.items.count > 1,
+                        onDelete: {
+                            if isItemScopedEditor {
+                                showDeleteItemConfirm = true
+                            } else {
+                                deleteItem(id: item.id)
+                            }
+                        },
+                        onPasteImage: {
+                            pasteImage(to: item.id)
+                        },
+                        onPickImage: {
+                            imageImportItemID = item.id
+                        },
+                        onDrop: { providers in
+                            handleDrop(providers, itemID: item.id)
+                        },
+                        onChange: scheduleSave
+                    )
+                }
+
+                if !isItemScopedEditor {
+                    Button {
+                        addItem()
+                    } label: {
+                        Label(
+                            L10n.string(.journalAddItem, language: settings.language),
+                            systemImage: "plus.circle"
+                        )
+                    }
+                    .buttonStyle(.bordered)
+
+                    footerDayActions
+                } else {
+                    footerItemActions
+                }
             }
             .padding(28)
             .frame(maxWidth: 880, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+    }
+
+    private var visibleItems: [JournalItem] {
+        let ids = Set(visibleItemIDs)
+        return draft.items.filter { ids.contains($0.id) }
+    }
+
+    private func displayIndex(for itemID: UUID, fallback: Int) -> Int {
+        if let index = draft.items.firstIndex(where: { $0.id == itemID }) {
+            return index
+        }
+        return fallback
     }
 
     private var header: some View {
@@ -438,209 +659,64 @@ private struct JournalEditorPane: View {
                 )
                 .labelsHidden()
                 .datePickerStyle(.field)
+                .disabled(isItemScopedEditor)
 
                 Spacer()
+
+                if isItemScopedEditor {
+                    Text(L10n.string(.journalItemScopeBadge, language: settings.language))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.accentColor.opacity(0.12), in: Capsule())
+                } else {
+                    Text(
+                        String(
+                            format: L10n.string(.journalItemCountFormat, language: settings.language),
+                            draft.items.count
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
 
                 Text(L10n.string(.journalAutosaved, language: settings.language))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
 
-            TextField(
-                L10n.string(.journalTitlePlaceholder, language: settings.language),
-                text: Binding(
-                    get: { draft.title },
-                    set: { draft.title = $0; scheduleSave() }
-                )
-            )
-            .font(.system(size: 26, weight: .semibold, design: .rounded))
-            .textFieldStyle(.plain)
-        }
-    }
-
-    private var tagsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.string(.journalTags, language: settings.language))
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-                .tracking(0.5)
-
-            HStack(spacing: 8) {
-                TextField(
-                    L10n.string(.journalTagPlaceholder, language: settings.language),
-                    text: $tagInput
-                )
-                .textFieldStyle(.roundedBorder)
-                .onSubmit(addTagFromInput)
-
-                Button(L10n.string(.journalAddTag, language: settings.language)) {
-                    addTagFromInput()
+            if isItemScopedEditor {
+                if !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(draft.title)
+                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
                 }
-                .disabled(tagInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-
-            if !draft.tags.isEmpty {
-                FlowTagLayout(spacing: 6) {
-                    ForEach(draft.tags, id: \.self) { tag in
-                        HStack(spacing: 4) {
-                            Text(tag)
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            Button {
-                                draft.tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
-                                scheduleSave()
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 9, weight: .bold))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.accentColor.opacity(0.12), in: Capsule())
-                        .overlay {
-                            Capsule().strokeBorder(Color.accentColor.opacity(0.28), lineWidth: 1)
-                        }
-                        .foregroundStyle(Color.accentColor)
-                    }
-                }
-            }
-
-            Text(L10n.string(.journalTagHint, language: settings.language))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(JournalChrome.cardFill(for: colorScheme))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(JournalChrome.cardStroke(for: colorScheme), lineWidth: 1)
-        }
-    }
-
-    private var bodySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.string(.journalBody, language: settings.language))
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-                .tracking(0.5)
-
-            TextEditor(
-                text: Binding(
-                    get: { draft.body },
-                    set: { draft.body = $0; scheduleSave() }
-                )
-            )
-            .font(.system(size: 14, weight: .regular, design: .default))
-            .frame(minHeight: 220)
-            .scrollContentBackground(.hidden)
-            .padding(10)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.03))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-            }
-            .overlay(alignment: .topLeading) {
-                if draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(L10n.string(.journalBodyPlaceholder, language: settings.language))
-                        .font(.system(size: 14))
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 18)
-                        .allowsHitTesting(false)
-                }
-            }
-        }
-    }
-
-    private var imagesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(L10n.string(.journalImages, language: settings.language))
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
-
-                Spacer()
-
-                Button {
-                    pasteImage()
-                } label: {
-                    Label(
-                        L10n.string(.journalPasteImage, language: settings.language),
-                        systemImage: "doc.on.clipboard"
-                    )
-                }
-                .help(L10n.string(.journalPasteImageHelp, language: settings.language))
-
-                Button {
-                    isImportingImages = true
-                } label: {
-                    Label(
-                        L10n.string(.journalAddImage, language: settings.language),
-                        systemImage: "photo.badge.plus"
-                    )
-                }
-            }
-
-            if draft.imageFilenames.isEmpty {
-                Text(L10n.string(.journalImagesHint, language: settings.language))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [6, 4]))
-                            .foregroundStyle(Color.primary.opacity(0.15))
-                    )
-                    .onDrop(of: [.image, .fileURL], isTargeted: nil) { providers in
-                        handleDrop(providers)
-                    }
+                Text(L10n.string(.journalItemScopeEditorHint, language: settings.language))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             } else {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 160), spacing: 12)],
-                    spacing: 12
-                ) {
-                    ForEach(draft.imageFilenames, id: \.self) { filename in
-                        JournalImageThumb(
-                            filename: filename,
-                            onDelete: {
-                                guard let id = store.selectedEntryID else { return }
-                                store.removeImage(filename: filename, from: id)
-                                reloadDraftImages()
-                            }
-                        )
-                    }
-                }
-                .onDrop(of: [.image, .fileURL], isTargeted: nil) { providers in
-                    handleDrop(providers)
-                }
+                TextField(
+                    L10n.string(.journalTitlePlaceholder, language: settings.language),
+                    text: Binding(
+                        get: { draft.title },
+                        set: { draft.title = $0; scheduleSave() }
+                    )
+                )
+                .font(.system(size: 26, weight: .semibold, design: .rounded))
+                .textFieldStyle(.plain)
+
+                Text(L10n.string(.journalItemsHint, language: settings.language))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(JournalChrome.cardFill(for: colorScheme))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(JournalChrome.cardStroke(for: colorScheme), lineWidth: 1)
         }
     }
 
-    private var footerActions: some View {
+    private var footerDayActions: some View {
         HStack {
             Button(role: .destructive) {
-                showDeleteConfirm = true
+                showDeleteDayConfirm = true
             } label: {
                 Label(
                     L10n.string(.journalDelete, language: settings.language),
@@ -652,27 +728,76 @@ private struct JournalEditorPane: View {
         .padding(.top, 4)
     }
 
+    private var footerItemActions: some View {
+        HStack {
+            Button {
+                store.openSelectedDayFully()
+            } label: {
+                Label(
+                    L10n.string(.journalOpenFullDay, language: settings.language),
+                    systemImage: "calendar"
+                )
+            }
+            .buttonStyle(.bordered)
+
+            Spacer()
+
+            Button(role: .destructive) {
+                showDeleteItemConfirm = true
+            } label: {
+                Label(
+                    L10n.string(.journalDeleteItem, language: settings.language),
+                    systemImage: "trash"
+                )
+            }
+        }
+        .padding(.top, 4)
+    }
+
     // MARK: - Draft helpers
 
-    private func loadDraft(for id: UUID?) {
+    private func binding(for itemID: UUID) -> Binding<JournalItem> {
+        Binding(
+            get: {
+                draft.items.first(where: { $0.id == itemID }) ?? JournalItem(id: itemID)
+            },
+            set: { newValue in
+                guard let index = draft.items.firstIndex(where: { $0.id == itemID }) else {
+                    return
+                }
+                draft.items[index] = newValue
+            }
+        )
+    }
+
+    private func loadDraft() {
         saveTask?.cancel()
-        guard let id, let entry = store.entries.first(where: { $0.id == id }) else {
+        guard let entryID = store.selectedEntryID,
+              let entry = store.entries.first(where: { $0.id == entryID })
+        else {
             draft = JournalEntry()
-            tagInput = ""
             return
         }
         draft = entry
-        tagInput = ""
     }
 
-    private func reloadDraftImages() {
-        guard let id = store.selectedEntryID,
-              let entry = store.entries.first(where: { $0.id == id })
+    private func reloadDraftFromStore() {
+        guard let entryID = store.selectedEntryID,
+              let entry = store.entries.first(where: { $0.id == entryID })
         else {
             return
         }
-        draft.imageFilenames = entry.imageFilenames
-        draft.updatedAt = entry.updatedAt
+        var merged = entry
+        for index in merged.items.indices {
+            let itemID = merged.items[index].id
+            if let local = draft.items.first(where: { $0.id == itemID }) {
+                merged.items[index].tag = local.tag
+                merged.items[index].body = local.body
+            }
+        }
+        merged.title = draft.title
+        merged.date = draft.date
+        draft = merged
     }
 
     private func scheduleSave() {
@@ -685,33 +810,37 @@ private struct JournalEditorPane: View {
         }
     }
 
-    private func addTagFromInput() {
-        let raw = tagInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return }
-
-        let pieces = raw
-            .split(whereSeparator: { $0 == "," || $0 == " " || $0 == "，" || $0 == ";" })
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        for piece in pieces {
-            if !draft.tags.contains(where: { $0.caseInsensitiveCompare(piece) == .orderedSame }) {
-                draft.tags.append(piece)
-            }
+    private func addItem() {
+        saveTask?.cancel()
+        store.updateEntry(draft)
+        guard let entryID = store.selectedEntryID,
+              let item = store.addItem(to: entryID)
+        else {
+            return
         }
-        tagInput = ""
-        scheduleSave()
+        draft.items.append(item)
+        draft.updatedAt = Date()
     }
 
-    private func pasteImage() {
-        guard let id = store.selectedEntryID else { return }
-        if store.pasteImageFromClipboard(to: id) {
-            reloadDraftImages()
+    private func deleteItem(id: UUID) {
+        saveTask?.cancel()
+        store.updateEntry(draft)
+        guard let entryID = store.selectedEntryID else { return }
+        store.deleteItem(itemID: id, from: entryID)
+        loadDraft()
+    }
+
+    private func pasteImage(to itemID: UUID) {
+        guard let entryID = store.selectedEntryID else { return }
+        saveTask?.cancel()
+        store.updateEntry(draft)
+        if store.pasteImageFromClipboard(to: entryID, itemID: itemID) {
+            reloadDraftFromStore()
         }
     }
 
-    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        guard let id = store.selectedEntryID else { return false }
+    private func handleDrop(_ providers: [NSItemProvider], itemID: UUID) -> Bool {
+        guard let entryID = store.selectedEntryID else { return false }
         var accepted = false
 
         for provider in providers {
@@ -720,8 +849,10 @@ private struct JournalEditorPane: View {
                 provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
                     guard let data else { return }
                     Task { @MainActor in
-                        _ = store.addImage(from: data, to: id, preferredExtension: "png")
-                        reloadDraftImages()
+                        saveTask?.cancel()
+                        store.updateEntry(draft)
+                        _ = store.addImage(from: data, to: entryID, itemID: itemID, preferredExtension: "png")
+                        reloadDraftFromStore()
                     }
                 }
                 continue
@@ -740,14 +871,184 @@ private struct JournalEditorPane: View {
                     }
                     guard let url else { return }
                     Task { @MainActor in
-                        _ = store.addImage(from: url, to: id)
-                        reloadDraftImages()
+                        saveTask?.cancel()
+                        store.updateEntry(draft)
+                        _ = store.addImage(from: url, to: entryID, itemID: itemID)
+                        reloadDraftFromStore()
                     }
                 }
             }
         }
 
         return accepted
+    }
+}
+
+// MARK: - Item card
+
+private struct JournalItemEditorCard: View {
+    @EnvironmentObject private var settings: AppSettings
+    @EnvironmentObject private var store: JournalStore
+    @Environment(\.colorScheme) private var colorScheme
+
+    let index: Int
+    @Binding var item: JournalItem
+    let canDelete: Bool
+    let onDelete: () -> Void
+    let onPasteImage: () -> Void
+    let onPickImage: () -> Void
+    let onDrop: ([NSItemProvider]) -> Bool
+    let onChange: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 10) {
+                Text(
+                    String(
+                        format: L10n.string(.journalItemNumberFormat, language: settings.language),
+                        index + 1
+                    )
+                )
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.4)
+
+                Spacer()
+
+                if canDelete {
+                    Button(role: .destructive, action: onDelete) {
+                        Label(
+                            L10n.string(.journalDeleteItem, language: settings.language),
+                            systemImage: "minus.circle"
+                        )
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L10n.string(.journalItemTag, language: settings.language))
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+
+                TextField(
+                    L10n.string(.journalItemTagPlaceholder, language: settings.language),
+                    text: Binding(
+                        get: { item.tag },
+                        set: { item.tag = $0; onChange() }
+                    )
+                )
+                .textFieldStyle(.roundedBorder)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L10n.string(.journalBody, language: settings.language))
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+
+                TextEditor(
+                    text: Binding(
+                        get: { item.body },
+                        set: { item.body = $0; onChange() }
+                    )
+                )
+                .font(.system(size: 14))
+                .frame(minHeight: 120)
+                .scrollContentBackground(.hidden)
+                .padding(10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.03))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+                .overlay(alignment: .topLeading) {
+                    if item.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(L10n.string(.journalBodyPlaceholder, language: settings.language))
+                            .font(.system(size: 14))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                            .allowsHitTesting(false)
+                    }
+                }
+            }
+
+            imagesSection
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(JournalChrome.cardFill(for: colorScheme))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(JournalChrome.cardStroke(for: colorScheme), lineWidth: 1)
+        }
+    }
+
+    private var imagesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(L10n.string(.journalImages, language: settings.language))
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+
+                Spacer()
+
+                Button(action: onPasteImage) {
+                    Label(
+                        L10n.string(.journalPasteImage, language: settings.language),
+                        systemImage: "doc.on.clipboard"
+                    )
+                }
+                .help(L10n.string(.journalPasteImageHelp, language: settings.language))
+
+                Button(action: onPickImage) {
+                    Label(
+                        L10n.string(.journalAddImage, language: settings.language),
+                        systemImage: "photo.badge.plus"
+                    )
+                }
+            }
+
+            if item.imageFilenames.isEmpty {
+                Text(L10n.string(.journalImagesHint, language: settings.language))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [6, 4]))
+                            .foregroundStyle(Color.primary.opacity(0.15))
+                    )
+                    .onDrop(of: [.image, .fileURL], isTargeted: nil, perform: onDrop)
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 140), spacing: 10)],
+                    spacing: 10
+                ) {
+                    ForEach(item.imageFilenames, id: \.self) { filename in
+                        JournalImageThumb(
+                            filename: filename,
+                            onDelete: {
+                                guard let entryID = store.selectedEntryID else { return }
+                                store.removeImage(filename: filename, from: entryID, itemID: item.id)
+                                item.imageFilenames.removeAll { $0 == filename }
+                            }
+                        )
+                    }
+                }
+                .onDrop(of: [.image, .fileURL], isTargeted: nil, perform: onDrop)
+            }
+        }
     }
 }
 
@@ -771,7 +1072,7 @@ private struct JournalImageThumb: View {
                         }
                 }
             }
-            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 120, maxHeight: 160)
+            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 110, maxHeight: 150)
             .clipped()
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
@@ -787,55 +1088,6 @@ private struct JournalImageThumb: View {
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-        }
-    }
-}
-
-// MARK: - Simple flow layout for tags
-
-private struct FlowTagLayout: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var widthUsed: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > maxWidth, x > 0 {
-                x = 0
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            x += size.width + spacing
-            widthUsed = max(widthUsed, x - spacing)
-            rowHeight = max(rowHeight, size.height)
-        }
-
-        return CGSize(width: maxWidth.isFinite ? maxWidth : widthUsed, height: y + rowHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > bounds.maxX, x > bounds.minX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(
-                at: CGPoint(x: x, y: y),
-                proposal: ProposedViewSize(size)
-            )
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
         }
     }
 }
@@ -867,5 +1119,3 @@ private enum JournalChrome {
             : Color.black.opacity(0.06)
     }
 }
-
-

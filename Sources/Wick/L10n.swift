@@ -55,10 +55,13 @@ enum L10n {
         case journalYesterday
         case journalSelectPrompt
         case journalTitlePlaceholder
-        case journalTags
-        case journalTagPlaceholder
-        case journalAddTag
-        case journalTagHint
+        case journalItemsHint
+        case journalAddItem
+        case journalDeleteItem
+        case journalItemNumberFormat
+        case journalItemCountFormat
+        case journalItemTag
+        case journalItemTagPlaceholder
         case journalBody
         case journalBodyPlaceholder
         case journalImages
@@ -78,6 +81,14 @@ enum L10n {
         case journalReminderBody
         case journalOpenAction
         case journalSection
+        case journalItemScopeHint
+        case journalFilterEmptyTitle
+        case journalFilterEmptySubtitle
+        case journalOpenFullDay
+        case journalUntitledItem
+        case journalItemScopeBadge
+        case journalItemScopeEditorHint
+        case journalDeleteItemConfirm
 
         var chinese: String {
             switch self {
@@ -118,16 +129,19 @@ enum L10n {
             case .journalSearchPlaceholder: return "搜索正文或标签…"
             case .journalAllTags: return "全部"
             case .journalEmptyTitle: return "还没有日记"
-            case .journalEmptySubtitle: return "写下今天的记录，可添加标签与图片，方便日后回顾。"
+            case .journalEmptySubtitle: return "新建一篇日记，用多条条目分别记录不同主题，每条可带标签、正文与图片。"
             case .journalUntitled: return "未命名日记"
             case .journalToday: return "今天"
             case .journalYesterday: return "昨天"
-            case .journalSelectPrompt: return "从左侧时间轴选择一条日记"
+            case .journalSelectPrompt: return "从左侧时间轴选择一篇日记"
             case .journalTitlePlaceholder: return "标题（可选）"
-            case .journalTags: return "标签"
-            case .journalTagPlaceholder: return "输入标签，回车添加"
-            case .journalAddTag: return "添加"
-            case .journalTagHint: return "可为日记添加标签，并按标签筛选。"
+            case .journalItemsHint: return "一篇日记可包含多条条目；每条对应一个标签、正文和图片。"
+            case .journalAddItem: return "添加条目"
+            case .journalDeleteItem: return "删除条目"
+            case .journalItemNumberFormat: return "条目 %d"
+            case .journalItemCountFormat: return "%d 条"
+            case .journalItemTag: return "标签"
+            case .journalItemTagPlaceholder: return "为此条目添加标签"
             case .journalBody: return "正文"
             case .journalBodyPlaceholder: return "写点什么…"
             case .journalImages: return "图片"
@@ -136,7 +150,7 @@ enum L10n {
             case .journalPasteImage: return "粘贴图片"
             case .journalPasteImageHelp: return "从剪贴板粘贴图片"
             case .journalDelete: return "删除日记"
-            case .journalDeleteConfirm: return "确定删除这条日记？图片也会一并删除。"
+            case .journalDeleteConfirm: return "确定删除这篇日记？其中的条目与图片都会一并删除。"
             case .journalAutosaved: return "已自动保存"
             case .journalLayoutSplit: return "双栏布局"
             case .journalLayoutSingle: return "单栏布局"
@@ -147,6 +161,14 @@ enum L10n {
             case .journalReminderBody: return "点击打开 Wick，记下今天想留住的内容。"
             case .journalOpenAction: return "打开日记"
             case .journalSection: return "日记"
+            case .journalItemScopeHint: return "筛选中：列表与编辑区只显示匹配的条目，不会带出当天其他条目。"
+            case .journalFilterEmptyTitle: return "没有匹配的条目"
+            case .journalFilterEmptySubtitle: return "试试其他标签或清空搜索。"
+            case .journalOpenFullDay: return "查看当天全部"
+            case .journalUntitledItem: return "未命名条目"
+            case .journalItemScopeBadge: return "单条"
+            case .journalItemScopeEditorHint: return "当前只编辑这一条。可打开「查看当天全部」管理同日其他条目。"
+            case .journalDeleteItemConfirm: return "确定删除这条条目？相关图片也会删除。"
             }
         }
 
@@ -189,25 +211,28 @@ enum L10n {
             case .journalSearchPlaceholder: return "Search text or tags…"
             case .journalAllTags: return "All"
             case .journalEmptyTitle: return "No entries yet"
-            case .journalEmptySubtitle: return "Write a note for today. Add tags and images if you like."
-            case .journalUntitled: return "Untitled entry"
+            case .journalEmptySubtitle: return "Create a journal day with multiple items — each item has a tag, text, and images."
+            case .journalUntitled: return "Untitled journal"
             case .journalToday: return "Today"
             case .journalYesterday: return "Yesterday"
-            case .journalSelectPrompt: return "Select an entry from the timeline"
+            case .journalSelectPrompt: return "Select a journal from the timeline"
             case .journalTitlePlaceholder: return "Title (optional)"
-            case .journalTags: return "Tags"
-            case .journalTagPlaceholder: return "Add a tag, press Return"
-            case .journalAddTag: return "Add"
-            case .journalTagHint: return "Tags help you find entries later."
-            case .journalBody: return "Body"
+            case .journalItemsHint: return "A journal can hold multiple items. Each item has one tag, text, and images."
+            case .journalAddItem: return "Add Item"
+            case .journalDeleteItem: return "Delete Item"
+            case .journalItemNumberFormat: return "Item %d"
+            case .journalItemCountFormat: return "%d items"
+            case .journalItemTag: return "Tag"
+            case .journalItemTagPlaceholder: return "Tag for this item"
+            case .journalBody: return "Text"
             case .journalBodyPlaceholder: return "Write something…"
             case .journalImages: return "Images"
             case .journalImagesHint: return "Drop images here, or paste from the clipboard."
             case .journalAddImage: return "Add Image"
             case .journalPasteImage: return "Paste Image"
             case .journalPasteImageHelp: return "Paste an image from the clipboard"
-            case .journalDelete: return "Delete Entry"
-            case .journalDeleteConfirm: return "Delete this entry? Attached images will be removed too."
+            case .journalDelete: return "Delete Journal"
+            case .journalDeleteConfirm: return "Delete this journal? All items and images will be removed."
             case .journalAutosaved: return "Autosaved"
             case .journalLayoutSplit: return "Split layout"
             case .journalLayoutSingle: return "Single column"
@@ -218,6 +243,14 @@ enum L10n {
             case .journalReminderBody: return "Open Wick and write today’s entry."
             case .journalOpenAction: return "Open Journal"
             case .journalSection: return "Journal"
+            case .journalItemScopeHint: return "Filtered: only matching items appear — not the full day."
+            case .journalFilterEmptyTitle: return "No matching items"
+            case .journalFilterEmptySubtitle: return "Try another tag or clear the search."
+            case .journalOpenFullDay: return "Open Full Day"
+            case .journalUntitledItem: return "Untitled item"
+            case .journalItemScopeBadge: return "Item"
+            case .journalItemScopeEditorHint: return "Editing this item only. Open the full day to manage siblings."
+            case .journalDeleteItemConfirm: return "Delete this item? Its images will be removed too."
             }
         }
     }
