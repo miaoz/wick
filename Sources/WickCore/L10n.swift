@@ -103,6 +103,7 @@ enum L10n {
         case journalRestoredFromBackup
         case journalReadOnly
         case journalChangeDate
+        case journalToggleSidebar
 
         // Settings extras
         case generalSection
@@ -218,6 +219,7 @@ enum L10n {
             case .journalRestoredFromBackup: return "已从备份恢复日记"
             case .journalReadOnly: return "只读（加载失败）"
             case .journalChangeDate: return "修改日期"
+            case .journalToggleSidebar: return "切换侧栏"
 
             case .generalSection: return "通用"
             case .menuBarPercentage: return "菜单栏显示今日剩余"
@@ -334,6 +336,7 @@ enum L10n {
             case .journalRestoredFromBackup: return "Journal restored from backup"
             case .journalReadOnly: return "Read-only (load failed)"
             case .journalChangeDate: return "Change date"
+            case .journalToggleSidebar: return "Toggle Sidebar"
 
             case .generalSection: return "General"
             case .menuBarPercentage: return "Show day remaining in menu bar"

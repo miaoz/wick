@@ -5,6 +5,10 @@ import AppKit
 /// SwiftUI does not expose an API to close the status-item panel. Same-app window activation
 /// (e.g. focusing the journal) also does not dismiss it the way an outside click does — so we
 /// close matching transient windows ourselves.
+///
+/// Safety: the status item's button window also shows up in `NSApp.windows` on some macOS
+/// versions (notably 13), and ordering it out removes the menu-bar icon for good. Never touch
+/// small (menu-bar-sized) windows — the panel is always hundreds of points tall.
 @MainActor
 enum MenuBarExtraPanel {
     /// Hides the open menu-bar panel, if any, without touching normal app windows.
@@ -22,13 +26,18 @@ enum MenuBarExtraPanel {
         }
     }
 
-    /// Heuristic: MenuBarExtra `.window` panels are not full chrome document windows.
+    /// Heuristic: MenuBarExtra `.window` panels are transient panels, never the
+    /// tiny status-item button window or a full-chrome document window.
     private static func isMenuBarExtraPanel(_ window: NSWindow) -> Bool {
+        // The status item's button window is menu-bar-sized; ordering it out
+        // destroys the icon (seen on macOS 13). The panel is always large.
+        let frame = window.frame
+        if frame.height <= 30 || frame.width <= 60 {
+            return false
+        }
+
         let className = window.className
-        if className.contains("StatusBar")
-            || className.contains("MenuBarExtra")
-            || className.contains("Popover")
-        {
+        if className.contains("MenuBarExtra") || className.contains("StatusBar") {
             return true
         }
 
@@ -38,14 +47,8 @@ enum MenuBarExtraPanel {
             return false
         }
 
-        // Transient panels / borderless hosts used by the status-item popover.
-        if window is NSPanel {
-            return true
-        }
-        if !mask.contains(.titled) {
-            return true
-        }
-
-        return false
+        // Remaining transient hosts of the panel are NSPanels. A bare
+        // "not titled" match is deliberately not enough (see icon note above).
+        return window is NSPanel
     }
 }

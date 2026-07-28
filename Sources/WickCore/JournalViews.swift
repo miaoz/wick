@@ -11,6 +11,7 @@ struct JournalRootView: View {
 
     @State private var exportStatus: String?
     @State private var showStartFreshConfirm = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
         // Low-frequency day-arc palette refresh (5 min granularity is plenty).
@@ -20,7 +21,12 @@ struct JournalRootView: View {
             let palette = DayArcEngine.palette(at: DayArcEngine.currentDate(), scheme: colorScheme)
 
             Group {
-                splitLayout
+                VStack(spacing: 0) {
+                    if usesInViewTopBar {
+                        topBar(palette: palette)
+                    }
+                    splitLayout
+                }
             }
             .environment(\.wickPalette, palette)
             .tint(palette.accent.color)
@@ -28,6 +34,9 @@ struct JournalRootView: View {
             .preferredColorScheme(settings.preferredColorScheme)
             .background(palette.backgroundBottom.color)
             .toolbar {
+                // Installed on macOS 14+ (alongside the split view's own
+                // sidebar toggle). On macOS 13 nothing materializes in this
+                // manually created window — `usesInViewTopBar` covers that.
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button {
                         _ = store.openOrCreateToday()
@@ -41,7 +50,6 @@ struct JournalRootView: View {
                     .keyboardShortcut("n", modifiers: [.command])
                 }
             }
-            .navigationTitle(L10n.string(.journalTitle, language: settings.language))
             .safeAreaInset(edge: .top, spacing: 0) {
                 if store.isReadOnlyDueToLoadFailure {
                     loadFailureBanner
@@ -70,6 +78,14 @@ struct JournalRootView: View {
                 .accessibilityHidden(true)
             }
         }
+    }
+
+    /// macOS 13 does not install any toolbar (neither SwiftUI `.toolbar` items
+    /// nor the split view's sidebar toggle) in this manually created
+    /// NSWindow once the titlebar is transparent and title-less, so the
+    /// sidebar toggle and new-entry controls live in the view there.
+    private var usesInViewTopBar: Bool {
+        ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 14
     }
 
     private var loadFailureBanner: some View {
@@ -125,12 +141,78 @@ struct JournalRootView: View {
     }
 
     private var splitLayout: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             JournalTimelineSidebar()
                 .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
         } detail: {
             JournalEditorPane()
         }
+    }
+
+    // In-view top bar. SwiftUI `.toolbar` inside a manually created NSWindow
+    // (NSHostingController) is not installed on macOS 13 once the titlebar is
+    // transparent and the title hidden, which left the journal window with no
+    // sidebar toggle and no new-entry button there — so these controls live in
+    // the view hierarchy, which behaves identically on all supported versions.
+    private func topBar(palette: WickPalette) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                topBarButton(
+                    palette: palette,
+                    systemName: "sidebar.left",
+                    help: L10n.string(.journalToggleSidebar, language: settings.language)
+                ) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+                    }
+                }
+                .keyboardShortcut("s", modifiers: [.control, .command])
+
+                Spacer(minLength: 0)
+
+                topBarButton(
+                    palette: palette,
+                    systemName: "square.and.pencil",
+                    help: L10n.string(.journalNewEntry, language: settings.language)
+                ) {
+                    _ = store.openOrCreateToday()
+                }
+                .keyboardShortcut("n", modifiers: [.command])
+            }
+            // Leading inset clears the traffic-light buttons (~70pt) in the
+            // transparent titlebar zone this bar underlaps.
+            .padding(.leading, 78)
+            .padding(.trailing, 10)
+            .padding(.vertical, 3)
+
+            Rectangle()
+                .fill(palette.cardStroke.color)
+                .frame(height: 1)
+        }
+    }
+
+    private func topBarButton(
+        palette: WickPalette,
+        systemName: String,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(palette.textSecondary.color)
+                .frame(width: 30, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(palette.controlBackground.color)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(palette.controlBorder.color, lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 }
 
