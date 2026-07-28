@@ -223,6 +223,9 @@ private struct JournalTimelineSidebar: View {
     @EnvironmentObject private var store: JournalStore
     @Environment(\.wickPalette) private var palette
 
+    @State private var tagsExpanded = false
+    @State private var tagAreaWidth: CGFloat = 300
+
     var body: some View {
         VStack(spacing: 0) {
             filterBar
@@ -265,29 +268,7 @@ private struct JournalTimelineSidebar: View {
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             if !store.allTags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        tagChip(
-                            title: L10n.string(.journalAllTags, language: settings.language),
-                            isSelected: store.selectedTagFilter == nil
-                        ) {
-                            store.setTagFilter(nil)
-                        }
-
-                        ForEach(store.allTags, id: \.self) { tag in
-                            tagChip(
-                                title: tag,
-                                isSelected: store.selectedTagFilter?.lowercased() == tag.lowercased()
-                            ) {
-                                if store.selectedTagFilter?.lowercased() == tag.lowercased() {
-                                    store.setTagFilter(nil)
-                                } else {
-                                    store.setTagFilter(tag)
-                                }
-                            }
-                        }
-                    }
-                }
+                tagFlowSection
             }
 
             if store.isItemScoped {
@@ -297,6 +278,13 @@ private struct JournalTimelineSidebar: View {
             }
         }
         .padding(12)
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { tagAreaWidth = proxy.size.width - 24 }
+                    .onChange(of: proxy.size.width) { tagAreaWidth = $0 - 24 }
+            }
+        )
     }
 
     private var dayScopedList: some View {
@@ -495,6 +483,136 @@ private struct JournalTimelineSidebar: View {
                 .foregroundStyle(isSelected ? palette.accentText.color : Color.primary.opacity(0.8))
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: Tag flow
+
+    /// Chips wrap over multiple rows; collapsed to a single row with a
+    /// trailing "N more" chip when they exceed the sidebar width.
+    private var tagFlowSection: some View {
+        let chips = [FlowChip(kind: .all, title: L10n.string(.journalAllTags, language: settings.language))]
+            + store.allTags.map { FlowChip(kind: .tag($0), title: $0) }
+        let items = chips.map(\.item)
+        let lessChip = FlowChip(
+            kind: .less,
+            title: L10n.string(.journalTagsCollapse, language: settings.language)
+        )
+
+        let rows: [[TagChipItem]]
+        var lookupChips = chips
+        var collapsed: (row: [TagChipItem], hiddenCount: Int)?
+        if tagsExpanded {
+            rows = TagChipFlow.rows(items: items + [lessChip.item], availableWidth: tagAreaWidth)
+            lookupChips.append(lessChip)
+        } else if let trimmed = TagChipFlow.collapsedRow(
+            items: items,
+            availableWidth: tagAreaWidth,
+            toggleWidth: { hidden in
+                JournalTimelineSidebar.chipWidth(
+                    for: String(
+                        format: L10n.string(.journalTagsMoreFormat, language: settings.language),
+                        hidden
+                    )
+                )
+            }
+        ) {
+            collapsed = trimmed
+            rows = [trimmed.row]
+        } else {
+            rows = TagChipFlow.rows(items: items, availableWidth: tagAreaWidth)
+        }
+
+        return VStack(alignment: .leading, spacing: TagChipFlow.spacing) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                HStack(spacing: TagChipFlow.spacing) {
+                    ForEach(row, id: \.id) { item in
+                        flowChipView(for: item.id, chips: lookupChips)
+                    }
+                    if let collapsed, index == 0 {
+                        moreChip(hiddenCount: collapsed.hiddenCount)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func flowChipView(for id: String, chips: [FlowChip]) -> some View {
+        switch chips.first(where: { $0.id == id })?.kind {
+        case .all:
+            tagChip(
+                title: L10n.string(.journalAllTags, language: settings.language),
+                isSelected: store.selectedTagFilter == nil
+            ) {
+                store.setTagFilter(nil)
+            }
+        case .tag(let tag):
+            tagChip(
+                title: tag,
+                isSelected: store.selectedTagFilter?.lowercased() == tag.lowercased()
+            ) {
+                if store.selectedTagFilter?.lowercased() == tag.lowercased() {
+                    store.setTagFilter(nil)
+                } else {
+                    store.setTagFilter(tag)
+                }
+            }
+        case .less:
+            tagChip(
+                title: L10n.string(.journalTagsCollapse, language: settings.language),
+                isSelected: false
+            ) {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    tagsExpanded = false
+                }
+            }
+        case nil:
+            EmptyView()
+        }
+    }
+
+    private func moreChip(hiddenCount: Int) -> some View {
+        tagChip(
+            title: String(
+                format: L10n.string(.journalTagsMoreFormat, language: settings.language),
+                hiddenCount
+            ),
+            isSelected: false
+        ) {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                tagsExpanded = true
+            }
+        }
+    }
+
+    private struct FlowChip: Equatable {
+        enum Kind: Equatable {
+            case all
+            case tag(String)
+            case less
+        }
+
+        let kind: Kind
+        let title: String
+
+        var id: String {
+            switch kind {
+            case .all: return "#all"
+            case .tag(let tag): return tag
+            case .less: return "#less"
+            }
+        }
+
+        var item: TagChipItem {
+            TagChipItem(id: id, width: JournalTimelineSidebar.chipWidth(for: title))
+        }
+    }
+
+    private static let chipFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
+
+    /// Matches `tagChip` metrics: 11pt text, 10pt horizontal padding, 1pt stroke.
+    private static func chipWidth(for title: String) -> CGFloat {
+        ceil((title as NSString).size(withAttributes: [.font: chipFont]).width) + 22
     }
 }
 

@@ -10,7 +10,7 @@
 - 其他能力：登录时启动（`SMAppService`）、亮/暗/跟随系统外观（配色由「一日弧光」主题引擎驱动）、中/英文界面、菜单栏百分比显示、基于 GitHub Releases 的检查更新。
 - **平台**：macOS 13+，Apple Silicon 与 Intel（正式打包产出 Universal 二进制）。
 - **技术栈**：Swift 6.1+（`Package.swift` 声明 `swift-tools-version: 6.1`；主开发环境为 Xcode 26 / Swift 6.3）、SwiftUI + AppKit、Swift Package Manager。**无任何第三方依赖**（无 `Package.resolved`）。
-- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.4.0 (11)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
+- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.4.1 (13)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
 
 ## 仓库结构与模块划分
 
@@ -30,7 +30,7 @@ SwiftPM 三个 target（`Package.swift`）：
 | `TimeProgress.swift` | `TimeProgressCalculator`：日/周/月/年剩余比例的纯计算（可注入 `Date`/`Calendar`，便于测试） |
 | `JournalModels.swift` | 日记模型：`JournalEntry`（某日，1..n 个 `JournalItem`：标签/正文/图片文件名）、`JournalSnapshot`（Codable，`currentVersion = 1`） |
 | `JournalStore.swift` | 日记存储（`@MainActor ObservableObject` 单例）：落盘、`.bak` 与滚动备份、加载失败只读保护、图片管理、zip 导入导出；**一天一篇**由 `createEntry`/`updateEntry` 的按日合并保证 |
-| `JournalViews.swift` | 日记窗口 UI（`JournalRootView`，`NavigationSplitView` 双栏；macOS 14+ 用系统工具栏（侧栏折叠 + 新建按钮），macOS 13 因手动窗口不安装工具栏改用视图内 `topBar`（`usesInViewTopBar`，折叠走 `columnVisibility` binding）；色值取自 `\.wickPalette`，根视图 300s `TimelineView` 刷新；编辑器顶部为 `DayArcStrip` 24h 弧光渐变条，今日条目带"此刻"圆点；头部日期按应用语言格式化、零填充，点击弹出图形日历） |
+| `JournalViews.swift` | 日记窗口 UI（`JournalRootView`，`NavigationSplitView` 双栏；macOS 14+ 用系统工具栏（侧栏折叠 + 新建按钮），macOS 13 因手动窗口不安装工具栏改用视图内 `topBar`（`usesInViewTopBar`，折叠走 `columnVisibility` binding）；色值取自 `\.wickPalette`，根视图 300s `TimelineView` 刷新；编辑器顶部为 `DayArcStrip` 24h 弧光渐变条，今日条目带"此刻"圆点；头部日期按应用语言格式化、零填充，点击弹出图形日历；侧栏标签芯片超宽时折叠为「更多 N」，点击展开换行显示/再点收起，打包逻辑在 `TagChipFlow.swift`） |
 | `JournalReminderScheduler.swift` | 每日本地通知（`UNUserNotificationCenter`）；**同文件内还有 `JournalWindowController`**——手动持有日记 `NSWindow`，因为 `MenuBarExtra` 场景里 SwiftUI `openWindow` 不可用 |
 | `MenuBarExtraPanel.swift` | 用启发式（类名/styleMask/NSPanel）关闭 `MenuBarExtra` 面板窗口；**带尺寸护栏**：高度 ≤30 或宽度 ≤60 的小窗一律不碰——macOS 13 的 `NSApp.windows` 里混有状态栏图标的宿主小窗，误关会让图标永久消失 |
 | `IMESafeTextViews.swift` | AppKit 包装的单行/多行文本输入，避免中文/日文/韩文 IME 组字（marked text）期间被外部写值吞字 |
@@ -83,11 +83,12 @@ make clean         # rm -rf .build dist
 ## 测试说明
 
 - 测试位于 `Tests/WickTests/`，XCTest + `@testable import WickCore`，CI 在打包前执行 `swift test`。
-- 现有四个测试文件：
+- 现有五个测试文件：
   - `TimeProgressTests.swift`：剩余比例边界（0/1 钳制、起止时刻）、四类进度齐全、周一起始。
   - `JournalStoreTests.swift`：用 `JournalStore(rootDirectory:)`（临时目录的测试专用初始化器）覆盖一天一篇、标签按条目过滤、删除条目清理图片、持久化重载、主文件损坏时从 `.bak` 恢复、无备份时进入只读且**不覆盖磁盘坏文件**。
   - `AppInfoTests.swift`：版本号比较。
   - `WickThemeTests.swift`：主题引擎——相位归属（锚点切换、跨午夜回绕）、插值中点、全天每 15 分钟 × 亮/暗的对比度护栏（textPrimary ≥4.5、accentText ≥4.0 等）、指标色相族稳定性。
+  - `TagChipFlowTests.swift`：标签芯片换行打包（贪心换行、超宽独占一行）与折叠行裁剪（为「更多 N」腾出空间、全部裁掉的边界）。
 - 新增可测逻辑时的落点：纯计算放 `TimeProgressCalculator` / `DayArcEngine` 这类可注入 `Date`/`Calendar` 的静态方法；存储行为扩展 `JournalStoreTests`。UI 层无测试。
 
 ## CI 与发版

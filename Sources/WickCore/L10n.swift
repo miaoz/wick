@@ -51,6 +51,8 @@ enum L10n {
         case journalNewEntry
         case journalSearchPlaceholder
         case journalAllTags
+        case journalTagsMoreFormat
+        case journalTagsCollapse
         case journalEmptyTitle
         case journalEmptySubtitle
         case journalUntitled
@@ -167,6 +169,8 @@ enum L10n {
             case .journalNewEntry: return "今日日记"
             case .journalSearchPlaceholder: return "搜索正文或标签…"
             case .journalAllTags: return "全部"
+            case .journalTagsMoreFormat: return "更多 %d"
+            case .journalTagsCollapse: return "收起"
             case .journalEmptyTitle: return "还没有日记"
             case .journalEmptySubtitle: return "新建一篇日记，用多条条目分别记录不同主题，每条可带标签、正文与图片。"
             case .journalUntitled: return "未命名日记"
@@ -284,6 +288,8 @@ enum L10n {
             case .journalNewEntry: return "Today’s Journal"
             case .journalSearchPlaceholder: return "Search text or tags…"
             case .journalAllTags: return "All"
+            case .journalTagsMoreFormat: return "%d More"
+            case .journalTagsCollapse: return "Less"
             case .journalEmptyTitle: return "No entries yet"
             case .journalEmptySubtitle: return "Create a journal day with multiple items — each item has a tag, text, and images."
             case .journalUntitled: return "Untitled journal"
