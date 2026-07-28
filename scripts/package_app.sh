@@ -6,6 +6,10 @@ APP_NAME="Wick"
 LEGACY_APP_NAME="CandleMenuBar"
 BUNDLE_ID="com.miaoz.wick"
 MIN_SYSTEM_VERSION="13.0"
+# Optional overrides for CI / tagged releases:
+#   VERSION=1.2.3 BUILD=42 ./scripts/package_app.sh
+VERSION="${VERSION:-1.1}"
+BUILD="${BUILD:-2}"
 DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/$APP_NAME.app"
 LEGACY_APP_DIR="$DIST_DIR/$LEGACY_APP_NAME.app"
@@ -72,9 +76,9 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.1</string>
+    <string>$VERSION</string>
     <key>CFBundleVersion</key>
-    <string>2</string>
+    <string>$BUILD</string>
     <key>LSMinimumSystemVersion</key>
     <string>$MIN_SYSTEM_VERSION</string>
     <key>LSUIElement</key>
