@@ -242,6 +242,7 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
 
     private var window: NSWindow?
     private var languageObserver: NSObjectProtocol?
+    private let legacyToolbarDelegate = LegacyJournalToolbarDelegate()
 
     private override init() {
         super.init()
@@ -295,6 +296,9 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         applyWindowTheme(to: window)
+        if journalNeedsInViewTopBar {
+            installLegacyToolbar(on: window)
+        }
 
         self.window = window
 
@@ -330,6 +334,17 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         window.backgroundColor = palette.backgroundBottom.nsColor
     }
 
+    /// macOS 13-only chrome: SwiftUI installs no toolbar in this manually
+    /// created window, so we install a real AppKit one — its items are laid
+    /// out by the system, level with the traffic lights by construction.
+    private func installLegacyToolbar(on window: NSWindow) {
+        let toolbar = NSToolbar(identifier: "WickJournalToolbar")
+        toolbar.delegate = legacyToolbarDelegate
+        toolbar.displayMode = .iconOnly
+        toolbar.allowsUserCustomization = false
+        window.toolbar = toolbar
+    }
+
     func windowDidBecomeKey(_ notification: Notification) {
         // Clicking an already-open journal should also dismiss the menu-bar panel.
         let keyWindow = (notification.object as? NSWindow) ?? window
@@ -341,5 +356,57 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         NotificationCenter.default.post(name: .wickWillFlushJournalDrafts, object: nil)
         JournalStore.shared.flushPendingWrites()
+    }
+}
+
+/// Item source for the macOS 13 journal toolbar: classic layout — sidebar
+/// toggle leftmost (responder-chain `toggleSidebar:`, same as the system
+/// item), new-entry at the trailing edge. The toggle uses the responder chain
+/// so it drives the SwiftUI split view exactly like the system toggle does.
+private final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate {
+    private enum ItemID {
+        static let toggle = NSToolbarItem.Identifier("wick.toggleSidebar")
+        static let newEntry = NSToolbarItem.Identifier("wick.newEntry")
+    }
+
+    func toolbar(
+        _ toolbar: NSToolbar,
+        itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+        willBeInsertedIntoToolbar flag: Bool
+    ) -> NSToolbarItem? {
+        switch itemIdentifier {
+        case ItemID.toggle:
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: nil)
+            item.target = self
+            item.action = #selector(toggleSidebar)
+            return item
+        case ItemID.newEntry:
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.image = NSImage(systemSymbolName: "square.and.pencil", accessibilityDescription: nil)
+            item.target = self
+            item.action = #selector(newEntry)
+            return item
+        default:
+            return nil
+        }
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        toolbarAllowedItemIdentifiers(toolbar)
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [ItemID.toggle, .flexibleSpace, ItemID.newEntry]
+    }
+
+    @objc private func toggleSidebar() {
+        NSApplication.shared.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
+    }
+
+    @objc private func newEntry() {
+        MainActor.assumeIsolated {
+            _ = JournalStore.shared.openOrCreateToday()
+        }
     }
 }

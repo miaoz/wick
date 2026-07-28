@@ -59,17 +59,36 @@ struct JournalRootView: View {
             .opacity(0)
             .frame(width: 0, height: 0)
             .accessibilityHidden(true)
+
+            // The macOS 13 AppKit toolbar has no keyboardShortcut support, so
+            // these shortcuts stay as hidden in-view buttons on that path.
+            if journalNeedsInViewTopBar {
+                Button("") {
+                    _ = store.openOrCreateToday()
+                }
+                .keyboardShortcut("n", modifiers: [.command])
+                .opacity(0)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+
+                Button("") {
+                    // Same responder-chain action as the system sidebar toggle.
+                    NSApp.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
+                }
+                .keyboardShortcut("s", modifiers: [.control, .command])
+                .opacity(0)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+            }
         }
 
         // macOS 14+ installs a real window toolbar (the split view's own
         // sidebar toggle plus this new-entry item). On macOS 13 nothing
-        // materializes in this manually created window, so the panes render
-        // their own in-view top strips instead — with the top safe area
-        // ignored so the strips actually reach the titlebar zone and sit
-        // level with the traffic lights (safeAreaInset lands differently
-        // across versions, which is why this is manual).
+        // materializes in this manually created window, so
+        // JournalWindowController installs an AppKit NSToolbar instead and
+        // the shortcut keys below stay as hidden in-view buttons.
         if journalNeedsInViewTopBar {
-            base.ignoresSafeArea(.container, edges: .top)
+            base
         } else {
             base.toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
@@ -142,52 +161,24 @@ struct JournalRootView: View {
 
     private var splitLayout: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            JournalTimelineSidebar(columnVisibility: $columnVisibility)
+            JournalTimelineSidebar()
                 .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
         } detail: {
-            JournalEditorPane(columnVisibility: $columnVisibility)
+            JournalEditorPane()
         }
     }
 }
 
 /// True on macOS 13: no toolbar (neither SwiftUI `.toolbar` items nor the
 /// split view's sidebar toggle) materializes in the manually created journal
-/// window there, so the top controls are rendered in-view inside each pane's
-/// top safe-area strip, aligned with the traffic lights.
-/// `WICK_INVIEW_TOPBAR=1` forces the in-view chrome on any version (debug).
-private var journalNeedsInViewTopBar: Bool {
+/// window there, so JournalWindowController installs an AppKit NSToolbar and
+/// shortcut keys stay as hidden in-view buttons.
+/// `WICK_INVIEW_TOPBAR=1` forces the macOS 13 chrome on any version (debug).
+var journalNeedsInViewTopBar: Bool {
     if ProcessInfo.processInfo.environment["WICK_INVIEW_TOPBAR"] != nil {
         return true
     }
     return ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 14
-}
-
-/// Shared chip button for the panes' in-view top strips (macOS 13 chrome).
-private struct JournalTopChip: View {
-    @Environment(\.wickPalette) private var palette
-
-    let systemName: String
-    let help: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(palette.textSecondary.color)
-                .frame(width: 30, height: 22)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(palette.controlBackground.color)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(palette.controlBorder.color, lineWidth: 1)
-                }
-        }
-        .buttonStyle(.plain)
-        .help(help)
-    }
 }
 
 // MARK: - Timeline
@@ -197,16 +188,11 @@ private struct JournalTimelineSidebar: View {
     @EnvironmentObject private var store: JournalStore
     @Environment(\.wickPalette) private var palette
 
-    let columnVisibility: Binding<NavigationSplitViewVisibility>
-
     @State private var tagsExpanded = false
     @State private var tagAreaWidth: CGFloat = 300
 
     var body: some View {
         VStack(spacing: 0) {
-            if journalNeedsInViewTopBar {
-                topStrip
-            }
             filterBar
             Divider()
             if store.isItemScoped {
@@ -218,32 +204,6 @@ private struct JournalTimelineSidebar: View {
         .background(palette.sidebarBackground.color)
         .onChange(of: store.searchText) { _ in
             store.handleFilterChange()
-        }
-    }
-
-    /// In-view titlebar strip (macOS 13): sidebar toggle right-aligned within
-    /// the sidebar column, level with the traffic lights.
-    private var topStrip: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Spacer(minLength: 0)
-
-                JournalTopChip(
-                    systemName: "sidebar.left",
-                    help: L10n.string(.journalToggleSidebar, language: settings.language)
-                ) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        columnVisibility.wrappedValue = .detailOnly
-                    }
-                }
-                .keyboardShortcut("s", modifiers: [.control, .command])
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 3)
-
-            Rectangle()
-                .fill(palette.cardStroke.color)
-                .frame(height: 1)
         }
     }
 
@@ -727,8 +687,6 @@ private struct JournalEditorPane: View {
     @EnvironmentObject private var store: JournalStore
     @Environment(\.wickPalette) private var palette
 
-    let columnVisibility: Binding<NavigationSplitViewVisibility>
-
     @State private var draft = JournalEntry()
     @State private var saveTask: Task<Void, Never>?
     @State private var showDeleteDayConfirm = false
@@ -750,16 +708,11 @@ private struct JournalEditorPane: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if journalNeedsInViewTopBar {
-                topStrip
-            }
-            Group {
-                if store.selection == nil || store.selectedEntry == nil {
-                    noSelection
-                } else {
-                    editor
-                }
+        Group {
+            if store.selection == nil || store.selectedEntry == nil {
+                noSelection
+            } else {
+                editor
             }
         }
         .background(palette.backgroundBottom.color)
@@ -847,44 +800,6 @@ private struct JournalEditorPane: View {
             .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    /// In-view titlebar strip (macOS 13): new-entry chip right-aligned within
-    /// the editor column, level with the traffic lights. When the sidebar is
-    /// collapsed its toggle moves here (leading, clear of the traffic lights).
-    private var topStrip: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                if columnVisibility.wrappedValue == .detailOnly {
-                    JournalTopChip(
-                        systemName: "sidebar.left",
-                        help: L10n.string(.journalToggleSidebar, language: settings.language)
-                    ) {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            columnVisibility.wrappedValue = .all
-                        }
-                    }
-                    .keyboardShortcut("s", modifiers: [.control, .command])
-                    .padding(.leading, 70)
-                }
-
-                Spacer(minLength: 0)
-
-                JournalTopChip(
-                    systemName: "square.and.pencil",
-                    help: L10n.string(.journalNewEntry, language: settings.language)
-                ) {
-                    _ = store.openOrCreateToday()
-                }
-                .keyboardShortcut("n", modifiers: [.command])
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 3)
-
-            Rectangle()
-                .fill(palette.cardStroke.color)
-                .frame(height: 1)
-        }
     }
 
     private var editor: some View {
