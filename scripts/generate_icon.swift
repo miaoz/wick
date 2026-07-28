@@ -23,13 +23,19 @@ func drawLinearGradient(
     colors: [NSColor],
     locations: [CGFloat]? = nil,
     start: CGPoint,
-    end: CGPoint
+    end: CGPoint,
+    extend: Bool = false
 ) {
+    // Default: do not extend past the gradient segment. Extending used to
+    // flood the whole icon (and its transparent corners) with solid color.
+    let options: CGGradientDrawingOptions = extend
+        ? [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+        : []
     context.drawLinearGradient(
         makeGradient(colors: colors, locations: locations),
         start: start,
         end: end,
-        options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+        options: options
     )
 }
 
@@ -40,15 +46,19 @@ func drawRadialGradient(
     startCenter: CGPoint,
     startRadius: CGFloat,
     endCenter: CGPoint,
-    endRadius: CGFloat
+    endRadius: CGFloat,
+    extend: Bool = false
 ) {
+    let options: CGGradientDrawingOptions = extend
+        ? [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+        : []
     context.drawRadialGradient(
         makeGradient(colors: colors, locations: locations),
         startCenter: startCenter,
         startRadius: startRadius,
         endCenter: endCenter,
         endRadius: endRadius,
-        options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+        options: options
     )
 }
 
@@ -72,6 +82,82 @@ func teardropPath(center: CGPoint, width: CGFloat, height: CGFloat) -> CGPath {
     )
     path.closeSubpath()
     return path
+}
+
+/// macOS app-icon silhouette: inset rounded rect matching system icons
+/// (transparent outside, continuous-looking corners ~22.5% of the shape side).
+func macOSIconMaskPath(canvasSize: CGFloat) -> (rect: CGRect, path: CGPath) {
+    // System icons keep ~9–10% outer margin so Dock/Launchpad can apply shadows.
+    let margin = canvasSize * (96.0 / 1024.0)
+    let side = canvasSize - margin * 2
+    let rect = CGRect(x: margin, y: margin, width: side, height: side)
+    // Apple-style corner radius ≈ 22.6% of the icon shape edge.
+    let radius = side * (188.0 / 832.0)
+    let path = CGPath(
+        roundedRect: rect,
+        cornerWidth: radius,
+        cornerHeight: radius,
+        transform: nil
+    )
+    return (rect, path)
+}
+
+/// Zero-out alpha outside the icon mask so Launchpad never shows square corners.
+func applyIconMask(to bitmap: NSBitmapImageRep, path: CGPath, size: Int) {
+    guard let maskBitmap = NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: size,
+        pixelsHigh: size,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 0,
+        bitsPerPixel: 0
+    ) else {
+        return
+    }
+
+    maskBitmap.size = NSSize(width: size, height: size)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: maskBitmap)
+    guard let maskContext = NSGraphicsContext.current?.cgContext else {
+        NSGraphicsContext.restoreGraphicsState()
+        return
+    }
+
+    maskContext.setAllowsAntialiasing(true)
+    maskContext.clear(CGRect(x: 0, y: 0, width: size, height: size))
+    maskContext.setFillColor(NSColor.white.cgColor)
+    maskContext.addPath(path)
+    maskContext.fillPath()
+    NSGraphicsContext.restoreGraphicsState()
+
+    guard let iconData = bitmap.bitmapData, let maskData = maskBitmap.bitmapData else {
+        return
+    }
+
+    let pixelCount = size * size
+    for i in 0..<pixelCount {
+        let offset = i * 4
+        let maskAlpha = Int(maskData[offset + 3])
+        if maskAlpha == 255 {
+            continue
+        }
+        if maskAlpha == 0 {
+            iconData[offset] = 0
+            iconData[offset + 1] = 0
+            iconData[offset + 2] = 0
+            iconData[offset + 3] = 0
+            continue
+        }
+        // Premultiplied-style fade at the anti-aliased edge.
+        iconData[offset] = UInt8((Int(iconData[offset]) * maskAlpha) / 255)
+        iconData[offset + 1] = UInt8((Int(iconData[offset + 1]) * maskAlpha) / 255)
+        iconData[offset + 2] = UInt8((Int(iconData[offset + 2]) * maskAlpha) / 255)
+        iconData[offset + 3] = UInt8((Int(iconData[offset + 3]) * maskAlpha) / 255)
+    }
 }
 
 guard CommandLine.arguments.count > 1 else {
@@ -111,14 +197,12 @@ context.setAllowsAntialiasing(true)
 context.interpolationQuality = .high
 context.clear(CGRect(x: 0, y: 0, width: size, height: size))
 
-let canvas = CGRect(x: 96, y: 96, width: 832, height: 832)
-let roundedCanvas = CGPath(
-    roundedRect: canvas,
-    cornerWidth: 188,
-    cornerHeight: 188,
-    transform: nil
-)
+let iconMask = macOSIconMaskPath(canvasSize: CGFloat(size))
+let canvas = iconMask.rect
+let roundedCanvas = iconMask.path
 
+// Clip every paint operation to the icon silhouette so unclipped gradients
+// cannot fill the transparent corners (that previously made Launchpad show a square).
 context.saveGState()
 context.addPath(roundedCanvas)
 context.clip()
@@ -132,7 +216,8 @@ drawLinearGradient(
     ],
     locations: [0.0, 0.55, 1.0],
     start: CGPoint(x: canvas.minX, y: canvas.maxY),
-    end: CGPoint(x: canvas.maxX, y: canvas.minY)
+    end: CGPoint(x: canvas.maxX, y: canvas.minY),
+    extend: true
 )
 
 drawRadialGradient(
@@ -171,14 +256,10 @@ drawLinearGradient(
     end: CGPoint(x: canvas.minX, y: canvas.midY)
 )
 
-context.restoreGState()
-
-context.saveGState()
 context.setLineWidth(4)
 context.addPath(roundedCanvas)
 context.setStrokeColor(NSColor(hex: 0xFFD6A4, alpha: 0.18).cgColor)
 context.strokePath()
-context.restoreGState()
 
 let haloCenter = CGPoint(x: 512, y: 648)
 drawRadialGradient(
@@ -262,6 +343,9 @@ context.strokePath()
 context.restoreGState()
 
 let rimRect = CGRect(x: 404, y: 548, width: 216, height: 58)
+context.saveGState()
+context.addEllipse(in: rimRect)
+context.clip()
 drawLinearGradient(
     context,
     colors: [
@@ -273,6 +357,7 @@ drawLinearGradient(
 )
 context.setFillColor(NSColor(hex: 0xF5E7D7, alpha: 0.88).cgColor)
 context.fillEllipse(in: rimRect)
+context.restoreGState()
 context.setStrokeColor(NSColor(hex: 0xFFFFFF, alpha: 0.25).cgColor)
 context.setLineWidth(2.5)
 context.strokeEllipse(in: rimRect)
@@ -347,7 +432,11 @@ drawRadialGradient(
     endRadius: 170
 )
 
+context.restoreGState()
 NSGraphicsContext.restoreGraphicsState()
+
+// Belt-and-suspenders: force transparent corners even if a draw call escapes the clip.
+applyIconMask(to: bitmap, path: roundedCanvas, size: size)
 
 guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
     fputs("failed to create png data\n", stderr)
