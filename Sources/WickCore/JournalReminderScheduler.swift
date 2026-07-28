@@ -254,6 +254,9 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
 
         let journalWindow = ensureWindow()
         updateTitle(for: journalWindow)
+        // MenuBarExtra `.window` does not auto-dismiss when another window of this app
+        // becomes key; close it explicitly so it does not float over the journal.
+        MenuBarExtraPanel.dismiss(excluding: [journalWindow])
         journalWindow.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -310,6 +313,14 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
 
     private func updateTitle(for window: NSWindow) {
         window.title = L10n.string(.journalTitle, language: AppSettings.shared.language)
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        // Clicking an already-open journal should also dismiss the menu-bar panel.
+        let keyWindow = (notification.object as? NSWindow) ?? window
+        if let keyWindow {
+            MenuBarExtraPanel.dismiss(excluding: [keyWindow])
+        }
     }
 
     func windowWillClose(_ notification: Notification) {

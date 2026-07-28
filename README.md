@@ -119,8 +119,8 @@ make package
 打包时可注入版本信息（写入 `Info.plist`，并体现在 zip 文件名中）：
 
 ```bash
-VERSION=1.3 BUILD=4 ./scripts/package_zip.sh
-# → dist/Wick-macOS-1.3.zip
+VERSION=1.3.1 BUILD=6 ./scripts/package_zip.sh
+# → dist/Wick-macOS-1.3.1.zip
 ```
 
 ### 构建说明
