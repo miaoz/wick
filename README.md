@@ -1,121 +1,169 @@
 # Wick
 
-`Wick` 是一个原生的 macOS 菜单栏应用：在系统菜单栏显示 `🕯️` 图标，点击后弹出一个下拉面板，展示日、周、月、年剩余时间百分比。
+[![Build and Release](https://github.com/miaoz/wick/actions/workflows/release.yml/badge.svg)](https://github.com/miaoz/wick/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/miaoz/wick)](https://github.com/miaoz/wick/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-macOS%2013%2B-black)](https://github.com/miaoz/wick)
+[![Swift](https://img.shields.io/badge/Swift-6.1%2B-F05138)](https://www.swift.org)
+
+**Wick** 是一款原生 macOS 菜单栏应用：在状态栏显示蜡烛图标，点击后弹出面板，展示**日 / 周 / 月 / 年**还剩多少时间。
+
+<p align="center">
+  <img src="assets/AppIcon-master.png" alt="Wick icon" width="128" height="128">
+</p>
 
 ## 功能
 
-- 使用 `MenuBarExtra` 构建原生菜单栏应用。
-- 亮色模式自动使用「烛光」主题，暗色模式自动使用「极夜」主题。
-- 面板展示每个时间维度的剩余百分比、剩余时长和结束时间。
-- 内置设置：语言（中文 / 英文，默认中文）与外观（亮色 / 暗色 / 跟随系统）；日期格式随所选语言切换。
-- 自带一套以温暖烛光为灵感生成的应用图标资源。
-- 项目的默认构建入口会产出同时支持 Apple Silicon 和 Intel Mac 的通用 `.app`。
-- 支持一键导出可分发的 `.zip` 安装包。
-- 通过 GitHub Actions 自动打包，并在打 tag 时发布到 GitHub Releases。
+- **菜单栏常驻**：基于 `MenuBarExtra` 的原生体验，不占用 Dock
+- **时间进度**：日、周、月、年的剩余百分比、剩余时长与结束时间，每秒刷新
+- **烛光 / 极夜主题**：亮色与暗色自动切换面板配色
+- **设置**：语言（中文 / English）、外观（亮色 / 暗色 / 跟随系统）
+- **Universal 二进制**：同时支持 Apple Silicon 与 Intel Mac
+- **开箱可分发**：本地一键打 zip；推送 tag 后由 GitHub Actions 自动发版
 
-## 默认构建
+## 系统要求
+
+| 项目 | 要求 |
+| --- | --- |
+| 系统 | macOS 13 Ventura 或更高 |
+| 架构 | Apple Silicon 或 Intel（Universal 包） |
+| 开发 | Xcode 16+ / Swift 6.1+（推荐 Xcode 26、Swift 6.3，与 CI 一致） |
+
+## 安装
+
+### 预编译包（推荐）
+
+1. 打开 [Releases](https://github.com/miaoz/wick/releases/latest)
+2. 下载 `Wick-macOS-<version>.zip`
+3. 解压后将 `Wick.app` 拖到「应用程序」
+4. 首次运行若被 Gatekeeper 拦截：在 Finder 中对应用 **右键 → 打开**，或在「系统设置 → 隐私与安全性」中允许
+
+> **说明：** 发布包使用 ad-hoc 签名，**尚未**使用 Apple Developer ID 签名或公证。因此首次打开可能需要手动允许。
+
+### 从源码安装
 
 ```bash
-./build.sh
+git clone https://github.com/miaoz/wick.git
+cd wick
+./scripts/package_app.sh
+open dist/Wick.app
 ```
 
-或者直接：
+## 使用
+
+1. 启动后，菜单栏会出现蜡烛图标（系统会按菜单栏风格着色）
+2. 点击图标打开进度面板
+3. 在面板中可进入设置：切换语言与外观
+4. 在设置中可退出应用
+
+应用为 `LSUIElement` 菜单栏工具，不会在 Dock 中显示图标。
+
+## 从源码构建
+
+### 快速开始
 
 ```bash
+# 开发运行（当前架构）
+swift run
+
+# 默认产物：Universal .app → dist/Wick.app
 make
-```
+# 或
+./build.sh
 
-这两个入口都会调用通用打包流程，分别构建 `arm64` 和 `x86_64`，再用 `lipo` 合并成一个通用 `.app`。
-
-> 说明：`swift build` 本身是 SwiftPM 的宿主架构构建命令，项目侧不能把它的默认行为改成通用二进制。因此这个仓库把 `./build.sh` / `make` 作为默认构建入口。
-
-## 导出 zip 安装包
-
-```bash
+# 导出可分发 zip → dist/Wick-macOS.zip
+make package
+# 或
 ./scripts/package_zip.sh
 ```
 
-或者直接：
+### 版本号
 
-```bash
-make package
-```
-
-这个流程会先生成通用 `.app`，再打包为 zip。
-
-zip 输出位置：
-
-```text
-dist/Wick-macOS.zip
-```
-
-指定版本号（会写入 `Info.plist`，并体现在 zip 文件名中）：
+打包时可注入版本信息（写入 `Info.plist`，并体现在 zip 文件名中）：
 
 ```bash
 VERSION=1.2.3 BUILD=42 ./scripts/package_zip.sh
 # → dist/Wick-macOS-1.2.3.zip
 ```
 
-## GitHub 自动打包与分发
+### 构建说明
 
-仓库使用 [`.github/workflows/release.yml`](.github/workflows/release.yml)：
-
-| 触发条件 | 行为 |
+| 命令 | 说明 |
 | --- | --- |
-| `push` / `pull_request` 到 `main` | 构建通用 macOS zip，上传为 workflow artifact |
-| 推送 tag `v*`（例如 `v1.0.0`） | 同上，并创建 [GitHub Release](https://github.com/miaoz/wick/releases)，附带安装包 |
-| `workflow_dispatch` | 手动触发构建 |
+| `swift run` / `swift build` | SwiftPM 宿主架构构建，适合开发调试 |
+| `./build.sh` / `make` | 分别编译 `arm64` 与 `x86_64`，经 `lipo` 合并为 Universal `.app` |
+| `./scripts/package_app.sh` | 生成 `dist/Wick.app`（含图标与 `Info.plist`） |
+| `./scripts/package_zip.sh` | 在 `.app` 基础上打包 zip |
+| `./scripts/generate_icon_assets.sh` | 从脚本重新生成 `assets/AppIcon*` |
 
-CI 跑在 GitHub 的 **`macos-26`** 云端机器上，并优先选用 **Xcode 26.6**（与当前本机开发环境一致；若镜像尚未装 26.6 则回退到最新的 Xcode 26.x）。打包脚本与本地相同（`./scripts/package_zip.sh`）。
+> `swift build` 默认只产出当前架构；项目把 `./build.sh` / `make` 作为正式打包入口，以确保 Universal 二进制。
 
-### 发布新版本
-
-```bash
-# 确认 main 已是要发布的代码
-git checkout main
-git pull
-
-# 打 tag 并推送（会触发 Release 工作流）
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-发布完成后，在 [Releases](https://github.com/miaoz/wick/releases) 下载 `Wick-macOS-<version>.zip`。
-
-### 安装说明
-
-1. 解压 zip，将 `Wick.app` 拖到「应用程序」。
-2. 首次打开若被 Gatekeeper 拦截：在 Finder 中对 `Wick.app` **右键 → 打开**，或在「系统设置 → 隐私与安全性」中允许。
-
-当前 CI 使用 ad-hoc 签名（与本地 `package_app.sh` 一致），**未做 Apple Developer ID 签名 / 公证**。若需要双击即开、无安全提示，需要另行配置证书与 notarization。
-
-## 开发运行
-
-```bash
-swift run
-```
-
-## 生成图标
+### 图标资源
 
 ```bash
 ./scripts/generate_icon_assets.sh
 ```
 
-图标输出位置：
+输出：
 
-```text
-assets/AppIcon-master.png
-assets/AppIcon.icns
-```
+- `assets/AppIcon-master.png`
+- `assets/AppIcon.icns`
 
-## 打包成通用 `.app`
+## 持续集成与发版
+
+仓库使用 [GitHub Actions](.github/workflows/release.yml) 自动打包：
+
+| 触发 | 结果 |
+| --- | --- |
+| `push` / `pull_request` 到 `main` | 构建 zip，上传为 workflow artifact |
+| 推送 tag `v*`（如 `v1.2.0`） | 构建 zip，并创建 [GitHub Release](https://github.com/miaoz/wick/releases) |
+| `workflow_dispatch` | 手动触发构建 |
+
+CI 使用 **`macos-26`** runner，优先选用 **Xcode 26.6**（与当前主开发环境对齐；若镜像无 26.6 则回退到最新 Xcode 26.x）。打包路径与本地相同：`./scripts/package_zip.sh`。
+
+### 发布新版本
 
 ```bash
-./scripts/package_app.sh
+git checkout main
+git pull
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
-生成的应用位于：
+完成后在 [Releases](https://github.com/miaoz/wick/releases) 下载 `Wick-macOS-<version>.zip`。
+
+## 项目结构
 
 ```text
-dist/Wick.app
+wick/
+├── Package.swift                 # Swift Package 清单
+├── Sources/Wick/                 # 应用源码
+│   ├── WickApp.swift             # 入口与 MenuBarExtra
+│   ├── ProgressPanelView.swift   # 进度面板与设置 UI
+│   ├── TimeProgress.swift        # 日/周/月/年计算
+│   ├── AppSettings.swift         # 语言与外观
+│   ├── L10n.swift                # 文案
+│   └── MenuBarIcon.swift         # 菜单栏模板图标
+├── assets/                       # 应用图标
+├── scripts/                      # 图标生成与打包
+├── build.sh / Makefile           # 默认构建入口
+└── .github/workflows/            # CI / Release
 ```
+
+## 贡献
+
+欢迎 Issue 与 Pull Request。
+
+1. Fork 本仓库并创建分支：`git checkout -b feature/your-change`
+2. 本地验证：`swift build` 与（如涉及打包）`./scripts/package_app.sh`
+3. 提交清晰的 commit message，并打开 PR 说明动机与改动
+
+若改动影响 UI，请尽量附上截图或简短说明。
+
+## 许可
+
+本仓库尚未添加 `LICENSE` 文件。在声明开源许可证之前，版权归作者所有；使用、修改与再分发请先与维护者确认，或提交 PR 提议采用常见许可证（如 MIT）。
+
+## 致谢
+
+- [SwiftUI](https://developer.apple.com/xcode/swiftui/) · [Swift Package Manager](https://www.swift.org/documentation/package-manager/)
+- [GitHub Actions](https://docs.github.com/actions) 用于自动化构建与发布
