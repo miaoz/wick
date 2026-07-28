@@ -26,20 +26,20 @@ struct JournalRootView: View {
     @ViewBuilder
     private func chromeContent(palette: WickPalette) -> some View {
         let base = Group {
-            splitLayout
+            VStack(spacing: 0) {
+                if store.isReadOnlyDueToLoadFailure {
+                    loadFailureBanner
+                } else if store.didRestoreFromBackup {
+                    restoreBanner(palette: palette)
+                }
+                splitLayout
+            }
         }
         .environment(\.wickPalette, palette)
         .tint(palette.accent.color)
         .frame(minWidth: 720, minHeight: 480)
         .preferredColorScheme(settings.preferredColorScheme)
         .background(palette.backgroundBottom.color)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if store.isReadOnlyDueToLoadFailure {
-                loadFailureBanner
-            } else if store.didRestoreFromBackup {
-                restoreBanner(palette: palette)
-            }
-        }
         .confirmationDialog(
             L10n.string(.journalStartFresh, language: settings.language),
             isPresented: $showStartFreshConfirm,
@@ -64,9 +64,12 @@ struct JournalRootView: View {
         // macOS 14+ installs a real window toolbar (the split view's own
         // sidebar toggle plus this new-entry item). On macOS 13 nothing
         // materializes in this manually created window, so the panes render
-        // their own in-view top strips instead (see `journalNeedsInViewTopBar`).
+        // their own in-view top strips instead — with the top safe area
+        // ignored so the strips actually reach the titlebar zone and sit
+        // level with the traffic lights (safeAreaInset lands differently
+        // across versions, which is why this is manual).
         if journalNeedsInViewTopBar {
-            base
+            base.ignoresSafeArea(.container, edges: .top)
         } else {
             base.toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
@@ -201,6 +204,9 @@ private struct JournalTimelineSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if journalNeedsInViewTopBar {
+                topStrip
+            }
             filterBar
             Divider()
             if store.isItemScoped {
@@ -210,11 +216,6 @@ private struct JournalTimelineSidebar: View {
             }
         }
         .background(palette.sidebarBackground.color)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if journalNeedsInViewTopBar {
-                topStrip
-            }
-        }
         .onChange(of: store.searchText) { _ in
             store.handleFilterChange()
         }
@@ -749,19 +750,19 @@ private struct JournalEditorPane: View {
     }
 
     var body: some View {
-        Group {
-            if store.selection == nil || store.selectedEntry == nil {
-                noSelection
-            } else {
-                editor
-            }
-        }
-        .background(palette.backgroundBottom.color)
-        .safeAreaInset(edge: .top, spacing: 0) {
+        VStack(spacing: 0) {
             if journalNeedsInViewTopBar {
                 topStrip
             }
+            Group {
+                if store.selection == nil || store.selectedEntry == nil {
+                    noSelection
+                } else {
+                    editor
+                }
+            }
         }
+        .background(palette.backgroundBottom.color)
         .onChange(of: store.selection) { _ in
             loadDraft()
         }
