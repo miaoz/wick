@@ -97,7 +97,7 @@ make clean         # rm -rf .build dist
 
 - 触发：push/PR 到 `main`、推送 tag `v*`、`workflow_dispatch`。
 - 环境：`macos-26` runner，优先 `xcode-select` **Xcode 26.6**（没有则回退最新 26.x）；步骤含工具链打印、`swift test`、版本解析（tag 去掉 `v` 前缀；非 tag 用 `0.0.0-<short-sha>`，BUILD 为 run number）、`./scripts/package_zip.sh`、校验二进制、上传 artifact（30 天）。
-- 仅当 tag 以 `v` 开头时用 `softprops/action-gh-release` 创建 GitHub Release 并附上 zip。
+- 仅当 tag 以 `v` 开头时用 `softprops/action-gh-release` 创建 GitHub Release 并附上 zip；随后执行 `Prune old releases` 步骤，**只保留最新 3 个 Release**（`gh release delete`，不删 git tag，旧版本仍可从 tag 出码重建）。
 - 发版流程：`git tag v1.2.3 && git push origin v1.2.3`（tag 版本号会成为 zip/Release 版本）。
 
 ## 代码风格与约定
