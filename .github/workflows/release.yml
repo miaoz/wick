@@ -27,6 +27,8 @@ jobs:
           sw_vers
           xcodebuild -version
           swift --version
+          # Fail early with a clear message if Swift is older than Package.swift requires.
+          swift package describe >/dev/null
 
       - name: Resolve version
         id: version
