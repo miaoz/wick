@@ -71,6 +71,12 @@ final class AppSettings: ObservableObject {
         static let journalReminderEnabled = "wick.journal.reminderEnabled"
         static let journalReminderHour = "wick.journal.reminderHour"
         static let journalReminderMinute = "wick.journal.reminderMinute"
+        static let showMenuBarPercentage = "wick.menubar.showPercentage"
+        static let launchAtLogin = "wick.launchAtLogin"
+        static let checkForUpdatesOnLaunch = "wick.updates.checkOnLaunch"
+        static let lastKnownRemoteVersion = "wick.updates.lastKnownRemoteVersion"
+        static let lastKnownRemoteURL = "wick.updates.lastKnownRemoteURL"
+        static let weekStartsOnMonday = "wick.calendar.weekStartsOnMonday"
     }
 
     /// Suppresses reminder rescheduling while loading defaults in `init`.
@@ -111,6 +117,48 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// Show remaining day percentage next to the menu bar icon.
+    @Published var showMenuBarPercentage: Bool {
+        didSet {
+            UserDefaults.standard.set(showMenuBarPercentage, forKey: Keys.showMenuBarPercentage)
+        }
+    }
+
+    /// Prefer Monday as the first day of the week for weekly progress.
+    @Published var weekStartsOnMonday: Bool {
+        didSet {
+            UserDefaults.standard.set(weekStartsOnMonday, forKey: Keys.weekStartsOnMonday)
+        }
+    }
+
+    /// Desired open-at-login preference (actual system status is in `LaunchAtLogin`).
+    @Published var launchAtLoginDesired: Bool {
+        didSet {
+            UserDefaults.standard.set(launchAtLoginDesired, forKey: Keys.launchAtLogin)
+            if !isLoading {
+                applyLaunchAtLoginPreference()
+            }
+        }
+    }
+
+    @Published var checkForUpdatesOnLaunch: Bool {
+        didSet {
+            UserDefaults.standard.set(checkForUpdatesOnLaunch, forKey: Keys.checkForUpdatesOnLaunch)
+        }
+    }
+
+    @Published var lastKnownRemoteVersion: String {
+        didSet {
+            UserDefaults.standard.set(lastKnownRemoteVersion, forKey: Keys.lastKnownRemoteVersion)
+        }
+    }
+
+    @Published var lastKnownRemoteURL: String {
+        didSet {
+            UserDefaults.standard.set(lastKnownRemoteURL, forKey: Keys.lastKnownRemoteURL)
+        }
+    }
+
     /// Combined reminder time for DatePicker bindings.
     var journalReminderTime: Date {
         get {
@@ -123,7 +171,6 @@ final class AppSettings: ObservableObject {
             let components = Calendar.current.dateComponents([.hour, .minute], from: newValue)
             let hour = components.hour ?? 21
             let minute = components.minute ?? 0
-            // Assign once when possible to avoid double reschedule.
             if hour != journalReminderHour {
                 journalReminderHour = hour
             }
@@ -141,6 +188,16 @@ final class AppSettings: ObservableObject {
         appearance.colorScheme
     }
 
+    /// Calendar configured for week-start preference.
+    var progressCalendar: Calendar {
+        var calendar = Calendar.current
+        calendar.locale = locale
+        if weekStartsOnMonday {
+            calendar.firstWeekday = 2 // Monday
+        }
+        return calendar
+    }
+
     private init() {
         let languageRaw = UserDefaults.standard.string(forKey: Keys.language) ?? AppLanguage.chinese.rawValue
         language = AppLanguage(rawValue: languageRaw) ?? .chinese
@@ -155,7 +212,6 @@ final class AppSettings: ObservableObject {
         }
 
         if UserDefaults.standard.object(forKey: Keys.journalReminderHour) == nil {
-            // Default evening reminder time.
             journalReminderHour = 21
         } else {
             journalReminderHour = UserDefaults.standard.integer(forKey: Keys.journalReminderHour)
@@ -167,11 +223,56 @@ final class AppSettings: ObservableObject {
             journalReminderMinute = UserDefaults.standard.integer(forKey: Keys.journalReminderMinute)
         }
 
+        if UserDefaults.standard.object(forKey: Keys.showMenuBarPercentage) == nil {
+            showMenuBarPercentage = true
+        } else {
+            showMenuBarPercentage = UserDefaults.standard.bool(forKey: Keys.showMenuBarPercentage)
+        }
+
+        if UserDefaults.standard.object(forKey: Keys.weekStartsOnMonday) == nil {
+            // Default: follow region (China → Monday-ish via locale); store false to mean system.
+            weekStartsOnMonday = false
+        } else {
+            weekStartsOnMonday = UserDefaults.standard.bool(forKey: Keys.weekStartsOnMonday)
+        }
+
+        if UserDefaults.standard.object(forKey: Keys.launchAtLogin) == nil {
+            launchAtLoginDesired = false
+        } else {
+            launchAtLoginDesired = UserDefaults.standard.bool(forKey: Keys.launchAtLogin)
+        }
+
+        if UserDefaults.standard.object(forKey: Keys.checkForUpdatesOnLaunch) == nil {
+            checkForUpdatesOnLaunch = true
+        } else {
+            checkForUpdatesOnLaunch = UserDefaults.standard.bool(forKey: Keys.checkForUpdatesOnLaunch)
+        }
+
+        lastKnownRemoteVersion = UserDefaults.standard.string(forKey: Keys.lastKnownRemoteVersion) ?? ""
+        lastKnownRemoteURL = UserDefaults.standard.string(forKey: Keys.lastKnownRemoteURL) ?? ""
+
         isLoading = false
     }
 
     private func notifyReminderSettingsChanged() {
         guard !isLoading else { return }
         JournalReminderScheduler.shared.rescheduleFromSettings()
+    }
+
+    func applyLaunchAtLoginPreference() {
+        do {
+            try LaunchAtLogin.setEnabled(launchAtLoginDesired)
+        } catch {
+            NSLog("Wick launch-at-login failed: \(error.localizedDescription)")
+        }
+        objectWillChange.send()
+    }
+
+    var isLaunchAtLoginEnabledInSystem: Bool {
+        LaunchAtLogin.isEnabled
+    }
+
+    var launchAtLoginNeedsApproval: Bool {
+        LaunchAtLogin.status == .requiresApproval
     }
 }

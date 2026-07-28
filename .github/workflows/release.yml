@@ -53,6 +53,9 @@ jobs:
           # Fail early with a clear message if Swift is older than Package.swift requires.
           swift package describe >/dev/null
 
+      - name: Unit tests
+        run: swift test
+
       - name: Resolve version
         id: version
         run: |

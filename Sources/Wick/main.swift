@@ -1,0 +1,3 @@
+import WickCore
+
+WickApp.main()

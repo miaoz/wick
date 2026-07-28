@@ -10,6 +10,8 @@ struct JournalRootView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @AppStorage("wick.journal.useSplitLayout") private var useSplitLayout = true
+    @State private var exportStatus: String?
+    @State private var showStartFreshConfirm = false
 
     var body: some View {
         Group {
@@ -41,7 +43,7 @@ struct JournalRootView: View {
                 )
 
                 Button {
-                    _ = store.createEntry()
+                    _ = store.openOrCreateToday()
                 } label: {
                     Label(
                         L10n.string(.journalNewEntry, language: settings.language),
@@ -49,9 +51,89 @@ struct JournalRootView: View {
                     )
                 }
                 .help(L10n.string(.journalNewEntry, language: settings.language))
+                .keyboardShortcut("n", modifiers: [.command])
             }
         }
         .navigationTitle(L10n.string(.journalTitle, language: settings.language))
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if store.isReadOnlyDueToLoadFailure {
+                loadFailureBanner
+            } else if store.didRestoreFromBackup {
+                restoreBanner
+            }
+        }
+        .confirmationDialog(
+            L10n.string(.journalStartFresh, language: settings.language),
+            isPresented: $showStartFreshConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.string(.journalStartFresh, language: settings.language), role: .destructive) {
+                try? store.abandonCorruptDatabaseAndStartFresh()
+            }
+            Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
+        }
+        .background {
+            // Hidden focusable buttons for shortcuts that aren't in the toolbar.
+            Button("") {
+                focusSearchField()
+            }
+            .keyboardShortcut("f", modifiers: [.command])
+            .opacity(0)
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private var loadFailureBanner: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L10n.string(.journalLoadFailureTitle, language: settings.language))
+                .font(.headline)
+            Text(L10n.string(.journalLoadFailureBody, language: settings.language))
+                .font(.callout)
+            HStack {
+                Button(L10n.string(.journalImport, language: settings.language)) {
+                    importJournal()
+                }
+                Button(L10n.string(.journalStartFresh, language: settings.language), role: .destructive) {
+                    showStartFreshConfirm = true
+                }
+                Spacer()
+                if let exportStatus {
+                    Text(exportStatus).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.18))
+    }
+
+    private var restoreBanner: some View {
+        Text(L10n.string(.journalRestoredFromBackup, language: settings.language))
+            .font(.callout)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.accentColor.opacity(0.12))
+    }
+
+    private func focusSearchField() {
+        // Best-effort: post a notification; the sidebar search field becomes first responder via window.
+        if let window = NSApp.keyWindow {
+            window.makeFirstResponder(window.contentView)
+        }
+    }
+
+    private func importJournal() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.zip, .json]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try store.importArchive(from: url)
+            exportStatus = L10n.string(.journalImportSuccess, language: settings.language)
+        } catch {
+            exportStatus = L10n.string(.journalImportFailed, language: settings.language)
+        }
     }
 
     private var splitLayout: some View {
@@ -264,7 +346,7 @@ private struct JournalTimelineSidebar: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
             Button {
-                _ = store.createEntry()
+                _ = store.openOrCreateToday()
             } label: {
                 Text(L10n.string(.journalNewEntry, language: settings.language))
             }
@@ -506,6 +588,13 @@ private struct JournalEditorPane: View {
         .onAppear {
             loadDraft()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .wickWillFlushJournalDrafts)) { _ in
+            flushDraftImmediately()
+        }
+        .onDisappear {
+            flushDraftImmediately()
+        }
+        .disabled(store.isReadOnlyDueToLoadFailure)
         .fileImporter(
             isPresented: Binding(
                 get: { imageImportItemID != nil },
@@ -570,7 +659,7 @@ private struct JournalEditorPane: View {
                 .font(.title3.weight(.medium))
                 .foregroundStyle(.secondary)
             Button {
-                _ = store.createEntry()
+                _ = store.openOrCreateToday()
             } label: {
                 Text(L10n.string(.journalNewEntry, language: settings.language))
             }
@@ -681,9 +770,15 @@ private struct JournalEditorPane: View {
                     .foregroundStyle(.secondary)
                 }
 
-                Text(L10n.string(.journalAutosaved, language: settings.language))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                if store.isReadOnlyDueToLoadFailure {
+                    Text(L10n.string(.journalReadOnly, language: settings.language))
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else {
+                    Text(L10n.string(.journalAutosaved, language: settings.language))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             if isItemScopedEditor {
@@ -811,6 +906,7 @@ private struct JournalEditorPane: View {
     }
 
     private func scheduleSave() {
+        guard !store.isReadOnlyDueToLoadFailure else { return }
         saveTask?.cancel()
         // Debounce disk writes, and never commit while an IME is composing —
         // intermediate marked text + @Published store refresh is what swallows CJK input.
@@ -825,6 +921,13 @@ private struct JournalEditorPane: View {
                 return
             }
         }
+    }
+
+    private func flushDraftImmediately() {
+        saveTask?.cancel()
+        guard store.selectedEntryID != nil, !store.isReadOnlyDueToLoadFailure else { return }
+        // Even if IME is active, quitting must not lose committed characters already in the binding.
+        store.updateEntry(draft)
     }
 
     private func addItem() {
@@ -1080,10 +1183,11 @@ private struct JournalImageThumb: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Group {
-                if let image = store.loadNSImage(filename: filename) {
+                if let image = store.loadThumbnail(filename: filename, maxPixel: 360) {
                     Image(nsImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
+                        .accessibilityLabel(filename)
                 } else {
                     Color.secondary.opacity(0.15)
                         .overlay {

@@ -13,11 +13,13 @@
 
 ## 功能
 
-- **菜单栏常驻**：基于 `MenuBarExtra` 的原生体验，不占用 Dock
-- **时间进度**：日、周、月、年的剩余百分比、剩余时长与结束时间，每秒刷新
+- **菜单栏常驻**：基于 `MenuBarExtra` 的原生体验，不占用 Dock；可选显示今日剩余百分比
+- **时间进度**：日、周、月、年的剩余百分比、剩余时长与结束时间，每秒刷新；可设周从周一开始
 - **日记**：双栏原生窗口；一天一篇日记，篇内多条目（标签 + 正文 + 图片）；标签/搜索以条目为粒度；可选每日提醒
+- **数据安全**：退出/关窗强制落盘、`journal.json.bak` 与滚动备份、加载失败只读保护、导出/导入 zip
+- **登录启动**：可选「登录时启动」（`SMAppService`）
 - **烛光 / 极夜主题**：亮色与暗色自动切换面板配色
-- **设置**：语言（中文 / English）、外观（亮色 / 暗色 / 跟随系统）、日记提醒时间
+- **设置**：语言、外观、提醒、菜单栏百分比、数据目录、版本与检查更新（GitHub Releases）
 - **Universal 二进制**：同时支持 Apple Silicon 与 Intel Mac
 - **开箱可分发**：本地一键打 zip；推送 tag 后由 GitHub Actions 自动发版
 
@@ -87,7 +89,9 @@ open dist/Wick.app
 | 图片 | 在条目内拖入、选择文件，或从剪贴板粘贴 |
 | 自动保存 | 编辑后短延迟写入本地，无需手动保存 |
 | 提醒 | 设置中开启「每日提醒写日记」并选择时间（默认 21:00）；点击通知打开日记 |
-| 存储 | `~/Library/Application Support/Wick/Journal/`（`journal.json` + `images/`） |
+| 存储 | `~/Library/Application Support/Wick/Journal/`（`journal.json`、`.bak`、滚动备份、`images/`） |
+| 导入导出 | 设置 → 数据：导出 zip / 导入 zip 或 `journal.json`；可在 Finder 中显示数据目录 |
+| 快捷键 | 日记窗口 `⌘N` 打开/创建今日日记 |
 
 > **说明：** 本地通知依赖正式 `.app` 包（含 Bundle ID）。`swift run` 开发运行时会跳过提醒调度，打包后的 `Wick.app` 可正常使用。
 
@@ -115,8 +119,8 @@ make package
 打包时可注入版本信息（写入 `Info.plist`，并体现在 zip 文件名中）：
 
 ```bash
-VERSION=1.2 BUILD=3 ./scripts/package_zip.sh
-# → dist/Wick-macOS-1.2.zip
+VERSION=1.3 BUILD=4 ./scripts/package_zip.sh
+# → dist/Wick-macOS-1.3.zip
 ```
 
 ### 构建说明
@@ -169,18 +173,20 @@ git push origin v1.2
 
 ```text
 wick/
-├── Package.swift                 # Swift Package 清单
-├── Sources/Wick/                 # 应用源码
-│   ├── WickApp.swift             # 入口、MenuBarExtra、日记窗口
+├── Package.swift                 # Swift Package 清单（WickCore + Wick + 测试）
+├── Sources/WickCore/             # 应用逻辑与 UI
+│   ├── WickApp.swift             # MenuBarExtra、AppDelegate
 │   ├── ProgressPanelView.swift   # 进度面板与设置 UI
 │   ├── TimeProgress.swift        # 日/周/月/年计算
 │   ├── JournalModels.swift       # 日记数据模型
-│   ├── JournalStore.swift        # 本地持久化与图片
+│   ├── JournalStore.swift        # 本地持久化、备份、导入导出
 │   ├── JournalViews.swift        # 日记双栏 UI
 │   ├── JournalReminderScheduler.swift  # 每日提醒
-│   ├── AppSettings.swift         # 语言、外观、提醒
+│   ├── AppSettings.swift         # 语言、外观、提醒、登录项等
 │   ├── L10n.swift                # 文案
 │   └── MenuBarIcon.swift         # 菜单栏模板图标
+├── Sources/Wick/main.swift       # 可执行入口
+├── Tests/WickTests/              # 单元测试
 ├── assets/                       # 应用图标
 ├── scripts/                      # 图标生成与打包
 ├── build.sh / Makefile           # 默认构建入口

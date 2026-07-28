@@ -11,6 +11,17 @@ struct TimeProgress: Identifiable {
 }
 
 enum TimeProgressCalculator {
+    /// Fraction of the current local day still remaining in `[0, 1]`.
+    static func dayFractionRemaining(
+        at date: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Double {
+        guard let interval = calendar.dateInterval(of: .day, for: date) else {
+            return 0
+        }
+        return remainingFraction(for: interval, at: date)
+    }
+
     static func allProgress(
         at date: Date,
         language: AppLanguage,
@@ -111,7 +122,7 @@ enum TimeProgressCalculator {
         }
     }
 
-    private static func remainingFraction(for interval: DateInterval, at date: Date) -> Double {
+    static func remainingFraction(for interval: DateInterval, at date: Date) -> Double {
         let remaining = interval.end.timeIntervalSince(date)
         guard interval.duration > 0 else {
             return 0

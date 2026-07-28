@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 private enum PanelViewLayout {
     static let width: CGFloat = 360
@@ -48,14 +49,18 @@ struct ProgressPanelView: View {
                     if showsSettings {
                         settingsHeader(theme: theme, language: language)
                         settingsDivider(theme: theme)
-                        SettingsContentView(theme: theme, language: language)
+                        ScrollView {
+                            SettingsContentView(theme: theme, language: language)
+                        }
+                        .frame(maxHeight: 520)
                     } else {
                         progressHeader(date: context.date, theme: theme, language: language)
                         settingsDivider(theme: theme)
 
                         let items = TimeProgressCalculator.allProgress(
                             at: context.date,
-                            language: language
+                            language: language,
+                            calendar: settings.progressCalendar
                         )
 
                         VStack(spacing: 12) {
@@ -222,9 +227,17 @@ struct ProgressPanelView: View {
 
 private struct SettingsContentView: View {
     @EnvironmentObject private var settings: AppSettings
+    @ObservedObject private var reminderScheduler = JournalReminderScheduler.shared
+    @EnvironmentObject private var journalStore: JournalStore
 
     let theme: PanelTheme
     let language: AppLanguage
+
+    @State private var isCheckingUpdates = false
+    @State private var updateStatusText: String?
+    @State private var updateOpenURL: URL?
+    @State private var dataStatusText: String?
+    @State private var showStartFreshConfirm = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -255,6 +268,50 @@ private struct SettingsContentView: View {
                         ) {
                             settings.appearance = option
                         }
+                    }
+                }
+            }
+
+            settingsSection(
+                title: L10n.string(.generalSection, language: language)
+            ) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Toggle(isOn: $settings.showMenuBarPercentage) {
+                        Text(L10n.string(.menuBarPercentage, language: language))
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(theme.primaryText)
+                    }
+                    .toggleStyle(.switch)
+                    .tint(theme.selectionAccent)
+
+                    Toggle(isOn: $settings.weekStartsOnMonday) {
+                        Text(L10n.string(.weekStartsOnMonday, language: language))
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(theme.primaryText)
+                    }
+                    .toggleStyle(.switch)
+                    .tint(theme.selectionAccent)
+
+                    Toggle(isOn: $settings.launchAtLoginDesired) {
+                        Text(L10n.string(.launchAtLogin, language: language))
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(theme.primaryText)
+                    }
+                    .toggleStyle(.switch)
+                    .tint(theme.selectionAccent)
+
+                    if settings.launchAtLoginDesired && settings.launchAtLoginNeedsApproval {
+                        Text(L10n.string(.launchAtLoginNeedsApproval, language: language))
+                            .font(.caption)
+                            .foregroundStyle(theme.secondaryText)
+                        Button {
+                            LaunchAtLogin.openSystemLoginItems()
+                        } label: {
+                            Text(L10n.string(.openLoginItems, language: language))
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(theme.selectionAccent)
                     }
                 }
             }
@@ -314,9 +371,283 @@ private struct SettingsContentView: View {
                             .datePickerStyle(.field)
                         }
                         .padding(.horizontal, 4)
+
+                        reminderPermissionFooter
                     }
                 }
             }
+
+            settingsSection(
+                title: L10n.string(.dataSection, language: language)
+            ) {
+                VStack(alignment: .leading, spacing: 10) {
+                    if journalStore.isReadOnlyDueToLoadFailure {
+                        Text(L10n.string(.journalLoadFailureTitle, language: language))
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(theme.primaryText)
+                        Text(L10n.string(.journalLoadFailureBody, language: language))
+                            .font(.caption)
+                            .foregroundStyle(theme.secondaryText)
+                        if let detail = journalStore.loadFailureMessage {
+                            Text(detail)
+                                .font(.caption2)
+                                .foregroundStyle(theme.tertiaryText)
+                        }
+                        Button {
+                            showStartFreshConfirm = true
+                        } label: {
+                            Text(L10n.string(.journalStartFresh, language: language))
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.red.opacity(0.85))
+                    } else if journalStore.didRestoreFromBackup {
+                        Text(L10n.string(.journalRestoredFromBackup, language: language))
+                            .font(.caption)
+                            .foregroundStyle(theme.secondaryText)
+                    }
+
+                    dataActionButton(
+                        title: L10n.string(.journalExport, language: language),
+                        systemImage: "square.and.arrow.up"
+                    ) {
+                        exportJournal()
+                    }
+                    dataActionButton(
+                        title: L10n.string(.journalImport, language: language),
+                        systemImage: "square.and.arrow.down"
+                    ) {
+                        importJournal()
+                    }
+                    dataActionButton(
+                        title: L10n.string(.journalRevealData, language: language),
+                        systemImage: "folder"
+                    ) {
+                        journalStore.revealDataDirectoryInFinder()
+                    }
+
+                    if let dataStatusText {
+                        Text(dataStatusText)
+                            .font(.caption)
+                            .foregroundStyle(theme.secondaryText)
+                    }
+                }
+            }
+
+            settingsSection(
+                title: L10n.string(.aboutSection, language: language)
+            ) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text(L10n.string(.versionLabel, language: language))
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(theme.secondaryText)
+                        Spacer()
+                        Text(AppInfo.versionDisplay)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded).monospacedDigit())
+                            .foregroundStyle(theme.primaryText)
+                            .textSelection(.enabled)
+                    }
+
+                    Toggle(isOn: $settings.checkForUpdatesOnLaunch) {
+                        Text(L10n.string(.checkUpdatesOnLaunch, language: language))
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(theme.primaryText)
+                    }
+                    .toggleStyle(.switch)
+                    .tint(theme.selectionAccent)
+
+                    Button {
+                        Task { await checkForUpdates() }
+                    } label: {
+                        HStack {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Text(
+                                isCheckingUpdates
+                                    ? L10n.string(.checkingForUpdates, language: language)
+                                    : L10n.string(.checkForUpdates, language: language)
+                            )
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            Spacer()
+                        }
+                        .foregroundStyle(theme.primaryText)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(theme.controlBackground)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(theme.controlBorder, lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isCheckingUpdates)
+
+                    if let updateStatusText {
+                        if let updateOpenURL {
+                            Button {
+                                NSWorkspace.shared.open(updateOpenURL)
+                            } label: {
+                                Text(updateStatusText)
+                                    .font(.caption)
+                                    .foregroundStyle(theme.selectionAccent)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            Text(updateStatusText)
+                                .font(.caption)
+                                .foregroundStyle(theme.secondaryText)
+                        }
+                    } else if !settings.lastKnownRemoteVersion.isEmpty,
+                              AppInfo.isVersion(settings.lastKnownRemoteVersion, newerThan: AppInfo.shortVersion)
+                    {
+                        Button {
+                            if let url = URL(string: settings.lastKnownRemoteURL) {
+                                NSWorkspace.shared.open(url)
+                            } else {
+                                NSWorkspace.shared.open(UpdateChecker.releasesPageURL)
+                            }
+                        } label: {
+                            Text(
+                                String(
+                                    format: L10n.string(.updateAvailableFormat, language: language),
+                                    settings.lastKnownRemoteVersion
+                                )
+                            )
+                            .font(.caption)
+                            .foregroundStyle(theme.selectionAccent)
+                            .multilineTextAlignment(.leading)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .confirmationDialog(
+            L10n.string(.journalStartFresh, language: language),
+            isPresented: $showStartFreshConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.string(.journalStartFresh, language: language), role: .destructive) {
+                try? journalStore.abandonCorruptDatabaseAndStartFresh()
+            }
+            Button(L10n.string(.cancel, language: language), role: .cancel) {}
+        }
+        .onAppear {
+            Task { await reminderScheduler.refreshAuthorizationState() }
+        }
+    }
+
+    @ViewBuilder
+    private var reminderPermissionFooter: some View {
+        switch reminderScheduler.authorizationState {
+        case .denied:
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L10n.string(.notificationDenied, language: language))
+                    .font(.caption)
+                    .foregroundStyle(theme.secondaryText)
+                Button {
+                    reminderScheduler.openSystemNotificationSettings()
+                } label: {
+                    Text(L10n.string(.openNotificationSettings, language: language))
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(theme.selectionAccent)
+            }
+        case .unavailable:
+            Text(L10n.string(.notificationUnavailable, language: language))
+                .font(.caption)
+                .foregroundStyle(theme.tertiaryText)
+        case .notDetermined, .authorized, .provisional:
+            EmptyView()
+        }
+    }
+
+    private func dataActionButton(
+        title: String,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack {
+                Image(systemName: systemImage)
+                Text(title)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                Spacer(minLength: 8)
+            }
+            .foregroundStyle(theme.primaryText)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(theme.controlBackground)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(theme.controlBorder, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func exportJournal() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.zip]
+        panel.nameFieldStringValue = "Wick-Journal-\(AppInfo.shortVersion).zip"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try journalStore.exportArchive(to: url)
+            dataStatusText = L10n.string(.journalExportSuccess, language: language)
+        } catch {
+            dataStatusText = L10n.string(.journalExportFailed, language: language)
+                + ": "
+                + error.localizedDescription
+        }
+    }
+
+    private func importJournal() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.zip, .json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try journalStore.importArchive(from: url)
+            dataStatusText = L10n.string(.journalImportSuccess, language: language)
+        } catch {
+            dataStatusText = L10n.string(.journalImportFailed, language: language)
+                + ": "
+                + error.localizedDescription
+        }
+    }
+
+    private func checkForUpdates() async {
+        isCheckingUpdates = true
+        updateOpenURL = nil
+        defer { isCheckingUpdates = false }
+
+        let result = await UpdateChecker.check()
+        switch result.kind {
+        case .upToDate:
+            updateStatusText = L10n.string(.upToDate, language: language)
+            settings.lastKnownRemoteVersion = ""
+            settings.lastKnownRemoteURL = ""
+        case .updateAvailable(let version, let url):
+            updateStatusText = String(
+                format: L10n.string(.updateAvailableFormat, language: language),
+                version
+            )
+            updateOpenURL = url
+            settings.lastKnownRemoteVersion = version
+            settings.lastKnownRemoteURL = url.absoluteString
+        case .unavailable:
+            updateStatusText = L10n.string(.updateCheckFailed, language: language)
+            updateOpenURL = UpdateChecker.releasesPageURL
         }
     }
 
@@ -455,6 +786,8 @@ private struct MetricProgressCard: View {
                 .strokeBorder(panelTheme.cardBorder, lineWidth: 1)
         }
         .shadow(color: theme.glow, radius: 10, y: 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(item.title), \(item.percentageText), \(item.remainingText)")
     }
 
     private func progressLabel(for value: Double) -> String {

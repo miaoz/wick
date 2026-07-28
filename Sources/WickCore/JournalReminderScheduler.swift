@@ -8,7 +8,7 @@ import UserNotifications
 /// UserNotifications requires a real app bundle (`*.app` + bundle id). When launched via
 /// `swift run` / raw binary under `.build/`, the framework aborts — so all UN calls are gated.
 @MainActor
-final class JournalReminderScheduler: NSObject, UNUserNotificationCenterDelegate {
+final class JournalReminderScheduler: NSObject, UNUserNotificationCenterDelegate, ObservableObject {
     static let shared = JournalReminderScheduler()
 
     enum IDs {
@@ -17,17 +17,26 @@ final class JournalReminderScheduler: NSObject, UNUserNotificationCenterDelegate
         static let openAction = "wick.journal.open"
     }
 
+    enum AuthorizationState: Equatable {
+        case unavailable
+        case notDetermined
+        case authorized
+        case denied
+        case provisional
+    }
+
+    @Published private(set) var authorizationState: AuthorizationState = .unavailable
+    @Published private(set) var lastScheduleError: String?
+
     /// `true` only when running inside a packaged `.app` that UserNotifications can bind to.
     static var notificationsAvailable: Bool {
         guard let bundleID = Bundle.main.bundleIdentifier, !bundleID.isEmpty else {
             return false
         }
-        // `swift run` uses something like `…/.build/debug/` as the main bundle URL.
         let bundleURL = Bundle.main.bundleURL
         if bundleURL.pathExtension == "app" {
             return true
         }
-        // Some launchers may point at Contents/MacOS; accept a parent .app.
         return bundleURL.path.contains(".app/")
     }
 
@@ -40,6 +49,7 @@ final class JournalReminderScheduler: NSObject, UNUserNotificationCenterDelegate
 
     func configure() {
         guard Self.notificationsAvailable else {
+            authorizationState = .unavailable
             NSLog("Wick: journal reminders disabled (not running as an app bundle)")
             return
         }
@@ -49,7 +59,10 @@ final class JournalReminderScheduler: NSObject, UNUserNotificationCenterDelegate
         notificationCenter.delegate = self
         didConfigure = true
         registerCategories()
-        rescheduleFromSettings()
+        Task {
+            await refreshAuthorizationState()
+            rescheduleFromSettings()
+        }
     }
 
     func rescheduleFromSettings() {
@@ -63,12 +76,23 @@ final class JournalReminderScheduler: NSObject, UNUserNotificationCenterDelegate
         }
     }
 
+    func refreshAuthorizationState() async {
+        guard let center else {
+            authorizationState = Self.notificationsAvailable ? .notDetermined : .unavailable
+            return
+        }
+        let settings = await center.notificationSettings()
+        authorizationState = mapAuthorization(settings.authorizationStatus)
+    }
+
     func requestAuthorizationIfNeeded() async -> Bool {
         guard let center else {
             return false
         }
 
         let settings = await center.notificationSettings()
+        authorizationState = mapAuthorization(settings.authorizationStatus)
+
         switch settings.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
             return true
@@ -76,8 +100,11 @@ final class JournalReminderScheduler: NSObject, UNUserNotificationCenterDelegate
             return false
         case .notDetermined:
             do {
-                return try await center.requestAuthorization(options: [.alert, .sound, .badge])
+                let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+                await refreshAuthorizationState()
+                return granted
             } catch {
+                lastScheduleError = error.localizedDescription
                 return false
             }
         @unknown default:
@@ -85,24 +112,35 @@ final class JournalReminderScheduler: NSObject, UNUserNotificationCenterDelegate
         }
     }
 
+    func openSystemNotificationSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
+            NSWorkspace.shared.open(url)
+            return
+        }
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     func reschedule(enabled: Bool, hour: Int, minute: Int) async {
         guard let center else {
-            // Not configured yet (or not an app bundle). Configure may still be pending.
             if Self.notificationsAvailable, !didConfigure {
-                // Wait for applicationDidFinishLaunching → configure().
                 return
             }
             return
         }
 
         center.removePendingNotificationRequests(withIdentifiers: [IDs.notification])
+        lastScheduleError = nil
 
         guard enabled else {
+            await refreshAuthorizationState()
             return
         }
 
         let authorized = await requestAuthorizationIfNeeded()
         guard authorized else {
+            await refreshAuthorizationState()
             return
         }
 
@@ -127,9 +165,12 @@ final class JournalReminderScheduler: NSObject, UNUserNotificationCenterDelegate
 
         do {
             try await center.add(request)
+            lastScheduleError = nil
         } catch {
+            lastScheduleError = error.localizedDescription
             NSLog("Wick journal reminder schedule failed: \(error.localizedDescription)")
         }
+        await refreshAuthorizationState()
     }
 
     // MARK: - UNUserNotificationCenterDelegate
@@ -175,6 +216,21 @@ final class JournalReminderScheduler: NSObject, UNUserNotificationCenterDelegate
             options: []
         )
         center.setNotificationCategories([category])
+    }
+
+    private func mapAuthorization(_ status: UNAuthorizationStatus) -> AuthorizationState {
+        switch status {
+        case .notDetermined:
+            return .notDetermined
+        case .denied:
+            return .denied
+        case .authorized:
+            return .authorized
+        case .provisional, .ephemeral:
+            return .provisional
+        @unknown default:
+            return .notDetermined
+        }
     }
 }
 
@@ -238,7 +294,6 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
 
         self.window = window
 
-        // Keep title in sync when the user switches language in settings.
         languageObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
             object: nil,
@@ -258,6 +313,7 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        // Keep the window instance for fast re-open; content stays loaded.
+        NotificationCenter.default.post(name: .wickWillFlushJournalDrafts, object: nil)
+        JournalStore.shared.flushPendingWrites()
     }
 }

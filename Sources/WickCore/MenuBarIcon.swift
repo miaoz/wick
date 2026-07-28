@@ -5,10 +5,8 @@ enum MenuBarIcon {
     /// Template candle silhouette for the macOS menu bar.
     /// Opaque black on transparent; the system tints it for light/dark bars.
     ///
-    /// `NSImage` is not `Sendable`. This icon is built once, marked as a template,
-    /// and never mutated afterwards, so `nonisolated(unsafe)` is safe here and
-    /// keeps the build green under Swift 6 strict concurrency (CI / Xcode 16).
-    nonisolated(unsafe) static let image: NSImage = {
+    /// Built once, marked as a template, and never mutated afterwards.
+    static let image: NSImage = {
         let pointSize = NSSize(width: 18, height: 18)
         let image = NSImage(size: pointSize)
 

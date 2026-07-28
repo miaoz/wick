@@ -89,6 +89,39 @@ enum L10n {
         case journalItemScopeBadge
         case journalItemScopeEditorHint
         case journalDeleteItemConfirm
+        case journalExport
+        case journalImport
+        case journalExportSuccess
+        case journalImportSuccess
+        case journalExportFailed
+        case journalImportFailed
+        case journalRevealData
+        case journalLoadFailureTitle
+        case journalLoadFailureBody
+        case journalStartFresh
+        case journalRestoredFromBackup
+        case journalReadOnly
+
+        // Settings extras
+        case generalSection
+        case menuBarPercentage
+        case weekStartsOnMonday
+        case launchAtLogin
+        case launchAtLoginNeedsApproval
+        case openLoginItems
+        case notificationDenied
+        case openNotificationSettings
+        case notificationUnavailable
+        case aboutSection
+        case versionLabel
+        case checkForUpdates
+        case checkingForUpdates
+        case updateAvailableFormat
+        case upToDate
+        case updateCheckFailed
+        case openReleasePage
+        case checkUpdatesOnLaunch
+        case dataSection
 
         var chinese: String {
             switch self {
@@ -125,7 +158,7 @@ enum L10n {
 
             case .journal: return "日记"
             case .journalTitle: return "日记"
-            case .journalNewEntry: return "新建日记"
+            case .journalNewEntry: return "今日日记"
             case .journalSearchPlaceholder: return "搜索正文或标签…"
             case .journalAllTags: return "全部"
             case .journalEmptyTitle: return "还没有日记"
@@ -169,6 +202,38 @@ enum L10n {
             case .journalItemScopeBadge: return "单条"
             case .journalItemScopeEditorHint: return "当前只编辑这一条。可打开「查看当天全部」管理同日其他条目。"
             case .journalDeleteItemConfirm: return "确定删除这条条目？相关图片也会删除。"
+            case .journalExport: return "导出日记…"
+            case .journalImport: return "导入日记…"
+            case .journalExportSuccess: return "日记已导出"
+            case .journalImportSuccess: return "日记已导入"
+            case .journalExportFailed: return "导出失败"
+            case .journalImportFailed: return "导入失败"
+            case .journalRevealData: return "在 Finder 中显示数据"
+            case .journalLoadFailureTitle: return "日记文件无法读取"
+            case .journalLoadFailureBody: return "已阻止覆盖，以免丢失数据。可尝试导入备份，或在确认后清空并重新开始。"
+            case .journalStartFresh: return "清空并重新开始"
+            case .journalRestoredFromBackup: return "已从备份恢复日记"
+            case .journalReadOnly: return "只读（加载失败）"
+
+            case .generalSection: return "通用"
+            case .menuBarPercentage: return "菜单栏显示今日剩余"
+            case .weekStartsOnMonday: return "周从周一开始"
+            case .launchAtLogin: return "登录时启动"
+            case .launchAtLoginNeedsApproval: return "请在系统设置中允许 Wick 登录启动"
+            case .openLoginItems: return "打开登录项设置"
+            case .notificationDenied: return "通知权限已关闭，提醒无法送达"
+            case .openNotificationSettings: return "打开通知设置"
+            case .notificationUnavailable: return "开发运行中无法使用通知（请打开打包后的 Wick.app）"
+            case .aboutSection: return "关于"
+            case .versionLabel: return "版本"
+            case .checkForUpdates: return "检查更新"
+            case .checkingForUpdates: return "正在检查…"
+            case .updateAvailableFormat: return "发现新版本 %@，点击打开下载页"
+            case .upToDate: return "已是最新版本"
+            case .updateCheckFailed: return "检查更新失败"
+            case .openReleasePage: return "打开发布页"
+            case .checkUpdatesOnLaunch: return "启动时检查更新"
+            case .dataSection: return "数据"
             }
         }
 
@@ -207,7 +272,7 @@ enum L10n {
 
             case .journal: return "Journal"
             case .journalTitle: return "Journal"
-            case .journalNewEntry: return "New Entry"
+            case .journalNewEntry: return "Today’s Journal"
             case .journalSearchPlaceholder: return "Search text or tags…"
             case .journalAllTags: return "All"
             case .journalEmptyTitle: return "No entries yet"
@@ -251,6 +316,38 @@ enum L10n {
             case .journalItemScopeBadge: return "Item"
             case .journalItemScopeEditorHint: return "Editing this item only. Open the full day to manage siblings."
             case .journalDeleteItemConfirm: return "Delete this item? Its images will be removed too."
+            case .journalExport: return "Export Journal…"
+            case .journalImport: return "Import Journal…"
+            case .journalExportSuccess: return "Journal exported"
+            case .journalImportSuccess: return "Journal imported"
+            case .journalExportFailed: return "Export failed"
+            case .journalImportFailed: return "Import failed"
+            case .journalRevealData: return "Reveal Data in Finder"
+            case .journalLoadFailureTitle: return "Couldn’t read journal file"
+            case .journalLoadFailureBody: return "Writes are blocked so your file won’t be overwritten. Import a backup, or start fresh after confirming."
+            case .journalStartFresh: return "Start Fresh"
+            case .journalRestoredFromBackup: return "Journal restored from backup"
+            case .journalReadOnly: return "Read-only (load failed)"
+
+            case .generalSection: return "General"
+            case .menuBarPercentage: return "Show day remaining in menu bar"
+            case .weekStartsOnMonday: return "Week starts on Monday"
+            case .launchAtLogin: return "Open at Login"
+            case .launchAtLoginNeedsApproval: return "Allow Wick in System Settings → Login Items"
+            case .openLoginItems: return "Open Login Items"
+            case .notificationDenied: return "Notifications are off — reminders can’t be delivered"
+            case .openNotificationSettings: return "Open Notification Settings"
+            case .notificationUnavailable: return "Notifications need the packaged Wick.app (not swift run)"
+            case .aboutSection: return "About"
+            case .versionLabel: return "Version"
+            case .checkForUpdates: return "Check for Updates"
+            case .checkingForUpdates: return "Checking…"
+            case .updateAvailableFormat: return "Update %@ available — click to open downloads"
+            case .upToDate: return "You’re up to date"
+            case .updateCheckFailed: return "Update check failed"
+            case .openReleasePage: return "Open Releases"
+            case .checkUpdatesOnLaunch: return "Check for updates on launch"
+            case .dataSection: return "Data"
             }
         }
     }

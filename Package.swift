@@ -13,8 +13,19 @@ let package = Package(
         )
     ],
     targets: [
+        .target(
+            name: "WickCore",
+            path: "Sources/WickCore"
+        ),
         .executableTarget(
-            name: "Wick"
+            name: "Wick",
+            dependencies: ["WickCore"],
+            path: "Sources/Wick"
+        ),
+        .testTarget(
+            name: "WickTests",
+            dependencies: ["WickCore"],
+            path: "Tests/WickTests"
         )
     ]
 )
