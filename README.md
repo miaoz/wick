@@ -66,6 +66,8 @@ VERSION=1.2.3 BUILD=42 ./scripts/package_zip.sh
 | 推送 tag `v*`（例如 `v1.0.0`） | 同上，并创建 [GitHub Release](https://github.com/miaoz/wick/releases)，附带安装包 |
 | `workflow_dispatch` | 手动触发构建 |
 
+CI 跑在 GitHub 的 **`macos-26`** 云端机器上，并优先选用 **Xcode 26.6**（与当前本机开发环境一致；若镜像尚未装 26.6 则回退到最新的 Xcode 26.x）。打包脚本与本地相同（`./scripts/package_zip.sh`）。
+
 ### 发布新版本
 
 ```bash

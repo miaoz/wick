@@ -14,7 +14,8 @@ permissions:
 jobs:
   build:
     name: Build universal macOS app
-    runs-on: macos-15
+    # Prefer the same major toolchain as local development (macOS 26 / Xcode 26.x).
+    runs-on: macos-26
     permissions:
       contents: write
 
@@ -22,9 +23,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Match local Xcode when available (this machine: 26.6 / 17F113).
+      # Falls back to the newest installed 26.x if 26.6 is missing on a future image.
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          preferred="/Applications/Xcode_26.6.app"
+          if [[ -d "$preferred" ]]; then
+            sudo xcode-select -s "$preferred"
+          else
+            latest="$(ls -1d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)"
+            if [[ -z "${latest}" ]]; then
+              echo "No Xcode 26.x found under /Applications" >&2
+              ls /Applications/Xcode*.app 2>/dev/null || true
+              exit 1
+            fi
+            echo "Xcode 26.6 not found; using ${latest}"
+            sudo xcode-select -s "$latest"
+          fi
+          xcodebuild -version
+          swift --version
+
       - name: Show toolchain
         run: |
           sw_vers
+          xcode-select -p
           xcodebuild -version
           swift --version
           # Fail early with a clear message if Swift is older than Package.swift requires.
