@@ -10,7 +10,7 @@
 - 其他能力：登录时启动（`SMAppService`）、亮/暗/跟随系统外观（配色由「一日弧光」主题引擎驱动）、中/英文界面、菜单栏百分比显示、基于 GitHub Releases 的检查更新。
 - **平台**：macOS 13+，Apple Silicon 与 Intel（正式打包产出 Universal 二进制）。
 - **技术栈**：Swift 6.1+（`Package.swift` 声明 `swift-tools-version: 6.1`；主开发环境为 Xcode 26 / Swift 6.3）、SwiftUI + AppKit、Swift Package Manager。**无任何第三方依赖**（无 `Package.resolved`）。
-- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.4.1 (13)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
+- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.4.1 (14)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
 
 ## 仓库结构与模块划分
 
@@ -30,7 +30,7 @@ SwiftPM 三个 target（`Package.swift`）：
 | `TimeProgress.swift` | `TimeProgressCalculator`：日/周/月/年剩余比例的纯计算（可注入 `Date`/`Calendar`，便于测试） |
 | `JournalModels.swift` | 日记模型：`JournalEntry`（某日，1..n 个 `JournalItem`：标签/正文/图片文件名）、`JournalSnapshot`（Codable，`currentVersion = 1`） |
 | `JournalStore.swift` | 日记存储（`@MainActor ObservableObject` 单例）：落盘、`.bak` 与滚动备份、加载失败只读保护、图片管理、zip 导入导出；**一天一篇**由 `createEntry`/`updateEntry` 的按日合并保证 |
-| `JournalViews.swift` | 日记窗口 UI（`JournalRootView`，`NavigationSplitView` 双栏；macOS 14+ 用系统工具栏（侧栏折叠 + 新建按钮），macOS 13 因手动窗口不安装工具栏改用视图内 `topBar`（`usesInViewTopBar`，折叠走 `columnVisibility` binding）；色值取自 `\.wickPalette`，根视图 300s `TimelineView` 刷新；编辑器顶部为 `DayArcStrip` 24h 弧光渐变条，今日条目带"此刻"圆点；头部日期按应用语言格式化、零填充，点击弹出图形日历；侧栏标签芯片超宽时折叠为「更多 N」，点击展开换行显示/再点收起，打包逻辑在 `TagChipFlow.swift`） |
+| `JournalViews.swift` | 日记窗口 UI（`JournalRootView`，`NavigationSplitView` 双栏；macOS 14+ 用系统工具栏（侧栏折叠 + 新建按钮），macOS 13 因手动窗口不安装工具栏改用各窗格顶部 `safeAreaInset` 条带（与红绿灯同线：侧栏条带右对齐折叠钮、编辑器条带右对齐新建钮，折叠后折叠钮挪编辑器条带左端并避让红绿灯；判定见 `journalNeedsInViewTopBar`，`WICK_INVIEW_TOPBAR=1` 可强制预览）；色值取自 `\.wickPalette`，根视图 300s `TimelineView` 刷新；编辑器顶部为 `DayArcStrip` 24h 弧光渐变条，今日条目带"此刻"圆点；头部日期按应用语言格式化、零填充，点击弹出图形日历；侧栏标签芯片超宽时折叠为「更多 N」，点击展开换行显示/再点收起，打包逻辑在 `TagChipFlow.swift`） |
 | `JournalReminderScheduler.swift` | 每日本地通知（`UNUserNotificationCenter`）；**同文件内还有 `JournalWindowController`**——手动持有日记 `NSWindow`，因为 `MenuBarExtra` 场景里 SwiftUI `openWindow` 不可用 |
 | `MenuBarExtraPanel.swift` | 用启发式（类名/styleMask/NSPanel）关闭 `MenuBarExtra` 面板窗口；**带尺寸护栏**：高度 ≤30 或宽度 ≤60 的小窗一律不碰——macOS 13 的 `NSApp.windows` 里混有状态栏图标的宿主小窗，误关会让图标永久消失 |
 | `IMESafeTextViews.swift` | AppKit 包装的单行/多行文本输入，避免中文/日文/韩文 IME 组字（marked text）期间被外部写值吞字 |
@@ -120,7 +120,7 @@ make clean         # rm -rf .build dist
 - **UserNotifications 只能在正式 `.app` 包内使用**：`swift run`/裸二进制下调用会 abort，因此 `JournalReminderScheduler.notificationsAvailable` 做了包形态门控，新增通知相关代码必须维持该门控。
 - **`MenuBarExtra` 的 label 里禁止放 `TimelineView` 等高频失效源**：会触发 `requestUpdate` → `setImage` 死循环占满 CPU（`WickApp.swift` 有注释；当前 label 用 30s `Timer` 且仅在文本变化时更新状态）。
 - IME 组字：日记编辑用 `IMESafeTextViews` 里的封装，不要用原生 SwiftUI `TextField` 直接替换，否则中文输入会吞字（有专门修复提交）。
-- **手动 `NSWindow` + `NSHostingController` 且标题栏透明/隐藏标题时，macOS 13 不会安装任何工具栏**（SwiftUI `.toolbar` 项与 `NavigationSplitView` 的侧栏折叠按钮都不出现，且 `.toolbar(removing:)`/`toolbarVisibility` 在新系统上也压不住分栏视图自动安装的工具栏）；因此日记窗口在 macOS 13 走视图内 `topBar`（`usesInViewTopBar`），14+ 用系统工具栏。改动窗口 chrome 时两种形态都要验证。
+- **手动 `NSWindow` + `NSHostingController` 且标题栏透明/隐藏标题时，macOS 13 不会安装任何工具栏**（SwiftUI `.toolbar` 项与 `NavigationSplitView` 的侧栏折叠按钮都不出现，且 `.toolbar(removing:)`/`toolbarVisibility` 在新系统上也压不住分栏视图自动安装的工具栏）；因此日记窗口在 macOS 13 用各窗格顶部的 `safeAreaInset(edge: .top)` 条带放按钮（`journalNeedsInViewTopBar`，与红绿灯同线），14+ 用系统工具栏。改动窗口 chrome 时两种形态都要验证，可用 `WICK_INVIEW_TOPBAR=1 swift run` 在新系统上预览 13 的形态。
 - 网络面很小：仅检查更新访问 `api.github.com`（15s 超时）；无遥测、无账号体系。
 - 发布包 ad-hoc 签名、未公证——不要在文档/脚本中暗示已签名公证。
 - 许可：仓库暂无 `LICENSE`，README 声明保留版权，新增第三方代码前需与维护者确认。

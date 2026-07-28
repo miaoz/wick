@@ -19,24 +19,56 @@ struct JournalRootView: View {
         // composition in the editor is unaffected.
         TimelineView(.periodic(from: .now, by: 300)) { _ in
             let palette = DayArcEngine.palette(at: DayArcEngine.currentDate(), scheme: colorScheme)
+            chromeContent(palette: palette)
+        }
+    }
 
-            Group {
-                VStack(spacing: 0) {
-                    if usesInViewTopBar {
-                        topBar(palette: palette)
-                    }
-                    splitLayout
-                }
+    @ViewBuilder
+    private func chromeContent(palette: WickPalette) -> some View {
+        let base = Group {
+            splitLayout
+        }
+        .environment(\.wickPalette, palette)
+        .tint(palette.accent.color)
+        .frame(minWidth: 720, minHeight: 480)
+        .preferredColorScheme(settings.preferredColorScheme)
+        .background(palette.backgroundBottom.color)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if store.isReadOnlyDueToLoadFailure {
+                loadFailureBanner
+            } else if store.didRestoreFromBackup {
+                restoreBanner(palette: palette)
             }
-            .environment(\.wickPalette, palette)
-            .tint(palette.accent.color)
-            .frame(minWidth: 720, minHeight: 480)
-            .preferredColorScheme(settings.preferredColorScheme)
-            .background(palette.backgroundBottom.color)
-            .toolbar {
-                // Installed on macOS 14+ (alongside the split view's own
-                // sidebar toggle). On macOS 13 nothing materializes in this
-                // manually created window — `usesInViewTopBar` covers that.
+        }
+        .confirmationDialog(
+            L10n.string(.journalStartFresh, language: settings.language),
+            isPresented: $showStartFreshConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.string(.journalStartFresh, language: settings.language), role: .destructive) {
+                try? store.abandonCorruptDatabaseAndStartFresh()
+            }
+            Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
+        }
+        .background {
+            // Hidden focusable buttons for shortcuts that aren't in the toolbar.
+            Button("") {
+                focusSearchField()
+            }
+            .keyboardShortcut("f", modifiers: [.command])
+            .opacity(0)
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
+        }
+
+        // macOS 14+ installs a real window toolbar (the split view's own
+        // sidebar toggle plus this new-entry item). On macOS 13 nothing
+        // materializes in this manually created window, so the panes render
+        // their own in-view top strips instead (see `journalNeedsInViewTopBar`).
+        if journalNeedsInViewTopBar {
+            base
+        } else {
+            base.toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button {
                         _ = store.openOrCreateToday()
@@ -50,42 +82,7 @@ struct JournalRootView: View {
                     .keyboardShortcut("n", modifiers: [.command])
                 }
             }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if store.isReadOnlyDueToLoadFailure {
-                    loadFailureBanner
-                } else if store.didRestoreFromBackup {
-                    restoreBanner(palette: palette)
-                }
-            }
-            .confirmationDialog(
-                L10n.string(.journalStartFresh, language: settings.language),
-                isPresented: $showStartFreshConfirm,
-                titleVisibility: .visible
-            ) {
-                Button(L10n.string(.journalStartFresh, language: settings.language), role: .destructive) {
-                    try? store.abandonCorruptDatabaseAndStartFresh()
-                }
-                Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
-            }
-            .background {
-                // Hidden focusable buttons for shortcuts that aren't in the toolbar.
-                Button("") {
-                    focusSearchField()
-                }
-                .keyboardShortcut("f", modifiers: [.command])
-                .opacity(0)
-                .frame(width: 0, height: 0)
-                .accessibilityHidden(true)
-            }
         }
-    }
-
-    /// macOS 13 does not install any toolbar (neither SwiftUI `.toolbar` items
-    /// nor the split view's sidebar toggle) in this manually created
-    /// NSWindow once the titlebar is transparent and title-less, so the
-    /// sidebar toggle and new-entry controls live in the view there.
-    private var usesInViewTopBar: Bool {
-        ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 14
     }
 
     private var loadFailureBanner: some View {
@@ -142,61 +139,35 @@ struct JournalRootView: View {
 
     private var splitLayout: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            JournalTimelineSidebar()
+            JournalTimelineSidebar(columnVisibility: $columnVisibility)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
         } detail: {
-            JournalEditorPane()
+            JournalEditorPane(columnVisibility: $columnVisibility)
         }
     }
+}
 
-    // In-view top bar. SwiftUI `.toolbar` inside a manually created NSWindow
-    // (NSHostingController) is not installed on macOS 13 once the titlebar is
-    // transparent and the title hidden, which left the journal window with no
-    // sidebar toggle and no new-entry button there — so these controls live in
-    // the view hierarchy, which behaves identically on all supported versions.
-    private func topBar(palette: WickPalette) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                topBarButton(
-                    palette: palette,
-                    systemName: "sidebar.left",
-                    help: L10n.string(.journalToggleSidebar, language: settings.language)
-                ) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
-                    }
-                }
-                .keyboardShortcut("s", modifiers: [.control, .command])
-
-                Spacer(minLength: 0)
-
-                topBarButton(
-                    palette: palette,
-                    systemName: "square.and.pencil",
-                    help: L10n.string(.journalNewEntry, language: settings.language)
-                ) {
-                    _ = store.openOrCreateToday()
-                }
-                .keyboardShortcut("n", modifiers: [.command])
-            }
-            // Leading inset clears the traffic-light buttons (~70pt) in the
-            // transparent titlebar zone this bar underlaps.
-            .padding(.leading, 78)
-            .padding(.trailing, 10)
-            .padding(.vertical, 3)
-
-            Rectangle()
-                .fill(palette.cardStroke.color)
-                .frame(height: 1)
-        }
+/// True on macOS 13: no toolbar (neither SwiftUI `.toolbar` items nor the
+/// split view's sidebar toggle) materializes in the manually created journal
+/// window there, so the top controls are rendered in-view inside each pane's
+/// top safe-area strip, aligned with the traffic lights.
+/// `WICK_INVIEW_TOPBAR=1` forces the in-view chrome on any version (debug).
+private var journalNeedsInViewTopBar: Bool {
+    if ProcessInfo.processInfo.environment["WICK_INVIEW_TOPBAR"] != nil {
+        return true
     }
+    return ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 14
+}
 
-    private func topBarButton(
-        palette: WickPalette,
-        systemName: String,
-        help: String,
-        action: @escaping () -> Void
-    ) -> some View {
+/// Shared chip button for the panes' in-view top strips (macOS 13 chrome).
+private struct JournalTopChip: View {
+    @Environment(\.wickPalette) private var palette
+
+    let systemName: String
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 13, weight: .semibold))
@@ -223,6 +194,8 @@ private struct JournalTimelineSidebar: View {
     @EnvironmentObject private var store: JournalStore
     @Environment(\.wickPalette) private var palette
 
+    let columnVisibility: Binding<NavigationSplitViewVisibility>
+
     @State private var tagsExpanded = false
     @State private var tagAreaWidth: CGFloat = 300
 
@@ -237,8 +210,39 @@ private struct JournalTimelineSidebar: View {
             }
         }
         .background(palette.sidebarBackground.color)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if journalNeedsInViewTopBar {
+                topStrip
+            }
+        }
         .onChange(of: store.searchText) { _ in
             store.handleFilterChange()
+        }
+    }
+
+    /// In-view titlebar strip (macOS 13): sidebar toggle right-aligned within
+    /// the sidebar column, level with the traffic lights.
+    private var topStrip: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Spacer(minLength: 0)
+
+                JournalTopChip(
+                    systemName: "sidebar.left",
+                    help: L10n.string(.journalToggleSidebar, language: settings.language)
+                ) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        columnVisibility.wrappedValue = .detailOnly
+                    }
+                }
+                .keyboardShortcut("s", modifiers: [.control, .command])
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+
+            Rectangle()
+                .fill(palette.cardStroke.color)
+                .frame(height: 1)
         }
     }
 
@@ -722,6 +726,8 @@ private struct JournalEditorPane: View {
     @EnvironmentObject private var store: JournalStore
     @Environment(\.wickPalette) private var palette
 
+    let columnVisibility: Binding<NavigationSplitViewVisibility>
+
     @State private var draft = JournalEntry()
     @State private var saveTask: Task<Void, Never>?
     @State private var showDeleteDayConfirm = false
@@ -751,6 +757,11 @@ private struct JournalEditorPane: View {
             }
         }
         .background(palette.backgroundBottom.color)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if journalNeedsInViewTopBar {
+                topStrip
+            }
+        }
         .onChange(of: store.selection) { _ in
             loadDraft()
         }
@@ -835,6 +846,44 @@ private struct JournalEditorPane: View {
             .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// In-view titlebar strip (macOS 13): new-entry chip right-aligned within
+    /// the editor column, level with the traffic lights. When the sidebar is
+    /// collapsed its toggle moves here (leading, clear of the traffic lights).
+    private var topStrip: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                if columnVisibility.wrappedValue == .detailOnly {
+                    JournalTopChip(
+                        systemName: "sidebar.left",
+                        help: L10n.string(.journalToggleSidebar, language: settings.language)
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            columnVisibility.wrappedValue = .all
+                        }
+                    }
+                    .keyboardShortcut("s", modifiers: [.control, .command])
+                    .padding(.leading, 70)
+                }
+
+                Spacer(minLength: 0)
+
+                JournalTopChip(
+                    systemName: "square.and.pencil",
+                    help: L10n.string(.journalNewEntry, language: settings.language)
+                ) {
+                    _ = store.openOrCreateToday()
+                }
+                .keyboardShortcut("n", modifiers: [.command])
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+
+            Rectangle()
+                .fill(palette.cardStroke.color)
+                .frame(height: 1)
+        }
     }
 
     private var editor: some View {
