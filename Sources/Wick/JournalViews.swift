@@ -696,15 +696,17 @@ private struct JournalEditorPane: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             } else {
-                TextField(
-                    L10n.string(.journalTitlePlaceholder, language: settings.language),
+                IMESafeTextField(
                     text: Binding(
                         get: { draft.title },
-                        set: { draft.title = $0; scheduleSave() }
-                    )
+                        set: { draft.title = $0 }
+                    ),
+                    placeholder: L10n.string(.journalTitlePlaceholder, language: settings.language),
+                    font: Self.titleFont,
+                    style: .plain,
+                    onChange: scheduleSave
                 )
-                .font(.system(size: 26, weight: .semibold, design: .rounded))
-                .textFieldStyle(.plain)
+                .frame(height: 34)
 
                 Text(L10n.string(.journalItemsHint, language: settings.language))
                     .font(.caption)
@@ -756,6 +758,14 @@ private struct JournalEditorPane: View {
 
     // MARK: - Draft helpers
 
+    private static var titleFont: NSFont {
+        let base = NSFont.systemFont(ofSize: 26, weight: .semibold)
+        if let rounded = base.fontDescriptor.withDesign(.rounded) {
+            return NSFont(descriptor: rounded, size: 26) ?? base
+        }
+        return base
+    }
+
     private func binding(for itemID: UUID) -> Binding<JournalItem> {
         Binding(
             get: {
@@ -802,11 +812,18 @@ private struct JournalEditorPane: View {
 
     private func scheduleSave() {
         saveTask?.cancel()
-        let snapshot = draft
-        saveTask = Task {
-            try? await Task.sleep(nanoseconds: 350_000_000)
-            guard !Task.isCancelled else { return }
-            store.updateEntry(snapshot)
+        // Debounce disk writes, and never commit while an IME is composing —
+        // intermediate marked text + @Published store refresh is what swallows CJK input.
+        saveTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                guard !Task.isCancelled else { return }
+                if TextInputComposition.isActive {
+                    continue
+                }
+                store.updateEntry(draft)
+                return
+            }
         }
     }
 
@@ -933,14 +950,17 @@ private struct JournalItemEditorCard: View {
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
 
-                TextField(
-                    L10n.string(.journalItemTagPlaceholder, language: settings.language),
+                IMESafeTextField(
                     text: Binding(
                         get: { item.tag },
-                        set: { item.tag = $0; onChange() }
-                    )
+                        set: { item.tag = $0 }
+                    ),
+                    placeholder: L10n.string(.journalItemTagPlaceholder, language: settings.language),
+                    font: .systemFont(ofSize: NSFont.systemFontSize),
+                    style: .rounded,
+                    onChange: onChange
                 )
-                .textFieldStyle(.roundedBorder)
+                .frame(height: 28)
             }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -949,15 +969,15 @@ private struct JournalItemEditorCard: View {
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
 
-                TextEditor(
+                IMESafeTextEditor(
                     text: Binding(
                         get: { item.body },
-                        set: { item.body = $0; onChange() }
-                    )
+                        set: { item.body = $0 }
+                    ),
+                    font: .systemFont(ofSize: 14),
+                    onChange: onChange
                 )
-                .font(.system(size: 14))
                 .frame(minHeight: 120)
-                .scrollContentBackground(.hidden)
                 .padding(10)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
