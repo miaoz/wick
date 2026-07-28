@@ -11,12 +11,50 @@ struct TimeProgress: Identifiable {
 }
 
 enum TimeProgressCalculator {
-    static func allProgress(at date: Date, calendar: Calendar = .current) -> [TimeProgress] {
-        [
-            makeProgress(for: .day, title: "日", subtitle: "今天", at: date, calendar: calendar),
-            makeProgress(for: .weekOfYear, title: "周", subtitle: "本周", at: date, calendar: calendar),
-            makeProgress(for: .month, title: "月", subtitle: "本月", at: date, calendar: calendar),
-            makeProgress(for: .year, title: "年", subtitle: "今年", at: date, calendar: calendar)
+    static func allProgress(
+        at date: Date,
+        language: AppLanguage,
+        calendar: Calendar = .current
+    ) -> [TimeProgress] {
+        let locale = language.locale
+
+        return [
+            makeProgress(
+                for: .day,
+                title: L10n.string(.dayTitle, language: language),
+                subtitle: L10n.string(.daySubtitle, language: language),
+                at: date,
+                calendar: calendar,
+                language: language,
+                locale: locale
+            ),
+            makeProgress(
+                for: .weekOfYear,
+                title: L10n.string(.weekTitle, language: language),
+                subtitle: L10n.string(.weekSubtitle, language: language),
+                at: date,
+                calendar: calendar,
+                language: language,
+                locale: locale
+            ),
+            makeProgress(
+                for: .month,
+                title: L10n.string(.monthTitle, language: language),
+                subtitle: L10n.string(.monthSubtitle, language: language),
+                at: date,
+                calendar: calendar,
+                language: language,
+                locale: locale
+            ),
+            makeProgress(
+                for: .year,
+                title: L10n.string(.yearTitle, language: language),
+                subtitle: L10n.string(.yearSubtitle, language: language),
+                at: date,
+                calendar: calendar,
+                language: language,
+                locale: locale
+            )
         ]
     }
 
@@ -25,7 +63,9 @@ enum TimeProgressCalculator {
         title: String,
         subtitle: String,
         at date: Date,
-        calendar: Calendar
+        calendar: Calendar,
+        language: AppLanguage,
+        locale: Locale
     ) -> TimeProgress {
         guard let interval = calendar.dateInterval(of: component, for: date) else {
             return TimeProgress(
@@ -34,8 +74,8 @@ enum TimeProgressCalculator {
                 subtitle: subtitle,
                 fractionRemaining: 0,
                 percentageText: "0%",
-                remainingText: "还剩 0 分钟",
-                endText: "时间边界不可用"
+                remainingText: remainingZeroText(language: language),
+                endText: L10n.string(.endUnavailable, language: language)
             )
         }
 
@@ -46,10 +86,29 @@ enum TimeProgressCalculator {
             title: title,
             subtitle: subtitle,
             fractionRemaining: fractionRemaining,
-            percentageText: fractionRemaining.formatted(.percent.precision(.fractionLength(1))),
-            remainingText: remainingText(for: component, from: date, to: interval.end, calendar: calendar),
-            endText: endText(for: component, end: interval.end)
+            percentageText: fractionRemaining.formatted(
+                .percent
+                .precision(.fractionLength(1))
+                .locale(locale)
+            ),
+            remainingText: remainingText(
+                for: component,
+                from: date,
+                to: interval.end,
+                calendar: calendar,
+                language: language
+            ),
+            endText: endText(for: component, end: interval.end, language: language, locale: locale)
         )
+    }
+
+    private static func remainingZeroText(language: AppLanguage) -> String {
+        switch language {
+        case .chinese:
+            return "还剩 0 分钟"
+        case .english:
+            return "0m left"
+        }
     }
 
     private static func remainingFraction(for interval: DateInterval, at date: Date) -> Double {
@@ -65,7 +124,8 @@ enum TimeProgressCalculator {
         for component: Calendar.Component,
         from start: Date,
         to end: Date,
-        calendar: Calendar
+        calendar: Calendar,
+        language: AppLanguage
     ) -> String {
         let units: [Calendar.Component]
 
@@ -82,33 +142,40 @@ enum TimeProgressCalculator {
 
         let components = calendar.dateComponents(Set(units), from: start, to: end)
         let parts = units.compactMap { unit in
-            valueText(for: unit, in: components)
+            valueText(for: unit, in: components, language: language)
         }
 
         if parts.isEmpty {
-            return "还剩不到 1 分钟"
+            return L10n.string(.remainingLessThanOneMinute, language: language)
         }
 
-        return "还剩 " + parts.prefix(2).joined(separator: " ")
+        let joined = parts.prefix(2).joined(separator: " ")
+        let prefix = L10n.string(.remainingPrefix, language: language)
+        let suffix = L10n.string(.remainingSuffix, language: language)
+        return prefix + joined + suffix
     }
 
-    private static func valueText(for component: Calendar.Component, in dateComponents: DateComponents) -> String? {
+    private static func valueText(
+        for component: Calendar.Component,
+        in dateComponents: DateComponents,
+        language: AppLanguage
+    ) -> String? {
         let value: Int?
         let unit: String
 
         switch component {
         case .month:
             value = dateComponents.month
-            unit = "个月"
+            unit = L10n.string(.unitMonth, language: language)
         case .day:
             value = dateComponents.day
-            unit = "天"
+            unit = L10n.string(.unitDay, language: language)
         case .hour:
             value = dateComponents.hour
-            unit = "小时"
+            unit = L10n.string(.unitHour, language: language)
         case .minute:
             value = dateComponents.minute
-            unit = "分钟"
+            unit = L10n.string(.unitMinute, language: language)
         default:
             value = nil
             unit = ""
@@ -118,19 +185,60 @@ enum TimeProgressCalculator {
             return nil
         }
 
-        return "\(value)\(unit)"
+        switch language {
+        case .chinese:
+            return "\(value)\(unit)"
+        case .english:
+            return "\(value)\(unit)"
+        }
     }
 
-    private static func endText(for component: Calendar.Component, end: Date) -> String {
+    private static func endText(
+        for component: Calendar.Component,
+        end: Date,
+        language: AppLanguage,
+        locale: Locale
+    ) -> String {
+        let prefix = L10n.string(.endPrefix, language: language)
+        let formatted: String
+
         switch component {
         case .day:
-            return "到 " + end.formatted(.dateTime.hour().minute())
+            formatted = end.formatted(
+                .dateTime
+                .hour()
+                .minute()
+                .locale(locale)
+            )
         case .weekOfYear, .month:
-            return "到 " + end.formatted(.dateTime.month().day().hour().minute())
+            formatted = end.formatted(
+                .dateTime
+                .month()
+                .day()
+                .hour()
+                .minute()
+                .locale(locale)
+            )
         case .year:
-            return "到 " + end.formatted(.dateTime.year().month().day())
+            formatted = end.formatted(
+                .dateTime
+                .year()
+                .month()
+                .day()
+                .locale(locale)
+            )
         default:
-            return end.formatted(date: .abbreviated, time: .shortened)
+            formatted = end.formatted(
+                .dateTime
+                .year()
+                .month()
+                .day()
+                .hour()
+                .minute()
+                .locale(locale)
+            )
         }
+
+        return prefix + formatted
     }
 }
