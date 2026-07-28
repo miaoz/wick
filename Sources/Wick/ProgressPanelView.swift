@@ -115,6 +115,14 @@ struct ProgressPanelView: View {
 
             HStack(spacing: 8) {
                 headerButton(
+                    systemName: "book.closed",
+                    help: L10n.string(.journal, language: language),
+                    theme: theme
+                ) {
+                    JournalWindowController.shared.openJournal(createTodayIfNeeded: false)
+                }
+
+                headerButton(
                     systemName: "gearshape",
                     help: L10n.string(.settings, language: language),
                     theme: theme
@@ -247,6 +255,65 @@ private struct SettingsContentView: View {
                         ) {
                             settings.appearance = option
                         }
+                    }
+                }
+            }
+
+            settingsSection(
+                title: L10n.string(.journalSection, language: language)
+            ) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Button {
+                        JournalWindowController.shared.openJournal()
+                    } label: {
+                        HStack {
+                            Image(systemName: "book.closed")
+                            Text(L10n.string(.journalOpenAction, language: language))
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                            Spacer(minLength: 8)
+                            Image(systemName: "arrow.up.right")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundStyle(theme.primaryText)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(theme.controlBackground)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(theme.controlBorder, lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Toggle(isOn: $settings.journalReminderEnabled) {
+                        Text(L10n.string(.journalReminderEnabled, language: language))
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(theme.primaryText)
+                    }
+                    .toggleStyle(.switch)
+                    .tint(theme.selectionAccent)
+
+                    if settings.journalReminderEnabled {
+                        HStack {
+                            Text(L10n.string(.journalReminderTime, language: language))
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .foregroundStyle(theme.secondaryText)
+                            Spacer()
+                            DatePicker(
+                                "",
+                                selection: Binding(
+                                    get: { settings.journalReminderTime },
+                                    set: { settings.journalReminderTime = $0 }
+                                ),
+                                displayedComponents: .hourAndMinute
+                            )
+                            .labelsHidden()
+                            .datePickerStyle(.field)
+                        }
+                        .padding(.horizontal, 4)
                     }
                 }
             }

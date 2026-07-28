@@ -15,8 +15,9 @@
 
 - **菜单栏常驻**：基于 `MenuBarExtra` 的原生体验，不占用 Dock
 - **时间进度**：日、周、月、年的剩余百分比、剩余时长与结束时间，每秒刷新
+- **日记**：双栏原生窗口（时间轴 + 编辑区），支持正文、标签、图片；可按标签筛选与搜索；可选每日固定时间提醒
 - **烛光 / 极夜主题**：亮色与暗色自动切换面板配色
-- **设置**：语言（中文 / English）、外观（亮色 / 暗色 / 跟随系统）
+- **设置**：语言（中文 / English）、外观（亮色 / 暗色 / 跟随系统）、日记提醒时间
 - **Universal 二进制**：同时支持 Apple Silicon 与 Intel Mac
 - **开箱可分发**：本地一键打 zip；推送 tag 后由 GitHub Actions 自动发版
 
@@ -52,10 +53,22 @@ open dist/Wick.app
 
 1. 启动后，菜单栏会出现蜡烛图标（系统会按菜单栏风格着色）
 2. 点击图标打开进度面板
-3. 在面板中可进入设置：切换语言与外观
-4. 在设置中可退出应用
+3. 在面板中可进入设置：切换语言与外观、配置日记提醒
+4. 点击书本图标（或设置里的「打开日记」）打开日记窗口
+5. 在设置中可退出应用
 
 应用为 `LSUIElement` 菜单栏工具，不会在 Dock 中显示图标。
+
+### 日记
+
+| 能力 | 说明 |
+| --- | --- |
+| 时间轴 | 左侧按日分组列出日记；右侧编辑标题、正文、标签与图片 |
+| 布局 | 工具栏可在双栏 / 单栏之间切换 |
+| 标签 | 自由标签；支持按标签筛选与全文搜索 |
+| 图片 | 拖入文件、选择图片，或从剪贴板粘贴 |
+| 提醒 | 设置中开启「每日提醒写日记」并选择时间；点击通知可打开日记 |
+| 存储 | 本地 `~/Library/Application Support/Wick/Journal/`（JSON + 图片文件） |
 
 ## 从源码构建
 
@@ -137,10 +150,14 @@ git push origin v1.2.0
 wick/
 ├── Package.swift                 # Swift Package 清单
 ├── Sources/Wick/                 # 应用源码
-│   ├── WickApp.swift             # 入口与 MenuBarExtra
+│   ├── WickApp.swift             # 入口、MenuBarExtra、日记窗口
 │   ├── ProgressPanelView.swift   # 进度面板与设置 UI
 │   ├── TimeProgress.swift        # 日/周/月/年计算
-│   ├── AppSettings.swift         # 语言与外观
+│   ├── JournalModels.swift       # 日记数据模型
+│   ├── JournalStore.swift        # 本地持久化与图片
+│   ├── JournalViews.swift        # 日记双栏 UI
+│   ├── JournalReminderScheduler.swift  # 每日提醒
+│   ├── AppSettings.swift         # 语言、外观、提醒
 │   ├── L10n.swift                # 文案
 │   └── MenuBarIcon.swift         # 菜单栏模板图标
 ├── assets/                       # 应用图标

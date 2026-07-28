@@ -68,17 +68,68 @@ final class AppSettings: ObservableObject {
     private enum Keys {
         static let language = "wick.language"
         static let appearance = "wick.appearance"
+        static let journalReminderEnabled = "wick.journal.reminderEnabled"
+        static let journalReminderHour = "wick.journal.reminderHour"
+        static let journalReminderMinute = "wick.journal.reminderMinute"
     }
+
+    /// Suppresses reminder rescheduling while loading defaults in `init`.
+    private var isLoading = true
 
     @Published var language: AppLanguage {
         didSet {
             UserDefaults.standard.set(language.rawValue, forKey: Keys.language)
+            notifyReminderSettingsChanged()
         }
     }
 
     @Published var appearance: AppAppearance {
         didSet {
             UserDefaults.standard.set(appearance.rawValue, forKey: Keys.appearance)
+        }
+    }
+
+    /// Daily local notification that opens the journal.
+    @Published var journalReminderEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(journalReminderEnabled, forKey: Keys.journalReminderEnabled)
+            notifyReminderSettingsChanged()
+        }
+    }
+
+    @Published var journalReminderHour: Int {
+        didSet {
+            UserDefaults.standard.set(journalReminderHour, forKey: Keys.journalReminderHour)
+            notifyReminderSettingsChanged()
+        }
+    }
+
+    @Published var journalReminderMinute: Int {
+        didSet {
+            UserDefaults.standard.set(journalReminderMinute, forKey: Keys.journalReminderMinute)
+            notifyReminderSettingsChanged()
+        }
+    }
+
+    /// Combined reminder time for DatePicker bindings.
+    var journalReminderTime: Date {
+        get {
+            var components = DateComponents()
+            components.hour = journalReminderHour
+            components.minute = journalReminderMinute
+            return Calendar.current.date(from: components) ?? Date()
+        }
+        set {
+            let components = Calendar.current.dateComponents([.hour, .minute], from: newValue)
+            let hour = components.hour ?? 21
+            let minute = components.minute ?? 0
+            // Assign once when possible to avoid double reschedule.
+            if hour != journalReminderHour {
+                journalReminderHour = hour
+            }
+            if minute != journalReminderMinute {
+                journalReminderMinute = minute
+            }
         }
     }
 
@@ -96,5 +147,31 @@ final class AppSettings: ObservableObject {
 
         let appearanceRaw = UserDefaults.standard.string(forKey: Keys.appearance) ?? AppAppearance.system.rawValue
         appearance = AppAppearance(rawValue: appearanceRaw) ?? .system
+
+        if UserDefaults.standard.object(forKey: Keys.journalReminderEnabled) == nil {
+            journalReminderEnabled = true
+        } else {
+            journalReminderEnabled = UserDefaults.standard.bool(forKey: Keys.journalReminderEnabled)
+        }
+
+        if UserDefaults.standard.object(forKey: Keys.journalReminderHour) == nil {
+            // Default evening reminder time.
+            journalReminderHour = 21
+        } else {
+            journalReminderHour = UserDefaults.standard.integer(forKey: Keys.journalReminderHour)
+        }
+
+        if UserDefaults.standard.object(forKey: Keys.journalReminderMinute) == nil {
+            journalReminderMinute = 0
+        } else {
+            journalReminderMinute = UserDefaults.standard.integer(forKey: Keys.journalReminderMinute)
+        }
+
+        isLoading = false
+    }
+
+    private func notifyReminderSettingsChanged() {
+        guard !isLoading else { return }
+        JournalReminderScheduler.shared.rescheduleFromSettings()
     }
 }

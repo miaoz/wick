@@ -85,6 +85,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSUserNotificationsUsageDescription</key>
+    <string>Wick uses notifications for the daily journal reminder.</string>
 </dict>
 </plist>
 PLIST
