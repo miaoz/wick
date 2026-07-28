@@ -9,11 +9,13 @@ private enum PanelViewLayout {
 
 struct ProgressPanelView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var settings: AppSettings
+    @State private var showsSettings = false
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            let items = TimeProgressCalculator.allProgress(at: context.date)
             let theme = PanelTheme.forColorScheme(colorScheme)
+            let language = settings.language
 
             ZStack {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -43,25 +45,28 @@ struct ProgressPanelView: View {
                     }
 
                 VStack(alignment: .leading, spacing: 18) {
-                    header(date: context.date, theme: theme)
+                    if showsSettings {
+                        settingsHeader(theme: theme, language: language)
+                        settingsDivider(theme: theme)
+                        SettingsContentView(theme: theme, language: language)
+                    } else {
+                        progressHeader(date: context.date, theme: theme, language: language)
+                        settingsDivider(theme: theme)
 
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.clear, theme.dividerAccent, Color.clear],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
+                        let items = TimeProgressCalculator.allProgress(
+                            at: context.date,
+                            language: language
                         )
-                        .frame(height: 1)
 
-                    VStack(spacing: 12) {
-                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                            MetricProgressCard(
-                                item: item,
-                                theme: theme.metricTheme(for: index),
-                                panelTheme: theme
-                            )
+                        VStack(spacing: 12) {
+                            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                                MetricProgressCard(
+                                    item: item,
+                                    theme: theme.metricTheme(for: index),
+                                    panelTheme: theme,
+                                    language: language
+                                )
+                            }
                         }
                     }
                 }
@@ -70,60 +75,253 @@ struct ProgressPanelView: View {
             .padding(PanelViewLayout.outerPadding)
             .frame(width: PanelViewLayout.width)
             .fixedSize(horizontal: false, vertical: true)
+            .animation(.easeInOut(duration: 0.18), value: showsSettings)
+            .animation(.easeInOut(duration: 0.18), value: settings.language)
+            .animation(.easeInOut(duration: 0.18), value: settings.appearance)
         }
     }
 
     @ViewBuilder
-    private func header(date: Date, theme: PanelTheme) -> some View {
+    private func progressHeader(date: Date, theme: PanelTheme, language: AppLanguage) -> some View {
         HStack(alignment: .top, spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: theme.iconGradient,
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .frame(width: 46, height: 46)
-                    .shadow(color: theme.iconGlow, radius: 12, y: 4)
-
-                Text(theme.icon)
-                    .font(.system(size: 23))
-            }
+            themeIcon(theme: theme)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(theme.title)
+                Text(theme.title(language: language))
                     .font(.system(size: 20, weight: .semibold, design: .rounded))
                     .foregroundStyle(theme.primaryText)
 
-                Text("一寸光阴一寸金。")
+                Text(L10n.string(.motto, language: language))
                     .font(.footnote)
                     .foregroundStyle(theme.secondaryText)
 
-                Text(date.formatted(.dateTime.year().month().day().weekday(.abbreviated).hour().minute()))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(theme.tertiaryText)
+                Text(
+                    date.formatted(
+                        .dateTime
+                        .year()
+                        .month()
+                        .day()
+                        .weekday(.abbreviated)
+                        .hour()
+                        .minute()
+                        .locale(language.locale)
+                    )
+                )
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(theme.tertiaryText)
             }
 
             Spacer(minLength: 8)
 
-            Button {
-                NSApplication.shared.terminate(nil)
-            } label: {
-                Image(systemName: "power")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(theme.primaryText.opacity(0.76))
-                    .frame(width: 28, height: 28)
-                    .background(theme.controlBackground, in: Circle())
-                    .overlay {
-                        Circle()
-                            .strokeBorder(theme.controlBorder, lineWidth: 1)
-                    }
+            HStack(spacing: 8) {
+                headerButton(
+                    systemName: "gearshape",
+                    help: L10n.string(.settings, language: language),
+                    theme: theme
+                ) {
+                    showsSettings = true
+                }
+
+                headerButton(
+                    systemName: "power",
+                    help: L10n.string(.quit, language: language),
+                    theme: theme
+                ) {
+                    NSApplication.shared.terminate(nil)
+                }
             }
-            .buttonStyle(.plain)
-            .help("退出")
         }
+    }
+
+    @ViewBuilder
+    private func settingsHeader(theme: PanelTheme, language: AppLanguage) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            themeIcon(theme: theme)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.string(.settingsTitle, language: language))
+                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    .foregroundStyle(theme.primaryText)
+
+                Text(theme.title(language: language))
+                    .font(.footnote)
+                    .foregroundStyle(theme.secondaryText)
+            }
+
+            Spacer(minLength: 8)
+
+            headerButton(
+                systemName: "chevron.left",
+                help: L10n.string(.back, language: language),
+                theme: theme
+            ) {
+                showsSettings = false
+            }
+        }
+    }
+
+    private func themeIcon(theme: PanelTheme) -> some View {
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: theme.iconGradient,
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 46, height: 46)
+                .shadow(color: theme.iconGlow, radius: 12, y: 4)
+
+            Text(theme.icon)
+                .font(.system(size: 23))
+        }
+    }
+
+    private func settingsDivider(theme: PanelTheme) -> some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [Color.clear, theme.dividerAccent, Color.clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(height: 1)
+    }
+
+    private func headerButton(
+        systemName: String,
+        help: String,
+        theme: PanelTheme,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(theme.primaryText.opacity(0.76))
+                .frame(width: 28, height: 28)
+                .background(theme.controlBackground, in: Circle())
+                .overlay {
+                    Circle()
+                        .strokeBorder(theme.controlBorder, lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+}
+
+private struct SettingsContentView: View {
+    @EnvironmentObject private var settings: AppSettings
+
+    let theme: PanelTheme
+    let language: AppLanguage
+
+    var body: some View {
+        VStack(spacing: 12) {
+            settingsSection(
+                title: L10n.string(.language, language: language)
+            ) {
+                HStack(spacing: 8) {
+                    ForEach(AppLanguage.allCases) { option in
+                        settingsOptionButton(
+                            title: option.displayName,
+                            isSelected: settings.language == option
+                        ) {
+                            settings.language = option
+                        }
+                    }
+                }
+            }
+
+            settingsSection(
+                title: L10n.string(.appearance, language: language)
+            ) {
+                VStack(spacing: 8) {
+                    ForEach(AppAppearance.allCases) { option in
+                        settingsOptionButton(
+                            title: option.displayName(language: language),
+                            isSelected: settings.appearance == option,
+                            expands: true
+                        ) {
+                            settings.appearance = option
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func settingsSection<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(theme.secondaryText)
+                .textCase(.uppercase)
+                .tracking(0.6)
+
+            content()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: theme.settingsCardColors,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(theme.cardBorder, lineWidth: 1)
+        }
+    }
+
+    private func settingsOptionButton(
+        title: String,
+        isSelected: Bool,
+        expands: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 14, weight: isSelected ? .semibold : .medium, design: .rounded))
+                    .foregroundStyle(isSelected ? theme.primaryText : theme.secondaryText)
+
+                if expands {
+                    Spacer(minLength: 8)
+                }
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(theme.selectionAccent)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: expands ? .infinity : nil, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isSelected ? theme.selectionBackground : theme.controlBackground)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? theme.selectionAccent.opacity(0.45) : theme.controlBorder,
+                        lineWidth: 1
+                    )
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -131,6 +329,7 @@ private struct MetricProgressCard: View {
     let item: TimeProgress
     let theme: MetricTheme
     let panelTheme: PanelTheme
+    let language: AppLanguage
 
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
@@ -193,14 +392,14 @@ private struct MetricProgressCard: View {
 
     private func progressLabel(for value: Double) -> String {
         if value < 0.15 {
-            return "所剩不多"
+            return L10n.string(.progressLow, language: language)
         }
 
         if value < 0.4 {
-            return "正在燃尽"
+            return L10n.string(.progressBurning, language: language)
         }
 
-        return "余量充足"
+        return L10n.string(.progressPlenty, language: language)
     }
 }
 
@@ -257,12 +456,12 @@ private enum PanelTheme {
         }
     }
 
-    var title: String {
+    func title(language: AppLanguage) -> String {
         switch self {
         case .candlelight:
-            return "烛火进度"
+            return L10n.string(.themeCandlelight, language: language)
         case .midnight:
-            return "夜幕进度"
+            return L10n.string(.themeMidnight, language: language)
         }
     }
 
@@ -380,6 +579,33 @@ private enum PanelTheme {
             return Color(hex: 0xDFC6A9, opacity: 0.65)
         case .midnight:
             return Color.white.opacity(0.07)
+        }
+    }
+
+    var settingsCardColors: [Color] {
+        switch self {
+        case .candlelight:
+            return [Color(hex: 0xFFF8F0), Color(hex: 0xF7E8D8)]
+        case .midnight:
+            return [Color(hex: 0x171F33, opacity: 0.88), Color(hex: 0x101727, opacity: 0.94)]
+        }
+    }
+
+    var selectionBackground: Color {
+        switch self {
+        case .candlelight:
+            return Color(hex: 0xFFE8C8, opacity: 0.9)
+        case .midnight:
+            return Color.white.opacity(0.10)
+        }
+    }
+
+    var selectionAccent: Color {
+        switch self {
+        case .candlelight:
+            return Color(hex: 0xE2903A)
+        case .midnight:
+            return Color(hex: 0x9BB6FF)
         }
     }
 
