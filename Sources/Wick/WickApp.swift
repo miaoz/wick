@@ -12,7 +12,9 @@ struct WickApp: App {
                 .environmentObject(settings)
                 .preferredColorScheme(settings.preferredColorScheme)
         } label: {
-            Text("🕯️")
+            Image(nsImage: MenuBarIcon.image)
+                .renderingMode(.template)
+                .accessibilityLabel("Wick")
         }
         .menuBarExtraStyle(.window)
     }
