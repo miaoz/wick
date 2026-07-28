@@ -9,78 +9,66 @@ struct JournalRootView: View {
     @EnvironmentObject private var store: JournalStore
     @Environment(\.colorScheme) private var colorScheme
 
-    @AppStorage("wick.journal.useSplitLayout") private var useSplitLayout = true
     @State private var exportStatus: String?
     @State private var showStartFreshConfirm = false
 
     var body: some View {
-        Group {
-            if useSplitLayout {
-                splitLayout
-            } else {
-                singleColumnLayout
-            }
-        }
-        .frame(minWidth: 720, minHeight: 480)
-        .preferredColorScheme(settings.preferredColorScheme)
-        .background(JournalChrome.background(for: colorScheme))
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    useSplitLayout.toggle()
-                } label: {
-                    Label(
-                        useSplitLayout
-                            ? L10n.string(.journalLayoutSingle, language: settings.language)
-                            : L10n.string(.journalLayoutSplit, language: settings.language),
-                        systemImage: useSplitLayout ? "rectangle" : "sidebar.left"
-                    )
-                }
-                .help(
-                    useSplitLayout
-                        ? L10n.string(.journalLayoutSingle, language: settings.language)
-                        : L10n.string(.journalLayoutSplit, language: settings.language)
-                )
+        // Low-frequency day-arc palette refresh (5 min granularity is plenty).
+        // This only re-resolves colors — it never writes bindings, so IME
+        // composition in the editor is unaffected.
+        TimelineView(.periodic(from: .now, by: 300)) { _ in
+            let palette = DayArcEngine.palette(at: DayArcEngine.currentDate(), scheme: colorScheme)
 
-                Button {
-                    _ = store.openOrCreateToday()
-                } label: {
-                    Label(
-                        L10n.string(.journalNewEntry, language: settings.language),
-                        systemImage: "square.and.pencil"
-                    )
+            Group {
+                splitLayout
+            }
+            .environment(\.wickPalette, palette)
+            .tint(palette.accent.color)
+            .frame(minWidth: 720, minHeight: 480)
+            .preferredColorScheme(settings.preferredColorScheme)
+            .background(palette.backgroundBottom.color)
+            .toolbar {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        _ = store.openOrCreateToday()
+                    } label: {
+                        Label(
+                            L10n.string(.journalNewEntry, language: settings.language),
+                            systemImage: "square.and.pencil"
+                        )
+                    }
+                    .help(L10n.string(.journalNewEntry, language: settings.language))
+                    .keyboardShortcut("n", modifiers: [.command])
                 }
-                .help(L10n.string(.journalNewEntry, language: settings.language))
-                .keyboardShortcut("n", modifiers: [.command])
             }
-        }
-        .navigationTitle(L10n.string(.journalTitle, language: settings.language))
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if store.isReadOnlyDueToLoadFailure {
-                loadFailureBanner
-            } else if store.didRestoreFromBackup {
-                restoreBanner
+            .navigationTitle(L10n.string(.journalTitle, language: settings.language))
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if store.isReadOnlyDueToLoadFailure {
+                    loadFailureBanner
+                } else if store.didRestoreFromBackup {
+                    restoreBanner(palette: palette)
+                }
             }
-        }
-        .confirmationDialog(
-            L10n.string(.journalStartFresh, language: settings.language),
-            isPresented: $showStartFreshConfirm,
-            titleVisibility: .visible
-        ) {
-            Button(L10n.string(.journalStartFresh, language: settings.language), role: .destructive) {
-                try? store.abandonCorruptDatabaseAndStartFresh()
+            .confirmationDialog(
+                L10n.string(.journalStartFresh, language: settings.language),
+                isPresented: $showStartFreshConfirm,
+                titleVisibility: .visible
+            ) {
+                Button(L10n.string(.journalStartFresh, language: settings.language), role: .destructive) {
+                    try? store.abandonCorruptDatabaseAndStartFresh()
+                }
+                Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
             }
-            Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
-        }
-        .background {
-            // Hidden focusable buttons for shortcuts that aren't in the toolbar.
-            Button("") {
-                focusSearchField()
+            .background {
+                // Hidden focusable buttons for shortcuts that aren't in the toolbar.
+                Button("") {
+                    focusSearchField()
+                }
+                .keyboardShortcut("f", modifiers: [.command])
+                .opacity(0)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
             }
-            .keyboardShortcut("f", modifiers: [.command])
-            .opacity(0)
-            .frame(width: 0, height: 0)
-            .accessibilityHidden(true)
         }
     }
 
@@ -108,12 +96,12 @@ struct JournalRootView: View {
         .background(Color.orange.opacity(0.18))
     }
 
-    private var restoreBanner: some View {
+    private func restoreBanner(palette: WickPalette) -> some View {
         Text(L10n.string(.journalRestoredFromBackup, language: settings.language))
             .font(.callout)
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.accentColor.opacity(0.12))
+            .background(palette.accentSoft.color)
     }
 
     private func focusSearchField() {
@@ -144,28 +132,6 @@ struct JournalRootView: View {
             JournalEditorPane()
         }
     }
-
-    private var singleColumnLayout: some View {
-        NavigationStack {
-            if store.selection != nil {
-                JournalEditorPane()
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button {
-                                store.selection = nil
-                            } label: {
-                                Label(
-                                    L10n.string(.back, language: settings.language),
-                                    systemImage: "chevron.left"
-                                )
-                            }
-                        }
-                    }
-            } else {
-                JournalTimelineSidebar()
-            }
-        }
-    }
 }
 
 // MARK: - Timeline
@@ -173,7 +139,7 @@ struct JournalRootView: View {
 private struct JournalTimelineSidebar: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: JournalStore
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.wickPalette) private var palette
 
     var body: some View {
         VStack(spacing: 0) {
@@ -185,7 +151,7 @@ private struct JournalTimelineSidebar: View {
                 dayScopedList
             }
         }
-        .background(JournalChrome.sidebarBackground(for: colorScheme))
+        .background(palette.sidebarBackground.color)
         .onChange(of: store.searchText) { _ in
             store.handleFilterChange()
         }
@@ -435,16 +401,16 @@ private struct JournalTimelineSidebar: View {
                 .padding(.vertical, 5)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(isSelected ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.06))
+                        .fill(isSelected ? palette.accentSoft.color : Color.primary.opacity(0.06))
                 )
                 .overlay {
                     Capsule(style: .continuous)
                         .strokeBorder(
-                            isSelected ? Color.accentColor.opacity(0.45) : Color.primary.opacity(0.08),
+                            isSelected ? palette.accent.color.opacity(0.45) : Color.primary.opacity(0.08),
                             lineWidth: 1
                         )
                 }
-                .foregroundStyle(isSelected ? Color.accentColor : Color.primary.opacity(0.8))
+                .foregroundStyle(isSelected ? palette.accentText.color : Color.primary.opacity(0.8))
         }
         .buttonStyle(.plain)
     }
@@ -452,6 +418,7 @@ private struct JournalTimelineSidebar: View {
 
 private struct JournalDayTimelineRow: View {
     @EnvironmentObject private var settings: AppSettings
+    @Environment(\.wickPalette) private var palette
     let entry: JournalEntry
 
     var body: some View {
@@ -480,7 +447,7 @@ private struct JournalDayTimelineRow: View {
             if !entry.tags.isEmpty {
                 Text(entry.tags.joined(separator: "  "))
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.accentColor.opacity(0.9))
+                    .foregroundStyle(palette.accentText.color)
                     .lineLimit(1)
             }
 
@@ -505,6 +472,7 @@ private struct JournalDayTimelineRow: View {
 
 private struct JournalItemTimelineRow: View {
     @EnvironmentObject private var settings: AppSettings
+    @Environment(\.wickPalette) private var palette
     let row: JournalTimelineItem
 
     var body: some View {
@@ -512,7 +480,7 @@ private struct JournalItemTimelineRow: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(tagTitle)
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(palette.accentText.color)
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 if !row.item.imageFilenames.isEmpty {
@@ -552,12 +520,13 @@ private struct JournalItemTimelineRow: View {
 private struct JournalEditorPane: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: JournalStore
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.wickPalette) private var palette
 
     @State private var draft = JournalEntry()
     @State private var saveTask: Task<Void, Never>?
     @State private var showDeleteDayConfirm = false
     @State private var showDeleteItemConfirm = false
+    @State private var showDatePicker = false
     @State private var imageImportItemID: UUID?
 
     /// When selection is `.item`, only this item is edited/shown.
@@ -581,7 +550,7 @@ private struct JournalEditorPane: View {
                 editor
             }
         }
-        .background(JournalChrome.background(for: colorScheme))
+        .background(palette.backgroundBottom.color)
         .onChange(of: store.selection) { _ in
             loadDraft()
         }
@@ -669,54 +638,58 @@ private struct JournalEditorPane: View {
     }
 
     private var editor: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                header
+        VStack(spacing: 0) {
+            DayArcStrip(date: draft.date, language: settings.language)
 
-                ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
-                    JournalItemEditorCard(
-                        index: displayIndex(for: item.id, fallback: index),
-                        item: binding(for: item.id),
-                        canDelete: isItemScopedEditor || draft.items.count > 1,
-                        onDelete: {
-                            if isItemScopedEditor {
-                                showDeleteItemConfirm = true
-                            } else {
-                                deleteItem(id: item.id)
-                            }
-                        },
-                        onPasteImage: {
-                            pasteImage(to: item.id)
-                        },
-                        onPickImage: {
-                            imageImportItemID = item.id
-                        },
-                        onDrop: { providers in
-                            handleDrop(providers, itemID: item.id)
-                        },
-                        onChange: scheduleSave
-                    )
-                }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    header
 
-                if !isItemScopedEditor {
-                    Button {
-                        addItem()
-                    } label: {
-                        Label(
-                            L10n.string(.journalAddItem, language: settings.language),
-                            systemImage: "plus.circle"
+                    ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
+                        JournalItemEditorCard(
+                            index: displayIndex(for: item.id, fallback: index),
+                            item: binding(for: item.id),
+                            canDelete: isItemScopedEditor || draft.items.count > 1,
+                            onDelete: {
+                                if isItemScopedEditor {
+                                    showDeleteItemConfirm = true
+                                } else {
+                                    deleteItem(id: item.id)
+                                }
+                            },
+                            onPasteImage: {
+                                pasteImage(to: item.id)
+                            },
+                            onPickImage: {
+                                imageImportItemID = item.id
+                            },
+                            onDrop: { providers in
+                                handleDrop(providers, itemID: item.id)
+                            },
+                            onChange: scheduleSave
                         )
                     }
-                    .buttonStyle(.bordered)
 
-                    footerDayActions
-                } else {
-                    footerItemActions
+                    if !isItemScopedEditor {
+                        Button {
+                            addItem()
+                        } label: {
+                            Label(
+                                L10n.string(.journalAddItem, language: settings.language),
+                                systemImage: "plus.circle"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+
+                        footerDayActions
+                    } else {
+                        footerItemActions
+                    }
                 }
+                .padding(28)
+                .frame(maxWidth: 880, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
-            .padding(28)
-            .frame(maxWidth: 880, alignment: .leading)
-            .frame(maxWidth: .infinity)
         }
     }
 
@@ -735,30 +708,62 @@ private struct JournalEditorPane: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 12) {
-                DatePicker(
-                    "",
-                    selection: Binding(
-                        get: { draft.date },
-                        set: { newValue in
-                            draft.date = Calendar.current.startOfDay(for: newValue)
-                            scheduleSave()
-                        }
-                    ),
-                    displayedComponents: .date
-                )
-                .labelsHidden()
-                .datePickerStyle(.field)
+                // Locale-correct, zero-padded date label; the field-style
+                // DatePicker followed the system locale and space-padded
+                // single digits ("2026/ 7/28"), so it is now display-only
+                // with a graphical calendar in a popover.
+                Button {
+                    showDatePicker = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(formattedDate)
+                            .font(.system(size: 15, weight: .semibold, design: .rounded).monospacedDigit())
+                        Image(systemName: "calendar")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(palette.textTertiary.color)
+                    }
+                    .foregroundStyle(palette.textPrimary.color)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(palette.controlBackground.color)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(palette.controlBorder.color, lineWidth: 1)
+                    }
+                }
+                .buttonStyle(.plain)
                 .disabled(isItemScopedEditor)
+                .accessibilityLabel(Text(L10n.string(.journalChangeDate, language: settings.language)))
+                .popover(isPresented: $showDatePicker, arrowEdge: .top) {
+                    DatePicker(
+                        "",
+                        selection: Binding(
+                            get: { draft.date },
+                            set: { newValue in
+                                draft.date = Calendar.current.startOfDay(for: newValue)
+                                scheduleSave()
+                            }
+                        ),
+                        displayedComponents: .date
+                    )
+                    .labelsHidden()
+                    .datePickerStyle(.graphical)
+                    .environment(\.locale, settings.language.locale)
+                    .padding(10)
+                }
 
                 Spacer()
 
                 if isItemScopedEditor {
                     Text(L10n.string(.journalItemScopeBadge, language: settings.language))
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(palette.accentText.color)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.accentColor.opacity(0.12), in: Capsule())
+                        .background(palette.accentSoft.color, in: Capsule())
                 } else {
                     Text(
                         String(
@@ -852,6 +857,14 @@ private struct JournalEditorPane: View {
     }
 
     // MARK: - Draft helpers
+
+    /// Locale-correct, zero-padded numeric date ("2026年07月28日" / "07/28/2026").
+    private var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.locale = settings.language.locale
+        formatter.setLocalizedDateFormatFromTemplate("yMMdd")
+        return formatter.string(from: draft.date)
+    }
 
     private static var titleFont: NSFont {
         let base = NSFont.systemFont(ofSize: 26, weight: .semibold)
@@ -1010,6 +1023,7 @@ private struct JournalItemEditorCard: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: JournalStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.wickPalette) private var palette
 
     let index: Int
     @Binding var item: JournalItem
@@ -1107,11 +1121,11 @@ private struct JournalItemEditorCard: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(JournalChrome.cardFill(for: colorScheme))
+                .fill(palette.cardTop.color)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(JournalChrome.cardStroke(for: colorScheme), lineWidth: 1)
+                .strokeBorder(palette.cardStroke.color, lineWidth: 1)
         }
     }
 
@@ -1216,30 +1230,70 @@ private struct JournalImageThumb: View {
     }
 }
 
-// MARK: - Chrome
+// MARK: - Day arc strip
 
-private enum JournalChrome {
-    static func background(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark
-            ? Color(nsColor: .windowBackgroundColor)
-            : Color(nsColor: .controlBackgroundColor)
+/// Signature day-arc element: a full-width 24h gradient of the day's four
+/// phase accents. Shows a "now" marker when the edited entry is today.
+private struct DayArcStrip: View {
+    let date: Date
+    let language: AppLanguage
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.wickPalette) private var palette
+
+    var body: some View {
+        let isToday = Calendar.current.isDateInToday(date)
+
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                LinearGradient(
+                    stops: arcStops,
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(height: 4)
+
+                if isToday {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 6, height: 6)
+                        .overlay {
+                            Circle()
+                                .strokeBorder(palette.accentText.color, lineWidth: 1.5)
+                        }
+                        .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
+                        .offset(x: nowMarkerX(width: proxy.size.width))
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(height: 10)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(L10n.string(.dayArcNowLabel, language: language)))
+        .accessibilityHidden(!isToday)
     }
 
-    static func sidebarBackground(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark
-            ? Color(nsColor: .underPageBackgroundColor)
-            : Color(nsColor: .windowBackgroundColor)
+    /// Phase accents placed at their anchor hours across the 24h strip.
+    private var arcStops: [Gradient.Stop] {
+        [
+            Gradient.Stop(color: phaseAccent(.night), location: 0),
+            Gradient.Stop(color: phaseAccent(.dawn), location: DayPhase.dawn.anchorHour / 24),
+            Gradient.Stop(color: phaseAccent(.day), location: DayPhase.day.anchorHour / 24),
+            Gradient.Stop(color: phaseAccent(.dusk), location: DayPhase.dusk.anchorHour / 24),
+            Gradient.Stop(color: phaseAccent(.night), location: DayPhase.night.anchorHour / 24),
+            Gradient.Stop(color: phaseAccent(.night), location: 1),
+        ]
     }
 
-    static func cardFill(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark
-            ? Color.white.opacity(0.04)
-            : Color.white.opacity(0.72)
+    private func phaseAccent(_ phase: DayPhase) -> Color {
+        DayArcEngine.anchorPalette(phase, scheme: colorScheme).accent.color
     }
 
-    static func cardStroke(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark
-            ? Color.white.opacity(0.08)
-            : Color.black.opacity(0.06)
+    private func nowMarkerX(width: CGFloat) -> CGFloat {
+        let now = DayArcEngine.currentDate()
+        let components = Calendar.current.dateComponents([.hour, .minute], from: now)
+        let hours = Double(components.hour ?? 0) + Double(components.minute ?? 0) / 60
+        let fraction = min(max(hours / 24, 0), 1)
+        return min(max(fraction * width - 3, 0), max(width - 6, 0))
     }
 }

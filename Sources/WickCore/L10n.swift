@@ -38,8 +38,11 @@ enum L10n {
         case progressLow
         case progressBurning
         case progressPlenty
-        case themeCandlelight
-        case themeMidnight
+        case phaseDawn
+        case phaseDay
+        case phaseDusk
+        case phaseNight
+        case dayArcNowLabel
         case settingsTitle
 
         // Journal
@@ -72,8 +75,6 @@ enum L10n {
         case journalDelete
         case journalDeleteConfirm
         case journalAutosaved
-        case journalLayoutSplit
-        case journalLayoutSingle
         case journalReminder
         case journalReminderEnabled
         case journalReminderTime
@@ -101,6 +102,7 @@ enum L10n {
         case journalStartFresh
         case journalRestoredFromBackup
         case journalReadOnly
+        case journalChangeDate
 
         // Settings extras
         case generalSection
@@ -152,8 +154,11 @@ enum L10n {
             case .progressLow: return "所剩不多"
             case .progressBurning: return "正在燃尽"
             case .progressPlenty: return "余量充足"
-            case .themeCandlelight: return "烛火进度"
-            case .themeMidnight: return "夜幕进度"
+            case .phaseDawn: return "晨光"
+            case .phaseDay: return "白昼"
+            case .phaseDusk: return "暮色"
+            case .phaseNight: return "夜幕"
+            case .dayArcNowLabel: return "今天 · 此刻"
             case .settingsTitle: return "设置"
 
             case .journal: return "日记"
@@ -185,8 +190,6 @@ enum L10n {
             case .journalDelete: return "删除日记"
             case .journalDeleteConfirm: return "确定删除这篇日记？其中的条目与图片都会一并删除。"
             case .journalAutosaved: return "已自动保存"
-            case .journalLayoutSplit: return "双栏布局"
-            case .journalLayoutSingle: return "单栏布局"
             case .journalReminder: return "日记提醒"
             case .journalReminderEnabled: return "每日提醒写日记"
             case .journalReminderTime: return "提醒时间"
@@ -214,6 +217,7 @@ enum L10n {
             case .journalStartFresh: return "清空并重新开始"
             case .journalRestoredFromBackup: return "已从备份恢复日记"
             case .journalReadOnly: return "只读（加载失败）"
+            case .journalChangeDate: return "修改日期"
 
             case .generalSection: return "通用"
             case .menuBarPercentage: return "菜单栏显示今日剩余"
@@ -266,8 +270,11 @@ enum L10n {
             case .progressLow: return "Running low"
             case .progressBurning: return "Burning down"
             case .progressPlenty: return "Plenty left"
-            case .themeCandlelight: return "Candle Progress"
-            case .themeMidnight: return "Midnight Progress"
+            case .phaseDawn: return "Dawn"
+            case .phaseDay: return "Daylight"
+            case .phaseDusk: return "Dusk"
+            case .phaseNight: return "Nightfall"
+            case .dayArcNowLabel: return "Today · now"
             case .settingsTitle: return "Settings"
 
             case .journal: return "Journal"
@@ -299,8 +306,6 @@ enum L10n {
             case .journalDelete: return "Delete Journal"
             case .journalDeleteConfirm: return "Delete this journal? All items and images will be removed."
             case .journalAutosaved: return "Autosaved"
-            case .journalLayoutSplit: return "Split layout"
-            case .journalLayoutSingle: return "Single column"
             case .journalReminder: return "Journal Reminder"
             case .journalReminderEnabled: return "Daily journal reminder"
             case .journalReminderTime: return "Reminder time"
@@ -328,6 +333,7 @@ enum L10n {
             case .journalStartFresh: return "Start Fresh"
             case .journalRestoredFromBackup: return "Journal restored from backup"
             case .journalReadOnly: return "Read-only (load failed)"
+            case .journalChangeDate: return "Change date"
 
             case .generalSection: return "General"
             case .menuBarPercentage: return "Show day remaining in menu bar"

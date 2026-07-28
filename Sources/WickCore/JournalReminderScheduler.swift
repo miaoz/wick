@@ -292,8 +292,9 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.setFrameAutosaveName("WickJournalWindow")
-        window.titlebarAppearsTransparent = false
-        window.backgroundColor = NSColor.windowBackgroundColor
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        applyWindowTheme(to: window)
 
         self.window = window
 
@@ -305,6 +306,7 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
             Task { @MainActor in
                 guard let self, let window = self.window else { return }
                 self.updateTitle(for: window)
+                self.applyWindowTheme(to: window)
             }
         }
 
@@ -313,6 +315,19 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
 
     private func updateTitle(for window: NSWindow) {
         window.title = L10n.string(.journalTitle, language: AppSettings.shared.language)
+    }
+
+    /// Syncs the window chrome (background behind the titlebar area) with the
+    /// current day-arc palette. Called on open and on settings changes; the
+    /// palette drifts slowly, so per-minute accuracy is not needed here.
+    private func applyWindowTheme(to window: NSWindow) {
+        let appearance = NSApplication.shared.effectiveAppearance
+        let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let palette = DayArcEngine.palette(
+            at: DayArcEngine.currentDate(),
+            scheme: isDark ? .dark : .light
+        )
+        window.backgroundColor = palette.backgroundBottom.nsColor
     }
 
     func windowDidBecomeKey(_ notification: Notification) {

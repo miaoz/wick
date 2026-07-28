@@ -15,7 +15,7 @@ struct ProgressPanelView: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            let theme = PanelTheme.forColorScheme(colorScheme)
+            let theme = PanelTheme.resolve(at: DayArcEngine.currentDate(), scheme: colorScheme)
             let language = settings.language
 
             ZStack {
@@ -841,289 +841,57 @@ private struct WickProgressBar: View {
     }
 }
 
-private enum PanelTheme {
-    case candlelight
-    case midnight
+/// Resolved day-arc theme for the panel. All roles delegate to `WickPalette`
+/// so the view templates below stay unchanged from the static-theme era.
+private struct PanelTheme {
+    let palette: WickPalette
+    let phase: DayPhase
+    let metrics: [MetricTheme]
 
-    static func forColorScheme(_ colorScheme: ColorScheme) -> PanelTheme {
-        switch colorScheme {
-        case .light:
-            return .candlelight
-        case .dark:
-            return .midnight
-        @unknown default:
-            return .midnight
-        }
-    }
-
-    func title(language: AppLanguage) -> String {
-        switch self {
-        case .candlelight:
-            return L10n.string(.themeCandlelight, language: language)
-        case .midnight:
-            return L10n.string(.themeMidnight, language: language)
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .candlelight:
-            return "🕯️"
-        case .midnight:
-            return "🌙"
-        }
+    static func resolve(at date: Date, scheme: ColorScheme) -> PanelTheme {
+        PanelTheme(
+            palette: DayArcEngine.palette(at: date, scheme: scheme),
+            phase: DayArcEngine.phase(at: date),
+            metrics: DayArcEngine.metricThemes(at: date, scheme: scheme)
+        )
     }
 
     var backgroundColors: [Color] {
-        switch self {
-        case .candlelight:
-            return [Color(hex: 0xFFF7ED), Color(hex: 0xF8EAD8), Color(hex: 0xF3E2D2)]
-        case .midnight:
-            return [Color(hex: 0x0E1320), Color(hex: 0x131A2B), Color(hex: 0x0D111B)]
-        }
+        [palette.backgroundTop.color, palette.backgroundBottom.color]
     }
 
-    var ambientGlow: Color {
-        switch self {
-        case .candlelight:
-            return Color(hex: 0xFFBE66, opacity: 0.24)
-        case .midnight:
-            return Color(hex: 0x6CA6FF, opacity: 0.18)
-        }
-    }
-
-    var panelStroke: Color {
-        switch self {
-        case .candlelight:
-            return Color(hex: 0xDDBB93, opacity: 0.65)
-        case .midnight:
-            return Color.white.opacity(0.10)
-        }
-    }
-
-    var dividerAccent: Color {
-        switch self {
-        case .candlelight:
-            return Color(hex: 0xD98F44, opacity: 0.55)
-        case .midnight:
-            return Color(hex: 0x8AB4FF, opacity: 0.42)
-        }
-    }
+    var ambientGlow: Color { palette.glow.color }
+    var panelStroke: Color { palette.cardStroke.color }
+    var dividerAccent: Color { palette.divider.color }
 
     var iconGradient: [Color] {
-        switch self {
-        case .candlelight:
-            return [Color(hex: 0xFFD78A), Color(hex: 0xE69943)]
-        case .midnight:
-            return [Color(hex: 0x9BB9FF), Color(hex: 0x4C68C7)]
-        }
+        [palette.accent.lightened(by: 0.25).color, palette.accent.darkened(by: 0.15).color]
     }
 
-    var iconGlow: Color {
-        switch self {
-        case .candlelight:
-            return Color(hex: 0xF7C673, opacity: 0.26)
-        case .midnight:
-            return Color(hex: 0x7FA9FF, opacity: 0.24)
-        }
-    }
+    var iconGlow: Color { palette.glow.color }
 
-    var primaryText: Color {
-        switch self {
-        case .candlelight:
-            return Color(hex: 0x2F241B)
-        case .midnight:
-            return Color.white.opacity(0.96)
-        }
-    }
+    var primaryText: Color { palette.textPrimary.color }
+    var secondaryText: Color { palette.textSecondary.color }
+    var tertiaryText: Color { palette.textTertiary.color }
 
-    var secondaryText: Color {
-        switch self {
-        case .candlelight:
-            return Color(hex: 0x6D5A49)
-        case .midnight:
-            return Color.white.opacity(0.64)
-        }
-    }
-
-    var tertiaryText: Color {
-        switch self {
-        case .candlelight:
-            return Color(hex: 0x917C67)
-        case .midnight:
-            return Color.white.opacity(0.50)
-        }
-    }
-
-    var controlBackground: Color {
-        switch self {
-        case .candlelight:
-            return Color.white.opacity(0.55)
-        case .midnight:
-            return Color.white.opacity(0.05)
-        }
-    }
-
-    var controlBorder: Color {
-        switch self {
-        case .candlelight:
-            return Color(hex: 0xD7B28A, opacity: 0.75)
-        case .midnight:
-            return Color.white.opacity(0.10)
-        }
-    }
-
-    var cardBorder: Color {
-        switch self {
-        case .candlelight:
-            return Color(hex: 0xDFC6A9, opacity: 0.65)
-        case .midnight:
-            return Color.white.opacity(0.07)
-        }
-    }
+    var controlBackground: Color { palette.controlBackground.color }
+    var controlBorder: Color { palette.controlBorder.color }
+    var cardBorder: Color { palette.cardStroke.color }
 
     var settingsCardColors: [Color] {
-        switch self {
-        case .candlelight:
-            return [Color(hex: 0xFFF8F0), Color(hex: 0xF7E8D8)]
-        case .midnight:
-            return [Color(hex: 0x171F33, opacity: 0.88), Color(hex: 0x101727, opacity: 0.94)]
-        }
+        [palette.cardTop.color, palette.cardBottom.color]
     }
 
-    var selectionBackground: Color {
-        switch self {
-        case .candlelight:
-            return Color(hex: 0xFFE8C8, opacity: 0.9)
-        case .midnight:
-            return Color.white.opacity(0.10)
-        }
-    }
-
-    var selectionAccent: Color {
-        switch self {
-        case .candlelight:
-            return Color(hex: 0xE2903A)
-        case .midnight:
-            return Color(hex: 0x9BB6FF)
-        }
-    }
+    var selectionBackground: Color { palette.accentSoft.color }
+    var selectionAccent: Color { palette.accent.color }
 
     func metricTheme(for index: Int) -> MetricTheme {
-        let themes: [MetricTheme]
-
-        switch self {
-        case .candlelight:
-            themes = [
-                MetricTheme(
-                    primary: Color(hex: 0xE2903A),
-                    secondary: Color(hex: 0xF7B261),
-                    glow: Color(hex: 0xE2903A, opacity: 0.18),
-                    cardTop: Color(hex: 0xFFF8F0),
-                    cardBottom: Color(hex: 0xF7E8D8),
-                    trackFill: Color.black.opacity(0.06),
-                    trackStroke: Color.black.opacity(0.05),
-                    spark: Color.white.opacity(0.90)
-                ),
-                MetricTheme(
-                    primary: Color(hex: 0x4B8EF4),
-                    secondary: Color(hex: 0x82B7FF),
-                    glow: Color(hex: 0x4B8EF4, opacity: 0.14),
-                    cardTop: Color(hex: 0xF4F8FF),
-                    cardBottom: Color(hex: 0xE5EEF9),
-                    trackFill: Color.black.opacity(0.06),
-                    trackStroke: Color.black.opacity(0.05),
-                    spark: Color.white.opacity(0.92)
-                ),
-                MetricTheme(
-                    primary: Color(hex: 0x8E6CE6),
-                    secondary: Color(hex: 0xC2A6FF),
-                    glow: Color(hex: 0x8E6CE6, opacity: 0.14),
-                    cardTop: Color(hex: 0xF7F3FF),
-                    cardBottom: Color(hex: 0xECE4FA),
-                    trackFill: Color.black.opacity(0.06),
-                    trackStroke: Color.black.opacity(0.05),
-                    spark: Color.white.opacity(0.92)
-                ),
-                MetricTheme(
-                    primary: Color(hex: 0x2DA37C),
-                    secondary: Color(hex: 0x80D8BA),
-                    glow: Color(hex: 0x2DA37C, opacity: 0.14),
-                    cardTop: Color(hex: 0xF2FCF8),
-                    cardBottom: Color(hex: 0xE0F0E8),
-                    trackFill: Color.black.opacity(0.06),
-                    trackStroke: Color.black.opacity(0.05),
-                    spark: Color.white.opacity(0.92)
-                )
-            ]
-        case .midnight:
-            themes = [
-                MetricTheme(
-                    primary: Color(hex: 0x9BB6FF),
-                    secondary: Color(hex: 0x6B86F5),
-                    glow: Color(hex: 0x7D96FF, opacity: 0.18),
-                    cardTop: Color(hex: 0x171F33, opacity: 0.88),
-                    cardBottom: Color(hex: 0x101727, opacity: 0.94),
-                    trackFill: Color.white.opacity(0.08),
-                    trackStroke: Color.white.opacity(0.05),
-                    spark: Color.white.opacity(0.32)
-                ),
-                MetricTheme(
-                    primary: Color(hex: 0x79D4FF),
-                    secondary: Color(hex: 0x3C9DE8),
-                    glow: Color(hex: 0x79D4FF, opacity: 0.16),
-                    cardTop: Color(hex: 0x132332, opacity: 0.88),
-                    cardBottom: Color(hex: 0x101A28, opacity: 0.94),
-                    trackFill: Color.white.opacity(0.08),
-                    trackStroke: Color.white.opacity(0.05),
-                    spark: Color.white.opacity(0.32)
-                ),
-                MetricTheme(
-                    primary: Color(hex: 0xB9A7FF),
-                    secondary: Color(hex: 0x7A67E6),
-                    glow: Color(hex: 0xB9A7FF, opacity: 0.16),
-                    cardTop: Color(hex: 0x1A1E38, opacity: 0.88),
-                    cardBottom: Color(hex: 0x111427, opacity: 0.94),
-                    trackFill: Color.white.opacity(0.08),
-                    trackStroke: Color.white.opacity(0.05),
-                    spark: Color.white.opacity(0.32)
-                ),
-                MetricTheme(
-                    primary: Color(hex: 0x8AE0D0),
-                    secondary: Color(hex: 0x3CB7A6),
-                    glow: Color(hex: 0x8AE0D0, opacity: 0.15),
-                    cardTop: Color(hex: 0x142627, opacity: 0.88),
-                    cardBottom: Color(hex: 0x10191B, opacity: 0.94),
-                    trackFill: Color.white.opacity(0.08),
-                    trackStroke: Color.white.opacity(0.05),
-                    spark: Color.white.opacity(0.32)
-                )
-            ]
-        }
-
-        return themes[index % themes.count]
+        metrics[index % metrics.count]
     }
-}
 
-private struct MetricTheme {
-    let primary: Color
-    let secondary: Color
-    let glow: Color
-    let cardTop: Color
-    let cardBottom: Color
-    let trackFill: Color
-    let trackStroke: Color
-    let spark: Color
-}
-
-private extension Color {
-    init(hex: UInt, opacity: Double = 1) {
-        self.init(
-            .sRGB,
-            red: Double((hex >> 16) & 0xFF) / 255,
-            green: Double((hex >> 8) & 0xFF) / 255,
-            blue: Double(hex & 0xFF) / 255,
-            opacity: opacity
-        )
+    func title(language: AppLanguage) -> String {
+        phase.name(language: language)
     }
+
+    var icon: String { phase.emoji }
 }
