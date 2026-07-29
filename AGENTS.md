@@ -39,7 +39,7 @@ SwiftPM 三个 target（`Package.swift`）：
 | `JournalWindowController.swift` | 手动持有日记 `NSWindow`（因 `MenuBarExtra` 场景里 SwiftUI `openWindow` 不可用）；日记打开时把激活策略切为 `.regular`（Dock 显示图标、可 Cmd+Tab 切换），关闭时回 `.accessory`；macOS 13 下安装 AppKit `NSToolbar` |
 | `LegacyJournalToolbar.swift` | macOS 13 工具栏代理（`LegacyJournalToolbarDelegate`：折叠钮最左、新建钮最右，系统布局保证与红绿灯同线；折叠走响应链 `toggleSidebar:`） |
 | `MenuBarExtraPanel.swift` | 用启发式（类名/styleMask/NSPanel）关闭 `MenuBarExtra` 面板窗口；**带尺寸护栏**：高度 ≤30 或宽度 ≤60 的小窗一律不碰——macOS 13 的 `NSApp.windows` 里混有状态栏图标的宿主小窗，误关会让图标永久消失 |
-| `IMESafeTextViews.swift` | AppKit 包装的单行/多行文本输入，避免中文/日文/韩文 IME 组字（marked text）期间被外部写值吞字；多行编辑器为 `IMETextView` 子类（手动装配 scrollView，**不要用 `NSTextView.scrollableTextView()`**），keyDown 里显式路由 ⌘V；单行框经 `control(_:textView:doCommandBy:)` 拦截粘贴命令；两者都在剪贴板含图片时交给 `onPasteImage`（图片进条目），否则走默认文本粘贴（注意 ⌘V 也可能以 `noop:` 形式到达，需按 `NSApp.currentEvent` 二次判定） |
+| `IMESafeTextViews.swift` | AppKit 包装的单行/多行文本输入，避免中文/日文/韩文 IME 组字（marked text）期间被外部写值吞字；多行编辑器为 `IMETextView` 子类（手动装配 scrollView，**不要用 `NSTextView.scrollableTextView()`**），并由 coordinator 监听 clip view bounds 同步文本视图宽度（macOS 13 不向 document view 传播缩小，不修则长行不换行溢出）；keyDown 里显式路由 ⌘V；单行框经 `control(_:textView:doCommandBy:)` 拦截粘贴命令；两者都在剪贴板含图片时交给 `onPasteImage`（图片进条目），否则走默认文本粘贴（注意 ⌘V 也可能以 `noop:` 形式到达，需按 `NSApp.currentEvent` 二次判定） |
 | `JournalImageProcessing.swift` | 图片导入处理：最长边 2048px，无 alpha 转 JPEG(0.82)，有 alpha 存 PNG |
 | `MenuBarIcon.swift` | 代码绘制的蜡烛模板 `NSImage`（1x/2x，`isTemplate = true`，只创建一次不再变更） |
 | `AppSettings.swift` | 设置单例（`AppSettings.shared`）：语言/外观/提醒/菜单栏百分比/周一起始/登录项/更新检查，全部持久化到 `UserDefaults`（键前缀 `wick.`） |

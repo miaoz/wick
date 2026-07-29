@@ -226,6 +226,7 @@ struct IMESafeTextEditor: NSViewRepresentable {
         scrollView.autohidesScrollers = true
 
         context.coordinator.textView = textView
+        context.coordinator.trackClipWidth(of: scrollView, textView: textView)
         return scrollView
     }
 
@@ -262,6 +263,36 @@ struct IMESafeTextEditor: NSViewRepresentable {
 
         init(_ parent: IMESafeTextEditor) {
             self.parent = parent
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self)
+        }
+
+        /// Keeps the document text view exactly as wide as the clip view. A
+        /// manually assembled scroll view does not propagate shrink resizes
+        /// to the document view on macOS 13, so long lines overflowed instead
+        /// of wrapping (the width never tracked the window size there).
+        func trackClipWidth(of scrollView: NSScrollView, textView: NSTextView) {
+            scrollView.contentView.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(clipBoundsDidChange(_:)),
+                name: NSView.boundsDidChangeNotification,
+                object: scrollView.contentView
+            )
+            syncWidth(scrollView.contentView, textView: textView)
+        }
+
+        @objc private func clipBoundsDidChange(_ note: Notification) {
+            guard let clipView = note.object as? NSClipView, let textView else { return }
+            syncWidth(clipView, textView: textView)
+        }
+
+        private func syncWidth(_ clipView: NSClipView, textView: NSTextView) {
+            let width = clipView.bounds.width
+            guard width > 0, abs(textView.frame.width - width) > 0.5 else { return }
+            textView.setFrameSize(NSSize(width: width, height: textView.frame.height))
         }
 
         func textDidChange(_ notification: Notification) {
