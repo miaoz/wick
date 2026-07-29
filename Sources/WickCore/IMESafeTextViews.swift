@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Composition detection
 
@@ -111,25 +112,58 @@ struct IMESafeTextField: NSViewRepresentable {
 
 // MARK: - Multi-line
 
+/// Plain-text view that routes image pastes (screenshots, copied images,
+/// image files) to a handler instead of dropping them on the floor.
+final class IMETextView: NSTextView {
+    /// Image-paste handler; returns true when the paste was consumed.
+    var onPasteImage: (() -> Bool)?
+
+    override func keyDown(with event: NSEvent) {
+        // Route ⌘V explicitly: the key-binding path is unreliable for this
+        // manually created text view, and image pastes need to reach `paste:`.
+        if event.modifierFlags.contains(.command),
+           event.charactersIgnoringModifiers?.lowercased() == "v"
+        {
+            paste(event)
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    override func paste(_ sender: Any?) {
+        if let onPasteImage, Self.pasteboardHasImage(NSPasteboard.general), onPasteImage() {
+            return
+        }
+        super.paste(sender)
+    }
+
+    /// Same two shapes `JournalStore.pasteImageFromClipboard` accepts.
+    static func pasteboardHasImage(_ pasteboard: NSPasteboard) -> Bool {
+        if NSImage(pasteboard: pasteboard) != nil {
+            return true
+        }
+        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [
+            .urlReadingFileURLsOnly: true,
+            .urlReadingContentsConformToTypes: [UTType.image.identifier],
+        ]) as? [URL]
+        return urls?.isEmpty == false
+    }
+}
+
 /// AppKit-backed multi-line editor that preserves IME marked text across SwiftUI redraws.
 struct IMESafeTextEditor: NSViewRepresentable {
     @Binding var text: String
     var font: NSFont = .systemFont(ofSize: NSFont.systemFontSize)
     var onChange: (() -> Void)?
+    /// Handles ⌘V when the pasteboard carries an image (text pastes use the default path).
+    var onPasteImage: (() -> Bool)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
-        scrollView.drawsBackground = false
-        scrollView.borderType = .noBorder
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
-
-        let textView = scrollView.documentView as! NSTextView
+        let textView = IMETextView(frame: NSRect(x: 0, y: 0, width: 400, height: 120))
         textView.delegate = context.coordinator
         textView.string = text
         textView.font = font
@@ -154,6 +188,15 @@ struct IMESafeTextEditor: NSViewRepresentable {
         textView.textContainer?.widthTracksTextView = true
         textView.minSize = .zero
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.onPasteImage = onPasteImage
+
+        let scrollView = NSScrollView()
+        scrollView.documentView = textView
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
 
         context.coordinator.textView = textView
         return scrollView
@@ -161,7 +204,8 @@ struct IMESafeTextEditor: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         context.coordinator.parent = self
-        guard let textView = scrollView.documentView as? NSTextView else { return }
+        guard let textView = scrollView.documentView as? IMETextView else { return }
+        textView.onPasteImage = onPasteImage
 
         if textView.hasMarkedText() {
             return

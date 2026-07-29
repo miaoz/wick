@@ -69,8 +69,6 @@ enum L10n {
         case journalBodyPlaceholder
         case journalImagesHint
         case journalAddImage
-        case journalPasteImage
-        case journalPasteImageHelp
         case journalDelete
         case journalDeleteConfirm
         case journalAutosaved
@@ -184,8 +182,6 @@ enum L10n {
             case .journalBodyPlaceholder: return "写点什么…"
             case .journalImagesHint: return "拖入图片，或从剪贴板粘贴。"
             case .journalAddImage: return "添加图片"
-            case .journalPasteImage: return "粘贴图片"
-            case .journalPasteImageHelp: return "从剪贴板粘贴图片"
             case .journalDelete: return "删除日记"
             case .journalDeleteConfirm: return "确定删除这篇日记？其中的条目与图片都会一并删除。"
             case .journalAutosaved: return "已自动保存"
@@ -300,8 +296,6 @@ enum L10n {
             case .journalBodyPlaceholder: return "Write something…"
             case .journalImagesHint: return "Drop images here, or paste from the clipboard."
             case .journalAddImage: return "Add Image"
-            case .journalPasteImage: return "Paste Image"
-            case .journalPasteImageHelp: return "Paste an image from the clipboard"
             case .journalDelete: return "Delete Journal"
             case .journalDeleteConfirm: return "Delete this journal? All items and images will be removed."
             case .journalAutosaved: return "Autosaved"

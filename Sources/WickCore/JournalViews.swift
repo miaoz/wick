@@ -1128,13 +1128,15 @@ private struct JournalEditorPane: View {
         loadDraft()
     }
 
-    private func pasteImage(to itemID: UUID) {
-        guard let entryID = store.selectedEntryID else { return }
+    private func pasteImage(to itemID: UUID) -> Bool {
+        guard let entryID = store.selectedEntryID else { return false }
         saveTask?.cancel()
         store.updateEntry(draft)
         if store.pasteImageFromClipboard(to: entryID, itemID: itemID) {
             reloadDraftFromStore()
+            return true
         }
+        return false
     }
 
     private func handleDrop(_ providers: [NSItemProvider], itemID: UUID) -> Bool {
@@ -1193,7 +1195,7 @@ private struct JournalItemEditorCard: View {
     @Binding var item: JournalItem
     let canDelete: Bool
     let onDelete: () -> Void
-    let onPasteImage: () -> Void
+    let onPasteImage: () -> Bool
     let onPickImage: () -> Void
     let onDrop: ([NSItemProvider]) -> Bool
     let onChange: () -> Void
@@ -1248,7 +1250,8 @@ private struct JournalItemEditorCard: View {
                     set: { item.body = $0 }
                 ),
                 font: .systemFont(ofSize: 14),
-                onChange: onChange
+                onChange: onChange,
+                onPasteImage: onPasteImage
             )
             .frame(minHeight: 120)
             .overlay(alignment: .topLeading) {
@@ -1268,7 +1271,7 @@ private struct JournalItemEditorCard: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(palette.cardTop.color)
+                .fill(palette.cardTop.scaledAlpha(0.65).color)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -1286,16 +1289,6 @@ private struct JournalItemEditorCard: View {
                 }
 
                 Spacer(minLength: 8)
-
-                Button(action: onPasteImage) {
-                    Label(
-                        L10n.string(.journalPasteImage, language: settings.language),
-                        systemImage: "doc.on.clipboard"
-                    )
-                    .font(.callout)
-                }
-                .buttonStyle(.borderless)
-                .help(L10n.string(.journalPasteImageHelp, language: settings.language))
 
                 Button(action: onPickImage) {
                     Label(
