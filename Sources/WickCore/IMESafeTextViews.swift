@@ -29,6 +29,8 @@ struct IMESafeTextField: NSViewRepresentable {
     var textColor: NSColor = .labelColor
     var style: Style = .rounded
     var onChange: (() -> Void)?
+    /// Handles ⌘V when the pasteboard carries an image (text pastes use the default path).
+    var onPasteImage: (() -> Bool)?
 
     enum Style {
         case plain
@@ -106,6 +108,31 @@ struct IMESafeTextField: NSViewRepresentable {
             guard parent.text != newValue else { return }
             parent.text = newValue
             parent.onChange?()
+        }
+
+        /// Single-line fields edit through the shared field editor, so image
+        /// pastes are intercepted at the command level. The standard key
+        /// binding usually resolves ⌘V to `paste:`, but it can also arrive as
+        /// `noop:` (e.g. synthetic events), so both shapes are recognized.
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            guard Self.isPasteCommand(commandSelector),
+                  let onPasteImage = parent.onPasteImage,
+                  IMETextView.pasteboardHasImage(NSPasteboard.general)
+            else { return false }
+            return onPasteImage()
+        }
+
+        private static func isPasteCommand(_ selector: Selector) -> Bool {
+            if selector == #selector(NSTextView.paste(_:)) {
+                return true
+            }
+            guard selector == NSSelectorFromString("noop:"),
+                  let event = NSApp.currentEvent,
+                  event.type == .keyDown,
+                  event.modifierFlags.contains(.command),
+                  event.charactersIgnoringModifiers?.lowercased() == "v"
+            else { return false }
+            return true
         }
     }
 }

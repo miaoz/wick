@@ -270,9 +270,11 @@ enum DayArcEngine {
         }
     }
 
-    /// "Now" for theme resolution. Honors `WICK_ARC_TIME=HH:mm` (debug and
-    /// screenshot use only); falls back to the real current date.
+    /// "Now" for theme resolution. Honors `WICK_ARC_TIME=HH:mm` in debug
+    /// builds only (screenshots/design review); release builds always use the
+    /// real current date.
     static func currentDate(calendar: Calendar = .current) -> Date {
+        #if DEBUG
         if let raw = ProcessInfo.processInfo.environment["WICK_ARC_TIME"] {
             let parts = raw.split(separator: ":")
             if parts.count == 2,
@@ -288,6 +290,7 @@ enum DayArcEngine {
                 }
             }
         }
+        #endif
         return Date()
     }
 

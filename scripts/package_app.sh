@@ -9,7 +9,7 @@ MIN_SYSTEM_VERSION="13.0"
 # Optional overrides for CI / tagged releases:
 #   VERSION=1.4.0 BUILD=42 ./scripts/package_app.sh
 VERSION="${VERSION:-1.4.3}"
-BUILD="${BUILD:-21}"
+BUILD="${BUILD:-22}"
 DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/$APP_NAME.app"
 LEGACY_APP_DIR="$DIST_DIR/$LEGACY_APP_NAME.app"
@@ -55,6 +55,15 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 cp "$UNIVERSAL_BIN" "$MACOS_DIR/$APP_NAME"
 cp "$ICON_FILE" "$RESOURCES_DIR/AppIcon.icns"
 chmod +x "$MACOS_DIR/$APP_NAME"
+
+# Localized Info.plist strings (notification usage description).
+mkdir -p "$RESOURCES_DIR/en.lproj" "$RESOURCES_DIR/zh-Hans.lproj"
+cat > "$RESOURCES_DIR/en.lproj/InfoPlist.strings" <<'STRINGS'
+"NSUserNotificationsUsageDescription" = "Wick uses notifications for the daily journal reminder.";
+STRINGS
+cat > "$RESOURCES_DIR/zh-Hans.lproj/InfoPlist.strings" <<'STRINGS'
+"NSUserNotificationsUsageDescription" = "Wick 使用通知发送每日日记提醒。";
+STRINGS
 
 cat > "$CONTENTS_DIR/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
