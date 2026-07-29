@@ -1291,13 +1291,12 @@ private struct JournalItemEditorCard: View {
                 Spacer(minLength: 8)
 
                 Button(action: onPickImage) {
-                    Label(
-                        L10n.string(.journalAddImage, language: settings.language),
-                        systemImage: "photo.badge.plus"
-                    )
-                    .font(.callout)
+                    Image(systemName: "photo.badge.plus")
+                        .font(.system(size: 14))
                 }
                 .buttonStyle(.borderless)
+                .help(L10n.string(.journalAddImage, language: settings.language))
+                .accessibilityLabel(Text(L10n.string(.journalAddImage, language: settings.language)))
             }
 
             if !item.imageFilenames.isEmpty {
