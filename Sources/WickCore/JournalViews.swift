@@ -1187,7 +1187,6 @@ private struct JournalEditorPane: View {
 private struct JournalItemEditorCard: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: JournalStore
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.wickPalette) private var palette
 
     let index: Int
@@ -1200,7 +1199,10 @@ private struct JournalItemEditorCard: View {
     let onChange: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        // One flat surface per item: no inner boxes. Tag, body, and images
+        // read as one continuous piece; only whitespace and type color set
+        // them apart.
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 10) {
                 Text(
                     String(
@@ -1209,7 +1211,7 @@ private struct JournalItemEditorCard: View {
                     )
                 )
                 .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.tertiary)
                 .textCase(.uppercase)
                 .tracking(0.4)
 
@@ -1223,64 +1225,41 @@ private struct JournalItemEditorCard: View {
                         )
                     }
                     .buttonStyle(.borderless)
+                    .foregroundStyle(.tertiary)
                 }
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L10n.string(.journalItemTag, language: settings.language))
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
+            IMESafeTextField(
+                text: Binding(
+                    get: { item.tag },
+                    set: { item.tag = $0 }
+                ),
+                placeholder: L10n.string(.journalItemTagPlaceholder, language: settings.language),
+                font: .systemFont(ofSize: 13, weight: .medium),
+                textColor: palette.accentText.nsColor,
+                style: .plain,
+                onChange: onChange
+            )
+            .frame(height: 22)
 
-                IMESafeTextField(
-                    text: Binding(
-                        get: { item.tag },
-                        set: { item.tag = $0 }
-                    ),
-                    placeholder: L10n.string(.journalItemTagPlaceholder, language: settings.language),
-                    font: .systemFont(ofSize: NSFont.systemFontSize),
-                    style: .rounded,
-                    onChange: onChange
-                )
-                .frame(height: 28)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L10n.string(.journalBody, language: settings.language))
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-
-                IMESafeTextEditor(
-                    text: Binding(
-                        get: { item.body },
-                        set: { item.body = $0 }
-                    ),
-                    font: .systemFont(ofSize: 14),
-                    onChange: onChange
-                )
-                .frame(minHeight: 120)
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.03))
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-                }
-                .overlay(alignment: .topLeading) {
-                    // Aligned with the text view's first line: 10 (editor
-                    // padding) + 5 (NSTextView line fragment padding) / + 0
-                    // (textContainerInset).
-                    if item.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(L10n.string(.journalBodyPlaceholder, language: settings.language))
-                            .font(.system(size: 14))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 15)
-                            .padding(.vertical, 10)
-                            .allowsHitTesting(false)
-                    }
+            IMESafeTextEditor(
+                text: Binding(
+                    get: { item.body },
+                    set: { item.body = $0 }
+                ),
+                font: .systemFont(ofSize: 14),
+                onChange: onChange
+            )
+            .frame(minHeight: 120)
+            .overlay(alignment: .topLeading) {
+                // Aligned with the text view's first line: 0 (no editor
+                // padding) + 5 (NSTextView line fragment padding).
+                if item.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(L10n.string(.journalBodyPlaceholder, language: settings.language))
+                        .font(.system(size: 14))
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 5)
+                        .allowsHitTesting(false)
                 }
             }
 
@@ -1293,26 +1272,29 @@ private struct JournalItemEditorCard: View {
         )
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(palette.cardStroke.color, lineWidth: 1)
+                .strokeBorder(palette.cardStroke.scaledAlpha(0.5).color, lineWidth: 1)
         }
     }
 
     private var imagesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(L10n.string(.journalImages, language: settings.language))
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
+            HStack(alignment: .center, spacing: 10) {
+                if item.imageFilenames.isEmpty {
+                    Text(L10n.string(.journalImagesHint, language: settings.language))
+                        .font(.callout)
+                        .foregroundStyle(.tertiary)
+                }
 
-                Spacer()
+                Spacer(minLength: 8)
 
                 Button(action: onPasteImage) {
                     Label(
                         L10n.string(.journalPasteImage, language: settings.language),
                         systemImage: "doc.on.clipboard"
                     )
+                    .font(.callout)
                 }
+                .buttonStyle(.borderless)
                 .help(L10n.string(.journalPasteImageHelp, language: settings.language))
 
                 Button(action: onPickImage) {
@@ -1320,22 +1302,12 @@ private struct JournalItemEditorCard: View {
                         L10n.string(.journalAddImage, language: settings.language),
                         systemImage: "photo.badge.plus"
                     )
+                    .font(.callout)
                 }
+                .buttonStyle(.borderless)
             }
 
-            if item.imageFilenames.isEmpty {
-                Text(L10n.string(.journalImagesHint, language: settings.language))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [6, 4]))
-                            .foregroundStyle(Color.primary.opacity(0.15))
-                    )
-                    .onDrop(of: [.image, .fileURL], isTargeted: nil, perform: onDrop)
-            } else {
+            if !item.imageFilenames.isEmpty {
                 LazyVGrid(
                     columns: [GridItem(.adaptive(minimum: 140), spacing: 10)],
                     spacing: 10
@@ -1351,9 +1323,9 @@ private struct JournalItemEditorCard: View {
                         )
                     }
                 }
-                .onDrop(of: [.image, .fileURL], isTargeted: nil, perform: onDrop)
             }
         }
+        .onDrop(of: [.image, .fileURL], isTargeted: nil, perform: onDrop)
     }
 }
 

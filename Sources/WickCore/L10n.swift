@@ -65,11 +65,8 @@ enum L10n {
         case journalDeleteItem
         case journalItemNumberFormat
         case journalItemCountFormat
-        case journalItemTag
         case journalItemTagPlaceholder
-        case journalBody
         case journalBodyPlaceholder
-        case journalImages
         case journalImagesHint
         case journalAddImage
         case journalPasteImage
@@ -183,11 +180,8 @@ enum L10n {
             case .journalDeleteItem: return "删除条目"
             case .journalItemNumberFormat: return "条目 %d"
             case .journalItemCountFormat: return "%d 条"
-            case .journalItemTag: return "标签"
             case .journalItemTagPlaceholder: return "为此条目添加标签"
-            case .journalBody: return "正文"
             case .journalBodyPlaceholder: return "写点什么…"
-            case .journalImages: return "图片"
             case .journalImagesHint: return "拖入图片，或从剪贴板粘贴。"
             case .journalAddImage: return "添加图片"
             case .journalPasteImage: return "粘贴图片"
@@ -302,11 +296,8 @@ enum L10n {
             case .journalDeleteItem: return "Delete Item"
             case .journalItemNumberFormat: return "Item %d"
             case .journalItemCountFormat: return "%d items"
-            case .journalItemTag: return "Tag"
             case .journalItemTagPlaceholder: return "Tag for this item"
-            case .journalBody: return "Text"
             case .journalBodyPlaceholder: return "Write something…"
-            case .journalImages: return "Images"
             case .journalImagesHint: return "Drop images here, or paste from the clipboard."
             case .journalAddImage: return "Add Image"
             case .journalPasteImage: return "Paste Image"

@@ -259,6 +259,9 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         // becomes key; close it explicitly so it does not float over the journal.
         MenuBarExtraPanel.dismiss(excluding: [journalWindow])
         journalWindow.makeKeyAndOrderFront(nil)
+        // Show a Dock icon (and Cmd+Tab presence) while the journal is open so
+        // the user can switch back to it; restored to accessory on close.
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -356,6 +359,8 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         NotificationCenter.default.post(name: .wickWillFlushJournalDrafts, object: nil)
         JournalStore.shared.flushPendingWrites()
+        // Back to menu-bar-only presence once the journal window is gone.
+        NSApp.setActivationPolicy(.accessory)
     }
 }
 

@@ -10,7 +10,7 @@
 - 其他能力：登录时启动（`SMAppService`）、亮/暗/跟随系统外观（配色由「一日弧光」主题引擎驱动）、中/英文界面、菜单栏百分比显示、基于 GitHub Releases 的检查更新。
 - **平台**：macOS 13+，Apple Silicon 与 Intel（正式打包产出 Universal 二进制）。
 - **技术栈**：Swift 6.1+（`Package.swift` 声明 `swift-tools-version: 6.1`；主开发环境为 Xcode 26 / Swift 6.3）、SwiftUI + AppKit、Swift Package Manager。**无任何第三方依赖**（无 `Package.resolved`）。
-- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.4.2 (17)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
+- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.4.2 (18)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
 
 ## 仓库结构与模块划分
 
@@ -30,8 +30,8 @@ SwiftPM 三个 target（`Package.swift`）：
 | `TimeProgress.swift` | `TimeProgressCalculator`：日/周/月/年剩余比例的纯计算（可注入 `Date`/`Calendar`，便于测试） |
 | `JournalModels.swift` | 日记模型：`JournalEntry`（某日，1..n 个 `JournalItem`：标签/正文/图片文件名）、`JournalSnapshot`（Codable，`currentVersion = 1`） |
 | `JournalStore.swift` | 日记存储（`@MainActor ObservableObject` 单例）：落盘、`.bak` 与滚动备份、加载失败只读保护、图片管理、zip 导入导出；**一天一篇**由 `createEntry`/`updateEntry` 的按日合并保证 |
-| `JournalViews.swift` | 日记窗口 UI（`JournalRootView`，`NavigationSplitView` 双栏；macOS 14+ 用系统工具栏，macOS 13 用 `JournalWindowController` 安装的 AppKit `NSToolbar`；色值取自 `\.wickPalette`，根视图 300s `TimelineView` 刷新；编辑器顶部为 `DayArcStrip` 24h 弧光渐变条，今日条目带"此刻"圆点；头部日期按应用语言格式化、零填充，点击弹出图形日历；侧栏标签芯片超宽时折叠为「更多 N」，点击展开换行显示/再点收起，打包逻辑在 `TagChipFlow.swift`） |
-| `JournalReminderScheduler.swift` | 每日本地通知（`UNUserNotificationCenter`）；**同文件内还有 `JournalWindowController`**——手动持有日记 `NSWindow`（因 `MenuBarExtra` 场景里 SwiftUI `openWindow` 不可用），并含 macOS 13 专用的 `LegacyJournalToolbarDelegate`（AppKit 工具栏：折叠/新建） |
+| `JournalViews.swift` | 日记窗口 UI（`JournalRootView`，`NavigationSplitView` 双栏；macOS 14+ 用系统工具栏，macOS 13 用 `JournalWindowController` 安装的 AppKit `NSToolbar`；色值取自 `\.wickPalette`，根视图 300s `TimelineView` 刷新；编辑器顶部为 `DayArcStrip` 24h 弧光渐变条，今日条目带"此刻"圆点；头部日期按应用语言格式化、零填充，点击弹出图形日历；条目卡片为单层平面：无内部盒子，标签为琥珀色纯文本、正文无框、图片区为提示行+缩略图，卡片描边弱化；侧栏标签芯片超宽时折叠为「更多 N」，点击展开换行显示/再点收起，打包逻辑在 `TagChipFlow.swift`） |
+| `JournalReminderScheduler.swift` | 每日本地通知（`UNUserNotificationCenter`）；**同文件内还有 `JournalWindowController`**——手动持有日记 `NSWindow`（因 `MenuBarExtra` 场景里 SwiftUI `openWindow` 不可用），日记打开时把激活策略切为 `.regular`（Dock 显示图标、可 Cmd+Tab 切换），关闭时回 `.accessory`；并含 macOS 13 专用的 `LegacyJournalToolbarDelegate`（AppKit 工具栏：折叠/新建） |
 | `MenuBarExtraPanel.swift` | 用启发式（类名/styleMask/NSPanel）关闭 `MenuBarExtra` 面板窗口；**带尺寸护栏**：高度 ≤30 或宽度 ≤60 的小窗一律不碰——macOS 13 的 `NSApp.windows` 里混有状态栏图标的宿主小窗，误关会让图标永久消失 |
 | `IMESafeTextViews.swift` | AppKit 包装的单行/多行文本输入，避免中文/日文/韩文 IME 组字（marked text）期间被外部写值吞字 |
 | `JournalImageProcessing.swift` | 图片导入处理：最长边 2048px，无 alpha 转 JPEG(0.82)，有 alpha 存 PNG |

@@ -25,6 +25,7 @@ struct IMESafeTextField: NSViewRepresentable {
     @Binding var text: String
     var placeholder: String = ""
     var font: NSFont = .systemFont(ofSize: NSFont.systemFontSize)
+    var textColor: NSColor = .labelColor
     var style: Style = .rounded
     var onChange: (() -> Void)?
 
@@ -42,7 +43,7 @@ struct IMESafeTextField: NSViewRepresentable {
         field.delegate = context.coordinator
         field.font = font
         field.placeholderString = placeholder
-        field.textColor = .labelColor
+        field.textColor = textColor
         field.lineBreakMode = .byTruncatingTail
         field.cell?.isScrollable = true
         field.maximumNumberOfLines = 1
@@ -67,6 +68,9 @@ struct IMESafeTextField: NSViewRepresentable {
         }
         if field.font != font {
             field.font = font
+        }
+        if field.textColor != textColor {
+            field.textColor = textColor
         }
         applyStyle(field)
     }
