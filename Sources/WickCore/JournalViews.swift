@@ -1270,12 +1270,15 @@ private struct JournalItemEditorCard: View {
                         .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
                 }
                 .overlay(alignment: .topLeading) {
+                    // Aligned with the text view's first line: 10 (editor
+                    // padding) + 5 (NSTextView line fragment padding) / + 0
+                    // (textContainerInset).
                     if item.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(L10n.string(.journalBodyPlaceholder, language: settings.language))
                             .font(.system(size: 14))
                             .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 18)
+                            .padding(.horizontal, 15)
+                            .padding(.vertical, 10)
                             .allowsHitTesting(false)
                     }
                 }
