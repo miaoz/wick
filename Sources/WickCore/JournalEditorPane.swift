@@ -3,66 +3,83 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 // MARK: - Editor
+
+/// Right-hand journal editor: a continuous date timeline (newest first).
+/// - Day mode: every journal day is a scrollable section (full day chrome).
+/// - Item-scoped mode (tag / search filter): matching items only, grouped by day,
+///   still a continuous scrollable timeline — not a single selected day/item.
 struct JournalEditorPane: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: JournalStore
     @Environment(\.wickPalette) private var palette
 
-    @State private var draft = JournalEntry()
-    @State private var saveTask: Task<Void, Never>?
+    /// Per-entry drafts so multi-day editing survives LazyVStack recycling.
+    @State private var drafts: [UUID: JournalEntry] = [:]
+    @State private var saveTasks: [UUID: Task<Void, Never>] = [:]
     @State private var showDeleteDayConfirm = false
     @State private var showDeleteItemConfirm = false
-    @State private var showDatePicker = false
-    @State private var imageImportItemID: UUID?
+    @State private var pendingDeleteDayID: UUID?
+    @State private var pendingDeleteItem: JournalItemRef?
+    @State private var datePickerEntryID: UUID?
+    @State private var imageImportTarget: JournalItemRef?
+    @State private var pendingScrollID: String?
 
-    /// When selection is `.item`, only this item is edited/shown.
-    private var isItemScopedEditor: Bool {
-        if case .item = store.selection { return true }
-        return false
-    }
-
-    private var visibleItemIDs: [UUID] {
-        if case .item(let ref) = store.selection {
-            return [ref.itemID]
-        }
-        return draft.items.map(\.id)
-    }
+    private var isItemScoped: Bool { store.isItemScoped }
 
     var body: some View {
         Group {
-            if store.selection == nil || store.selectedEntry == nil {
+            if isItemScoped {
+                if store.filteredTimelineItems.isEmpty {
+                    emptyFilter
+                } else {
+                    timelineChrome
+                }
+            } else if store.filteredEntries.isEmpty {
                 noSelection
             } else {
-                editor
+                timelineChrome
             }
         }
         .background(palette.backgroundBottom.color)
-        .onChange(of: store.selection) { _ in
-            loadDraft()
-        }
         .onAppear {
-            loadDraft()
+            seedDraftsForVisibleTimeline()
+            queueScrollToSelection()
+        }
+        .onChange(of: store.selection) { _ in
+            seedDraftsForVisibleTimeline()
+            queueScrollToSelection()
+        }
+        .onChange(of: store.selectedTagFilter) { _ in
+            seedDraftsForVisibleTimeline()
+            queueScrollToSelection()
+        }
+        .onChange(of: store.searchText) { _ in
+            seedDraftsForVisibleTimeline()
+            queueScrollToSelection()
+        }
+        .onChange(of: store.entries) { _ in
+            pruneDrafts()
+            seedDraftsForVisibleTimeline()
         }
         .onReceive(NotificationCenter.default.publisher(for: .wickWillFlushJournalDrafts)) { _ in
-            flushDraftImmediately()
+            flushAllDraftsImmediately()
         }
         .onDisappear {
-            flushDraftImmediately()
+            flushAllDraftsImmediately()
         }
         .disabled(store.isReadOnlyDueToLoadFailure)
         .fileImporter(
             isPresented: Binding(
-                get: { imageImportItemID != nil },
-                set: { if !$0 { imageImportItemID = nil } }
+                get: { imageImportTarget != nil },
+                set: { if !$0 { imageImportTarget = nil } }
             ),
             allowedContentTypes: [.image],
             allowsMultipleSelection: true
         ) { result in
             guard case .success(let urls) = result,
-                  let entryID = store.selectedEntryID,
-                  let itemID = imageImportItemID
+                  let target = imageImportTarget
             else {
-                imageImportItemID = nil
+                imageImportTarget = nil
                 return
             }
             for url in urls {
@@ -72,10 +89,10 @@ struct JournalEditorPane: View {
                         url.stopAccessingSecurityScopedResource()
                     }
                 }
-                _ = store.addImage(from: url, to: entryID, itemID: itemID)
+                _ = store.addImage(from: url, to: target.entryID, itemID: target.itemID)
             }
-            reloadDraftFromStore()
-            imageImportItemID = nil
+            mergeImagesFromStore(entryID: target.entryID)
+            imageImportTarget = nil
         }
         .confirmationDialog(
             L10n.string(.journalDeleteConfirm, language: settings.language),
@@ -83,11 +100,16 @@ struct JournalEditorPane: View {
             titleVisibility: .visible
         ) {
             Button(L10n.string(.journalDelete, language: settings.language), role: .destructive) {
-                if let id = store.selectedEntryID {
+                if let id = pendingDeleteDayID {
+                    cancelSave(for: id)
+                    drafts[id] = nil
                     store.deleteEntry(id: id)
                 }
+                pendingDeleteDayID = nil
             }
-            Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
+            Button(L10n.string(.cancel, language: settings.language), role: .cancel) {
+                pendingDeleteDayID = nil
+            }
         }
         .confirmationDialog(
             L10n.string(.journalDeleteItemConfirm, language: settings.language),
@@ -95,15 +117,27 @@ struct JournalEditorPane: View {
             titleVisibility: .visible
         ) {
             Button(L10n.string(.journalDeleteItem, language: settings.language), role: .destructive) {
-                if case .item(let ref) = store.selection {
-                    saveTask?.cancel()
-                    store.updateEntry(draft)
+                if let ref = pendingDeleteItem {
+                    cancelSave(for: ref.entryID)
+                    if let draft = drafts[ref.entryID] {
+                        store.updateEntry(draft)
+                    }
                     store.deleteItem(itemID: ref.itemID, from: ref.entryID)
+                    if let entry = store.entries.first(where: { $0.id == ref.entryID }) {
+                        drafts[ref.entryID] = entry
+                    } else {
+                        drafts[ref.entryID] = nil
+                    }
                 }
+                pendingDeleteItem = nil
             }
-            Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
+            Button(L10n.string(.cancel, language: settings.language), role: .cancel) {
+                pendingDeleteItem = nil
+            }
         }
     }
+
+    // MARK: - Empty states
 
     private var noSelection: some View {
         VStack(spacing: 14) {
@@ -123,86 +157,248 @@ struct JournalEditorPane: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var editor: some View {
+    private var emptyFilter: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 42, weight: .ultraLight))
+                .foregroundStyle(.secondary)
+            Text(L10n.string(.journalFilterEmptyTitle, language: settings.language))
+                .font(.title3.weight(.medium))
+                .foregroundStyle(.secondary)
+            Text(L10n.string(.journalFilterEmptySubtitle, language: settings.language))
+                .font(.callout)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Timeline
+
+    /// Date for the single top chrome strip (panel chrome, not per-day content).
+    private var chromeStripDate: Date {
+        if let id = store.selectedEntryID,
+           let entry = store.entries.first(where: { $0.id == id })
+        {
+            return entry.date
+        }
+        if let first = store.filteredEntries.first {
+            return first.date
+        }
+        return Date()
+    }
+
+    private var timelineChrome: some View {
         VStack(spacing: 0) {
-            DayArcStrip(date: draft.date, language: settings.language)
+            // One arc strip for the whole editor panel — not repeated per day/item.
+            DayArcStrip(date: chromeStripDate, language: settings.language)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    header
-
-                    ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
-                        JournalItemEditorCard(
-                            index: displayIndex(for: item.id, fallback: index),
-                            item: binding(for: item.id),
-                            canDelete: isItemScopedEditor || draft.items.count > 1,
-                            onDelete: {
-                                if isItemScopedEditor {
-                                    showDeleteItemConfirm = true
-                                } else {
-                                    deleteItem(id: item.id)
-                                }
-                            },
-                            onPasteImage: {
-                                pasteImage(to: item.id)
-                            },
-                            onPickImage: {
-                                imageImportItemID = item.id
-                            },
-                            onDrop: { providers in
-                                handleDrop(providers, itemID: item.id)
-                            },
-                            onChange: scheduleSave
-                        )
-                    }
-
-                    if !isItemScopedEditor {
-                        Button {
-                            addItem()
-                        } label: {
-                            Label(
-                                L10n.string(.journalAddItem, language: settings.language),
-                                systemImage: "plus.circle"
-                            )
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 28) {
+                        if isItemScoped {
+                            itemScopedSections
+                        } else {
+                            dayScopedSections
                         }
-                        .buttonStyle(.bordered)
-
-                        footerDayActions
-                    } else {
-                        footerItemActions
+                    }
+                    .padding(.vertical, 20)
+                    .padding(.horizontal, 28)
+                    .frame(maxWidth: 880, alignment: .leading)
+                    .frame(maxWidth: .infinity)
+                }
+                .onChange(of: pendingScrollID) { target in
+                    guard let target else { return }
+                    // Double-pass: first layout pass may not have built LazyVStack rows yet.
+                    DispatchQueue.main.async {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            proxy.scrollTo(target, anchor: .top)
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            proxy.scrollTo(target, anchor: .top)
+                            if pendingScrollID == target {
+                                pendingScrollID = nil
+                            }
+                        }
                     }
                 }
-                .padding(28)
-                .frame(maxWidth: 880, alignment: .leading)
-                .frame(maxWidth: .infinity)
             }
         }
     }
 
-    private var visibleItems: [JournalItem] {
-        let ids = Set(visibleItemIDs)
-        return draft.items.filter { ids.contains($0.id) }
-    }
-
-    private func displayIndex(for itemID: UUID, fallback: Int) -> Int {
-        if let index = draft.items.firstIndex(where: { $0.id == itemID }) {
-            return index
+    @ViewBuilder
+    private var dayScopedSections: some View {
+        ForEach(store.filteredEntries) { entry in
+            daySection(
+                entryID: entry.id,
+                isFocused: store.selectedEntryID == entry.id
+            )
+            .id(Self.dayScrollID(entry.id))
+            .onAppear {
+                ensureDraft(for: entry.id)
+            }
         }
-        return fallback
     }
 
-    private var header: some View {
+    @ViewBuilder
+    private var itemScopedSections: some View {
+        ForEach(itemDayGroups) { group in
+            VStack(alignment: .leading, spacing: 14) {
+                itemScopedDayHeader(group)
+
+                ForEach(group.items) { row in
+                    itemCard(
+                        entryID: row.ref.entryID,
+                        itemID: row.ref.itemID,
+                        isFocused: store.selectedItemID == row.ref.itemID
+                            && store.selectedEntryID == row.ref.entryID
+                    )
+                    .id(Self.itemScrollID(row.ref))
+                    .onAppear {
+                        ensureDraft(for: row.ref.entryID)
+                    }
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(palette.cardTop.scaledAlpha(0.35).color)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(palette.cardStroke.scaledAlpha(0.4).color, lineWidth: 1)
+            }
+        }
+    }
+
+    private func itemScopedDayHeader(_ group: ItemDayGroup) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(formattedDate(group.day))
+                    .font(.system(size: 15, weight: .semibold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(palette.textPrimary.color)
+
+                if let title = group.dayTitle, !title.isEmpty {
+                    Text(title)
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundStyle(palette.textSecondary.color)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Text(L10n.string(.journalItemScopeBadge, language: settings.language))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.accentText.color)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(palette.accentSoft.color, in: Capsule())
+
+                Text(
+                    String(
+                        format: L10n.string(.journalItemCountFormat, language: settings.language),
+                        group.items.count
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                Button {
+                    // Leave filter mode and open this calendar day fully.
+                    store.selectedTagFilter = nil
+                    store.searchText = ""
+                    store.selectDay(group.representativeEntryID)
+                } label: {
+                    Label(
+                        L10n.string(.journalOpenFullDay, language: settings.language),
+                        systemImage: "calendar"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            Text(L10n.string(.journalItemScopeEditorHint, language: settings.language))
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    // MARK: - Day section (full day)
+
+    @ViewBuilder
+    private func daySection(
+        entryID: UUID,
+        isFocused: Bool
+    ) -> some View {
+        let draft = drafts[entryID] ?? store.entries.first(where: { $0.id == entryID }) ?? JournalEntry()
+
+        VStack(alignment: .leading, spacing: 16) {
+            dayHeader(entryID: entryID, draft: draft, itemCount: draft.items.count, isFocused: isFocused)
+
+            ForEach(Array(draft.items.enumerated()), id: \.element.id) { index, item in
+                itemCard(
+                    entryID: entryID,
+                    itemID: item.id,
+                    itemIndex: index,
+                    isFocused: false
+                )
+            }
+
+            Button {
+                addItem(to: entryID)
+            } label: {
+                Label(
+                    L10n.string(.journalAddItem, language: settings.language),
+                    systemImage: "plus.circle"
+                )
+            }
+            .buttonStyle(.bordered)
+
+            HStack {
+                Button(role: .destructive) {
+                    pendingDeleteDayID = entryID
+                    showDeleteDayConfirm = true
+                } label: {
+                    Label(
+                        L10n.string(.journalDelete, language: settings.language),
+                        systemImage: "trash"
+                    )
+                }
+                Spacer()
+            }
+            .padding(.top, 4)
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(palette.cardTop.scaledAlpha(isFocused ? 0.55 : 0.35).color)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(
+                    isFocused
+                        ? palette.accent.color.opacity(0.4)
+                        : palette.cardStroke.scaledAlpha(0.4).color,
+                    lineWidth: isFocused ? 1.5 : 1
+                )
+        }
+    }
+
+    private func dayHeader(
+        entryID: UUID,
+        draft: JournalEntry,
+        itemCount: Int,
+        isFocused: Bool
+    ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 12) {
-                // Locale-correct, zero-padded date label; the field-style
-                // DatePicker followed the system locale and space-padded
-                // single digits ("2026/ 7/28"), so it is now display-only
-                // with a graphical calendar in a popover.
                 Button {
-                    showDatePicker = true
+                    datePickerEntryID = entryID
                 } label: {
                     HStack(spacing: 6) {
-                        Text(formattedDate)
+                        Text(formattedDate(draft.date))
                             .font(.system(size: 15, weight: .semibold, design: .rounded).monospacedDigit())
                         Image(systemName: "calendar")
                             .font(.system(size: 12, weight: .medium))
@@ -221,16 +417,20 @@ struct JournalEditorPane: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .disabled(isItemScopedEditor)
                 .accessibilityLabel(Text(L10n.string(.journalChangeDate, language: settings.language)))
-                .popover(isPresented: $showDatePicker, arrowEdge: .top) {
+                .popover(isPresented: Binding(
+                    get: { datePickerEntryID == entryID },
+                    set: { if !$0 { datePickerEntryID = nil } }
+                ), arrowEdge: .top) {
                     DatePicker(
                         "",
                         selection: Binding(
-                            get: { draft.date },
+                            get: { drafts[entryID]?.date ?? draft.date },
                             set: { newValue in
-                                draft.date = Calendar.current.startOfDay(for: newValue)
-                                scheduleSave()
+                                mutateDraft(entryID) { entry in
+                                    entry.date = Calendar.current.startOfDay(for: newValue)
+                                }
+                                scheduleSave(for: entryID)
                             }
                         ),
                         displayedComponents: .date
@@ -243,113 +443,217 @@ struct JournalEditorPane: View {
 
                 Spacer()
 
-                if isItemScopedEditor {
-                    Text(L10n.string(.journalItemScopeBadge, language: settings.language))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(palette.accentText.color)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(palette.accentSoft.color, in: Capsule())
-                } else {
-                    Text(
-                        String(
-                            format: L10n.string(.journalItemCountFormat, language: settings.language),
-                            draft.items.count
-                        )
+                Text(
+                    String(
+                        format: L10n.string(.journalItemCountFormat, language: settings.language),
+                        itemCount
                     )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
                 if store.isReadOnlyDueToLoadFailure {
                     Text(L10n.string(.journalReadOnly, language: settings.language))
                         .font(.caption)
                         .foregroundStyle(.orange)
-                } else {
+                } else if isFocused {
                     Text(L10n.string(.journalAutosaved, language: settings.language))
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
             }
 
-            if isItemScopedEditor {
-                if !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(draft.title)
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
+            IMESafeTextField(
+                text: Binding(
+                    get: { drafts[entryID]?.title ?? draft.title },
+                    set: { newValue in
+                        mutateDraft(entryID) { $0.title = newValue }
+                    }
+                ),
+                placeholder: L10n.string(.journalTitlePlaceholder, language: settings.language),
+                font: Self.titleFont,
+                style: .plain,
+                onChange: { scheduleSave(for: entryID) }
+            )
+            .frame(height: 34)
+
+            Text(L10n.string(.journalItemsHint, language: settings.language))
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    // MARK: - Item card
+
+    private func itemCard(
+        entryID: UUID,
+        itemID: UUID,
+        itemIndex: Int? = nil,
+        isFocused: Bool
+    ) -> some View {
+        let draft = drafts[entryID] ?? store.entries.first(where: { $0.id == entryID }) ?? JournalEntry()
+        let index = itemIndex ?? displayIndex(for: itemID, in: draft, fallback: 0)
+        let canDelete = isItemScoped || draft.items.count > 1
+
+        return JournalItemEditorCard(
+            entryID: entryID,
+            index: index,
+            item: binding(entryID: entryID, itemID: itemID),
+            canDelete: canDelete,
+            onDelete: {
+                if isItemScoped {
+                    pendingDeleteItem = JournalItemRef(entryID: entryID, itemID: itemID)
+                    showDeleteItemConfirm = true
+                } else {
+                    deleteItem(itemID: itemID, from: entryID)
                 }
-                Text(L10n.string(.journalItemScopeEditorHint, language: settings.language))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            } else {
-                IMESafeTextField(
-                    text: Binding(
-                        get: { draft.title },
-                        set: { draft.title = $0 }
-                    ),
-                    placeholder: L10n.string(.journalTitlePlaceholder, language: settings.language),
-                    font: Self.titleFont,
-                    style: .plain,
-                    onChange: scheduleSave
-                )
-                .frame(height: 34)
-
-                Text(L10n.string(.journalItemsHint, language: settings.language))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+            },
+            onPasteImage: {
+                pasteImage(to: itemID, in: entryID)
+            },
+            onPickImage: {
+                imageImportTarget = JournalItemRef(entryID: entryID, itemID: itemID)
+            },
+            onDrop: { providers in
+                handleDrop(providers, itemID: itemID, entryID: entryID)
+            },
+            onChange: { scheduleSave(for: entryID) }
+        )
+        .overlay {
+            if isFocused {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(palette.accent.color.opacity(0.45), lineWidth: 1.5)
             }
         }
     }
 
-    private var footerDayActions: some View {
-        HStack {
-            Button(role: .destructive) {
-                showDeleteDayConfirm = true
-            } label: {
-                Label(
-                    L10n.string(.journalDelete, language: settings.language),
-                    systemImage: "trash"
-                )
-            }
-            Spacer()
+    // MARK: - Item-scoped grouping
+
+    private struct ItemDayGroup: Identifiable {
+        /// Start-of-day key.
+        var id: Date { day }
+        let day: Date
+        let items: [JournalTimelineItem]
+
+        var representativeEntryID: UUID {
+            items.first?.ref.entryID ?? UUID()
         }
-        .padding(.top, 4)
+
+        var dayTitle: String? {
+            let title = items.first?.entryTitle.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return title.isEmpty ? nil : title
+        }
     }
 
-    private var footerItemActions: some View {
-        HStack {
-            Button {
-                store.openSelectedDayFully()
-            } label: {
-                Label(
-                    L10n.string(.journalOpenFullDay, language: settings.language),
-                    systemImage: "calendar"
-                )
-            }
-            .buttonStyle(.bordered)
-
-            Spacer()
-
-            Button(role: .destructive) {
-                showDeleteItemConfirm = true
-            } label: {
-                Label(
-                    L10n.string(.journalDeleteItem, language: settings.language),
-                    systemImage: "trash"
-                )
-            }
+    private var itemDayGroups: [ItemDayGroup] {
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: store.filteredTimelineItems) {
+            calendar.startOfDay(for: $0.date)
         }
-        .padding(.top, 4)
+        return grouped.keys.sorted(by: >).map { day in
+            ItemDayGroup(day: day, items: grouped[day] ?? [])
+        }
     }
 
     // MARK: - Draft helpers
 
-    /// Locale-correct, zero-padded numeric date ("2026年07月28日" / "07/28/2026").
-    private var formattedDate: String {
+    private static func dayScrollID(_ entryID: UUID) -> String {
+        "day-\(entryID.uuidString)"
+    }
+
+    private static func itemScrollID(_ ref: JournalItemRef) -> String {
+        "item-\(ref.id)"
+    }
+
+    private func scrollID(for selection: JournalSelection?) -> String? {
+        switch selection {
+        case .day(let id):
+            return Self.dayScrollID(id)
+        case .item(let ref):
+            return Self.itemScrollID(ref)
+        case nil:
+            return nil
+        }
+    }
+
+    private func queueScrollToSelection() {
+        guard let id = scrollID(for: store.selection) else { return }
+        pendingScrollID = id
+    }
+
+    private func seedDraftsForVisibleTimeline() {
+        if isItemScoped {
+            let entryIDs = Set(store.filteredTimelineItems.map(\.ref.entryID))
+            for id in entryIDs {
+                ensureDraft(for: id)
+            }
+        } else {
+            for entry in store.filteredEntries {
+                ensureDraft(for: entry.id)
+            }
+        }
+    }
+
+    private func ensureDraft(for entryID: UUID) {
+        guard drafts[entryID] == nil,
+              let entry = store.entries.first(where: { $0.id == entryID })
+        else {
+            return
+        }
+        drafts[entryID] = entry
+    }
+
+    private func pruneDrafts() {
+        let live = Set(store.entries.map(\.id))
+        for key in drafts.keys where !live.contains(key) {
+            cancelSave(for: key)
+            drafts[key] = nil
+        }
+    }
+
+    private func mutateDraft(_ entryID: UUID, _ body: (inout JournalEntry) -> Void) {
+        ensureDraft(for: entryID)
+        guard var draft = drafts[entryID] else { return }
+        body(&draft)
+        drafts[entryID] = draft
+    }
+
+    private func binding(entryID: UUID, itemID: UUID) -> Binding<JournalItem> {
+        Binding(
+            get: {
+                if let item = drafts[entryID]?.items.first(where: { $0.id == itemID }) {
+                    return item
+                }
+                if let item = store.entries
+                    .first(where: { $0.id == entryID })?
+                    .items.first(where: { $0.id == itemID })
+                {
+                    return item
+                }
+                return JournalItem(id: itemID)
+            },
+            set: { newValue in
+                mutateDraft(entryID) { entry in
+                    if let index = entry.items.firstIndex(where: { $0.id == itemID }) {
+                        entry.items[index] = newValue
+                    }
+                }
+            }
+        )
+    }
+
+    private func displayIndex(for itemID: UUID, in draft: JournalEntry, fallback: Int) -> Int {
+        if let index = draft.items.firstIndex(where: { $0.id == itemID }) {
+            return index
+        }
+        return fallback
+    }
+
+    private func formattedDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = settings.language.locale
         formatter.setLocalizedDateFormatFromTemplate("yMMdd")
-        return formatter.string(from: draft.date)
+        return formatter.string(from: date)
     }
 
     private static var titleFont: NSFont {
@@ -360,108 +664,100 @@ struct JournalEditorPane: View {
         return base
     }
 
-    private func binding(for itemID: UUID) -> Binding<JournalItem> {
-        Binding(
-            get: {
-                draft.items.first(where: { $0.id == itemID }) ?? JournalItem(id: itemID)
-            },
-            set: { newValue in
-                guard let index = draft.items.firstIndex(where: { $0.id == itemID }) else {
-                    return
-                }
-                draft.items[index] = newValue
-            }
-        )
-    }
+    // MARK: - Persistence
 
-    private func loadDraft() {
-        saveTask?.cancel()
-        guard let entryID = store.selectedEntryID,
-              let entry = store.entries.first(where: { $0.id == entryID })
-        else {
-            draft = JournalEntry()
-            return
-        }
-        draft = entry
-    }
-
-    private func reloadDraftFromStore() {
-        guard let entryID = store.selectedEntryID,
-              let entry = store.entries.first(where: { $0.id == entryID })
-        else {
-            return
-        }
-        var merged = entry
-        for index in merged.items.indices {
-            let itemID = merged.items[index].id
-            if let local = draft.items.first(where: { $0.id == itemID }) {
-                merged.items[index].tag = local.tag
-                merged.items[index].body = local.body
-            }
-        }
-        merged.title = draft.title
-        merged.date = draft.date
-        draft = merged
-    }
-
-    private func scheduleSave() {
+    private func scheduleSave(for entryID: UUID) {
         guard !store.isReadOnlyDueToLoadFailure else { return }
-        saveTask?.cancel()
-        // Debounce disk writes, and never commit while an IME is composing —
-        // intermediate marked text + @Published store refresh is what swallows CJK input.
-        saveTask = Task { @MainActor in
+        cancelSave(for: entryID)
+        saveTasks[entryID] = Task { @MainActor in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 350_000_000)
                 guard !Task.isCancelled else { return }
                 if TextInputComposition.isActive {
                     continue
                 }
-                store.updateEntry(draft)
+                if let draft = drafts[entryID] {
+                    store.updateEntry(draft)
+                }
+                saveTasks[entryID] = nil
                 return
             }
         }
     }
 
-    private func flushDraftImmediately() {
-        saveTask?.cancel()
-        guard store.selectedEntryID != nil, !store.isReadOnlyDueToLoadFailure else { return }
-        // Even if IME is active, quitting must not lose committed characters already in the binding.
-        store.updateEntry(draft)
+    private func cancelSave(for entryID: UUID) {
+        saveTasks[entryID]?.cancel()
+        saveTasks[entryID] = nil
     }
 
-    private func addItem() {
-        saveTask?.cancel()
-        store.updateEntry(draft)
-        guard let entryID = store.selectedEntryID,
-              let item = store.addItem(to: entryID)
-        else {
-            return
+    private func flushAllDraftsImmediately() {
+        for (entryID, task) in saveTasks {
+            task.cancel()
+            saveTasks[entryID] = nil
         }
-        draft.items.append(item)
-        draft.updatedAt = Date()
+        guard !store.isReadOnlyDueToLoadFailure else { return }
+        for (entryID, draft) in drafts {
+            if store.entries.contains(where: { $0.id == entryID }) {
+                store.updateEntry(draft)
+            }
+        }
     }
 
-    private func deleteItem(id: UUID) {
-        saveTask?.cancel()
-        store.updateEntry(draft)
-        guard let entryID = store.selectedEntryID else { return }
-        store.deleteItem(itemID: id, from: entryID)
-        loadDraft()
+    private func mergeImagesFromStore(entryID: UUID) {
+        guard let entry = store.entries.first(where: { $0.id == entryID }) else { return }
+        mutateDraft(entryID) { draft in
+            var merged = entry
+            for index in merged.items.indices {
+                let itemID = merged.items[index].id
+                if let local = draft.items.first(where: { $0.id == itemID }) {
+                    merged.items[index].tag = local.tag
+                    merged.items[index].body = local.body
+                }
+            }
+            merged.title = draft.title
+            merged.date = draft.date
+            draft = merged
+        }
     }
 
-    private func pasteImage(to itemID: UUID) -> Bool {
-        guard let entryID = store.selectedEntryID else { return false }
-        saveTask?.cancel()
-        store.updateEntry(draft)
+    private func addItem(to entryID: UUID) {
+        cancelSave(for: entryID)
+        if let draft = drafts[entryID] {
+            store.updateEntry(draft)
+        }
+        guard let item = store.addItem(to: entryID) else { return }
+        mutateDraft(entryID) { draft in
+            draft.items.append(item)
+            draft.updatedAt = Date()
+        }
+    }
+
+    private func deleteItem(itemID: UUID, from entryID: UUID) {
+        cancelSave(for: entryID)
+        if let draft = drafts[entryID] {
+            store.updateEntry(draft)
+        }
+        store.deleteItem(itemID: itemID, from: entryID)
+        if let entry = store.entries.first(where: { $0.id == entryID }) {
+            drafts[entryID] = entry
+        } else {
+            drafts[entryID] = nil
+        }
+    }
+
+    private func pasteImage(to itemID: UUID, in entryID: UUID) -> Bool {
+        cancelSave(for: entryID)
+        if let draft = drafts[entryID] {
+            store.updateEntry(draft)
+        }
         if store.pasteImageFromClipboard(to: entryID, itemID: itemID) {
-            reloadDraftFromStore()
+            mergeImagesFromStore(entryID: entryID)
             return true
         }
         return false
     }
 
-    private func handleDrop(_ providers: [NSItemProvider], itemID: UUID) -> Bool {
-        guard let entryID = store.selectedEntryID else { return false }
+    private func handleDrop(_ providers: [NSItemProvider], itemID: UUID, entryID: UUID) -> Bool {
         var accepted = false
 
         for provider in providers {
@@ -470,10 +766,17 @@ struct JournalEditorPane: View {
                 provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
                     guard let data else { return }
                     Task { @MainActor in
-                        saveTask?.cancel()
-                        store.updateEntry(draft)
-                        _ = store.addImage(from: data, to: entryID, itemID: itemID, preferredExtension: "png")
-                        reloadDraftFromStore()
+                        cancelSave(for: entryID)
+                        if let draft = drafts[entryID] {
+                            store.updateEntry(draft)
+                        }
+                        _ = store.addImage(
+                            from: data,
+                            to: entryID,
+                            itemID: itemID,
+                            preferredExtension: "png"
+                        )
+                        mergeImagesFromStore(entryID: entryID)
                     }
                 }
                 continue
@@ -492,10 +795,12 @@ struct JournalEditorPane: View {
                     }
                     guard let url else { return }
                     Task { @MainActor in
-                        saveTask?.cancel()
-                        store.updateEntry(draft)
+                        cancelSave(for: entryID)
+                        if let draft = drafts[entryID] {
+                            store.updateEntry(draft)
+                        }
                         _ = store.addImage(from: url, to: entryID, itemID: itemID)
-                        reloadDraftFromStore()
+                        mergeImagesFromStore(entryID: entryID)
                     }
                 }
             }
@@ -504,4 +809,3 @@ struct JournalEditorPane: View {
         return accepted
     }
 }
-

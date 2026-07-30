@@ -8,6 +8,8 @@ struct JournalItemEditorCard: View {
     @EnvironmentObject private var store: JournalStore
     @Environment(\.wickPalette) private var palette
 
+    /// Owning day entry — required so image deletion stays correct in multi-day timelines.
+    let entryID: UUID
     let index: Int
     @Binding var item: JournalItem
     let canDelete: Bool
@@ -126,7 +128,6 @@ struct JournalItemEditorCard: View {
                         JournalImageThumb(
                             filename: filename,
                             onDelete: {
-                                guard let entryID = store.selectedEntryID else { return }
                                 store.removeImage(filename: filename, from: entryID, itemID: item.id)
                                 item.imageFilenames.removeAll { $0 == filename }
                             }
