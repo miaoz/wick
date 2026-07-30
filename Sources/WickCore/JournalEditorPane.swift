@@ -273,55 +273,42 @@ struct JournalEditorPane: View {
     }
 
     private func itemScopedDayHeader(_ group: ItemDayGroup) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 12) {
-                Text(formattedDate(group.day))
-                    .font(.system(size: 15, weight: .semibold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(palette.textPrimary.color)
+        HStack(alignment: .center, spacing: 12) {
+            Text(formattedDate(group.day))
+                .font(.system(size: 15, weight: .semibold, design: .rounded).monospacedDigit())
+                .foregroundStyle(palette.textPrimary.color)
 
-                if let title = group.dayTitle, !title.isEmpty {
-                    Text(title)
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(palette.textSecondary.color)
-                        .lineLimit(1)
-                }
+            Spacer(minLength: 8)
 
-                Spacer(minLength: 8)
+            Text(L10n.string(.journalItemScopeBadge, language: settings.language))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(palette.accentText.color)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(palette.accentSoft.color, in: Capsule())
 
-                Text(L10n.string(.journalItemScopeBadge, language: settings.language))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(palette.accentText.color)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(palette.accentSoft.color, in: Capsule())
-
-                Text(
-                    String(
-                        format: L10n.string(.journalItemCountFormat, language: settings.language),
-                        group.items.count
-                    )
+            Text(
+                String(
+                    format: L10n.string(.journalItemCountFormat, language: settings.language),
+                    group.items.count
                 )
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
 
-                Button {
-                    // Leave filter mode and open this calendar day fully.
-                    store.selectedTagFilter = nil
-                    store.searchText = ""
-                    store.selectDay(group.representativeEntryID)
-                } label: {
-                    Label(
-                        L10n.string(.journalOpenFullDay, language: settings.language),
-                        systemImage: "calendar"
-                    )
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+            Button {
+                // Leave filter mode and open this calendar day fully.
+                store.selectedTagFilter = nil
+                store.searchText = ""
+                store.selectDay(group.representativeEntryID)
+            } label: {
+                Label(
+                    L10n.string(.journalOpenFullDay, language: settings.language),
+                    systemImage: "calendar"
+                )
             }
-
-            Text(L10n.string(.journalItemScopeEditorHint, language: settings.language))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
     }
 
@@ -392,94 +379,74 @@ struct JournalEditorPane: View {
         itemCount: Int,
         isFocused: Bool
     ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 12) {
-                Button {
-                    datePickerEntryID = entryID
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(formattedDate(draft.date))
-                            .font(.system(size: 15, weight: .semibold, design: .rounded).monospacedDigit())
-                        Image(systemName: "calendar")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(palette.textTertiary.color)
-                    }
-                    .foregroundStyle(palette.textPrimary.color)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(palette.controlBackground.color)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(palette.controlBorder.color, lineWidth: 1)
-                    }
+        HStack(alignment: .center, spacing: 12) {
+            Button {
+                datePickerEntryID = entryID
+            } label: {
+                HStack(spacing: 6) {
+                    Text(formattedDate(draft.date))
+                        .font(.system(size: 15, weight: .semibold, design: .rounded).monospacedDigit())
+                    Image(systemName: "calendar")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(palette.textTertiary.color)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text(L10n.string(.journalChangeDate, language: settings.language)))
-                .popover(isPresented: Binding(
-                    get: { datePickerEntryID == entryID },
-                    set: { if !$0 { datePickerEntryID = nil } }
-                ), arrowEdge: .top) {
-                    DatePicker(
-                        "",
-                        selection: Binding(
-                            get: { drafts[entryID]?.date ?? draft.date },
-                            set: { newValue in
-                                mutateDraft(entryID) { entry in
-                                    entry.date = Calendar.current.startOfDay(for: newValue)
-                                }
-                                scheduleSave(for: entryID)
-                            }
-                        ),
-                        displayedComponents: .date
-                    )
-                    .labelsHidden()
-                    .datePickerStyle(.graphical)
-                    .environment(\.locale, settings.language.locale)
-                    .padding(10)
-                }
-
-                Spacer()
-
-                Text(
-                    String(
-                        format: L10n.string(.journalItemCountFormat, language: settings.language),
-                        itemCount
-                    )
+                .foregroundStyle(palette.textPrimary.color)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(palette.controlBackground.color)
                 )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                if store.isReadOnlyDueToLoadFailure {
-                    Text(L10n.string(.journalReadOnly, language: settings.language))
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                } else if isFocused {
-                    Text(L10n.string(.journalAutosaved, language: settings.language))
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(palette.controlBorder.color, lineWidth: 1)
                 }
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(L10n.string(.journalChangeDate, language: settings.language)))
+            .popover(isPresented: Binding(
+                get: { datePickerEntryID == entryID },
+                set: { if !$0 { datePickerEntryID = nil } }
+            ), arrowEdge: .top) {
+                DatePicker(
+                    "",
+                    selection: Binding(
+                        get: { drafts[entryID]?.date ?? draft.date },
+                        set: { newValue in
+                            mutateDraft(entryID) { entry in
+                                entry.date = Calendar.current.startOfDay(for: newValue)
+                            }
+                            scheduleSave(for: entryID)
+                        }
+                    ),
+                    displayedComponents: .date
+                )
+                .labelsHidden()
+                .datePickerStyle(.graphical)
+                .environment(\.locale, settings.language.locale)
+                .padding(10)
+            }
 
-            IMESafeTextField(
-                text: Binding(
-                    get: { drafts[entryID]?.title ?? draft.title },
-                    set: { newValue in
-                        mutateDraft(entryID) { $0.title = newValue }
-                    }
-                ),
-                placeholder: L10n.string(.journalTitlePlaceholder, language: settings.language),
-                font: Self.titleFont,
-                style: .plain,
-                onChange: { scheduleSave(for: entryID) }
+            Spacer()
+
+            Text(
+                String(
+                    format: L10n.string(.journalItemCountFormat, language: settings.language),
+                    itemCount
+                )
             )
-            .frame(height: 34)
+            .font(.caption)
+            .foregroundStyle(.secondary)
 
-            Text(L10n.string(.journalItemsHint, language: settings.language))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            if store.isReadOnlyDueToLoadFailure {
+                Text(L10n.string(.journalReadOnly, language: settings.language))
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else if isFocused {
+                Text(L10n.string(.journalAutosaved, language: settings.language))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 
@@ -537,11 +504,6 @@ struct JournalEditorPane: View {
 
         var representativeEntryID: UUID {
             items.first?.ref.entryID ?? UUID()
-        }
-
-        var dayTitle: String? {
-            let title = items.first?.entryTitle.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return title.isEmpty ? nil : title
         }
     }
 
@@ -654,14 +616,6 @@ struct JournalEditorPane: View {
         formatter.locale = settings.language.locale
         formatter.setLocalizedDateFormatFromTemplate("yMMdd")
         return formatter.string(from: date)
-    }
-
-    private static var titleFont: NSFont {
-        let base = NSFont.systemFont(ofSize: 26, weight: .semibold)
-        if let rounded = base.fontDescriptor.withDesign(.rounded) {
-            return NSFont(descriptor: rounded, size: 26) ?? base
-        }
-        return base
     }
 
     // MARK: - Persistence
