@@ -177,8 +177,8 @@ struct JournalImageThumb: View {
 
 // MARK: - Quiet icon buttons
 
-/// Journal chrome icon control: idle is low-contrast; hover/press adds a soft
-/// fill and stronger glyph so actions do not look permanently “on”.
+/// Journal chrome icon control: glyph always uses the day-arc theme color;
+/// hover/press only adds a soft mask behind the icon (no gray idle state).
 struct JournalQuietIconButtonStyle: ButtonStyle {
     enum Role {
         case regular
@@ -187,7 +187,7 @@ struct JournalQuietIconButtonStyle: ButtonStyle {
 
     var role: Role = .regular
     var fontSize: CGFloat = 14
-    /// Thumbnail “x” sits on photos — keep a faint glyph even when idle.
+    /// Thumbnail “x” sits on photos — white glyph on a dim disc.
     var alwaysShowOnDarkChrome: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
@@ -208,17 +208,19 @@ private struct JournalQuietIconButtonBody: View {
 
     @State private var isHovered = false
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.wickPalette) private var palette
 
     var body: some View {
         let active = isHovered || configuration.isPressed
         configuration.label
             .font(.system(size: fontSize, weight: .medium))
             .symbolRenderingMode(.monochrome)
-            .foregroundStyle(foreground(active: active))
+            // Themed glyph stays the same; only the mask below reacts to hover.
+            .foregroundStyle(glyphColor)
             .frame(width: 28, height: 28)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(background(active: active))
+                    .fill(hoverMask(active: active))
             )
             .opacity(isEnabled ? 1 : 0.35)
             .contentShape(Rectangle())
@@ -226,31 +228,32 @@ private struct JournalQuietIconButtonBody: View {
             .animation(.easeOut(duration: 0.12), value: active)
     }
 
-    private func foreground(active: Bool) -> Color {
+    private var glyphColor: Color {
         if alwaysShowOnDarkChrome {
-            return .white.opacity(active ? 1 : 0.8)
-        }
-        guard active else {
-            return Color.primary.opacity(0.32)
+            return .white
         }
         switch role {
         case .regular:
-            return Color.primary.opacity(0.88)
+            // Same family as tags / accent controls — follows day-arc phase.
+            return palette.accentText.color
         case .destructive:
-            return Color.red.opacity(0.92)
+            // Quiet gray by default (delete should not scream until hover).
+            return palette.textTertiary.color
         }
     }
 
-    private func background(active: Bool) -> Color {
+    private func hoverMask(active: Bool) -> Color {
         if alwaysShowOnDarkChrome {
-            return Color.black.opacity(active ? 0.55 : 0.28)
+            // Always need a disc over the photo; deepen slightly on hover.
+            return Color.black.opacity(active ? 0.55 : 0.32)
         }
         guard active else { return .clear }
         switch role {
         case .regular:
-            return Color.primary.opacity(0.08)
+            return palette.accentSoft.color
         case .destructive:
-            return Color.red.opacity(0.12)
+            // Soft neutral mask only — no permanent red glyph.
+            return palette.controlBackground.color.opacity(0.9)
         }
     }
 }
