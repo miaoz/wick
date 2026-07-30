@@ -177,10 +177,34 @@ final class IMETextView: NSTextView {
     }
 }
 
+/// Scroll view that reports a fitted content height to SwiftUI via
+/// `intrinsicContentSize`, so journal item bodies can grow with text instead
+/// of sitting in a fixed-height box.
+final class AutoHeightScrollView: NSScrollView {
+    var fittedHeight: CGFloat = 48 {
+        didSet {
+            guard abs(oldValue - fittedHeight) > 0.5 else { return }
+            invalidateIntrinsicContentSize()
+        }
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: fittedHeight)
+    }
+}
+
 /// AppKit-backed multi-line editor that preserves IME marked text across SwiftUI redraws.
+///
+/// Height tracks the laid-out text (clamped to `minHeight`…`maxHeight`). When
+/// content exceeds `maxHeight`, a vertical scroller appears; otherwise the
+/// outer journal timeline scrolls as one continuous surface.
 struct IMESafeTextEditor: NSViewRepresentable {
     @Binding var text: String
     var font: NSFont = .systemFont(ofSize: NSFont.systemFontSize)
+    /// Empty / short bodies still get a couple of lines of breathing room.
+    var minHeight: CGFloat = 48
+    /// Soft cap; `nil` grows without limit (preferred for timeline cards).
+    var maxHeight: CGFloat? = nil
     var onChange: (() -> Void)?
     /// Handles ⌘V when the pasteboard carries an image (text pastes use the default path).
     var onPasteImage: (() -> Bool)?
@@ -189,8 +213,8 @@ struct IMESafeTextEditor: NSViewRepresentable {
         Coordinator(self)
     }
 
-    func makeNSView(context: Context) -> NSScrollView {
-        let textView = IMETextView(frame: NSRect(x: 0, y: 0, width: 400, height: 120))
+    func makeNSView(context: Context) -> AutoHeightScrollView {
+        let textView = IMETextView(frame: NSRect(x: 0, y: 0, width: 400, height: minHeight))
         textView.delegate = context.coordinator
         textView.string = text
         textView.font = font
@@ -217,25 +241,31 @@ struct IMESafeTextEditor: NSViewRepresentable {
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.onPasteImage = onPasteImage
 
-        let scrollView = NSScrollView()
+        let scrollView = AutoHeightScrollView()
         scrollView.documentView = textView
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
-        scrollView.hasVerticalScroller = true
+        scrollView.hasVerticalScroller = false
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
+        scrollView.fittedHeight = minHeight
 
         context.coordinator.textView = textView
+        context.coordinator.scrollView = scrollView
         context.coordinator.trackClipWidth(of: scrollView, textView: textView)
+        context.coordinator.recomputeHeight()
         return scrollView
     }
 
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+    func updateNSView(_ scrollView: AutoHeightScrollView, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.scrollView = scrollView
         guard let textView = scrollView.documentView as? IMETextView else { return }
         textView.onPasteImage = onPasteImage
 
         if textView.hasMarkedText() {
+            // Still refresh height from current layout; do not rewrite the string.
+            context.coordinator.recomputeHeight()
             return
         }
 
@@ -255,11 +285,15 @@ struct IMESafeTextEditor: NSViewRepresentable {
         if textView.textColor != NSColor.labelColor {
             textView.textColor = .labelColor
         }
+
+        context.coordinator.recomputeHeight()
     }
 
+    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: IMESafeTextEditor
         weak var textView: NSTextView?
+        weak var scrollView: AutoHeightScrollView?
 
         init(_ parent: IMESafeTextEditor) {
             self.parent = parent
@@ -281,26 +315,105 @@ struct IMESafeTextEditor: NSViewRepresentable {
                 name: NSView.boundsDidChangeNotification,
                 object: scrollView.contentView
             )
+            // Frame changes (initial layout / window resize) also affect wrap width.
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(clipFrameDidChange(_:)),
+                name: NSView.frameDidChangeNotification,
+                object: scrollView.contentView
+            )
+            scrollView.contentView.postsFrameChangedNotifications = true
             syncWidth(scrollView.contentView, textView: textView)
         }
 
         @objc private func clipBoundsDidChange(_ note: Notification) {
             guard let clipView = note.object as? NSClipView, let textView else { return }
             syncWidth(clipView, textView: textView)
+            recomputeHeight()
+        }
+
+        @objc private func clipFrameDidChange(_ note: Notification) {
+            guard let clipView = note.object as? NSClipView, let textView else { return }
+            syncWidth(clipView, textView: textView)
+            recomputeHeight()
         }
 
         private func syncWidth(_ clipView: NSClipView, textView: NSTextView) {
             let width = clipView.bounds.width
             guard width > 0, abs(textView.frame.width - width) > 0.5 else { return }
             textView.setFrameSize(NSSize(width: width, height: textView.frame.height))
+            textView.textContainer?.containerSize = NSSize(
+                width: width,
+                height: CGFloat.greatestFiniteMagnitude
+            )
         }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             let newValue = textView.string
-            guard parent.text != newValue else { return }
-            parent.text = newValue
-            parent.onChange?()
+            if parent.text != newValue {
+                parent.text = newValue
+                parent.onChange?()
+            }
+            recomputeHeight()
+        }
+
+        /// Measure laid-out text and push height into the scroll view's
+        /// intrinsic size so SwiftUI reflows the card.
+        func recomputeHeight() {
+            guard let textView, let scrollView else { return }
+
+            let width = scrollView.contentView.bounds.width
+            if width > 1 {
+                if abs(textView.frame.width - width) > 0.5 {
+                    textView.setFrameSize(NSSize(width: width, height: textView.frame.height))
+                }
+                textView.textContainer?.widthTracksTextView = true
+                textView.textContainer?.containerSize = NSSize(
+                    width: width,
+                    height: CGFloat.greatestFiniteMagnitude
+                )
+            }
+
+            guard let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer
+            else {
+                return
+            }
+
+            layoutManager.ensureLayout(for: textContainer)
+            let used = layoutManager.usedRect(for: textContainer)
+            // A little slack so the last descender / insertion point is not clipped.
+            let raw = ceil(used.height + textView.textContainerInset.height * 2 + 4)
+
+            let lineHeight: CGFloat = {
+                if let font = textView.font {
+                    return ceil(layoutManager.defaultLineHeight(for: font))
+                }
+                return 18
+            }()
+            // At least one line of content area even when `used` is empty.
+            let contentHeight = max(raw, lineHeight + 4)
+            let minH = parent.minHeight
+            let uncapped = max(contentHeight, minH)
+
+            if let maxH = parent.maxHeight, uncapped > maxH {
+                scrollView.hasVerticalScroller = true
+                scrollView.fittedHeight = maxH
+                // Let the text view grow inside the scroll view when capped.
+                let docHeight = max(uncapped, maxH)
+                if abs(textView.frame.height - docHeight) > 0.5 {
+                    textView.setFrameSize(NSSize(width: textView.frame.width, height: docHeight))
+                }
+            } else {
+                scrollView.hasVerticalScroller = false
+                scrollView.fittedHeight = uncapped
+                // Match document height to the fitted viewport so nested
+                // scrolling does not steal gestures from the timeline.
+                if abs(textView.frame.height - uncapped) > 0.5 {
+                    textView.setFrameSize(NSSize(width: textView.frame.width, height: uncapped))
+                }
+            }
         }
     }
 }

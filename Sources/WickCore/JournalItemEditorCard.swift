@@ -70,10 +70,13 @@ struct JournalItemEditorCard: View {
                     set: { item.body = $0 }
                 ),
                 font: .systemFont(ofSize: 14),
+                // ~2–3 lines empty; grows with content so short notes stay compact.
+                minHeight: 48,
+                maxHeight: nil,
                 onChange: onChange,
                 onPasteImage: onPasteImage
             )
-            .frame(minHeight: 120)
+            .fixedSize(horizontal: false, vertical: true)
             .overlay(alignment: .topLeading) {
                 // Aligned with the text view's first line: 0 (no editor
                 // padding) + 5 (NSTextView line fragment padding).
