@@ -209,19 +209,49 @@ struct ProgressPanelView: View {
         theme: PanelTheme,
         action: @escaping () -> Void
     ) -> some View {
+        PanelHeaderIconButton(systemName: systemName, help: help, theme: theme, action: action)
+    }
+}
+
+/// Menu-bar panel header icon (journal / settings / quit / back).
+/// Keeps the day-arc control chrome idle; hover adds a soft accent mask.
+private struct PanelHeaderIconButton: View {
+    let systemName: String
+    let help: String
+    let theme: PanelTheme
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(theme.primaryText.opacity(0.76))
                 .frame(width: 28, height: 28)
-                .background(theme.controlBackground, in: Circle())
+                .background(
+                    Circle()
+                        .fill(theme.controlBackground)
+                )
+                // Hover mask sits above the control fill — same idea as journal quiet icons.
                 .overlay {
                     Circle()
-                        .strokeBorder(theme.controlBorder, lineWidth: 1)
+                        .fill(theme.selectionBackground.opacity(isHovered ? 1 : 0))
+                }
+                .overlay {
+                    Circle()
+                        .strokeBorder(
+                            isHovered
+                                ? theme.selectionAccent.opacity(0.35)
+                                : theme.controlBorder,
+                            lineWidth: 1
+                        )
                 }
         }
         .buttonStyle(.plain)
         .help(help)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
     }
 }
 
