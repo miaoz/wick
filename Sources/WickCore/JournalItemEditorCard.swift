@@ -40,13 +40,12 @@ struct JournalItemEditorCard: View {
 
                 if canDelete {
                     Button(role: .destructive, action: onDelete) {
-                        Label(
-                            L10n.string(.journalDeleteItem, language: settings.language),
-                            systemImage: "minus.circle"
-                        )
+                        Image(systemName: "minus.circle")
                     }
                     .buttonStyle(.borderless)
                     .foregroundStyle(.tertiary)
+                    .help(L10n.string(.journalDeleteItem, language: settings.language))
+                    .accessibilityLabel(Text(L10n.string(.journalDeleteItem, language: settings.language)))
                 }
             }
 
@@ -105,13 +104,7 @@ struct JournalItemEditorCard: View {
     private var imagesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 10) {
-                if item.imageFilenames.isEmpty {
-                    Text(L10n.string(.journalImagesHint, language: settings.language))
-                        .font(.callout)
-                        .foregroundStyle(.tertiary)
-                }
-
-                Spacer(minLength: 8)
+                Spacer(minLength: 0)
 
                 Button(action: onPickImage) {
                     Image(systemName: "photo.badge.plus")

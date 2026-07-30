@@ -302,13 +302,12 @@ struct JournalEditorPane: View {
                 store.searchText = ""
                 store.selectDay(group.representativeEntryID)
             } label: {
-                Label(
-                    L10n.string(.journalOpenFullDay, language: settings.language),
-                    systemImage: "calendar"
-                )
+                Image(systemName: "calendar")
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            .help(L10n.string(.journalOpenFullDay, language: settings.language))
+            .accessibilityLabel(Text(L10n.string(.journalOpenFullDay, language: settings.language)))
         }
     }
 
@@ -336,23 +335,21 @@ struct JournalEditorPane: View {
             Button {
                 addItem(to: entryID)
             } label: {
-                Label(
-                    L10n.string(.journalAddItem, language: settings.language),
-                    systemImage: "plus.circle"
-                )
+                Image(systemName: "plus.circle")
             }
             .buttonStyle(.bordered)
+            .help(L10n.string(.journalAddItem, language: settings.language))
+            .accessibilityLabel(Text(L10n.string(.journalAddItem, language: settings.language)))
 
             HStack {
                 Button(role: .destructive) {
                     pendingDeleteDayID = entryID
                     showDeleteDayConfirm = true
                 } label: {
-                    Label(
-                        L10n.string(.journalDelete, language: settings.language),
-                        systemImage: "trash"
-                    )
+                    Image(systemName: "trash")
                 }
+                .help(L10n.string(.journalDelete, language: settings.language))
+                .accessibilityLabel(Text(L10n.string(.journalDelete, language: settings.language)))
                 Spacer()
             }
             .padding(.top, 4)

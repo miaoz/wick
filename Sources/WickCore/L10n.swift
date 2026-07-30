@@ -79,7 +79,6 @@ enum L10n {
         case journalReminderBody
         case journalOpenAction
         case journalSection
-        case journalItemScopeHint
         case journalFilterEmptyTitle
         case journalFilterEmptySubtitle
         case journalOpenFullDay
@@ -192,7 +191,6 @@ enum L10n {
             case .journalReminderBody: return "点击打开 Wick，记下今天想留住的内容。"
             case .journalOpenAction: return "打开日记"
             case .journalSection: return "日记"
-            case .journalItemScopeHint: return "筛选中：侧栏与编辑区按时间轴显示所有匹配条目，可上下滚动浏览。"
             case .journalFilterEmptyTitle: return "没有匹配的条目"
             case .journalFilterEmptySubtitle: return "试试其他标签或清空搜索。"
             case .journalOpenFullDay: return "查看当天全部"
@@ -306,7 +304,6 @@ enum L10n {
             case .journalReminderBody: return "Open Wick and write today’s entry."
             case .journalOpenAction: return "Open Journal"
             case .journalSection: return "Journal"
-            case .journalItemScopeHint: return "Filtered: sidebar and editor show every matching item as a scrollable timeline."
             case .journalFilterEmptyTitle: return "No matching items"
             case .journalFilterEmptySubtitle: return "Try another tag or clear the search."
             case .journalOpenFullDay: return "Open Full Day"

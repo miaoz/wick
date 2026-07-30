@@ -56,12 +56,6 @@ struct JournalTimelineSidebar: View {
             if !store.allTags.isEmpty {
                 tagFlowSection
             }
-
-            if store.isItemScoped {
-                Text(L10n.string(.journalItemScopeHint, language: settings.language))
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
         }
         .padding(12)
         .background(
