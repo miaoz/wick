@@ -85,7 +85,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appearanceObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApplication.shared.setActivationPolicy(.accessory)
+        // Default to menu-bar-only presence. Skip if the journal is already
+        // (or is about to be) fronted — e.g. launched by a notification tap —
+        // so we do not race `openJournal`'s `.regular` promotion.
+        if !JournalWindowController.shared.hasOpenJournalWindow {
+            NSApplication.shared.setActivationPolicy(.accessory)
+        }
         applyAppearance(AppSettings.shared.appearance)
         AppSettings.shared.applyLaunchAtLoginPreference()
 

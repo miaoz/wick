@@ -194,11 +194,17 @@ final class JournalReminderScheduler: NSObject, UNUserNotificationCenterDelegate
             || action == IDs.openAction
 
         if shouldOpen {
+            // UN completion handlers are not Sendable under Swift 6; open on
+            // the main actor and complete after. `nonisolated(unsafe)` is the
+            // practical bridge for this system callback.
+            nonisolated(unsafe) let finish = completionHandler
             Task { @MainActor in
                 JournalWindowController.shared.openJournal(createTodayIfNeeded: true)
+                finish()
             }
+        } else {
+            completionHandler()
         }
-        completionHandler()
     }
 
     private func registerCategories() {

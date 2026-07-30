@@ -16,21 +16,48 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         super.init()
     }
 
+    /// True while the journal window exists and is on-screen (or miniaturized).
+    /// Used so launch-time accessory policy does not stomp a notification-driven open.
+    var hasOpenJournalWindow: Bool {
+        guard let window else { return false }
+        return window.isVisible || window.isMiniaturized
+    }
+
     func openJournal(createTodayIfNeeded: Bool = false) {
         if createTodayIfNeeded {
             _ = JournalStore.shared.openOrCreateToday()
         }
+
+        // For LSUIElement / accessory apps, promote activation policy *before*
+        // keying the window — otherwise notification taps often open the
+        // journal behind other apps without focus.
+        NSApp.setActivationPolicy(.regular)
 
         let journalWindow = ensureWindow()
         updateTitle(for: journalWindow)
         // MenuBarExtra `.window` does not auto-dismiss when another window of this app
         // becomes key; close it explicitly so it does not float over the journal.
         MenuBarExtraPanel.dismiss(excluding: [journalWindow])
+
+        if journalWindow.isMiniaturized {
+            journalWindow.deminiaturize(nil)
+        }
         journalWindow.makeKeyAndOrderFront(nil)
+        journalWindow.orderFrontRegardless()
         // Show a Dock icon (and Cmd+Tab presence) while the journal is open so
         // the user can switch back to it; restored to accessory on close.
-        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+
+        // Cold-start from a notification can race with AppDelegate setting
+        // `.accessory` in the same launch turn — re-assert focus next tick.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            NSApp.setActivationPolicy(.regular)
+            if let window = self.window {
+                window.makeKeyAndOrderFront(nil)
+            }
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     private func ensureWindow() -> NSWindow {
