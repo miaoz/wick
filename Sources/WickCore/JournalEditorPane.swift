@@ -304,8 +304,7 @@ struct JournalEditorPane: View {
             } label: {
                 Image(systemName: "calendar")
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(JournalQuietIconButtonStyle())
             .help(L10n.string(.journalOpenFullDay, language: settings.language))
             .accessibilityLabel(Text(L10n.string(.journalOpenFullDay, language: settings.language)))
         }
@@ -332,27 +331,19 @@ struct JournalEditorPane: View {
                 )
             }
 
-            Button {
-                addItem(to: entryID)
-            } label: {
-                Image(systemName: "plus.circle")
-            }
-            .buttonStyle(.bordered)
-            .help(L10n.string(.journalAddItem, language: settings.language))
-            .accessibilityLabel(Text(L10n.string(.journalAddItem, language: settings.language)))
-
             HStack {
-                Button(role: .destructive) {
-                    pendingDeleteDayID = entryID
-                    showDeleteDayConfirm = true
+                Spacer(minLength: 0)
+                Button {
+                    addItem(to: entryID)
                 } label: {
-                    Image(systemName: "trash")
+                    Image(systemName: "plus.circle")
                 }
-                .help(L10n.string(.journalDelete, language: settings.language))
-                .accessibilityLabel(Text(L10n.string(.journalDelete, language: settings.language)))
-                Spacer()
+                .buttonStyle(JournalQuietIconButtonStyle())
+                .help(L10n.string(.journalAddItem, language: settings.language))
+                .accessibilityLabel(Text(L10n.string(.journalAddItem, language: settings.language)))
+                Spacer(minLength: 0)
             }
-            .padding(.top, 4)
+            .padding(.top, 2)
         }
         .padding(18)
         .background(
@@ -444,6 +435,16 @@ struct JournalEditorPane: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+
+            Button {
+                pendingDeleteDayID = entryID
+                showDeleteDayConfirm = true
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(JournalQuietIconButtonStyle(role: .destructive))
+            .help(L10n.string(.journalDelete, language: settings.language))
+            .accessibilityLabel(Text(L10n.string(.journalDelete, language: settings.language)))
         }
     }
 

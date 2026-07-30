@@ -39,11 +39,10 @@ struct JournalItemEditorCard: View {
                 Spacer()
 
                 if canDelete {
-                    Button(role: .destructive, action: onDelete) {
+                    Button(action: onDelete) {
                         Image(systemName: "minus.circle")
                     }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.tertiary)
+                    .buttonStyle(JournalQuietIconButtonStyle(role: .destructive))
                     .help(L10n.string(.journalDeleteItem, language: settings.language))
                     .accessibilityLabel(Text(L10n.string(.journalDeleteItem, language: settings.language)))
                 }
@@ -108,9 +107,8 @@ struct JournalItemEditorCard: View {
 
                 Button(action: onPickImage) {
                     Image(systemName: "photo.badge.plus")
-                        .font(.system(size: 14))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(JournalQuietIconButtonStyle())
                 .help(L10n.string(.journalAddImage, language: settings.language))
                 .accessibilityLabel(Text(L10n.string(.journalAddImage, language: settings.language)))
             }
@@ -137,6 +135,7 @@ struct JournalItemEditorCard: View {
 }
 
 struct JournalImageThumb: View {
+    @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: JournalStore
     let filename: String
     let onDelete: () -> Void
@@ -163,16 +162,95 @@ struct JournalImageThumb: View {
 
             Button(action: onDelete) {
                 Image(systemName: "xmark.circle.fill")
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, .black.opacity(0.55))
-                    .font(.system(size: 18))
             }
-            .buttonStyle(.plain)
-            .padding(6)
+            .buttonStyle(JournalQuietIconButtonStyle(role: .destructive, fontSize: 16, alwaysShowOnDarkChrome: true))
+            .help(L10n.string(.journalDeleteItem, language: settings.language))
+            .accessibilityLabel(Text(L10n.string(.journalDeleteItem, language: settings.language)))
+            .padding(4)
         }
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+    }
+}
+
+// MARK: - Quiet icon buttons
+
+/// Journal chrome icon control: idle is low-contrast; hover/press adds a soft
+/// fill and stronger glyph so actions do not look permanently “on”.
+struct JournalQuietIconButtonStyle: ButtonStyle {
+    enum Role {
+        case regular
+        case destructive
+    }
+
+    var role: Role = .regular
+    var fontSize: CGFloat = 14
+    /// Thumbnail “x” sits on photos — keep a faint glyph even when idle.
+    var alwaysShowOnDarkChrome: Bool = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        JournalQuietIconButtonBody(
+            configuration: configuration,
+            role: role,
+            fontSize: fontSize,
+            alwaysShowOnDarkChrome: alwaysShowOnDarkChrome
+        )
+    }
+}
+
+private struct JournalQuietIconButtonBody: View {
+    let configuration: ButtonStyle.Configuration
+    let role: JournalQuietIconButtonStyle.Role
+    let fontSize: CGFloat
+    let alwaysShowOnDarkChrome: Bool
+
+    @State private var isHovered = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        let active = isHovered || configuration.isPressed
+        configuration.label
+            .font(.system(size: fontSize, weight: .medium))
+            .symbolRenderingMode(.monochrome)
+            .foregroundStyle(foreground(active: active))
+            .frame(width: 28, height: 28)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(background(active: active))
+            )
+            .opacity(isEnabled ? 1 : 0.35)
+            .contentShape(Rectangle())
+            .onHover { isHovered = $0 }
+            .animation(.easeOut(duration: 0.12), value: active)
+    }
+
+    private func foreground(active: Bool) -> Color {
+        if alwaysShowOnDarkChrome {
+            return .white.opacity(active ? 1 : 0.8)
+        }
+        guard active else {
+            return Color.primary.opacity(0.32)
+        }
+        switch role {
+        case .regular:
+            return Color.primary.opacity(0.88)
+        case .destructive:
+            return Color.red.opacity(0.92)
+        }
+    }
+
+    private func background(active: Bool) -> Color {
+        if alwaysShowOnDarkChrome {
+            return Color.black.opacity(active ? 0.55 : 0.28)
+        }
+        guard active else { return .clear }
+        switch role {
+        case .regular:
+            return Color.primary.opacity(0.08)
+        case .destructive:
+            return Color.red.opacity(0.12)
         }
     }
 }
