@@ -83,8 +83,6 @@ enum L10n {
         case journalFilterEmptySubtitle
         case journalOpenFullDay
         case journalUntitledItem
-        case journalItemScopeBadge
-        case journalItemScopeEditorHint
         case journalDeleteItemConfirm
         case journalExport
         case journalImport
@@ -201,8 +199,6 @@ enum L10n {
             case .journalFilterEmptySubtitle: return "试试其他标签或清空搜索。"
             case .journalOpenFullDay: return "查看当天全部"
             case .journalUntitledItem: return "未命名条目"
-            case .journalItemScopeBadge: return "筛选"
-            case .journalItemScopeEditorHint: return "仅显示匹配的条目。可打开「查看当天全部」管理同日其他条目。"
             case .journalDeleteItemConfirm: return "确定删除这条条目？相关图片也会删除。"
             case .journalExport: return "导出日记…"
             case .journalImport: return "导入日记…"
@@ -320,8 +316,6 @@ enum L10n {
             case .journalFilterEmptySubtitle: return "Try another tag or clear the search."
             case .journalOpenFullDay: return "Open Full Day"
             case .journalUntitledItem: return "Untitled item"
-            case .journalItemScopeBadge: return "Filtered"
-            case .journalItemScopeEditorHint: return "Only matching items are shown. Open the full day to manage siblings."
             case .journalDeleteItemConfirm: return "Delete this item? Its images will be removed too."
             case .journalExport: return "Export Journal…"
             case .journalImport: return "Import Journal…"

@@ -280,22 +280,6 @@ struct JournalEditorPane: View {
 
             Spacer(minLength: 8)
 
-            Text(L10n.string(.journalItemScopeBadge, language: settings.language))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(palette.accentText.color)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(palette.accentSoft.color, in: Capsule())
-
-            Text(
-                String(
-                    format: L10n.string(.journalItemCountFormat, language: settings.language),
-                    group.items.count
-                )
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
             Button {
                 // Leave filter mode and open this calendar day fully.
                 store.selectedTagFilter = nil
