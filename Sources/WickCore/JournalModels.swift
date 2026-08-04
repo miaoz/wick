@@ -1,5 +1,32 @@
 import Foundation
 
+/// Next-day verdict on a journal item (trade review): was the call right.
+enum JournalReviewVerdict: String, Codable {
+    case correct
+    case wrong
+}
+
+/// Structured review attached to a journal item, editable from the next day on.
+struct JournalReview: Codable, Equatable, Hashable {
+    var verdict: JournalReviewVerdict
+    /// Optional one-line annotation shown in italics under the verdict picker.
+    var note: String
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(
+        verdict: JournalReviewVerdict,
+        note: String = "",
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.verdict = verdict
+        self.note = note
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
 /// One focus block inside a journal day: a tag, notes, and optional images.
 struct JournalItem: Identifiable, Codable, Equatable, Hashable {
     var id: UUID
@@ -8,17 +35,21 @@ struct JournalItem: Identifiable, Codable, Equatable, Hashable {
     var body: String
     /// Relative filenames under the store's images directory.
     var imageFilenames: [String]
+    /// Next-day review; optional key keeps version-1 snapshots decodable.
+    var review: JournalReview?
 
     init(
         id: UUID = UUID(),
         tag: String = "",
         body: String = "",
-        imageFilenames: [String] = []
+        imageFilenames: [String] = [],
+        review: JournalReview? = nil
     ) {
         self.id = id
         self.tag = tag
         self.body = body
         self.imageFilenames = imageFilenames
+        self.review = review
     }
 
     var isEmpty: Bool {

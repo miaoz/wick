@@ -13,11 +13,15 @@ struct JournalItemEditorCard: View {
     let index: Int
     @Binding var item: JournalItem
     let canDelete: Bool
+    /// True when the owning entry is older than today — reviews open next day.
+    let reviewEligible: Bool
     let onDelete: () -> Void
     let onPasteImage: () -> Bool
     let onPickImage: () -> Void
     let onDrop: ([NSItemProvider]) -> Bool
     let onChange: () -> Void
+
+    @State private var showReviewPopover = false
 
     var body: some View {
         // One flat surface per item: no inner boxes. Tag, body, and images
@@ -37,6 +41,41 @@ struct JournalItemEditorCard: View {
                 .tracking(0.4)
 
                 Spacer()
+
+                if let review = item.review {
+                    Button {
+                        showReviewPopover = true
+                    } label: {
+                        JournalReviewBadge(verdict: review.verdict, style: .seal)
+                            .padding(.trailing, 2)
+                    }
+                    .buttonStyle(.plain)
+                    .help(L10n.string(.journalReviewHelp, language: settings.language))
+                    .accessibilityLabel(Text(verdictName(review.verdict)))
+                    .popover(isPresented: $showReviewPopover, arrowEdge: .top) {
+                        reviewPopoverContent
+                    }
+                } else if reviewEligible {
+                    Button {
+                        showReviewPopover = true
+                    } label: {
+                        Text(L10n.string(.journalReview, language: settings.language))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(palette.accentText.color)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .strokeBorder(palette.controlBorder.color, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help(L10n.string(.journalReviewHelp, language: settings.language))
+                    .accessibilityLabel(Text(L10n.string(.journalReviewHelp, language: settings.language)))
+                    .popover(isPresented: $showReviewPopover, arrowEdge: .top) {
+                        reviewPopoverContent
+                    }
+                }
 
                 if canDelete {
                     Button(action: onDelete) {
@@ -88,6 +127,15 @@ struct JournalItemEditorCard: View {
             }
 
             imagesSection
+
+            if let note = item.review?.note,
+               !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                // Resting reviewed state: the seal says the verdict, this
+                // italic line carries the annotation — no picker chrome.
+                Text(note)
+                    .font(.system(size: 13).italic())
+                    .foregroundStyle(palette.textSecondary.color)
+            }
         }
         .padding(16)
         .background(
@@ -98,6 +146,115 @@ struct JournalItemEditorCard: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(palette.cardStroke.scaledAlpha(0.5).color, lineWidth: 1)
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { _ in
+            // The journal window object is reused across open/close — reset
+            // the popover state so it cannot re-present on the next open.
+            showReviewPopover = false
+        }
+    }
+
+    // MARK: Review
+
+    /// Verdict picker inside a popover: clicking anywhere outside dismisses
+    /// it (sidebar, other cards, closing the window), so an abandoned picker
+    /// can never linger. Picking a verdict also dismisses it.
+    private var reviewPopoverContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 8) {
+                ForEach([JournalReviewVerdict.correct, .wrong], id: \.self) { verdict in
+                    verdictButton(verdict)
+                }
+
+                if item.review != nil {
+                    Spacer(minLength: 4)
+                    Button(action: clearReview) {
+                        Text(L10n.string(.journalReviewClear, language: settings.language))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(palette.textTertiary.color)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text(L10n.string(.journalReviewClear, language: settings.language)))
+                }
+            }
+
+            if item.review != nil {
+                IMESafeTextField(
+                    text: Binding(
+                        get: { item.review?.note ?? "" },
+                        set: { newValue in
+                            item.review?.note = newValue
+                            item.review?.updatedAt = Date()
+                        }
+                    ),
+                    placeholder: L10n.string(.journalReviewNotePlaceholder, language: settings.language),
+                    font: NSFontManager.shared.convert(
+                        NSFont.systemFont(ofSize: 13),
+                        toHaveTrait: .italicFontMask
+                    ),
+                    textColor: palette.textSecondary.nsColor,
+                    style: .plain,
+                    onChange: onChange,
+                    onPasteImage: onPasteImage
+                )
+                .frame(width: 220, height: 22)
+            }
+        }
+        .padding(10)
+    }
+
+    private func verdictButton(_ verdict: JournalReviewVerdict) -> some View {
+        let isActive = item.review?.verdict == verdict
+        let color = verdict.color(in: palette)
+        return Button {
+            setVerdict(verdict)
+        } label: {
+            Text(verdictName(verdict))
+                .font(.system(size: 12, weight: isActive ? .semibold : .medium))
+                .foregroundStyle(isActive ? color : palette.textTertiary.color)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(isActive ? color.opacity(0.12) : Color.clear)
+                )
+                .overlay {
+                    Capsule(style: .continuous)
+                        .strokeBorder(
+                            isActive ? color.opacity(0.6) : palette.controlBorder.color,
+                            lineWidth: 1
+                        )
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(verdictName(verdict)))
+        .accessibilityAddTraits(isActive ? .isSelected : [])
+    }
+
+    private func setVerdict(_ verdict: JournalReviewVerdict) {
+        if var review = item.review {
+            review.verdict = verdict
+            review.updatedAt = Date()
+            item.review = review
+        } else {
+            item.review = JournalReview(verdict: verdict)
+        }
+        onChange()
+        showReviewPopover = false
+    }
+
+    private func clearReview() {
+        item.review = nil
+        onChange()
+        showReviewPopover = false
+    }
+
+    private func verdictName(_ verdict: JournalReviewVerdict) -> String {
+        let key: L10n.Key
+        switch verdict {
+        case .correct: key = .journalReviewCorrect
+        case .wrong: key = .journalReviewWrong
+        }
+        return L10n.string(key, language: settings.language)
     }
 
     private var imagesSection: some View {

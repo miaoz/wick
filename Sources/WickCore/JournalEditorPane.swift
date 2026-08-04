@@ -459,12 +459,15 @@ struct JournalEditorPane: View {
         let draft = drafts[entryID] ?? store.entries.first(where: { $0.id == entryID }) ?? JournalEntry()
         let index = itemIndex ?? displayIndex(for: itemID, in: draft, fallback: 0)
         let canDelete = isItemScoped || draft.items.count > 1
+        let reviewEligible = Calendar.current.startOfDay(for: draft.date)
+            < Calendar.current.startOfDay(for: Date())
 
         return JournalItemEditorCard(
             entryID: entryID,
             index: index,
             item: binding(entryID: entryID, itemID: itemID),
             canDelete: canDelete,
+            reviewEligible: reviewEligible,
             onDelete: {
                 if isItemScoped {
                     pendingDeleteItem = JournalItemRef(entryID: entryID, itemID: itemID)

@@ -159,7 +159,7 @@ final class JournalStore: ObservableObject {
 
                 if !query.isEmpty {
                     let haystack = (
-                        entry.title + " " + item.tag + " " + item.body
+                        entry.title + " " + item.tag + " " + item.body + " " + (item.review?.note ?? "")
                     ).lowercased()
                     guard haystack.contains(query) else { continue }
                 }

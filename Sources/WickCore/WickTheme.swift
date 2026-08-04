@@ -156,6 +156,10 @@ struct WickPalette: Equatable {
     var accentText: WickRGB
     /// Soft accent tint for selected fills.
     var accentSoft: WickRGB
+    /// Review verdict glyphs: "correct" seal (green family, hue-stable across phases).
+    var reviewCorrect: WickRGB
+    /// Review verdict glyphs: "wrong" seal (vermilion family, hue-stable across phases).
+    var reviewWrong: WickRGB
     var divider: WickRGB
     var glow: WickRGB
 
@@ -175,6 +179,8 @@ struct WickPalette: Equatable {
             accent: accent.lerped(to: other.accent, t: t),
             accentText: accentText.lerped(to: other.accentText, t: t),
             accentSoft: accentSoft.lerped(to: other.accentSoft, t: t),
+            reviewCorrect: reviewCorrect.lerped(to: other.reviewCorrect, t: t),
+            reviewWrong: reviewWrong.lerped(to: other.reviewWrong, t: t),
             divider: divider.lerped(to: other.divider, t: t),
             glow: glow.lerped(to: other.glow, t: t)
         )
@@ -346,6 +352,8 @@ enum DayArcEngine {
         accent: WickRGB(hex: 0xD96C42),
         accentText: WickRGB(hex: 0xB45237),
         accentSoft: WickRGB(hex: 0xFBDCCB, opacity: 0.9),
+        reviewCorrect: WickRGB(hex: 0x3E7C4F),
+        reviewWrong: WickRGB(hex: 0xB4443C),
         divider: WickRGB(hex: 0xD98A63, opacity: 0.5),
         glow: WickRGB(hex: 0xF7B28A, opacity: 0.26)
     )
@@ -366,6 +374,8 @@ enum DayArcEngine {
         accent: WickRGB(hex: 0xD9822B),
         accentText: WickRGB(hex: 0xB05F14),
         accentSoft: WickRGB(hex: 0xFFE8C8, opacity: 0.9),
+        reviewCorrect: WickRGB(hex: 0x3E7C4F),
+        reviewWrong: WickRGB(hex: 0xB4443C),
         divider: WickRGB(hex: 0xD98F44, opacity: 0.55),
         glow: WickRGB(hex: 0xFFBE66, opacity: 0.24)
     )
@@ -386,6 +396,8 @@ enum DayArcEngine {
         accent: WickRGB(hex: 0xC2611F),
         accentText: WickRGB(hex: 0x9F4E17),
         accentSoft: WickRGB(hex: 0xF6D9B4, opacity: 0.9),
+        reviewCorrect: WickRGB(hex: 0x3E7C4F),
+        reviewWrong: WickRGB(hex: 0xB4443C),
         divider: WickRGB(hex: 0xC97E3D, opacity: 0.55),
         glow: WickRGB(hex: 0xF0A050, opacity: 0.28)
     )
@@ -406,6 +418,8 @@ enum DayArcEngine {
         accent: WickRGB(hex: 0x7A86C8),
         accentText: WickRGB(hex: 0x5560A8),
         accentSoft: WickRGB(hex: 0xD5D8EE, opacity: 0.9),
+        reviewCorrect: WickRGB(hex: 0x3E7C4F),
+        reviewWrong: WickRGB(hex: 0xB4443C),
         divider: WickRGB(hex: 0x8B90C0, opacity: 0.5),
         glow: WickRGB(hex: 0x9AA4E0, opacity: 0.2)
     )
@@ -428,6 +442,8 @@ enum DayArcEngine {
         accent: WickRGB(hex: 0xF0A368),
         accentText: WickRGB(hex: 0xF5B27E),
         accentSoft: WickRGB(hex: 0xF0A368, opacity: 0.16),
+        reviewCorrect: WickRGB(hex: 0x7FBF8E),
+        reviewWrong: WickRGB(hex: 0xE08A7E),
         divider: WickRGB(hex: 0xE8A06A, opacity: 0.45),
         glow: WickRGB(hex: 0xF0A368, opacity: 0.2)
     )
@@ -448,6 +464,8 @@ enum DayArcEngine {
         accent: WickRGB(hex: 0xF5B85C),
         accentText: WickRGB(hex: 0xF7C276),
         accentSoft: WickRGB(hex: 0xF5B85C, opacity: 0.16),
+        reviewCorrect: WickRGB(hex: 0x7FBF8E),
+        reviewWrong: WickRGB(hex: 0xE08A7E),
         divider: WickRGB(hex: 0xE8B96E, opacity: 0.45),
         glow: WickRGB(hex: 0xF5B85C, opacity: 0.16)
     )
@@ -468,6 +486,8 @@ enum DayArcEngine {
         accent: WickRGB(hex: 0xF08A4B),
         accentText: WickRGB(hex: 0xF79A63),
         accentSoft: WickRGB(hex: 0xF08A4B, opacity: 0.16),
+        reviewCorrect: WickRGB(hex: 0x7FBF8E),
+        reviewWrong: WickRGB(hex: 0xE08A7E),
         divider: WickRGB(hex: 0xE08A52, opacity: 0.45),
         glow: WickRGB(hex: 0xF08A4B, opacity: 0.22)
     )
@@ -488,6 +508,8 @@ enum DayArcEngine {
         accent: WickRGB(hex: 0x9BB6FF),
         accentText: WickRGB(hex: 0xAFC4FF),
         accentSoft: WickRGB(hex: 0x9BB6FF, opacity: 0.16),
+        reviewCorrect: WickRGB(hex: 0x7FBF8E),
+        reviewWrong: WickRGB(hex: 0xE08A7E),
         divider: WickRGB(hex: 0x8AB4FF, opacity: 0.42),
         glow: WickRGB(hex: 0x6CA6FF, opacity: 0.18)
     )

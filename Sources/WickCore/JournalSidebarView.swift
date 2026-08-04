@@ -493,6 +493,9 @@ struct JournalItemTimelineRow: View {
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundStyle(palette.accentText.color)
                     .lineLimit(1)
+                if let review = row.item.review {
+                    JournalReviewBadge(verdict: review.verdict, style: .mini)
+                }
                 Spacer(minLength: 8)
                 if !row.item.imageFilenames.isEmpty {
                     Label("\(row.item.imageFilenames.count)", systemImage: "photo")

@@ -94,6 +94,50 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.entries.first?.title, "Safe")
     }
 
+    func testReviewPersistsAcrossReload() {
+        let entry = store.createEntry()
+        var draft = entry
+        draft.items[0].tag = "BTC"
+        draft.items[0].review = JournalReview(verdict: .correct, note: "方向对，入场晚了")
+        store.updateEntry(draft)
+
+        let reloaded = JournalStore(rootDirectory: tempRoot)
+        let review = reloaded.entries.first?.items.first?.review
+        XCTAssertEqual(review?.verdict, .correct)
+        XCTAssertEqual(review?.note, "方向对，入场晚了")
+    }
+
+    func testLegacySnapshotWithoutReviewDecodes() throws {
+        // Version-1 JSON predating the review feature (no `review` key) must load cleanly.
+        let entryID = UUID().uuidString
+        let itemID = UUID().uuidString
+        let json = """
+        {"version":1,"entries":[{"id":"\(entryID)","date":"2026-01-15T00:00:00Z","title":"",\
+        "items":[{"id":"\(itemID)","tag":"BTC","body":"test","imageFilenames":[]}],\
+        "createdAt":"2026-01-15T00:00:00Z","updatedAt":"2026-01-15T00:00:00Z"}]}
+        """
+        let db = tempRoot.appendingPathComponent("journal.json")
+        try Data(json.utf8).write(to: db)
+
+        let reloaded = JournalStore(rootDirectory: tempRoot)
+        XCTAssertFalse(reloaded.isReadOnlyDueToLoadFailure)
+        XCTAssertEqual(reloaded.entries.first?.items.first?.tag, "BTC")
+        XCTAssertNil(reloaded.entries.first?.items.first?.review)
+    }
+
+    func testReviewNoteIsSearchable() {
+        let entry = store.createEntry()
+        var draft = entry
+        draft.items[0].tag = "BTC"
+        draft.items[0].body = "body"
+        draft.items[0].review = JournalReview(verdict: .wrong, note: "不该追单")
+        store.updateEntry(draft)
+
+        store.searchText = "追单"
+        XCTAssertEqual(store.filteredTimelineItems.count, 1)
+        XCTAssertEqual(store.filteredTimelineItems.first?.item.review?.verdict, .wrong)
+    }
+
     func testCorruptPrimaryWithoutBackupIsReadOnly() throws {
         let entry = store.createEntry()
         var draft = entry

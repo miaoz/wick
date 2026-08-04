@@ -26,15 +26,16 @@ SwiftPM 三个 target（`Package.swift`）：
 | --- | --- |
 | `WickApp.swift` | `MenuBarExtra` 场景、`AppDelegate`（外观/登录项/提醒/更新检查启动、退出前落盘）、菜单栏 label（蜡烛图标 + 可选当日剩余百分比） |
 | `ProgressPanelView.swift` | 菜单栏弹出的进度面板与设置页 UI（`TimelineView` 每秒刷新；`PanelTheme` 为薄结构体，全部色值委托给 `DayArcEngine`） |
-| `WickTheme.swift` | 「一日弧光」主题引擎：`WickRGB`（可插值/可做 WCAG 对比度计算的 sRGB 值类型）、`WickPalette`（全部色角色）、`DayPhase`（晨光/白昼/暮色/夜幕四锚点）、`DayArcEngine`（按时刻在 4 相位 × 亮/暗 2 套锚点色板间插值；`MetricTheme` 色相族恒定、仅辉光随相位缩放；`WICK_ARC_TIME=HH:mm` 环境变量可伪造"当前时刻"用于调试/截图）；`\.wickPalette` 环境键 |
+| `WickTheme.swift` | 「一日弧光」主题引擎：`WickRGB`（可插值/可做 WCAG 对比度计算的 sRGB 值类型）、`WickPalette`（全部色角色，含复盘判定色 `reviewCorrect`/`reviewWrong`）、`DayPhase`（晨光/白昼/暮色/夜幕四锚点）、`DayArcEngine`（按时刻在 4 相位 × 亮/暗 2 套锚点色板间插值；`MetricTheme` 色相族恒定、仅辉光随相位缩放；`WICK_ARC_TIME=HH:mm` 环境变量可伪造"当前时刻"用于调试/截图）；`\.wickPalette` 环境键 |
 | `TimeProgress.swift` | `TimeProgressCalculator`：日/周/月/年剩余比例的纯计算（可注入 `Date`/`Calendar`，便于测试） |
-| `JournalModels.swift` | 日记模型：`JournalEntry`（某日，1..n 个 `JournalItem`：标签/正文/图片文件名）、`JournalSnapshot`（Codable，`currentVersion = 1`） |
+| `JournalModels.swift` | 日记模型：`JournalEntry`（某日，1..n 个 `JournalItem`：标签/正文/图片文件名/可选 `JournalReview`）、`JournalReview`+`JournalReviewVerdict`（条目级复盘：correct/wrong + 一行批注）、`JournalSnapshot`（Codable，`currentVersion = 1`） |
 | `JournalStore.swift` | 日记存储（`@MainActor ObservableObject` 单例）：落盘、`.bak` 与滚动备份、加载失败只读保护、图片管理、zip 导入导出；**一天一篇**由 `createEntry`/`updateEntry` 的按日合并保证 |
 | `JournalRootView.swift` | 日记窗口根视图（`JournalRootView`，`NavigationSplitView` 双栏；macOS 14+ 用系统工具栏，macOS 13 用 `JournalWindowController` 安装的 AppKit `NSToolbar`，判定见 `journalNeedsInViewTopBar`；色值取自 `\.wickPalette`，根视图 300s `TimelineView` 刷新；加载失败/恢复横幅、隐藏快捷键按钮） |
 | `JournalSidebarView.swift` | 日记侧栏：搜索框 + 标签芯片过滤（超宽折叠为「更多 N」，展开换行/再点收起）、按日/按条目两种列表、空态；选中高亮为自绘 `listRowBackground`（`sidebarBackground` 打底 + `accentSoft`，替代系统蓝/灰药丸以保证跨 macOS 版本一致），两个 `List` 均挂 `TableViewSelectionSuppressor` 关掉底层 `NSTableView` 的系统高亮（否则点击瞬间会闪一帧系统蓝色）；标签打包逻辑在 `TagChipFlow.swift` |
 | `TableViewSelectionSuppressor.swift` | `NSViewRepresentable`：子树搜索找到 SwiftUI `List` 背后的列表视图（新系统为 `SwiftUIOutlineListView`，`NSTableView` 子类；注意它是兄弟子树而非祖先）并设 `selectionHighlightStyle = .none`，配合自绘选中背景消除按住/点击时的系统蓝高亮 |
 | `JournalEditorPane.swift` | 日记编辑区：编辑器顶部为 `DayArcStrip` 24h 弧光渐变条（组件在 `DayArcStrip.swift`），今日条目带"此刻"圆点；头部日期按应用语言格式化、零填充，点击弹出图形日历；草稿防抖落盘（IME 组字期间不提交）、图片粘贴/拖拽 |
-| `JournalItemEditorCard.swift` | 条目卡片（单层平面：无内部盒子，标签为琥珀色纯文本、正文无框、图片区为提示行+缩略图，卡片描边弱化、填充 65% 不透明）+ 图片缩略图组件 |
+| `JournalItemEditorCard.swift` | 条目卡片（单层平面：无内部盒子，标签为琥珀色纯文本、正文无框、图片区为提示行+缩略图，卡片描边弱化、填充 65% 不透明）+ 图片缩略图组件；条目早于今天时顶部出现「复盘」按钮，复盘选择（对/错）在系统 `popover` 中进行——点外部任意处自动关闭（放弃选择不留痕迹），已复盘条目顶栏为 `JournalReviewBadge` 印章（点按弹出改判/批注/清除），收起态只显示印章 + 斜体批注行 |
+| `JournalReviewBadge.swift` | 复盘判定贴纸：`JournalReviewBadge`（`.seal` 双环印章微旋转，编辑器卡片用；`.mini` 纯色字形，侧栏条目行用），verdict→字形/颜色映射也在此（correct=reviewCorrect、wrong=reviewWrong） |
 | `DayArcStrip.swift` | 弧光条组件本体 |
 | `JournalReminderScheduler.swift` | 每日本地通知（`UNUserNotificationCenter`） |
 | `JournalWindowController.swift` | 手动持有日记 `NSWindow`（因 `MenuBarExtra` 场景里 SwiftUI `openWindow` 不可用）；日记打开时把激活策略切为 `.regular`（Dock 显示图标、可 Cmd+Tab 切换），关闭时回 `.accessory`；macOS 13 下安装 AppKit `NSToolbar` |

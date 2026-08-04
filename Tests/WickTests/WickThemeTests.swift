@@ -123,6 +123,16 @@ final class WickThemeTests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(
                     accent.contrastRatio(to: palette.backgroundTop), 2.5, "accent/bgTop \(whereAmI)"
                 )
+
+                // Review verdict glyphs on card fills (graphics floor: 3.0).
+                let reviewCorrect = palette.reviewCorrect.flattened(over: palette.cardTop)
+                XCTAssertGreaterThanOrEqual(
+                    reviewCorrect.contrastRatio(to: palette.cardTop), 3.0, "reviewCorrect/cardTop \(whereAmI)"
+                )
+                let reviewWrong = palette.reviewWrong.flattened(over: palette.cardTop)
+                XCTAssertGreaterThanOrEqual(
+                    reviewWrong.contrastRatio(to: palette.cardTop), 3.0, "reviewWrong/cardTop \(whereAmI)"
+                )
             }
         }
     }

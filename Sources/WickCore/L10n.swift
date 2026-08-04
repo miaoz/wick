@@ -100,6 +100,12 @@ enum L10n {
         case journalReadOnly
         case journalChangeDate
         case journalToggleSidebar
+        case journalReview
+        case journalReviewCorrect
+        case journalReviewWrong
+        case journalReviewNotePlaceholder
+        case journalReviewClear
+        case journalReviewHelp
 
         // Settings extras
         case generalSection
@@ -212,6 +218,12 @@ enum L10n {
             case .journalReadOnly: return "只读（加载失败）"
             case .journalChangeDate: return "修改日期"
             case .journalToggleSidebar: return "切换侧栏"
+            case .journalReview: return "复盘"
+            case .journalReviewCorrect: return "对"
+            case .journalReviewWrong: return "错"
+            case .journalReviewNotePlaceholder: return "补一句复盘…"
+            case .journalReviewClear: return "清除复盘"
+            case .journalReviewHelp: return "复盘此条目"
 
             case .generalSection: return "通用"
             case .menuBarPercentage: return "菜单栏显示今日剩余"
@@ -325,6 +337,12 @@ enum L10n {
             case .journalReadOnly: return "Read-only (load failed)"
             case .journalChangeDate: return "Change date"
             case .journalToggleSidebar: return "Toggle Sidebar"
+            case .journalReview: return "Review"
+            case .journalReviewCorrect: return "Right"
+            case .journalReviewWrong: return "Wrong"
+            case .journalReviewNotePlaceholder: return "Add a review note…"
+            case .journalReviewClear: return "Clear review"
+            case .journalReviewHelp: return "Review this item"
 
             case .generalSection: return "General"
             case .menuBarPercentage: return "Show day remaining in menu bar"
