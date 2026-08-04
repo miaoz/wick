@@ -131,10 +131,17 @@ struct JournalItemEditorCard: View {
             if let note = item.review?.note,
                !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 // Resting reviewed state: the seal says the verdict, this
-                // italic line carries the annotation — no picker chrome.
-                Text(note)
-                    .font(.system(size: 13).italic())
-                    .foregroundStyle(palette.textSecondary.color)
+                // marked line carries the annotation — no picker chrome.
+                // (Italic is a no-op for CJK, so the marker + secondary
+                // color do the distinguishing instead.)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "pencil.line")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(palette.textTertiary.color)
+                    Text(note)
+                        .font(.system(size: 13))
+                        .foregroundStyle(palette.textSecondary.color)
+                }
             }
         }
         .padding(16)
@@ -187,10 +194,7 @@ struct JournalItemEditorCard: View {
                         }
                     ),
                     placeholder: L10n.string(.journalReviewNotePlaceholder, language: settings.language),
-                    font: NSFontManager.shared.convert(
-                        NSFont.systemFont(ofSize: 13),
-                        toHaveTrait: .italicFontMask
-                    ),
+                    font: .systemFont(ofSize: 13),
                     textColor: palette.textSecondary.nsColor,
                     style: .plain,
                     onChange: onChange,
