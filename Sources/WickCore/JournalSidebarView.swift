@@ -84,6 +84,7 @@ struct JournalTimelineSidebar: View {
                             ForEach(section.entries) { entry in
                                 JournalDayTimelineRow(entry: entry)
                                     .tag(entry.id)
+                                    .listRowBackground(selectionRowBackground(isSelected: isDaySelected(entry.id)))
                                     .contextMenu {
                                         Button(role: .destructive) {
                                             store.deleteEntry(id: entry.id)
@@ -96,6 +97,7 @@ struct JournalTimelineSidebar: View {
                     }
                 }
                 .listStyle(.sidebar)
+                .background(TableViewSelectionSuppressor())
             }
         }
     }
@@ -125,6 +127,7 @@ struct JournalTimelineSidebar: View {
                             ForEach(section.items) { row in
                                 JournalItemTimelineRow(row: row)
                                     .tag(row.id)
+                                    .listRowBackground(selectionRowBackground(isSelected: isItemSelected(row.id)))
                                     .contextMenu {
                                         Button(role: .destructive) {
                                             store.deleteItem(itemID: row.ref.itemID, from: row.ref.entryID)
@@ -144,6 +147,7 @@ struct JournalTimelineSidebar: View {
                     }
                 }
                 .listStyle(.sidebar)
+                .background(TableViewSelectionSuppressor())
             }
         }
     }
@@ -221,6 +225,33 @@ struct JournalTimelineSidebar: View {
         }
         return grouped.keys.sorted(by: >).map { day in
             ItemSection(title: dayTitle(day), items: grouped[day] ?? [])
+        }
+    }
+
+    private func isDaySelected(_ id: UUID) -> Bool {
+        guard case .day(let selectedID) = store.selection else { return false }
+        return selectedID == id
+    }
+
+    private func isItemSelected(_ id: String) -> Bool {
+        guard case .item(let ref) = store.selection else { return false }
+        return ref.id == id
+    }
+
+    /// Soft, theme-driven selection pill. Replaces the system highlight,
+    /// which is bright blue on recent macOS and gray on macOS 13.
+    /// The opaque `sidebarBackground` underlay hides the system pill even
+    /// if it is still drawn beneath the custom background.
+    @ViewBuilder
+    private func selectionRowBackground(isSelected: Bool) -> some View {
+        if isSelected {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(palette.sidebarBackground.color)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(palette.accentSoft.color)
+                )
+                .padding(.horizontal, 4)
         }
     }
 
