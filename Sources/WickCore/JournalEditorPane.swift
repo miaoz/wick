@@ -22,6 +22,7 @@ struct JournalEditorPane: View {
     @State private var pendingDeleteItem: JournalItemRef?
     @State private var datePickerEntryID: UUID?
     @State private var imageImportTarget: JournalItemRef?
+    @State private var showImageImporter = false
     @State private var pendingScrollID: String?
 
     private var isItemScoped: Bool { store.isItemScoped }
@@ -69,17 +70,17 @@ struct JournalEditorPane: View {
         }
         .disabled(store.isReadOnlyDueToLoadFailure)
         .fileImporter(
-            isPresented: Binding(
-                get: { imageImportTarget != nil },
-                set: { if !$0 { imageImportTarget = nil } }
-            ),
+            isPresented: $showImageImporter,
             allowedContentTypes: [.image],
             allowsMultipleSelection: true
         ) { result in
+            // Read the target before clearing: isPresented resets *before*
+            // this completion runs, so a payload-driven binding would
+            // already be nil here (that bug made picks no-op).
+            defer { imageImportTarget = nil }
             guard case .success(let urls) = result,
                   let target = imageImportTarget
             else {
-                imageImportTarget = nil
                 return
             }
             for url in urls {
@@ -92,7 +93,6 @@ struct JournalEditorPane: View {
                 _ = store.addImage(from: url, to: target.entryID, itemID: target.itemID)
             }
             mergeImagesFromStore(entryID: target.entryID)
-            imageImportTarget = nil
         }
         .confirmationDialog(
             L10n.string(.journalDeleteConfirm, language: settings.language),
@@ -465,6 +465,7 @@ struct JournalEditorPane: View {
             },
             onPickImage: {
                 imageImportTarget = JournalItemRef(entryID: entryID, itemID: itemID)
+                showImageImporter = true
             },
             onDrop: { providers in
                 handleDrop(providers, itemID: itemID, entryID: entryID)
