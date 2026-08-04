@@ -34,7 +34,7 @@ SwiftPM 三个 target（`Package.swift`）：
 | `JournalSidebarView.swift` | 日记侧栏：搜索框 + 标签芯片过滤（超宽折叠为「更多 N」，展开换行/再点收起）、按日/按条目两种列表、空态；选中高亮为自绘 `listRowBackground`（`sidebarBackground` 打底 + `accentSoft`，替代系统蓝/灰药丸以保证跨 macOS 版本一致），两个 `List` 均挂 `TableViewSelectionSuppressor` 关掉底层 `NSTableView` 的系统高亮（否则点击瞬间会闪一帧系统蓝色）；标签打包逻辑在 `TagChipFlow.swift` |
 | `TableViewSelectionSuppressor.swift` | `NSViewRepresentable`：子树搜索找到 SwiftUI `List` 背后的列表视图（新系统为 `SwiftUIOutlineListView`，`NSTableView` 子类；注意它是兄弟子树而非祖先）并设 `selectionHighlightStyle = .none`，配合自绘选中背景消除按住/点击时的系统蓝高亮 |
 | `JournalEditorPane.swift` | 日记编辑区：编辑器顶部为 `DayArcStrip` 24h 弧光渐变条（组件在 `DayArcStrip.swift`），今日条目带"此刻"圆点；头部日期按应用语言格式化、零填充，点击弹出图形日历；草稿防抖落盘（IME 组字期间不提交）、图片粘贴/拖拽 |
-| `JournalItemEditorCard.swift` | 条目卡片（单层平面：无内部盒子，标签为琥珀色纯文本、正文无框、图片区为提示行+缩略图，卡片描边弱化、填充 65% 不透明）+ 图片缩略图组件；条目早于今天时顶部出现「复盘」按钮，复盘选择（对/错）在系统 `popover` 中进行——点外部任意处自动关闭（放弃选择不留痕迹），已复盘条目顶栏为 `JournalReviewBadge` 印章（点按弹出改判/批注/清除），收起态只显示印章 + 铅笔图标批注行（不用斜体：CJK 无斜体字形）|
+| `JournalItemEditorCard.swift` | 条目卡片（单层平面：无内部盒子，标签为琥珀色纯文本、正文无框、图片区为提示行+缩略图，卡片描边弱化、填充 65% 不透明）+ 图片缩略图组件；条目早于今天时顶部出现「复盘」按钮，复盘选择（对/错贴纸即选项）在系统 `popover` 中进行——点外部任意处自动关闭（放弃选择不留痕迹），批注输入框始终在场（未判定时先存草稿、选定时并入复盘），已复盘条目顶栏为 `JournalReviewBadge` 印章（点按弹出改判/批注/清除，非当前判定贴纸淡显），收起态只显示印章 + 铅笔图标批注行（不用斜体：CJK 无斜体字形）|
 | `JournalReviewBadge.swift` | 复盘判定贴纸：`JournalReviewBadge`（`.seal` 双环印章微旋转，编辑器卡片用；`.mini` 纯色字形，侧栏条目行用），verdict→字形/颜色映射也在此（correct=reviewCorrect、wrong=reviewWrong） |
 | `DayArcStrip.swift` | 弧光条组件本体 |
 | `JournalReminderScheduler.swift` | 每日本地通知（`UNUserNotificationCenter`） |

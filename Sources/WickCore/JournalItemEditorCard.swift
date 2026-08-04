@@ -22,6 +22,9 @@ struct JournalItemEditorCard: View {
     let onChange: () -> Void
 
     @State private var showReviewPopover = false
+    /// Pre-verdict note text; merges into the review when one is picked,
+    /// discarded when the popover is dismissed without a verdict.
+    @State private var reviewNoteDraft = ""
 
     var body: some View {
         // One flat surface per item: no inner boxes. Tag, body, and images
@@ -164,10 +167,13 @@ struct JournalItemEditorCard: View {
 
     /// Verdict picker inside a popover: clicking anywhere outside dismisses
     /// it (sidebar, other cards, closing the window), so an abandoned picker
-    /// can never linger. Picking a verdict also dismisses it.
+    /// can never linger. Picking a verdict also dismisses it. The note field
+    /// is always present; before a verdict exists the note is a local draft
+    /// that merges into the review the moment one is picked (and is
+    /// discarded if the popover is abandoned).
     private var reviewPopoverContent: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 8) {
+            HStack(alignment: .center, spacing: 14) {
                 ForEach([JournalReviewVerdict.correct, .wrong], id: \.self) { verdict in
                     verdictButton(verdict)
                 }
@@ -184,50 +190,45 @@ struct JournalItemEditorCard: View {
                 }
             }
 
-            if item.review != nil {
-                IMESafeTextField(
-                    text: Binding(
-                        get: { item.review?.note ?? "" },
-                        set: { newValue in
+            IMESafeTextField(
+                text: Binding(
+                    get: { item.review?.note ?? reviewNoteDraft },
+                    set: { newValue in
+                        if item.review != nil {
                             item.review?.note = newValue
                             item.review?.updatedAt = Date()
+                        } else {
+                            reviewNoteDraft = newValue
                         }
-                    ),
-                    placeholder: L10n.string(.journalReviewNotePlaceholder, language: settings.language),
-                    font: .systemFont(ofSize: 13),
-                    textColor: palette.textSecondary.nsColor,
-                    style: .plain,
-                    onChange: onChange,
-                    onPasteImage: onPasteImage
-                )
-                .frame(width: 220, height: 22)
-            }
+                    }
+                ),
+                placeholder: L10n.string(.journalReviewNotePlaceholder, language: settings.language),
+                font: .systemFont(ofSize: 13),
+                textColor: palette.textSecondary.nsColor,
+                style: .plain,
+                onChange: {
+                    // Draft notes persist only when a verdict is picked.
+                    if item.review != nil { onChange() }
+                },
+                onPasteImage: onPasteImage
+            )
+            .frame(width: 220, height: 22)
         }
         .padding(10)
+        .onChange(of: showReviewPopover) { presented in
+            if !presented { reviewNoteDraft = "" }
+        }
     }
 
+    /// The seal itself is the option: full strength when selectable, dimmed
+    /// when another verdict already holds the review.
     private func verdictButton(_ verdict: JournalReviewVerdict) -> some View {
         let isActive = item.review?.verdict == verdict
-        let color = verdict.color(in: palette)
         return Button {
             setVerdict(verdict)
         } label: {
-            Text(verdictName(verdict))
-                .font(.system(size: 12, weight: isActive ? .semibold : .medium))
-                .foregroundStyle(isActive ? color : palette.textTertiary.color)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(isActive ? color.opacity(0.12) : Color.clear)
-                )
-                .overlay {
-                    Capsule(style: .continuous)
-                        .strokeBorder(
-                            isActive ? color.opacity(0.6) : palette.controlBorder.color,
-                            lineWidth: 1
-                        )
-                }
+            JournalReviewBadge(verdict: verdict, style: .seal)
+                .opacity(item.review == nil || isActive ? 1 : 0.3)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(verdictName(verdict)))
@@ -240,8 +241,9 @@ struct JournalItemEditorCard: View {
             review.updatedAt = Date()
             item.review = review
         } else {
-            item.review = JournalReview(verdict: verdict)
+            item.review = JournalReview(verdict: verdict, note: reviewNoteDraft)
         }
+        reviewNoteDraft = ""
         onChange()
         showReviewPopover = false
     }
