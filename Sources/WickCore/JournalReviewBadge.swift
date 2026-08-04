@@ -15,6 +15,8 @@ struct JournalReviewBadge: View {
 
     let verdict: JournalReviewVerdict
     var style: Style = .seal
+    /// Seal diameter in points; ring widths and glyph scale with it.
+    var size: CGFloat = 34
 
     var body: some View {
         switch style {
@@ -30,15 +32,15 @@ struct JournalReviewBadge: View {
     private var seal: some View {
         ZStack {
             Circle()
-                .strokeBorder(color.opacity(0.85), lineWidth: 1.6)
+                .strokeBorder(color.opacity(0.85), lineWidth: size * 0.047)
             Circle()
-                .strokeBorder(color.opacity(0.45), lineWidth: 1)
-                .padding(3.5)
+                .strokeBorder(color.opacity(0.45), lineWidth: size * 0.029)
+                .padding(size * 0.1)
             glyph
-                .font(.system(size: 15, weight: .heavy))
+                .font(.system(size: size * 0.44, weight: .heavy))
                 .foregroundStyle(color)
         }
-        .frame(width: 34, height: 34)
+        .frame(width: size, height: size)
         .rotationEffect(.degrees(-8))
         .transition(.scale(scale: 0.6).combined(with: .opacity))
     }

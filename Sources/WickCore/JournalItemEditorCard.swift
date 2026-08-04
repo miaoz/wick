@@ -42,47 +42,25 @@ struct JournalItemEditorCard: View {
                 .foregroundStyle(.tertiary)
                 .textCase(.uppercase)
                 .tracking(0.4)
+                // CJK ink sits low in its line box; nudge up so the label
+                // optically centers with the 28pt icon buttons in this row.
+                .offset(y: -2)
 
                 Spacer()
 
-                if let review = item.review {
-                    Button {
-                        showReviewPopover = true
-                    } label: {
-                        JournalReviewBadge(verdict: review.verdict, style: .seal)
-                            .padding(.trailing, 2)
-                    }
-                    .buttonStyle(.plain)
-                    .help(L10n.string(.journalReviewHelp, language: settings.language))
-                    .accessibilityLabel(Text(verdictName(review.verdict)))
-                    .popover(isPresented: $showReviewPopover, arrowEdge: .top) {
-                        reviewPopoverContent
-                    }
-                } else if reviewEligible {
-                    Button {
-                        showReviewPopover = true
-                    } label: {
-                        Text(L10n.string(.journalReview, language: settings.language))
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(palette.accentText.color)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .strokeBorder(palette.controlBorder.color, lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .help(L10n.string(.journalReviewHelp, language: settings.language))
-                    .accessibilityLabel(Text(L10n.string(.journalReviewHelp, language: settings.language)))
-                    .popover(isPresented: $showReviewPopover, arrowEdge: .top) {
-                        reviewPopoverContent
-                    }
+                Button(action: onPickImage) {
+                    Image(systemName: "photo.badge.plus")
                 }
+                .buttonStyle(JournalQuietIconButtonStyle())
+                .help(L10n.string(.journalAddImage, language: settings.language))
+                .accessibilityLabel(Text(L10n.string(.journalAddImage, language: settings.language)))
 
                 if canDelete {
                     Button(action: onDelete) {
+                        // minus.circle ink rides ~1pt low versus the photo
+                        // glyph beside it — lift it into optical alignment.
                         Image(systemName: "minus.circle")
+                            .offset(y: -1)
                     }
                     .buttonStyle(JournalQuietIconButtonStyle(role: .destructive))
                     .help(L10n.string(.journalDeleteItem, language: settings.language))
@@ -131,19 +109,26 @@ struct JournalItemEditorCard: View {
 
             imagesSection
 
-            if let note = item.review?.note,
-               !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                // Resting reviewed state: the seal says the verdict, this
-                // marked line carries the annotation — no picker chrome.
-                // (Italic is a no-op for CJK, so the marker + secondary
-                // color do the distinguishing instead.)
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: "pencil.line")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(palette.textTertiary.color)
-                    Text(note)
-                        .font(.system(size: 13))
-                        .foregroundStyle(palette.textSecondary.color)
+            if !noteText.isEmpty || item.review != nil || reviewEligible {
+                HStack(alignment: .bottom, spacing: 8) {
+                    if !noteText.isEmpty {
+                        // The seal says the verdict, this marked line carries
+                        // the annotation. (Italic is a no-op for CJK, so the
+                        // marker + secondary color do the distinguishing.)
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Image(systemName: "pencil.line")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(palette.textTertiary.color)
+                            Text(noteText)
+                                .font(.system(size: 13))
+                                .foregroundStyle(palette.textSecondary.color)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    reviewSlot
                 }
             }
         }
@@ -161,9 +146,56 @@ struct JournalItemEditorCard: View {
             // the popover state so it cannot re-present on the next open.
             showReviewPopover = false
         }
+        // The whole card is the image drop zone (the images section itself
+        // collapses to zero height when the item has no images).
+        .onDrop(of: [.image, .fileURL], isTargeted: nil, perform: onDrop)
     }
 
     // MARK: Review
+
+    private var noteText: String {
+        item.review?.note.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    /// Bottom-right "stamp corner": the 复盘 button while unreviewed, the
+    /// enlarged decorative seal once a verdict exists. Both open the same
+    /// review popover.
+    @ViewBuilder
+    private var reviewSlot: some View {
+        if let review = item.review {
+            Button {
+                showReviewPopover = true
+            } label: {
+                JournalReviewBadge(verdict: review.verdict, style: .seal, size: 56)
+            }
+            .buttonStyle(.plain)
+            .help(L10n.string(.journalReviewHelp, language: settings.language))
+            .accessibilityLabel(Text(verdictName(review.verdict)))
+            .popover(isPresented: $showReviewPopover, arrowEdge: .top) {
+                reviewPopoverContent
+            }
+        } else if reviewEligible {
+            Button {
+                showReviewPopover = true
+            } label: {
+                Text(L10n.string(.journalReview, language: settings.language))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(palette.accentText.color)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule(style: .continuous)
+                            .strokeBorder(palette.controlBorder.color, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .help(L10n.string(.journalReviewHelp, language: settings.language))
+            .accessibilityLabel(Text(L10n.string(.journalReviewHelp, language: settings.language)))
+            .popover(isPresented: $showReviewPopover, arrowEdge: .top) {
+                reviewPopoverContent
+            }
+        }
+    }
 
     /// Verdict picker inside a popover: clicking anywhere outside dismisses
     /// it (sidebar, other cards, closing the window), so an abandoned picker
@@ -265,17 +297,6 @@ struct JournalItemEditorCard: View {
 
     private var imagesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 10) {
-                Spacer(minLength: 0)
-
-                Button(action: onPickImage) {
-                    Image(systemName: "photo.badge.plus")
-                }
-                .buttonStyle(JournalQuietIconButtonStyle())
-                .help(L10n.string(.journalAddImage, language: settings.language))
-                .accessibilityLabel(Text(L10n.string(.journalAddImage, language: settings.language)))
-            }
-
             if !item.imageFilenames.isEmpty {
                 LazyVGrid(
                     columns: [GridItem(.adaptive(minimum: 140), spacing: 10)],
@@ -293,7 +314,6 @@ struct JournalItemEditorCard: View {
                 }
             }
         }
-        .onDrop(of: [.image, .fileURL], isTargeted: nil, perform: onDrop)
     }
 }
 
