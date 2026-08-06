@@ -275,17 +275,27 @@ final class JournalStore: ObservableObject {
 
     /// Adopts a journal discovered on another sync device: registers it locally
     /// under the SAME id (the remote folder's identity) and switches to it.
-    /// The sync engine then pulls its contents down. Already-known ids just
-    /// switch. The local snapshot starts empty on purpose — engine applies
-    /// remote days onto it (never the other way around).
+    /// The sync engine then pulls its contents down.
     @discardableResult
     func adoptRemoteJournal(id: UUID, name: String) -> JournalInfo {
+        let info = registerRemoteJournal(id: id, name: name)
+        if activeJournalID != info.id {
+            switchToJournal(id: info.id)
+        }
+        return info
+    }
+
+    /// Registers a remote journal locally under its remote id WITHOUT switching
+    /// to it (the auto-import path). The local snapshot starts empty on
+    /// purpose — the engine applies remote days onto it, never the reverse.
+    /// Callers must reset the journal's sync state first: a state file left
+    /// from a deleted past life would make "empty local" look like "deleted
+    /// everywhere" and tombstone the remote content.
+    @discardableResult
+    func registerRemoteJournal(id: UUID, name: String) -> JournalInfo {
         if let existing = journals.first(where: { $0.id == id }) {
-            switchToJournal(id: existing.id)
             return existing
         }
-
-        flushActiveJournalSession()
 
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let info = JournalInfo(
@@ -312,13 +322,7 @@ final class JournalStore: ObservableObject {
 
         journals.append(info)
         journals.sort { $0.createdAt < $1.createdAt }
-        activeJournalID = info.id
-        bindPaths(for: info.id)
-        resetSessionState()
-        entries = []
-        selection = nil
         persistCatalog()
-        notifyActiveJournalChanged()
         return info
     }
 

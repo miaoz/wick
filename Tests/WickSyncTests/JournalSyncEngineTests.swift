@@ -556,4 +556,67 @@ final class JournalSyncEngineTests: XCTestCase {
         await engine.performSyncCycle()
         XCTAssertTrue(engine.discoveredJournals.isEmpty)
     }
+
+    func testDiscoveredRecordPrunedWhenManifestVanishes() async throws {
+        let otherID = UUID()
+        let manifest = JournalSyncManifest(
+            formatVersion: 1,
+            journalID: otherID,
+            journalName: "Gone Soon",
+            createdAt: t0,
+            deviceID: "B"
+        )
+        let manifestPath = JournalSyncLayout.manifestPath(for: otherID)
+        backend.seedFile(manifestPath, data: try JournalSyncEncoding.encoder.encode(manifest))
+
+        let source = makeSource()
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        await engine.performSyncCycle()
+        XCTAssertEqual(engine.discoveredJournals.count, 1)
+
+        try await backend.delete(path: manifestPath)
+        await engine.performSyncCycle()
+        XCTAssertTrue(engine.discoveredJournals.isEmpty)
+    }
+
+    // MARK: re-import baseline reset
+
+    /// Characterizes the hazard `resetSyncState` exists to prevent: importing
+    /// a journal whose stale state file survived — "empty local" reads as
+    /// "deleted everywhere" and the engine tombstones the remote content.
+    func testStaleStateAfterLocalWipeTombstonesRemote() async throws {
+        let source = makeSource()
+        source.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "precious")
+        await makeEngine(source: source, stateDir: "a", device: "A").performSyncCycle()
+
+        // Journal wiped locally (e.g. deleted); a new engine resumes over the
+        // SAME state directory — exactly what re-importing must NOT do.
+        let wiped = makeSource()
+        let resumed = makeEngine(source: wiped, stateDir: "a", device: "A")
+        await resumed.performSyncCycle()
+
+        XCTAssertTrue(
+            backend.hasFile(JournalSyncLayout.tombstonePath(for: journalID, dayKey: "2026-08-01")),
+            "stale baseline turns an empty local copy into a delete propagation"
+        )
+        XCTAssertFalse(backend.hasFile(dayPath("2026-08-01")))
+    }
+
+    /// The intended re-import flow: reset the baseline, then sync — the empty
+    /// local copy pulls remote content down instead of deleting it.
+    func testResetSyncStateMakesReimportPullInsteadOfDelete() async throws {
+        let source = makeSource()
+        source.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "precious")
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        await engine.performSyncCycle()
+
+        let wiped = makeSource()
+        let reimported = makeEngine(source: wiped, stateDir: "a", device: "A")
+        reimported.resetSyncState(for: journalID)
+        await reimported.performSyncCycle()
+
+        XCTAssertEqual(wiped.days["2026-08-01"]?.items.first?.body, "precious")
+        XCTAssertTrue(backend.hasFile(dayPath("2026-08-01")))
+        XCTAssertFalse(backend.hasFile(JournalSyncLayout.tombstonePath(for: journalID, dayKey: "2026-08-01")))
+    }
 }

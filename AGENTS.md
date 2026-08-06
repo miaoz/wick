@@ -51,7 +51,7 @@ SwiftPM target（`Package.swift`）：
 | `UpdateChecker.swift` | 查询 GitHub Releases latest API（`miaoz/wick`），15s 超时，自定义 UA |
 | `LaunchAtLogin.swift` | `SMAppService.mainApp` 封装（macOS 13+） |
 | `AppNotifications.swift` | 自定义 `Notification.Name`（退出/关窗前冲刷草稿、存储恢复通知） |
-| `SyncCoordinator.swift` | 同步生命周期单例：持有 `DropboxSyncBackend` + `JournalSyncEngine`（localSource 为 `JournalStore.shared`）；启动时按 `wick.sync.enabled` 启停；`$entries` 变更 → 15s 防抖同步、切换日记本/失去激活 → 触发同步；连接/断开 Dropbox；退出前一次 5s 上限的最终同步（`applicationShouldTerminate` 返回 `.terminateLater`） |
+| `SyncCoordinator.swift` | 同步生命周期单例：持有 `DropboxSyncBackend` + `JournalSyncEngine`（localSource 为 `JournalStore.shared`）；启动时按 `wick.sync.enabled` 启停；`$entries` 变更 → 15s 防抖同步、切换日记本/失去激活 → 触发同步；连接/断开 Dropbox；**自动导入**远端发现的日记本（`registerRemoteJournal` 不切换活跃本，内容在用户打开时拉取；本地删除过的 UUID 记入 `wick.sync.ignoredRemoteJournals` 不再自动导入，设置页手动导入为逃生口）；导入前必须 `resetSyncState`（否则陈旧基线会把空本地误判为全删、向远端写墓碑）；退出前一次 5s 上限的最终同步（`applicationShouldTerminate` 返回 `.terminateLater`） |
 | `DropboxAuthSession.swift` | `ASWebAuthenticationSession` 包装（OAuth 浏览器授权 + 回调 URL）；需窗口 anchor，且回调 scheme 只在打包 `.app` 内注册，`swift run` 收不到回调 |
 
 `Sources/WickSync/`（纯 Foundation，iOS 可复用）各文件职责：
@@ -67,7 +67,7 @@ SwiftPM target（`Package.swift`）：
 | `PKCE.swift`、`KeychainTokenStore.swift` | PKCE 工具（无 App secret 的公共客户端）；Keychain 读写（无 access group——ad-hoc 重编译可能丢 token，表现为需重新授权） |
 | `JournalDayMerge.swift` | 同一天两版本合并：条目按 UUID 并集、同条目不同内容新 `updatedAt` 方胜（败者入 `losingItems` 保留）、标题同理、身份收敛到 `createdAt` 更早者 |
 | `JournalSyncState.swift` | 远端布局 `/journals/<uuid>/{manifest.json,days/,images/,tombstones/,conflicts/}`；manifest/墓碑/冲突载荷 Codable；每设备同步状态（cursor、远端文件视图、按天哈希/rev、pendingConflicts）与本地持久化（`~/Library/Application Support/Wick/SyncState/<uuid>.json`，**不参与同步**） |
-| `JournalSyncEngine.swift` | 对账引擎（`@MainActor ObservableObject`）：cursor 增量 → manifest `formatVersion` 版本门 → 按天矩阵（本地变→条件上传；远端变→下载应用；双变→条目并集合并，败者存档 `conflicts/` 并出 `pendingConflicts`；本地删→先写墓碑再删远端；远端墓碑→本地删（本地有改动则改动方胜并清墓碑）；远端文件无墓碑消失→视为事故自动回传，绝不镜像删除）→ 图片按引用差集上传/下载 → 墓碑 30 天 GC；60s 周期 + 15s 防抖 + `syncOnce()`（退出用） |
+| `JournalSyncEngine.swift` | 对账引擎（`@MainActor ObservableObject`）：cursor 增量 → manifest `formatVersion` 版本门 → 发现其他日记本 manifest（`discoveredJournals`，供自动/手动导入，消失即剪除）→ 按天矩阵（本地变→条件上传；远端变→下载应用；双变→条目并集合并，败者存档 `conflicts/` 并出 `pendingConflicts`；本地删→先写墓碑再删远端；远端墓碑→本地删（本地有改动则改动方胜并清墓碑）；远端文件无墓碑消失→视为事故自动回传，绝不镜像删除）→ 图片按引用差集上传/下载 → 墓碑 30 天 GC；60s 周期 + 15s 防抖 + `syncOnce()`（退出用）+ `resetSyncState()`（重导入前调） |
 
 其他目录：
 

@@ -246,4 +246,11 @@ public struct JournalSyncStateStore {
             NSLog("Wick sync state save failed: \(error.localizedDescription)")
         }
     }
+
+    /// Drops all stored state for a journal (used when it is (re-)imported
+    /// from the remote: a stale baseline would misread the empty local copy
+    /// as "deleted everywhere" and tombstone the remote content).
+    public func clear(for journalID: UUID) {
+        try? FileManager.default.removeItem(at: stateURL(for: journalID))
+    }
 }

@@ -116,6 +116,17 @@ public final class JournalSyncEngine: ObservableObject {
         saveAndPublish()
     }
 
+    /// Resets a journal's sync baseline. Required before (re-)importing a
+    /// journal from the remote: with a stale baseline the empty local copy
+    /// would look like "deleted everywhere" and the engine would tombstone
+    /// the remote content instead of pulling it.
+    public func resetSyncState(for journalID: UUID) {
+        if stateJournalID == journalID {
+            state = JournalSyncState()
+        }
+        stateStore.clear(for: journalID)
+    }
+
     // MARK: - Sync cycle
 
     func performSyncCycle() async {
@@ -550,7 +561,8 @@ public final class JournalSyncEngine: ObservableObject {
     // MARK: - Journal discovery
 
     /// Scans the remote view for manifests of journals other than the active
-    /// one and caches them in state. Each manifest is downloaded once per rev.
+    /// one and caches them in state. Each manifest is downloaded once per rev;
+    /// records whose manifest vanished from the remote are pruned.
     private func refreshDiscoveredJournals(currentJournalID: UUID) async {
         for path in state.remoteFiles.keys.sorted() {
             guard let manifestJournalID = Self.manifestJournalID(from: path),
@@ -571,6 +583,14 @@ public final class JournalSyncEngine: ObservableObject {
                 manifest: manifest,
                 manifestRev: meta.rev
             )
+        }
+
+        // Prune records whose manifest is gone from the remote view.
+        for key in state.discoveredJournals.keys {
+            guard let uuid = UUID(uuidString: key),
+                  state.remoteFiles[JournalSyncLayout.manifestPath(for: uuid)] == nil
+            else { continue }
+            state.discoveredJournals.removeValue(forKey: key)
         }
     }
 

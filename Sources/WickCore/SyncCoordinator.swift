@@ -20,6 +20,14 @@ final class SyncCoordinator: ObservableObject {
     @Published private(set) var isRunning = false
     @Published private(set) var lastAuthError: String?
 
+    private static let ignoredJournalsKey = "wick.sync.ignoredRemoteJournals"
+
+    /// Remote journals the user deleted locally — never auto-import these again
+    /// (the manual import row in settings remains as the escape hatch).
+    private var ignoredRemoteJournalIDs: Set<UUID>
+    /// Previous local catalog, used to detect deletions.
+    private var knownLocalJournalIDs: Set<UUID>
+
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
@@ -35,9 +43,27 @@ final class SyncCoordinator: ObservableObject {
             stateStore: JournalSyncStateStore(directory: Self.stateDirectory())
         )
 
+        ignoredRemoteJournalIDs = Set(
+            (UserDefaults.standard.stringArray(forKey: Self.ignoredJournalsKey) ?? [])
+                .compactMap(UUID.init)
+        )
+        knownLocalJournalIDs = Set(JournalStore.shared.journals.map(\.id))
+
         // Forward engine state to SwiftUI observers of the coordinator.
         engine.objectWillChange
             .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
+        // Auto-import journals discovered on the remote (e.g. created on
+        // another device): register them locally under the same id without
+        // switching — their content pulls down when the user opens them.
+        engine.$discoveredJournals
+            .sink { [weak self] in self?.autoImportRemoteJournals($0) }
+            .store(in: &cancellables)
+
+        // Locally deleting a journal must not bring it back via auto-import.
+        JournalStore.shared.$journals
+            .sink { [weak self] in self?.trackLocalJournalDeletions($0) }
             .store(in: &cancellables)
 
         // Edit-driven sync: engine coalesces these into one cycle 15 s after
@@ -109,8 +135,47 @@ final class SyncCoordinator: ObservableObject {
     /// Adopts a journal discovered on the remote (registering it locally under
     /// the same id) and immediately pulls its contents.
     func adoptRemoteJournal(_ manifest: JournalSyncManifest) {
+        ignoredRemoteJournalIDs.remove(manifest.journalID)
+        persistIgnoredJournals()
+        engine.resetSyncState(for: manifest.journalID)
         _ = JournalStore.shared.adoptRemoteJournal(id: manifest.journalID, name: manifest.journalName)
         engine.syncNow()
+    }
+
+    // MARK: - Auto-import
+
+    private func autoImportRemoteJournals(_ manifests: [JournalSyncManifest]) {
+        guard AppSettings.shared.syncEnabled, backend.isAuthorized else { return }
+        for manifest in manifests {
+            guard !ignoredRemoteJournalIDs.contains(manifest.journalID),
+                  !JournalStore.shared.journals.contains(where: { $0.id == manifest.journalID })
+            else { continue }
+            // Reset the baseline first: a stale state file would make the
+            // empty local copy look like "deleted everywhere".
+            engine.resetSyncState(for: manifest.journalID)
+            _ = JournalStore.shared.registerRemoteJournal(
+                id: manifest.journalID,
+                name: manifest.journalName
+            )
+            NSLog("Wick sync: auto-imported remote journal \"%@\"", manifest.journalName)
+        }
+    }
+
+    private func trackLocalJournalDeletions(_ infos: [JournalInfo]) {
+        let current = Set(infos.map(\.id))
+        let removed = knownLocalJournalIDs.subtracting(current)
+        if !removed.isEmpty {
+            ignoredRemoteJournalIDs.formUnion(removed)
+            persistIgnoredJournals()
+        }
+        knownLocalJournalIDs = current
+    }
+
+    private func persistIgnoredJournals() {
+        UserDefaults.standard.set(
+            ignoredRemoteJournalIDs.map(\.uuidString),
+            forKey: Self.ignoredJournalsKey
+        )
     }
 
     // MARK: - Quit

@@ -180,4 +180,18 @@ final class JournalStoreSyncTests: XCTestCase {
         XCTAssertNotEqual(info.name.lowercased(), existing.lowercased())
         XCTAssertTrue(info.name.hasPrefix(existing))
     }
+
+    func testRegisterRemoteJournalDoesNotSwitchActive() {
+        let originalID = store.activeJournalID!
+        let remoteID = UUID()
+
+        let info = store.registerRemoteJournal(id: remoteID, name: "Background Import")
+
+        XCTAssertEqual(info.id, remoteID)
+        XCTAssertEqual(store.activeJournalID, originalID, "registration must not yank the active journal")
+        XCTAssertEqual(store.journals.count, 2)
+        let reloaded = JournalStore(rootDirectory: tempRoot)
+        XCTAssertTrue(reloaded.journals.contains { $0.id == remoteID })
+        XCTAssertEqual(reloaded.activeJournalID, originalID)
+    }
 }
