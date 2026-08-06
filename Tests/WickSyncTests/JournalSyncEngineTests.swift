@@ -1,0 +1,518 @@
+import XCTest
+@testable import WickSync
+
+// MARK: - Fakes
+
+/// In-memory Dropbox stand-in. One instance shared between engines simulates
+/// the server two devices talk to.
+@MainActor
+final class FakeSyncBackend: JournalSyncBackend {
+    private struct StoredFile {
+        var data: Data
+        var rev: String
+    }
+
+    private var files: [String: StoredFile] = [:]
+    private var changeLog: [(version: Int, meta: RemoteFileMeta)] = []
+    private var revCounter = 0
+    private var version = 0
+
+    var authorized = true
+    var uploadCount = 0
+    var downloadCount = 0
+    /// When set, incremental listings throw this error once.
+    var failNextIncremental: SyncBackendError?
+
+    var isAuthorized: Bool { authorized }
+    var accountEmail: String? { authorized ? "fake@example.com" : nil }
+
+    func authorize() async throws -> String { "fake@example.com" }
+    func signOut() { authorized = false }
+
+    func listChanges(since cursor: String?) async throws -> (entries: [RemoteFileMeta], cursor: String) {
+        if let cursor {
+            if let error = failNextIncremental {
+                failNextIncremental = nil
+                throw error
+            }
+            let sinceVersion = Int(cursor.dropFirst()) ?? 0
+            let metas = changeLog.filter { $0.version > sinceVersion }.map(\.meta)
+            return (metas, "v\(version)")
+        }
+        let metas = files.map { path, file in
+            RemoteFileMeta(path: path, rev: file.rev, contentHash: JournalSyncEncoding.contentHash(of: file.data))
+        }
+        return (metas, "v\(version)")
+    }
+
+    func download(path: String) async throws -> (data: Data, rev: String) {
+        downloadCount += 1
+        guard let file = files[path.lowercased()] else {
+            throw SyncBackendError.server(status: 409, message: "path/not_found/")
+        }
+        return (file.data, file.rev)
+    }
+
+    @discardableResult
+    func upload(path: String, data: Data, ifRev: String?) async throws -> String {
+        uploadCount += 1
+        let key = path.lowercased()
+        if let existing = files[key] {
+            guard let ifRev, ifRev == existing.rev else {
+                throw SyncBackendError.writeConflict(path: key)
+            }
+        }
+        revCounter += 1
+        let rev = "r\(revCounter)"
+        files[key] = StoredFile(data: data, rev: rev)
+        log(path: key, meta: RemoteFileMeta(path: key, rev: rev, contentHash: JournalSyncEncoding.contentHash(of: data)))
+        return rev
+    }
+
+    func delete(path: String) async throws {
+        let key = path.lowercased()
+        files.removeValue(forKey: key)
+        log(path: key, meta: RemoteFileMeta(path: key, rev: nil, contentHash: nil, isDeleted: true))
+    }
+
+    // Test helpers
+
+    func fileData(_ path: String) -> Data? { files[path.lowercased()]?.data }
+    func hasFile(_ path: String) -> Bool { files[path.lowercased()] != nil }
+    func allPaths() -> [String] { files.keys.sorted() }
+
+    /// Seeds a file bypassing sync semantics (simulates a foreign writer).
+    func seedFile(_ path: String, data: Data) {
+        revCounter += 1
+        let rev = "r\(revCounter)"
+        let key = path.lowercased()
+        files[key] = StoredFile(data: data, rev: rev)
+        log(path: key, meta: RemoteFileMeta(path: key, rev: rev, contentHash: JournalSyncEncoding.contentHash(of: data)))
+    }
+
+    private func log(path: String, meta: RemoteFileMeta) {
+        version += 1
+        changeLog.append((version: version, meta: meta))
+    }
+}
+
+@MainActor
+final class FakeLocalSource: JournalLocalSource {
+    var journalID: UUID
+    var writable = true
+    var days: [String: JournalEntry] = [:]
+    var images: [String: Data] = [:]
+    var removedDayKeys: [String] = []
+
+    init(journalID: UUID) { self.journalID = journalID }
+
+    var syncJournalID: UUID? { journalID }
+    var syncJournalName: String { "Test Journal" }
+    var syncIsWritable: Bool { writable }
+
+    func syncDaySnapshots() -> [String: JournalEntry] { days }
+    func applySyncedEntry(_ entry: JournalEntry) { days[entry.dayKey] = entry }
+    func removeSyncedDay(dayKey: String) {
+        days.removeValue(forKey: dayKey)
+        removedDayKeys.append(dayKey)
+    }
+
+    func syncedImageFilenames() -> Set<String> { Set(days.values.flatMap(\.allImageFilenames)) }
+    func syncedImageData(filename: String) -> Data? { images[filename] }
+    func hasSyncedImage(filename: String) -> Bool { images[filename] != nil }
+    func storeSyncedImage(filename: String, data: Data) { images[filename] = data }
+}
+
+// MARK: - Tests
+
+@MainActor
+final class JournalSyncEngineTests: XCTestCase {
+    private var tempRoot: URL!
+    private var backend: FakeSyncBackend!
+    private let journalID = UUID()
+    private let t0 = Date(timeIntervalSince1970: 1_754_000_000)
+
+    override func setUp() async throws {
+        tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WickSyncEngineTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        backend = FakeSyncBackend()
+    }
+
+    override func tearDown() async throws {
+        try? FileManager.default.removeItem(at: tempRoot)
+        tempRoot = nil
+        backend = nil
+    }
+
+    // MARK: helpers
+
+    private func makeSource() -> FakeLocalSource {
+        FakeLocalSource(journalID: journalID)
+    }
+
+    private func makeEngine(source: FakeLocalSource, stateDir: String, device: String) -> JournalSyncEngine {
+        let store = JournalSyncStateStore(directory: tempRoot.appendingPathComponent(stateDir, isDirectory: true))
+        return JournalSyncEngine(backend: backend, localSource: source, deviceID: device, stateStore: store)
+    }
+
+    private func entry(dayKey: String, body: String, updatedAt: Date? = nil) -> JournalEntry {
+        JournalEntry(
+            date: t0,
+            dayKey: dayKey,
+            items: [JournalItem(body: body)],
+            createdAt: t0,
+            updatedAt: updatedAt ?? t0
+        )
+    }
+
+    private func dayPath(_ dayKey: String) -> String {
+        JournalSyncLayout.dayPath(for: journalID, dayKey: dayKey)
+    }
+
+    private func decodeRemoteDay(_ dayKey: String) throws -> JournalEntry {
+        let data = try XCTUnwrap(backend.fileData(dayPath(dayKey)))
+        return try JournalSyncEncoding.decoder.decode(JournalEntry.self, from: data)
+    }
+
+    // MARK: basics
+
+    func testFirstSyncUploadsManifestAndDays() async throws {
+        let source = makeSource()
+        source.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "one")
+        source.days["2026-08-02"] = entry(dayKey: "2026-08-02", body: "two")
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+
+        await engine.performSyncCycle()
+
+        XCTAssertEqual(engine.status, .idle)
+        XCTAssertNotNil(engine.lastSyncAt)
+        XCTAssertTrue(backend.hasFile(JournalSyncLayout.manifestPath(for: journalID)))
+        XCTAssertEqual(try decodeRemoteDay("2026-08-01").items.first?.body, "one")
+        XCTAssertEqual(try decodeRemoteDay("2026-08-02").items.first?.body, "two")
+    }
+
+    func testSecondCycleIsNoOp() async {
+        let source = makeSource()
+        source.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "one")
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+
+        await engine.performSyncCycle()
+        let uploads = backend.uploadCount
+        let downloads = backend.downloadCount
+        await engine.performSyncCycle()
+
+        XCTAssertEqual(backend.uploadCount, uploads, "idle second cycle must not upload")
+        XCTAssertEqual(backend.downloadCount, downloads, "idle second cycle must not download")
+    }
+
+    func testNeedsAuthWhenNotAuthorized() async {
+        let source = makeSource()
+        source.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "one")
+        backend.authorized = false
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+
+        await engine.performSyncCycle()
+
+        XCTAssertEqual(engine.status, .needsAuth)
+        XCTAssertFalse(backend.hasFile(dayPath("2026-08-01")))
+    }
+
+    func testReadOnlySourceNeverPushes() async {
+        let source = makeSource()
+        source.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "one")
+        source.writable = false
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+
+        await engine.performSyncCycle()
+
+        XCTAssertEqual(engine.status, .idle)
+        XCTAssertFalse(backend.hasFile(dayPath("2026-08-01")))
+    }
+
+    // MARK: two-device flows
+
+    func testSecondDevicePullsDays() async {
+        let a = makeSource()
+        a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "from A")
+        await makeEngine(source: a, stateDir: "a", device: "A").performSyncCycle()
+
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+
+        XCTAssertEqual(b.days["2026-08-01"]?.items.first?.body, "from A")
+    }
+
+    func testLocalEditPushesToOtherDevice() async {
+        let a = makeSource()
+        a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "v1")
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+
+        // A edits locally, then both sync in turn.
+        var edited = a.days["2026-08-01"]!
+        edited.items[0].body = "v2"
+        edited.updatedAt = t0.addingTimeInterval(100)
+        a.days["2026-08-01"] = edited
+        await engineA.performSyncCycle()
+        await engineB.performSyncCycle()
+
+        XCTAssertEqual(b.days["2026-08-01"]?.items.first?.body, "v2")
+    }
+
+    func testConcurrentDifferentItemsMergeAsUnion() async throws {
+        let sharedItem = JournalItem(body: "shared")
+        let a = makeSource()
+        a.days["2026-08-01"] = JournalEntry(date: t0, dayKey: "2026-08-01", items: [sharedItem], createdAt: t0, updatedAt: t0)
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+
+        // Both devices add different items while "offline" from each other.
+        let itemY = JournalItem(body: "from A")
+        let itemZ = JournalItem(body: "from B")
+        a.days["2026-08-01"]!.items.append(itemY)
+        a.days["2026-08-01"]!.updatedAt = t0.addingTimeInterval(100)
+        b.days["2026-08-01"]!.items.append(itemZ)
+        b.days["2026-08-01"]!.updatedAt = t0.addingTimeInterval(200)
+
+        await engineA.performSyncCycle() // pushes X+Y
+        await engineB.performSyncCycle() // merges X+Z with X+Y → union
+        await engineA.performSyncCycle() // pulls union
+
+        let expected = Set([sharedItem.id, itemY.id, itemZ.id])
+        XCTAssertEqual(Set(b.days["2026-08-01"]!.items.map(\.id)), expected)
+        XCTAssertEqual(Set(a.days["2026-08-01"]!.items.map(\.id)), expected)
+        XCTAssertEqual(Set(try decodeRemoteDay("2026-08-01").items.map(\.id)), expected)
+        XCTAssertTrue(engineB.pendingConflicts.isEmpty)
+    }
+
+    func testSameItemConflictKeepsNewerAndArchivesLoser() async throws {
+        let itemID = UUID()
+        let a = makeSource()
+        a.days["2026-08-01"] = JournalEntry(
+            date: t0,
+            dayKey: "2026-08-01",
+            items: [JournalItem(id: itemID, body: "original")],
+            createdAt: t0,
+            updatedAt: t0
+        )
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+
+        // Both edit the SAME item; A is newer.
+        a.days["2026-08-01"]!.items[0].body = "A edit"
+        a.days["2026-08-01"]!.updatedAt = t0.addingTimeInterval(200)
+        b.days["2026-08-01"]!.items[0].body = "B edit"
+        b.days["2026-08-01"]!.updatedAt = t0.addingTimeInterval(100)
+
+        await engineA.performSyncCycle() // pushes A edit
+        await engineB.performSyncCycle() // merge: A wins, B's copy archived
+
+        XCTAssertEqual(b.days["2026-08-01"]?.items.first?.body, "A edit")
+        XCTAssertEqual(engineB.pendingConflicts.count, 1)
+
+        let conflictPath = try XCTUnwrap(engineB.pendingConflicts.first?.remotePath)
+        let payloadData = try XCTUnwrap(backend.fileData(conflictPath))
+        let payload = try JournalSyncEncoding.decoder.decode(JournalConflictPayload.self, from: payloadData)
+        XCTAssertEqual(payload.losingItems.first?.body, "B edit")
+    }
+
+    func testDeletePropagatesViaTombstone() async {
+        let a = makeSource()
+        a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "doomed")
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+        XCTAssertNotNil(b.days["2026-08-01"])
+
+        // A deletes the day and syncs: remote file gone, tombstone written.
+        a.days.removeValue(forKey: "2026-08-01")
+        await engineA.performSyncCycle()
+        XCTAssertFalse(backend.hasFile(dayPath("2026-08-01")))
+        XCTAssertTrue(backend.hasFile(JournalSyncLayout.tombstonePath(for: journalID, dayKey: "2026-08-01")))
+
+        await engineB.performSyncCycle()
+        XCTAssertNil(b.days["2026-08-01"])
+        XCTAssertEqual(b.removedDayKeys, ["2026-08-01"])
+    }
+
+    func testDeleteVsRemoteEditResurrectsAndRecordsConflict() async {
+        let a = makeSource()
+        a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "v1")
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+
+        // A deletes offline; B edits offline; B syncs first.
+        a.days.removeValue(forKey: "2026-08-01")
+        var edited = b.days["2026-08-01"]!
+        edited.items[0].body = "B edit"
+        edited.updatedAt = t0.addingTimeInterval(100)
+        b.days["2026-08-01"] = edited
+        await engineB.performSyncCycle()
+
+        // A's deletion loses: the day comes back with B's content.
+        await engineA.performSyncCycle()
+        XCTAssertEqual(a.days["2026-08-01"]?.items.first?.body, "B edit")
+        XCTAssertEqual(engineA.pendingConflicts.count, 1)
+    }
+
+    func testEditVsTombstoneEditWins() async throws {
+        let a = makeSource()
+        a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "v1")
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+
+        // B edits offline; A deletes and syncs; B syncs after.
+        var edited = b.days["2026-08-01"]!
+        edited.items[0].body = "B edit"
+        edited.updatedAt = t0.addingTimeInterval(100)
+        b.days["2026-08-01"] = edited
+        a.days.removeValue(forKey: "2026-08-01")
+        await engineA.performSyncCycle()
+
+        await engineB.performSyncCycle()
+        // B's edit wins: day restored remotely, tombstone cleared.
+        XCTAssertEqual(try decodeRemoteDay("2026-08-01").items.first?.body, "B edit")
+        XCTAssertFalse(backend.hasFile(JournalSyncLayout.tombstonePath(for: journalID, dayKey: "2026-08-01")))
+
+        // A then pulls the resurrected day back.
+        await engineA.performSyncCycle()
+        XCTAssertEqual(a.days["2026-08-01"]?.items.first?.body, "B edit")
+    }
+
+    func testRemoteFileVanishingWithoutTombstoneIsReuploaded() async throws {
+        let a = makeSource()
+        a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "precious")
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        // Someone deletes the file out-of-band (no tombstone) — the engine
+        // must treat that as an accident and restore it, never mirror it.
+        try await backend.delete(path: dayPath("2026-08-01"))
+        await engineA.performSyncCycle()
+
+        XCTAssertEqual(a.days["2026-08-01"]?.items.first?.body, "precious")
+        XCTAssertEqual(try decodeRemoteDay("2026-08-01").items.first?.body, "precious")
+    }
+
+    // MARK: images
+
+    func testImagesUploadAndDownloadToOtherDevice() async {
+        let imageData = Data([0x89, 0x50, 0x4E, 0x47, 1, 2, 3])
+        let item = JournalItem(body: "with image", imageFilenames: ["PHOTO.PNG"])
+        let a = makeSource()
+        a.days["2026-08-01"] = JournalEntry(date: t0, dayKey: "2026-08-01", items: [item], createdAt: t0, updatedAt: t0)
+        a.images["PHOTO.PNG"] = imageData
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        XCTAssertTrue(backend.hasFile(JournalSyncLayout.imagePath(for: journalID, filename: "PHOTO.PNG")))
+
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+
+        XCTAssertEqual(b.images["PHOTO.PNG"], imageData)
+    }
+
+    // MARK: robustness
+
+    func testNewerRemoteManifestBlocksSync() async throws {
+        let manifest = JournalSyncManifest(
+            formatVersion: 99,
+            journalID: journalID,
+            journalName: "Future",
+            createdAt: t0,
+            deviceID: "elsewhere"
+        )
+        backend.seedFile(
+            JournalSyncLayout.manifestPath(for: journalID),
+            data: try JournalSyncEncoding.encoder.encode(manifest)
+        )
+        let source = makeSource()
+        source.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "held back")
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+
+        await engine.performSyncCycle()
+
+        if case .error(let message) = engine.status {
+            XCTAssertTrue(message.contains("v99"))
+        } else {
+            XCTFail("expected error status, got \(engine.status)")
+        }
+        XCTAssertFalse(backend.hasFile(dayPath("2026-08-01")))
+    }
+
+    func testExpiredCursorResetsAndRecovers() async {
+        let source = makeSource()
+        source.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "one")
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        await engine.performSyncCycle()
+
+        backend.failNextIncremental = .cursorExpired
+        await engine.performSyncCycle()
+        // The reset cycle schedules a relist; the next cycle recovers cleanly.
+        XCTAssertNotEqual(engine.status, .needsAuth)
+
+        await engine.performSyncCycle()
+        XCTAssertEqual(engine.status, .idle)
+        XCTAssertTrue(backend.hasFile(dayPath("2026-08-01")))
+    }
+
+    func testStatePersistsAcrossEngineInstances() async {
+        let source = makeSource()
+        source.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "one")
+        await makeEngine(source: source, stateDir: "shared", device: "A").performSyncCycle()
+        let uploads = backend.uploadCount
+
+        // A fresh engine over the same state directory must resume, not restart.
+        let resumed = makeEngine(source: source, stateDir: "shared", device: "A")
+        await resumed.performSyncCycle()
+
+        XCTAssertEqual(backend.uploadCount, uploads)
+        XCTAssertEqual(resumed.status, .idle)
+    }
+
+    func testJournalSwitchAbortsCycleWithoutWrites() async {
+        let source = makeSource()
+        source.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "one")
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        await engine.performSyncCycle()
+
+        // Simulate the user switching journals: same source object, new ID.
+        let otherID = UUID()
+        source.journalID = otherID
+        source.days = [:]
+        await engine.performSyncCycle()
+
+        // The new journal gets its own fresh remote root; nothing from the old
+        // journal leaks into it.
+        XCTAssertEqual(engine.status, .idle)
+        XCTAssertFalse(backend.hasFile(JournalSyncLayout.dayPath(for: otherID, dayKey: "2026-08-01")))
+        XCTAssertTrue(backend.hasFile(JournalSyncLayout.manifestPath(for: otherID)))
+    }
+}

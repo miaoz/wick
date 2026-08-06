@@ -18,6 +18,7 @@
 - **日记**：双栏原生窗口；一天一篇日记，篇内多条目（标签 + 正文 + 图片）；标签/搜索以条目为粒度；可选每日提醒
 - **多日记本**：工具栏侧栏折叠钮旁可切换 / 新建 / 重命名 / 删除日记本；旧版单日记数据首次启动自动迁移
 - **数据安全**：退出/关窗强制落盘、`journal.json.bak` 与滚动备份、加载失败只读保护、导出/导入 zip
+- **Dropbox 同步（可选）**：本地存储始终是唯一真源，同步引擎按「天」与 Dropbox 双向对账；删除以墓碑传播、冲突保留双方内容、远端文件意外丢失自动回传；OAuth PKCE 登录，不在客户端内置 App secret
 - **登录启动**：可选「登录时启动」（`SMAppService`）
 - **一日弧光主题**：面板与日记配色随一天的时间流动（晨光 / 白昼 / 暮色 / 夜幕四相位平滑过渡），亮 / 暗 / 跟随系统外观三档可选
 - **设置**：语言、外观、提醒、菜单栏百分比、数据目录、版本与检查更新（GitHub Releases）
@@ -174,20 +175,26 @@ git push origin v1.2
 
 ```text
 wick/
-├── Package.swift                 # Swift Package 清单（WickCore + Wick + 测试）
-├── Sources/WickCore/             # 应用逻辑与 UI
+├── Package.swift                 # Swift Package 清单（WickSync + WickCore + Wick + 测试）
+├── Sources/WickSync/             # 平台无关（纯 Foundation）日记模型 + 同步引擎 + Dropbox 后端
+│   ├── JournalModels.swift       # 日记数据模型（含 dayKey 同步主键）
+│   ├── JournalSyncEngine.swift   # 按天对账引擎（推/拉/合并/墓碑/自愈）
+│   ├── JournalDayMerge.swift     # 同日两版本的条目级并集合并
+│   ├── DropboxSyncBackend.swift  # Dropbox API v2 + PKCE OAuth
+│   └── …                         # 状态/布局/协议/Keychain 等
+├── Sources/WickCore/             # macOS 应用逻辑与 UI
 │   ├── WickApp.swift             # MenuBarExtra、AppDelegate
-│   ├── ProgressPanelView.swift   # 进度面板与设置 UI
+│   ├── ProgressPanelView.swift   # 进度面板与设置 UI（含同步设置）
 │   ├── TimeProgress.swift        # 日/周/月/年计算
-│   ├── JournalModels.swift       # 日记数据模型
-│   ├── JournalStore.swift        # 本地持久化、备份、导入导出
-│   ├── JournalViews.swift        # 日记双栏 UI
+│   ├── JournalStore.swift        # 本地持久化、备份、导入导出（尾部为同步桥接扩展）
+│   ├── JournalRootView.swift     # 日记双栏窗口
+│   ├── SyncCoordinator.swift     # 同步生命周期、连接/断开、退出前最终同步
 │   ├── JournalReminderScheduler.swift  # 每日提醒
-│   ├── AppSettings.swift         # 语言、外观、提醒、登录项等
+│   ├── AppSettings.swift         # 语言、外观、提醒、登录项、同步开关等
 │   ├── L10n.swift                # 文案
 │   └── MenuBarIcon.swift         # 菜单栏模板图标
 ├── Sources/Wick/main.swift       # 可执行入口
-├── Tests/WickTests/              # 单元测试
+├── Tests/                        # WickTests + WickSyncTests 单元测试
 ├── assets/                       # 应用图标
 ├── scripts/                      # 图标生成与打包
 ├── build.sh / Makefile           # 默认构建入口

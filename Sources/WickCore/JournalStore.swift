@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import UniformTypeIdentifiers
+import WickSync
 
 /// Points at one item inside a day journal. Used when the timeline is item-scoped
 /// (tag filter / text search).
@@ -421,6 +422,10 @@ final class JournalStore: ObservableObject {
             return
         }
 
+        // Entry moved to another day: re-key it (plain edits never touch dayKey).
+        if !Calendar.current.isDate(updated.date, inSameDayAs: entries[index].date) {
+            updated.dayKey = JournalDayKey.make(from: updated.date)
+        }
         updated.updatedAt = Date()
         entries[index] = updated
         persist()
@@ -764,6 +769,9 @@ final class JournalStore: ObservableObject {
 
         let data = try Data(contentsOf: jsonURL)
         let snapshot = try decoder.decode(JournalSnapshot.self, from: data)
+        guard snapshot.version <= JournalSnapshot.currentVersion else {
+            throw JournalStoreError.unsupportedSnapshotVersion(snapshot.version)
+        }
 
         // Backup current store before replacing.
         if fileManager.fileExists(atPath: databaseURL.path) {
@@ -1107,6 +1115,18 @@ final class JournalStore: ObservableObject {
         do {
             let data = try Data(contentsOf: databaseURL)
             let snapshot = try decoder.decode(JournalSnapshot.self, from: data)
+            // Newer format (written by a newer app on another device): go read-only
+            // rather than strip unknown fields by re-encoding and persisting.
+            guard snapshot.version <= JournalSnapshot.currentVersion else {
+                entries = []
+                selection = nil
+                isReadOnlyDueToLoadFailure = true
+                loadFailureMessage = L10n.string(
+                    .journalNewerVersionRequired,
+                    language: AppSettings.shared.language
+                )
+                return
+            }
             entries = snapshot.entries.sorted { $0.date > $1.date }
             selection = entries.first.map { .day($0.id) }
         } catch {
@@ -1137,7 +1157,11 @@ final class JournalStore: ObservableObject {
         guard fileManager.fileExists(atPath: url.path) else { return nil }
         do {
             let data = try Data(contentsOf: url)
-            return try decoder.decode(JournalSnapshot.self, from: data)
+            let snapshot = try decoder.decode(JournalSnapshot.self, from: data)
+            // Treat newer-format files as unreadable so restore paths never
+            // re-encode (and strip) data written by a newer app version.
+            guard snapshot.version <= JournalSnapshot.currentVersion else { return nil }
+            return snapshot
         } catch {
             return nil
         }
@@ -1286,6 +1310,7 @@ enum JournalStoreError: LocalizedError {
     case exportFailed(String)
     case importFailed(String)
     case importMissingJournalJSON
+    case unsupportedSnapshotVersion(Int)
 
     var errorDescription: String? {
         switch self {
@@ -1295,6 +1320,114 @@ enum JournalStoreError: LocalizedError {
             return message.isEmpty ? "Import failed" : message
         case .importMissingJournalJSON:
             return "Archive does not contain journal.json"
+        case .unsupportedSnapshotVersion(let version):
+            return "Archive was written by a newer Wick version (snapshot v\(version))"
         }
+    }
+}
+
+
+// MARK: - Sync engine bridge
+
+/// The sync engine (`WickSync.JournalSyncEngine`) talks to the store only through
+/// this surface: day-keyed snapshots in, whole-day applies/removals out. Applies
+/// replace the same-keyed day wholesale and never bump `updatedAt`, so remote
+/// timestamps keep driving last-writer-wins decisions.
+extension JournalStore: JournalLocalSource {
+    var syncJournalID: UUID? { activeJournalID }
+
+    var syncJournalName: String { activeJournal?.name ?? "" }
+
+    var syncIsWritable: Bool { !isReadOnlyDueToLoadFailure }
+
+    func syncDaySnapshots() -> [String: JournalEntry] {
+        var result: [String: JournalEntry] = [:]
+        for entry in entries {
+            // Defensive: legacy data could hold duplicate days — newest wins.
+            if let existing = result[entry.dayKey], existing.updatedAt >= entry.updatedAt {
+                continue
+            }
+            result[entry.dayKey] = entry
+        }
+        return result
+    }
+
+    func applySyncedEntry(_ entry: JournalEntry) {
+        guard !isReadOnlyDueToLoadFailure else { return }
+        // Commit any in-flight editor draft before replacing the entry underneath it.
+        NotificationCenter.default.post(name: .wickWillFlushJournalDrafts, object: nil)
+
+        var applied = entry
+        if applied.items.isEmpty {
+            applied.items = [JournalItem()]
+        }
+
+        if let index = entries.firstIndex(where: { $0.dayKey == applied.dayKey }) {
+            let replacedID = entries[index].id
+            entries[index] = applied
+            // The merged entry may carry another device's entry id; keep the
+            // user's selection on the same day instead of snapping to the top.
+            if replacedID != applied.id {
+                switch selection {
+                case .day(let id) where id == replacedID:
+                    selection = .day(applied.id)
+                case .item(let ref) where ref.entryID == replacedID:
+                    selection = .item(JournalItemRef(entryID: applied.id, itemID: ref.itemID))
+                default:
+                    break
+                }
+            }
+        } else {
+            entries.append(applied)
+        }
+
+        persist()
+        touchActiveJournalMetadata()
+        reconcileSelectionAfterChange()
+    }
+
+    func removeSyncedDay(dayKey: String) {
+        guard !isReadOnlyDueToLoadFailure else { return }
+        guard let index = entries.firstIndex(where: { $0.dayKey == dayKey }) else { return }
+        let entry = entries[index]
+        for filename in entry.allImageFilenames {
+            removeImageFile(filename)
+        }
+        entries.remove(at: index)
+        if selectedEntryID == entry.id {
+            selection = defaultSelection()
+        }
+        persist()
+        touchActiveJournalMetadata()
+    }
+
+    func syncedImageFilenames() -> Set<String> {
+        Set(entries.flatMap(\.allImageFilenames))
+    }
+
+    func syncedImageData(filename: String) -> Data? {
+        guard isSafeSyncedImageFilename(filename) else { return nil }
+        return try? Data(contentsOf: imageURL(for: filename))
+    }
+
+    func hasSyncedImage(filename: String) -> Bool {
+        guard isSafeSyncedImageFilename(filename) else { return false }
+        return fileManager.fileExists(atPath: imageURL(for: filename).path)
+    }
+
+    func storeSyncedImage(filename: String, data: Data) {
+        guard !isReadOnlyDueToLoadFailure else { return }
+        guard isSafeSyncedImageFilename(filename) else { return }
+        try? data.write(to: imageURL(for: filename), options: .atomic)
+        JournalThumbnailCache.shared.invalidate(filename: filename)
+    }
+
+    /// Remote-supplied image names must stay plain relative filenames (no traversal).
+    private func isSafeSyncedImageFilename(_ filename: String) -> Bool {
+        !filename.isEmpty
+            && !filename.contains("/")
+            && !filename.contains("\\")
+            && filename != "."
+            && filename != ".."
     }
 }

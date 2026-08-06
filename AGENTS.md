@@ -7,18 +7,20 @@
 - **Wick** 是一款原生 macOS 菜单栏应用（`LSUIElement`，不显示 Dock 图标）。
 - 菜单栏显示蜡烛模板图标，点击弹出面板，实时展示**日 / 周 / 月 / 年**的剩余百分比、剩余时长与结束时间（每秒刷新）。
 - 内置**日记**功能：一天一篇日记，篇内多条目（标签 + 正文 + 图片），支持按标签/全文以条目粒度检索、每日本地通知提醒、zip 导出/导入。
+- 可选 **Dropbox 同步**：本地存储始终是唯一真源，`WickSync` 模块的同步引擎按「天」与 Dropbox App folder 双向对账（OAuth PKCE，客户端不内置 App secret）；删除靠墓碑传播、同日冲突按条目并集合并并保留败者、远端文件意外消失自动回传。模型/引擎为纯 Foundation，为未来 iPhone 客户端设计。
 - 其他能力：登录时启动（`SMAppService`）、亮/暗/跟随系统外观（配色由「一日弧光」主题引擎驱动）、中/英文界面、菜单栏百分比显示、基于 GitHub Releases 的检查更新。
 - **平台**：macOS 13+，Apple Silicon 与 Intel（正式打包产出 Universal 二进制）。
 - **技术栈**：Swift 6.1+（`Package.swift` 声明 `swift-tools-version: 6.1`；主开发环境为 Xcode 26 / Swift 6.3）、SwiftUI + AppKit、Swift Package Manager。**无任何第三方依赖**（无 `Package.resolved`）。
-- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.4.6 (26)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
+- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.5.0 (27)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
 
 ## 仓库结构与模块划分
 
-SwiftPM 三个 target（`Package.swift`）：
+SwiftPM target（`Package.swift`）：
 
-- `WickCore`（库，几乎全部代码，可被测试 `@testable import`）
+- `WickSync`（库，**纯 Foundation** 的日记模型 + 同步引擎 + Dropbox 后端；未来 iOS 客户端直接复用，其中文件禁止 `import AppKit`/`UIKit`）
+- `WickCore`（库，macOS 其余几乎全部代码，可被测试 `@testable import`；依赖 `WickSync`）
 - `Wick`（可执行，`Sources/Wick/main.swift` 仅 3 行：调用 `WickApp.main()`）
-- `WickTests`（单元测试，仅依赖 `WickCore`）
+- `WickTests` / `WickSyncTests`（单元测试，分别依赖 `WickCore` / `WickSync`）
 
 `Sources/WickCore/` 各文件职责：
 
@@ -28,8 +30,7 @@ SwiftPM 三个 target（`Package.swift`）：
 | `ProgressPanelView.swift` | 菜单栏弹出的进度面板与设置页 UI（`TimelineView` 每秒刷新；`PanelTheme` 为薄结构体，全部色值委托给 `DayArcEngine`） |
 | `WickTheme.swift` | 「一日弧光」主题引擎：`WickRGB`（可插值/可做 WCAG 对比度计算的 sRGB 值类型）、`WickPalette`（全部色角色，含复盘判定色 `reviewCorrect`/`reviewWrong`）、`DayPhase`（晨光/白昼/暮色/夜幕四锚点）、`DayArcEngine`（按时刻在 4 相位 × 亮/暗 2 套锚点色板间插值；`MetricTheme` 色相族恒定、仅辉光随相位缩放；`WICK_ARC_TIME=HH:mm` 环境变量可伪造"当前时刻"用于调试/截图）；`\.wickPalette` 环境键 |
 | `TimeProgress.swift` | `TimeProgressCalculator`：日/周/月/年剩余比例的纯计算（可注入 `Date`/`Calendar`，便于测试） |
-| `JournalModels.swift` | 日记模型：`JournalEntry`（某日，1..n 个 `JournalItem`：标签/正文/图片文件名/可选 `JournalReview`）、`JournalReview`+`JournalReviewVerdict`（条目级复盘：correct/wrong + 一行批注）、`JournalSnapshot`（Codable，`currentVersion = 1`） |
-| `JournalStore.swift` | 多日记本存储（`@MainActor ObservableObject` 单例）：`catalog.json` + 每本独立目录；落盘、`.bak` 与滚动备份、加载失败只读保护、图片管理、zip 导入导出；启动时一次性把旧版 `Wick/Journal` 迁到多日记布局；**一天一篇**由 `createEntry`/`updateEntry` 的按日合并保证 |
+| `JournalStore.swift` | 多日记本存储（`@MainActor ObservableObject` 单例）：`catalog.json` + 每本独立目录；落盘、`.bak` 与滚动备份、加载失败只读保护、图片管理、zip 导入导出；启动时一次性把旧版 `Wick/Journal` 迁到多日记布局；**一天一篇**由 `createEntry`/`updateEntry` 的按日合并保证；`load()`/`loadSnapshot()`/导入均带 `JournalSnapshot.version` 版本门（遇到更新格式只读拒写）；文件尾部为 `JournalLocalSource` 同步桥接扩展（`syncDaySnapshots`/`applySyncedEntry`/`removeSyncedDay`/图片读写，远端文件名做防穿越校验） |
 | `JournalRootView.swift` | 日记窗口根视图（`JournalRootView`，`NavigationSplitView` 双栏；macOS 14+ 用系统工具栏，macOS 13 用 `JournalWindowController` 安装的 AppKit `NSToolbar`，判定见 `journalNeedsInViewTopBar`；色值取自 `\.wickPalette`，根视图 300s `TimelineView` 刷新；加载失败/恢复横幅、隐藏快捷键按钮） |
 | `JournalSidebarView.swift` | 日记侧栏：搜索框 + 标签芯片过滤（超宽折叠为「更多 N」，展开换行/再点收起）、按日/按条目两种列表、空态；选中高亮为自绘 `listRowBackground`（`sidebarBackground` 打底 + `accentSoft`，替代系统蓝/灰药丸以保证跨 macOS 版本一致），两个 `List` 均挂 `TableViewSelectionSuppressor` 关掉底层 `NSTableView` 的系统高亮（否则点击瞬间会闪一帧系统蓝色）；标签打包逻辑在 `TagChipFlow.swift` |
 | `TableViewSelectionSuppressor.swift` | `NSViewRepresentable`：子树搜索找到 SwiftUI `List` 背后的列表视图（新系统为 `SwiftUIOutlineListView`，`NSTableView` 子类；注意它是兄弟子树而非祖先）并设 `selectionHighlightStyle = .none`，配合自绘选中背景消除按住/点击时的系统蓝高亮 |
@@ -50,6 +51,23 @@ SwiftPM 三个 target（`Package.swift`）：
 | `UpdateChecker.swift` | 查询 GitHub Releases latest API（`miaoz/wick`），15s 超时，自定义 UA |
 | `LaunchAtLogin.swift` | `SMAppService.mainApp` 封装（macOS 13+） |
 | `AppNotifications.swift` | 自定义 `Notification.Name`（退出/关窗前冲刷草稿、存储恢复通知） |
+| `SyncCoordinator.swift` | 同步生命周期单例：持有 `DropboxSyncBackend` + `JournalSyncEngine`（localSource 为 `JournalStore.shared`）；启动时按 `wick.sync.enabled` 启停；`$entries` 变更 → 15s 防抖同步、切换日记本/失去激活 → 触发同步；连接/断开 Dropbox；退出前一次 5s 上限的最终同步（`applicationShouldTerminate` 返回 `.terminateLater`） |
+| `DropboxAuthSession.swift` | `ASWebAuthenticationSession` 包装（OAuth 浏览器授权 + 回调 URL）；需窗口 anchor，且回调 scheme 只在打包 `.app` 内注册，`swift run` 收不到回调 |
+
+`Sources/WickSync/`（纯 Foundation，iOS 可复用）各文件职责：
+
+| 文件 | 职责 |
+| --- | --- |
+| `JournalModels.swift` | 日记模型（`JournalEntry`/`JournalItem`/`JournalReview`/`JournalSnapshot`/`JournalInfo`/catalog，全部 `public` Codable）；`JournalEntry.dayKey` 为同步层按天稳定主键——创建或移日时生成后冻结，解码旧数据时从 `date` 推导一次 |
+| `JournalDayKey.swift` | `yyyy-MM-dd`（本地时区、公历）日键生成 |
+| `JournalSyncEncoding.swift` | 规范 JSON 编码器（sortedKeys，与落盘格式一致）+ SHA-256 内容哈希（≤4MB 时与 Dropbox `content_hash` 逐字节一致，哈希可直接比对远端元数据） |
+| `JournalLocalSource.swift` | 引擎↔本地存储协议（按天快照/应用/删除 + 图片读写），未来 iOS 存储实现同一协议 |
+| `JournalSyncBackend.swift` | 后端协议（listChanges 游标增量/download/upload rev 条件写/delete）+ `RemoteFileMeta` + `SyncBackendError` |
+| `DropboxSyncBackend.swift` | Dropbox API v2 实现：PKCE OAuth（`token_access_type=offline`，refresh token 存 Keychain，access token 单飞刷新）、`list_folder(+continue)`、`files/download|upload|delete_v2`；409 冲突/cursor 失效/429/401 分类 |
+| `PKCE.swift`、`KeychainTokenStore.swift` | PKCE 工具（无 App secret 的公共客户端）；Keychain 读写（无 access group——ad-hoc 重编译可能丢 token，表现为需重新授权） |
+| `JournalDayMerge.swift` | 同一天两版本合并：条目按 UUID 并集、同条目不同内容新 `updatedAt` 方胜（败者入 `losingItems` 保留）、标题同理、身份收敛到 `createdAt` 更早者 |
+| `JournalSyncState.swift` | 远端布局 `/journals/<uuid>/{manifest.json,days/,images/,tombstones/,conflicts/}`；manifest/墓碑/冲突载荷 Codable；每设备同步状态（cursor、远端文件视图、按天哈希/rev、pendingConflicts）与本地持久化（`~/Library/Application Support/Wick/SyncState/<uuid>.json`，**不参与同步**） |
+| `JournalSyncEngine.swift` | 对账引擎（`@MainActor ObservableObject`）：cursor 增量 → manifest `formatVersion` 版本门 → 按天矩阵（本地变→条件上传；远端变→下载应用；双变→条目并集合并，败者存档 `conflicts/` 并出 `pendingConflicts`；本地删→先写墓碑再删远端；远端墓碑→本地删（本地有改动则改动方胜并清墓碑）；远端文件无墓碑消失→视为事故自动回传，绝不镜像删除）→ 图片按引用差集上传/下载 → 墓碑 30 天 GC；60s 周期 + 15s 防抖 + `syncOnce()`（退出用） |
 
 其他目录：
 
@@ -90,14 +108,18 @@ make clean         # rm -rf .build dist
 
 ## 测试说明
 
-- 测试位于 `Tests/WickTests/`，XCTest + `@testable import WickCore`，CI 在打包前执行 `swift test`。
-- 现有五个测试文件：
+- 测试位于 `Tests/`，XCTest：`WickTests` 用 `@testable import WickCore`，`WickSyncTests` 用 `@testable import WickSync`；CI 在打包前执行 `swift test`。
+- 现有测试文件：
   - `TimeProgressTests.swift`：剩余比例边界（0/1 钳制、起止时刻）、四类进度齐全、周一起始。
   - `JournalStoreTests.swift`：用 `JournalStore(rootDirectory:)`（临时多日记根目录）覆盖默认日记本、新建/切换/删除日记本、旧版单日记迁移、一天一篇、标签按条目过滤、删除条目清理图片、持久化重载、主文件损坏时从 `.bak` 恢复、无备份时进入只读且**不覆盖磁盘坏文件**。
+  - `JournalStoreSyncTests.swift`：同步桥接——快照版本门（v99 只读且磁盘原样、新版 `.bak` 不恢复）、`applySyncedEntry` 按 dayKey 插替/保 remote updatedAt/选中跟随身份变更/只读下拒绝、`removeSyncedDay` 清图片、图片读写与路径穿越防护。
   - `AppInfoTests.swift`：版本号比较。
   - `WickThemeTests.swift`：主题引擎——相位归属（锚点切换、跨午夜回绕）、插值中点、全天每 15 分钟 × 亮/暗的对比度护栏（textPrimary ≥4.5、accentText ≥4.0 等）、指标色相族稳定性。
   - `TagChipFlowTests.swift`：标签芯片换行打包（贪心换行、超宽独占一行）与折叠行裁剪（为「更多 N」腾出空间、全部裁掉的边界）。
-- 新增可测逻辑时的落点：纯计算放 `TimeProgressCalculator` / `DayArcEngine` 这类可注入 `Date`/`Calendar` 的静态方法；存储行为扩展 `JournalStoreTests`。UI 层无测试。
+  - `WickSyncTests/JournalSyncModelTests.swift`：dayKey 生成/解码推导/往返、规范编码 decode→encode 字节稳定、SHA-256 已知向量。
+  - `WickSyncTests/JournalDayMergeTests.swift`：并集、同条目冲突新者胜+败者记录、标题规则、占位空条目剔除、时间戳 min/max、身份按 createdAt 收敛（与参数顺序无关）。
+  - `WickSyncTests/JournalSyncEngineTests.swift`：内存假后端 + 假本地源模拟**双设备**——首同步上传、二次空转、拉取、推送、不同条目并集合并、同条目冲突存档、删除墓碑传播、删除 vs 编辑两方向、远端文件消失自愈回传、图片双向、新版 manifest 阻断、cursor 失效恢复、状态跨实例恢复、切换日记本不串数据。
+- 新增可测逻辑时的落点：纯计算放 `TimeProgressCalculator` / `DayArcEngine` 这类可注入 `Date`/`Calendar` 的静态方法；存储行为扩展 `JournalStoreTests`；同步行为扩展 `WickSyncTests`（引擎一切分支都应能用假后端复现，不碰网络）。UI 层无测试。
 
 ## CI 与发版
 
@@ -127,6 +149,8 @@ make clean         # rm -rf .build dist
   - 覆盖前先复制 sidecar `journal.json.bak`；滚动备份最多 5 份、间隔 ≥30 分钟。
   - 退出（`applicationShouldTerminate`）与关日记窗前发 `wickWillFlushJournalDrafts` 并 `flushPendingWrites()`；切换日记本前同样 `flushPendingWrites()`。
 - **UserNotifications 只能在正式 `.app` 包内使用**：`swift run`/裸二进制下调用会 abort，因此 `JournalReminderScheduler.notificationsAvailable` 做了包形态门控，新增通知相关代码必须维持该门控。
+- **Dropbox 同步**：OAuth 回调走自定义 scheme `db-hm5yscsy9a11g0q`（`package_app.sh` 生成的 Info.plist 里 `CFBundleURLTypes`，与 `DropboxSyncBackend.callbackScheme` 一致），因此「连接 Dropbox」只能在打包 `.app` 内完成，`swift run` 收不到回调；引擎全部逻辑用 `WickSyncTests` 的内存假后端覆盖，不碰网络。**App secret 永不写入仓库/二进制**（PKCE 公共客户端只需要 App key）。同步只针对当前活跃日记本（切换即重新对账）；`isReadOnlyDueToLoadFailure` 时引擎只读不推；远端 manifest `formatVersion` 与 `JournalSnapshot.version` 双重版本门，遇到更新格式一律只读拒写。
+- 同步数据面：Dropbox App folder 内 `/journals/<uuid>/`（manifest + days + images + tombstones + conflicts）；每设备私有状态在本地 `Wick/SyncState/`；设置项 `wick.sync.enabled`/`wick.sync.accountEmail` 在 `AppSettings`，token 只在 Keychain。
 - **`MenuBarExtra` 的 label 里禁止放 `TimelineView` 等高频失效源**：会触发 `requestUpdate` → `setImage` 死循环占满 CPU（`WickApp.swift` 有注释；当前 label 用 30s `Timer` 且仅在文本变化时更新状态）。
 - IME 组字：日记编辑用 `IMESafeTextViews` 里的封装，不要用原生 SwiftUI `TextField` 直接替换，否则中文输入会吞字（有专门修复提交）。
 - **手动 `NSWindow` + `NSHostingController` 且标题栏透明/隐藏标题时，macOS 13 不会安装任何工具栏**（SwiftUI `.toolbar` 项与 `NavigationSplitView` 的侧栏折叠按钮都不出现；视图内 `safeAreaInset`/`ignoresSafeArea` 的条带方案在各版本间落点不一致，已弃用）；因此 macOS 13 由 `JournalWindowController` 安装真正的 **AppKit `NSToolbar`**（`LegacyJournalToolbarDelegate`：折叠钮最左、新建钮最右，系统布局保证与红绿灯同线），折叠动作走响应链 `toggleSidebar:`（与系统按钮同机制，勿用自研 binding 桥）；快捷键 ⌘N/⌃⌘S 以隐藏按钮形式留在视图里（`journalNeedsInViewTopBar` 判定，`WICK_INVIEW_TOPBAR=1` 仅 DEBUG 构建可强制预览）。`sidebarTrackingSeparator` 不要用于本窗口——内容 VC 是 `NSHostingController` 而非 `NSSplitViewController`，关联不合法且实测导致窗口状态异常。

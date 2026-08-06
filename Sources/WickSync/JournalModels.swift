@@ -1,20 +1,20 @@
 import Foundation
 
 /// Next-day verdict on a journal item (trade review): was the call right.
-enum JournalReviewVerdict: String, Codable {
+public enum JournalReviewVerdict: String, Codable {
     case correct
     case wrong
 }
 
 /// Structured review attached to a journal item, editable from the next day on.
-struct JournalReview: Codable, Equatable, Hashable {
-    var verdict: JournalReviewVerdict
+public struct JournalReview: Codable, Equatable, Hashable {
+    public var verdict: JournalReviewVerdict
     /// Optional one-line annotation shown in italics under the verdict picker.
-    var note: String
-    var createdAt: Date
-    var updatedAt: Date
+    public var note: String
+    public var createdAt: Date
+    public var updatedAt: Date
 
-    init(
+    public init(
         verdict: JournalReviewVerdict,
         note: String = "",
         createdAt: Date = Date(),
@@ -28,17 +28,17 @@ struct JournalReview: Codable, Equatable, Hashable {
 }
 
 /// One focus block inside a journal day: a tag, notes, and optional images.
-struct JournalItem: Identifiable, Codable, Equatable, Hashable {
-    var id: UUID
+public struct JournalItem: Identifiable, Codable, Equatable, Hashable {
+    public var id: UUID
     /// Single free-form tag for this item (e.g. a symbol, topic, or person).
-    var tag: String
-    var body: String
+    public var tag: String
+    public var body: String
     /// Relative filenames under the store's images directory.
-    var imageFilenames: [String]
+    public var imageFilenames: [String]
     /// Next-day review; optional key keeps version-1 snapshots decodable.
-    var review: JournalReview?
+    public var review: JournalReview?
 
-    init(
+    public init(
         id: UUID = UUID(),
         tag: String = "",
         body: String = "",
@@ -52,13 +52,13 @@ struct JournalItem: Identifiable, Codable, Equatable, Hashable {
         self.review = review
     }
 
-    var isEmpty: Bool {
+    public var isEmpty: Bool {
         tag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && imageFilenames.isEmpty
     }
 
-    var previewText: String {
+    public var previewText: String {
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedBody.isEmpty {
             let firstLine = trimmedBody
@@ -71,19 +71,25 @@ struct JournalItem: Identifiable, Codable, Equatable, Hashable {
 }
 
 /// A journal document for a calendar day, composed of one or more items.
-struct JournalEntry: Identifiable, Codable, Equatable, Hashable {
-    var id: UUID
+public struct JournalEntry: Identifiable, Codable, Equatable, Hashable {
+    public var id: UUID
     /// Calendar day this entry is about (start-of-day in local time when created).
-    var date: Date
+    public var date: Date
+    /// Stable cross-device identity ("yyyy-MM-dd" in the local timezone when the
+    /// entry was created or moved). Never recomputed on plain edits, so timezone
+    /// travel cannot silently re-key a day; `JournalStore.updateEntry` refreshes
+    /// it only when the entry is actually moved to a different day.
+    public var dayKey: String
     /// Optional day-level title.
-    var title: String
-    var items: [JournalItem]
-    var createdAt: Date
-    var updatedAt: Date
+    public var title: String
+    public var items: [JournalItem]
+    public var createdAt: Date
+    public var updatedAt: Date
 
-    init(
+    public init(
         id: UUID = UUID(),
         date: Date = Date(),
+        dayKey: String? = nil,
         title: String = "",
         items: [JournalItem] = [JournalItem()],
         createdAt: Date = Date(),
@@ -91,14 +97,35 @@ struct JournalEntry: Identifiable, Codable, Equatable, Hashable {
     ) {
         self.id = id
         self.date = date
+        self.dayKey = dayKey ?? JournalDayKey.make(from: date)
         self.title = title
         self.items = items.isEmpty ? [JournalItem()] : items
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case id, date, dayKey, title, items, createdAt, updatedAt
+    }
+
+    /// Pre-sync snapshots have no `dayKey`; derive it from `date` once. It is
+    /// frozen into the file on the next persist, so this fallback runs at most once.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        let decodedDate = try container.decode(Date.self, forKey: .date)
+        date = decodedDate
+        dayKey = try container.decodeIfPresent(String.self, forKey: .dayKey)
+            ?? JournalDayKey.make(from: decodedDate)
+        title = try container.decode(String.self, forKey: .title)
+        let decodedItems = try container.decode([JournalItem].self, forKey: .items)
+        items = decodedItems.isEmpty ? [JournalItem()] : decodedItems
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    }
+
     /// Tags collected from all non-empty item tags.
-    var tags: [String] {
+    public var tags: [String] {
         var seen = Set<String>()
         var result: [String] = []
         for item in items {
@@ -112,16 +139,16 @@ struct JournalEntry: Identifiable, Codable, Equatable, Hashable {
         return result
     }
 
-    var allImageFilenames: [String] {
+    public var allImageFilenames: [String] {
         items.flatMap(\.imageFilenames)
     }
 
-    var isEmpty: Bool {
+    public var isEmpty: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && items.allSatisfy(\.isEmpty)
     }
 
-    var previewText: String {
+    public var previewText: String {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedTitle.isEmpty {
             return trimmedTitle
@@ -143,7 +170,7 @@ struct JournalEntry: Identifiable, Codable, Equatable, Hashable {
     }
 
     /// Secondary timeline snippet: first item body when title/tags already occupy the primary line.
-    var previewBody: String {
+    public var previewBody: String {
         let firstBody = items.lazy.map(\.previewText).first(where: { !$0.isEmpty }) ?? ""
         guard !firstBody.isEmpty else { return "" }
 
@@ -156,27 +183,32 @@ struct JournalEntry: Identifiable, Codable, Equatable, Hashable {
     }
 }
 
-struct JournalSnapshot: Codable, Equatable {
-    var version: Int
-    var entries: [JournalEntry]
+public struct JournalSnapshot: Codable, Equatable {
+    public var version: Int
+    public var entries: [JournalEntry]
 
-    static let currentVersion = 1
+    public static let currentVersion = 1
 
-    static var empty: JournalSnapshot {
+    public static var empty: JournalSnapshot {
         JournalSnapshot(version: currentVersion, entries: [])
+    }
+
+    public init(version: Int, entries: [JournalEntry]) {
+        self.version = version
+        self.entries = entries
     }
 }
 
 // MARK: - Multi-journal catalog
 
 /// Metadata for one journal library (a named container of day entries).
-struct JournalInfo: Identifiable, Codable, Equatable, Hashable {
-    var id: UUID
-    var name: String
-    var createdAt: Date
-    var updatedAt: Date
+public struct JournalInfo: Identifiable, Codable, Equatable, Hashable {
+    public var id: UUID
+    public var name: String
+    public var createdAt: Date
+    public var updatedAt: Date
 
-    init(
+    public init(
         id: UUID = UUID(),
         name: String,
         createdAt: Date = Date(),
@@ -190,10 +222,16 @@ struct JournalInfo: Identifiable, Codable, Equatable, Hashable {
 }
 
 /// On-disk catalog of all journals under the multi-journal root.
-struct JournalCatalogSnapshot: Codable, Equatable {
-    var version: Int
-    var activeJournalID: UUID
-    var journals: [JournalInfo]
+public struct JournalCatalogSnapshot: Codable, Equatable {
+    public var version: Int
+    public var activeJournalID: UUID
+    public var journals: [JournalInfo]
 
-    static let currentVersion = 1
+    public static let currentVersion = 1
+
+    public init(version: Int, activeJournalID: UUID, journals: [JournalInfo]) {
+        self.version = version
+        self.activeJournalID = activeJournalID
+        self.journals = journals
+    }
 }

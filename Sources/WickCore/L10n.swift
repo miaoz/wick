@@ -94,6 +94,25 @@ enum L10n {
         case journalLoadFailureTitle
         case journalLoadFailureBody
         case journalStartFresh
+        case journalNewerVersionRequired
+
+        // Sync
+        case syncSection
+        case syncConnect
+        case syncConnecting
+        case syncDisconnect
+        case syncExplanation
+        case syncNow
+        case syncStatusSyncing
+        case syncStatusOffline
+        case syncStatusNeedsAuth
+        case syncRemoteTooNew
+        case syncLastSync
+        case syncNeverSynced
+        case syncConflictNoticeFormat
+        case syncConflictDismiss
+        case syncDisconnectConfirmTitle
+        case syncDisconnectConfirmBody
         case journalRestoredFromBackup
         case journalReadOnly
         case journalChangeDate
@@ -221,6 +240,24 @@ enum L10n {
             case .journalLoadFailureTitle: return "日记文件无法读取"
             case .journalLoadFailureBody: return "已阻止覆盖，以免丢失数据。可尝试导入备份，或在确认后清空并重新开始。"
             case .journalStartFresh: return "清空并重新开始"
+            case .journalNewerVersionRequired: return "日记数据由更新版本的 Wick 写入，请升级 App 后再编辑"
+
+            case .syncSection: return "同步"
+            case .syncConnect: return "连接 Dropbox"
+            case .syncConnecting: return "正在连接…"
+            case .syncDisconnect: return "断开 Dropbox"
+            case .syncExplanation: return "通过 Dropbox 在多台设备间同步日记。本地始终是主副本，同步中断不影响使用。"
+            case .syncNow: return "立即同步"
+            case .syncStatusSyncing: return "正在同步…"
+            case .syncStatusOffline: return "当前离线，将自动重试"
+            case .syncStatusNeedsAuth: return "需要重新连接 Dropbox"
+            case .syncRemoteTooNew: return "远端数据由更新版本的 Wick 写入，请升级 App"
+            case .syncLastSync: return "最后同步"
+            case .syncNeverSynced: return "尚未同步"
+            case .syncConflictNoticeFormat: return "发现 %lld 个同步冲突，双方内容均已保留"
+            case .syncConflictDismiss: return "知道了"
+            case .syncDisconnectConfirmTitle: return "断开 Dropbox？"
+            case .syncDisconnectConfirmBody: return "将停止同步。本机与 Dropbox 中已有的数据都会保留。"
             case .journalRestoredFromBackup: return "已从备份恢复日记"
             case .journalReadOnly: return "只读（加载失败）"
             case .journalChangeDate: return "修改日期"
@@ -349,6 +386,24 @@ enum L10n {
             case .journalLoadFailureTitle: return "Couldn’t read journal file"
             case .journalLoadFailureBody: return "Writes are blocked so your file won’t be overwritten. Import a backup, or start fresh after confirming."
             case .journalStartFresh: return "Start Fresh"
+            case .journalNewerVersionRequired: return "Journal data was written by a newer version of Wick — update the app to edit"
+
+            case .syncSection: return "Sync"
+            case .syncConnect: return "Connect Dropbox"
+            case .syncConnecting: return "Connecting…"
+            case .syncDisconnect: return "Disconnect Dropbox"
+            case .syncExplanation: return "Sync journals across devices via Dropbox. Local data is always the primary copy — syncing can fail without affecting use."
+            case .syncNow: return "Sync Now"
+            case .syncStatusSyncing: return "Syncing…"
+            case .syncStatusOffline: return "Offline — will retry automatically"
+            case .syncStatusNeedsAuth: return "Dropbox sign-in required"
+            case .syncRemoteTooNew: return "Remote data was written by a newer Wick — please update"
+            case .syncLastSync: return "Last synced"
+            case .syncNeverSynced: return "Not synced yet"
+            case .syncConflictNoticeFormat: return "%lld sync conflict(s) found — both versions were kept"
+            case .syncConflictDismiss: return "Dismiss"
+            case .syncDisconnectConfirmTitle: return "Disconnect Dropbox?"
+            case .syncDisconnectConfirmBody: return "Syncing will stop. Data already on this Mac and in Dropbox is kept."
             case .journalRestoredFromBackup: return "Journal restored from backup"
             case .journalReadOnly: return "Read-only (load failed)"
             case .journalChangeDate: return "Change date"

@@ -8,8 +8,8 @@ BUNDLE_ID="com.miaoz.wick"
 MIN_SYSTEM_VERSION="13.0"
 # Optional overrides for CI / tagged releases:
 #   VERSION=1.4.0 BUILD=42 ./scripts/package_app.sh
-VERSION="${VERSION:-1.4.6}"
-BUILD="${BUILD:-26}"
+VERSION="${VERSION:-1.5.0}"
+BUILD="${BUILD:-27}"
 DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/$APP_NAME.app"
 LEGACY_APP_DIR="$DIST_DIR/$LEGACY_APP_NAME.app"
@@ -86,6 +86,17 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
     <string>$VERSION</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.miaoz.wick.dropbox</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>db-hm5yscsy9a11g0q</string>
+            </array>
+        </dict>
+    </array>
     <key>CFBundleVersion</key>
     <string>$BUILD</string>
     <key>LSMinimumSystemVersion</key>

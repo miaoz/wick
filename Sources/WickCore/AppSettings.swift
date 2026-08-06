@@ -77,10 +77,16 @@ final class AppSettings: ObservableObject {
         static let lastKnownRemoteVersion = "wick.updates.lastKnownRemoteVersion"
         static let lastKnownRemoteURL = "wick.updates.lastKnownRemoteURL"
         static let weekStartsOnMonday = "wick.calendar.weekStartsOnMonday"
+        static let deviceID = "wick.deviceID"
+        static let syncEnabled = "wick.sync.enabled"
+        static let syncAccountEmail = "wick.sync.accountEmail"
     }
 
     /// Suppresses reminder rescheduling while loading defaults in `init`.
     private var isLoading = true
+
+    /// Stable per-install identifier (the sync layer marks tombstones/manifests with it).
+    let deviceID: String
 
     @Published var language: AppLanguage {
         didSet {
@@ -144,6 +150,20 @@ final class AppSettings: ObservableObject {
     @Published var checkForUpdatesOnLaunch: Bool {
         didSet {
             UserDefaults.standard.set(checkForUpdatesOnLaunch, forKey: Keys.checkForUpdatesOnLaunch)
+        }
+    }
+
+    /// Dropbox journal sync master switch (driven by `SyncCoordinator`).
+    @Published var syncEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(syncEnabled, forKey: Keys.syncEnabled)
+        }
+    }
+
+    /// Cached sign-in identity for the settings UI (token itself is in Keychain).
+    @Published var syncAccountEmail: String {
+        didSet {
+            UserDefaults.standard.set(syncAccountEmail, forKey: Keys.syncAccountEmail)
         }
     }
 
@@ -248,8 +268,19 @@ final class AppSettings: ObservableObject {
             checkForUpdatesOnLaunch = UserDefaults.standard.bool(forKey: Keys.checkForUpdatesOnLaunch)
         }
 
+        syncEnabled = UserDefaults.standard.bool(forKey: Keys.syncEnabled)
+        syncAccountEmail = UserDefaults.standard.string(forKey: Keys.syncAccountEmail) ?? ""
+
         lastKnownRemoteVersion = UserDefaults.standard.string(forKey: Keys.lastKnownRemoteVersion) ?? ""
         lastKnownRemoteURL = UserDefaults.standard.string(forKey: Keys.lastKnownRemoteURL) ?? ""
+
+        if let existing = UserDefaults.standard.string(forKey: Keys.deviceID) {
+            deviceID = existing
+        } else {
+            let fresh = UUID().uuidString
+            UserDefaults.standard.set(fresh, forKey: Keys.deviceID)
+            deviceID = fresh
+        }
 
         isLoading = false
     }

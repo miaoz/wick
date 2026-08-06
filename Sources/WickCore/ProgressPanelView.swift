@@ -263,11 +263,14 @@ private struct SettingsContentView: View {
     let theme: PanelTheme
     let language: AppLanguage
 
+    @ObservedObject private var syncCoordinator = SyncCoordinator.shared
     @State private var isCheckingUpdates = false
     @State private var updateStatusText: String?
     @State private var updateOpenURL: URL?
     @State private var dataStatusText: String?
     @State private var showStartFreshConfirm = false
+    @State private var isConnectingDropbox = false
+    @State private var showDisconnectConfirm = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -465,6 +468,91 @@ private struct SettingsContentView: View {
             }
 
             settingsSection(
+                title: L10n.string(.syncSection, language: language)
+            ) {
+                VStack(alignment: .leading, spacing: 10) {
+                    if settings.syncEnabled && syncCoordinator.backend.isAuthorized {
+                        HStack {
+                            Text("Dropbox")
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .foregroundStyle(theme.secondaryText)
+                            Spacer()
+                            Text(settings.syncAccountEmail.isEmpty ? "—" : settings.syncAccountEmail)
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(theme.primaryText)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+
+                        syncStatusFooter
+
+                        dataActionButton(
+                            title: L10n.string(.syncNow, language: language),
+                            systemImage: "arrow.triangle.2.circlepath"
+                        ) {
+                            syncCoordinator.engine.syncNow()
+                        }
+                        dataActionButton(
+                            title: L10n.string(.syncDisconnect, language: language),
+                            systemImage: "link"
+                        ) {
+                            showDisconnectConfirm = true
+                        }
+                    } else {
+                        Text(L10n.string(.syncExplanation, language: language))
+                            .font(.caption)
+                            .foregroundStyle(theme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        dataActionButton(
+                            title: isConnectingDropbox
+                                ? L10n.string(.syncConnecting, language: language)
+                                : L10n.string(.syncConnect, language: language),
+                            systemImage: "link"
+                        ) {
+                            connectDropbox()
+                        }
+                        .disabled(isConnectingDropbox)
+
+                        if settings.syncEnabled, !syncCoordinator.backend.isAuthorized {
+                            Text(L10n.string(.syncStatusNeedsAuth, language: language))
+                                .font(.caption)
+                                .foregroundStyle(theme.secondaryText)
+                        }
+                        if let authError = syncCoordinator.lastAuthError {
+                            Text(authError)
+                                .font(.caption2)
+                                .foregroundStyle(theme.tertiaryText)
+                        }
+                    }
+
+                    if !syncCoordinator.engine.pendingConflicts.isEmpty {
+                        HStack(spacing: 8) {
+                            Text(
+                                String(
+                                    format: L10n.string(.syncConflictNoticeFormat, language: language),
+                                    syncCoordinator.engine.pendingConflicts.count
+                                )
+                            )
+                            .font(.caption)
+                            .foregroundStyle(theme.secondaryText)
+                            Spacer()
+                            Button {
+                                for conflict in syncCoordinator.engine.pendingConflicts {
+                                    syncCoordinator.engine.dismissConflict(id: conflict.id)
+                                }
+                            } label: {
+                                Text(L10n.string(.syncConflictDismiss, language: language))
+                                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(theme.selectionAccent)
+                        }
+                    }
+                }
+            }
+
+            settingsSection(
                 title: L10n.string(.aboutSection, language: language)
             ) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -555,6 +643,18 @@ private struct SettingsContentView: View {
                     }
                 }
             }
+        }
+        .confirmationDialog(
+            L10n.string(.syncDisconnectConfirmTitle, language: language),
+            isPresented: $showDisconnectConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.string(.syncDisconnect, language: language), role: .destructive) {
+                syncCoordinator.disconnectDropbox()
+            }
+            Button(L10n.string(.cancel, language: language), role: .cancel) {}
+        } message: {
+            Text(L10n.string(.syncDisconnectConfirmBody, language: language))
         }
         .confirmationDialog(
             L10n.string(.journalStartFresh, language: language),
@@ -678,6 +778,57 @@ private struct SettingsContentView: View {
         case .unavailable:
             updateStatusText = L10n.string(.updateCheckFailed, language: language)
             updateOpenURL = UpdateChecker.releasesPageURL
+        }
+    }
+
+    @ViewBuilder
+    private var syncStatusFooter: some View {
+        switch syncCoordinator.engine.status {
+        case .syncing:
+            Text(L10n.string(.syncStatusSyncing, language: language))
+                .font(.caption)
+                .foregroundStyle(theme.secondaryText)
+        case .offline:
+            Text(L10n.string(.syncStatusOffline, language: language))
+                .font(.caption)
+                .foregroundStyle(theme.secondaryText)
+        case .needsAuth:
+            Text(L10n.string(.syncStatusNeedsAuth, language: language))
+                .font(.caption)
+                .foregroundStyle(theme.secondaryText)
+        case .error(let message):
+            Text(
+                message.contains("remote format")
+                    ? L10n.string(.syncRemoteTooNew, language: language)
+                    : message
+            )
+            .font(.caption)
+            .foregroundStyle(theme.secondaryText)
+        case .idle:
+            HStack {
+                Text(L10n.string(.syncLastSync, language: language))
+                    .font(.caption)
+                    .foregroundStyle(theme.secondaryText)
+                Spacer()
+                if let lastSyncAt = syncCoordinator.engine.lastSyncAt {
+                    Text(lastSyncAt, style: .relative)
+                        .font(.caption)
+                        .foregroundStyle(theme.primaryText)
+                } else {
+                    Text(L10n.string(.syncNeverSynced, language: language))
+                        .font(.caption)
+                        .foregroundStyle(theme.primaryText)
+                }
+            }
+        }
+    }
+
+    private func connectDropbox() {
+        guard !isConnectingDropbox else { return }
+        isConnectingDropbox = true
+        Task {
+            await syncCoordinator.connectDropbox()
+            isConnectingDropbox = false
         }
     }
 

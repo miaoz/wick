@@ -105,6 +105,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         Task { @MainActor in
+            // Constructing the coordinator starts the sync engine when enabled.
+            _ = SyncCoordinator.shared
             JournalReminderScheduler.shared.configure()
             if AppSettings.shared.checkForUpdatesOnLaunch {
                 await UpdateCheckerPresenter.shared.checkInBackgroundIfNeeded()
@@ -124,7 +126,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         NotificationCenter.default.post(name: .wickWillFlushJournalDrafts, object: nil)
         JournalStore.shared.flushPendingWrites()
-        return .terminateNow
+        let coordinator = SyncCoordinator.shared
+        guard coordinator.needsFinalSync else {
+            return .terminateNow
+        }
+        // One bounded final sync so the last keystrokes reach Dropbox too.
+        Task { @MainActor in
+            await coordinator.finalSyncBeforeQuit()
+            NSApplication.shared.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 }
 

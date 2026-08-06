@@ -13,8 +13,14 @@ let package = Package(
         )
     ],
     targets: [
+        // Platform-independent journal models + sync engine (reusable by a future iOS app).
+        .target(
+            name: "WickSync",
+            path: "Sources/WickSync"
+        ),
         .target(
             name: "WickCore",
+            dependencies: ["WickSync"],
             path: "Sources/WickCore"
         ),
         .executableTarget(
@@ -26,6 +32,11 @@ let package = Package(
             name: "WickTests",
             dependencies: ["WickCore"],
             path: "Tests/WickTests"
+        ),
+        .testTarget(
+            name: "WickSyncTests",
+            dependencies: ["WickSync"],
+            path: "Tests/WickSyncTests"
         )
     ]
 )
