@@ -515,4 +515,45 @@ final class JournalSyncEngineTests: XCTestCase {
         XCTAssertFalse(backend.hasFile(JournalSyncLayout.dayPath(for: otherID, dayKey: "2026-08-01")))
         XCTAssertTrue(backend.hasFile(JournalSyncLayout.manifestPath(for: otherID)))
     }
+
+    // MARK: discovery
+
+    func testDiscoversOtherJournalsManifests() async throws {
+        // Another device's journal exists on the remote.
+        let otherID = UUID()
+        let otherManifest = JournalSyncManifest(
+            formatVersion: 1,
+            journalID: otherID,
+            journalName: "Mac 13 Journal",
+            createdAt: t0,
+            deviceID: "B"
+        )
+        backend.seedFile(
+            JournalSyncLayout.manifestPath(for: otherID),
+            data: try JournalSyncEncoding.encoder.encode(otherManifest)
+        )
+
+        let source = makeSource()
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        await engine.performSyncCycle()
+
+        XCTAssertEqual(engine.discoveredJournals.count, 1)
+        XCTAssertEqual(engine.discoveredJournals.first?.journalID, otherID)
+        XCTAssertEqual(engine.discoveredJournals.first?.journalName, "Mac 13 Journal")
+
+        // Discovery is cached in state: a fresh engine instance over the same
+        // state dir republishes it without re-downloading.
+        let downloads = backend.downloadCount
+        let resumed = makeEngine(source: source, stateDir: "a", device: "A")
+        await resumed.performSyncCycle()
+        XCTAssertEqual(resumed.discoveredJournals.count, 1)
+        XCTAssertEqual(backend.downloadCount, downloads)
+    }
+
+    func testActiveJournalManifestIsNotReportedAsDiscovered() async {
+        let source = makeSource()
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        await engine.performSyncCycle()
+        XCTAssertTrue(engine.discoveredJournals.isEmpty)
+    }
 }

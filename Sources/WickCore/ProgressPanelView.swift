@@ -486,6 +486,33 @@ private struct SettingsContentView: View {
 
                         syncStatusFooter
 
+                        let adoptableJournals = syncCoordinator.engine.discoveredJournals.filter { manifest in
+                            !journalStore.journals.contains { $0.id == manifest.journalID }
+                        }
+                        if !adoptableJournals.isEmpty {
+                            ForEach(adoptableJournals, id: \.journalID) { manifest in
+                                HStack(spacing: 8) {
+                                    Text(
+                                        String(
+                                            format: L10n.string(.syncRemoteJournalFormat, language: language),
+                                            manifest.journalName
+                                        )
+                                    )
+                                    .font(.caption)
+                                    .foregroundStyle(theme.secondaryText)
+                                    Spacer()
+                                    Button {
+                                        syncCoordinator.adoptRemoteJournal(manifest)
+                                    } label: {
+                                        Text(L10n.string(.syncImportJournal, language: language))
+                                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(theme.selectionAccent)
+                                }
+                            }
+                        }
+
                         dataActionButton(
                             title: L10n.string(.syncNow, language: language),
                             systemImage: "arrow.triangle.2.circlepath"

@@ -106,6 +106,13 @@ final class SyncCoordinator: ObservableObject {
         AppSettings.shared.syncAccountEmail = ""
     }
 
+    /// Adopts a journal discovered on the remote (registering it locally under
+    /// the same id) and immediately pulls its contents.
+    func adoptRemoteJournal(_ manifest: JournalSyncManifest) {
+        _ = JournalStore.shared.adoptRemoteJournal(id: manifest.journalID, name: manifest.journalName)
+        engine.syncNow()
+    }
+
     // MARK: - Quit
 
     var needsFinalSync: Bool {

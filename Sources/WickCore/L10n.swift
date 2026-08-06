@@ -113,6 +113,8 @@ enum L10n {
         case syncConflictDismiss
         case syncDisconnectConfirmTitle
         case syncDisconnectConfirmBody
+        case syncRemoteJournalFormat
+        case syncImportJournal
         case journalRestoredFromBackup
         case journalReadOnly
         case journalChangeDate
@@ -258,6 +260,8 @@ enum L10n {
             case .syncConflictDismiss: return "知道了"
             case .syncDisconnectConfirmTitle: return "断开 Dropbox？"
             case .syncDisconnectConfirmBody: return "将停止同步。本机与 Dropbox 中已有的数据都会保留。"
+            case .syncRemoteJournalFormat: return "在 Dropbox 上发现日记本「%@」，可导入本机"
+            case .syncImportJournal: return "导入"
             case .journalRestoredFromBackup: return "已从备份恢复日记"
             case .journalReadOnly: return "只读（加载失败）"
             case .journalChangeDate: return "修改日期"
@@ -404,6 +408,8 @@ enum L10n {
             case .syncConflictDismiss: return "Dismiss"
             case .syncDisconnectConfirmTitle: return "Disconnect Dropbox?"
             case .syncDisconnectConfirmBody: return "Syncing will stop. Data already on this Mac and in Dropbox is kept."
+            case .syncRemoteJournalFormat: return "Found journal “%@” on Dropbox — it can be imported to this Mac"
+            case .syncImportJournal: return "Import"
             case .journalRestoredFromBackup: return "Journal restored from backup"
             case .journalReadOnly: return "Read-only (load failed)"
             case .journalChangeDate: return "Change date"

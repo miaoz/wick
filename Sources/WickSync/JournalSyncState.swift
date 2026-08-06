@@ -170,6 +170,18 @@ public struct SyncConflictRecord: Codable, Equatable, Identifiable {
     }
 }
 
+/// A journal found on the remote that this device may not have locally.
+/// Cached (with its rev) so discovery survives relaunches without re-downloading.
+public struct DiscoveredJournalRecord: Codable, Equatable {
+    public var manifest: JournalSyncManifest
+    public var manifestRev: String
+
+    public init(manifest: JournalSyncManifest, manifestRev: String) {
+        self.manifest = manifest
+        self.manifestRev = manifestRev
+    }
+}
+
 /// Whole per-journal sync state, persisted locally as JSON.
 public struct JournalSyncState: Codable, Equatable {
     public var cursor: String?
@@ -180,6 +192,9 @@ public struct JournalSyncState: Codable, Equatable {
     public var pendingConflicts: [SyncConflictRecord]
     public var manifestRev: String?
     public var lastSyncAt: Date?
+    /// Manifests of OTHER journals found on the remote (journalID → record),
+    /// used to offer adoption on this device.
+    public var discoveredJournals: [String: DiscoveredJournalRecord]
 
     public init(
         cursor: String? = nil,
@@ -187,7 +202,8 @@ public struct JournalSyncState: Codable, Equatable {
         days: [String: DaySyncState] = [:],
         pendingConflicts: [SyncConflictRecord] = [],
         manifestRev: String? = nil,
-        lastSyncAt: Date? = nil
+        lastSyncAt: Date? = nil,
+        discoveredJournals: [String: DiscoveredJournalRecord] = [:]
     ) {
         self.cursor = cursor
         self.remoteFiles = remoteFiles
@@ -195,6 +211,7 @@ public struct JournalSyncState: Codable, Equatable {
         self.pendingConflicts = pendingConflicts
         self.manifestRev = manifestRev
         self.lastSyncAt = lastSyncAt
+        self.discoveredJournals = discoveredJournals
     }
 }
 

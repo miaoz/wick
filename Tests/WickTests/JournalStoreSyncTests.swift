@@ -142,4 +142,42 @@ final class JournalStoreSyncTests: XCTestCase {
         let snapshots = store.syncDaySnapshots()
         XCTAssertEqual(Set(snapshots.keys), Set([a.dayKey, "2026-01-01"]))
     }
+
+    // MARK: - adoptRemoteJournal
+
+    func testAdoptRemoteJournalRegistersProvidedIDAndSwitches() {
+        let remoteID = UUID()
+        let info = store.adoptRemoteJournal(id: remoteID, name: "From Other Mac")
+
+        XCTAssertEqual(info.id, remoteID)
+        XCTAssertEqual(store.activeJournalID, remoteID)
+        XCTAssertEqual(store.journals.count, 2)
+        XCTAssertTrue(store.entries.isEmpty, "adopted journal starts empty; the engine fills it")
+
+        // Directory seeded and catalog persisted across reload.
+        let dir = tempRoot.appendingPathComponent(remoteID.uuidString, isDirectory: true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("journal.json").path))
+        let reloaded = JournalStore(rootDirectory: tempRoot)
+        XCTAssertEqual(reloaded.activeJournalID, remoteID)
+        XCTAssertEqual(reloaded.activeJournal?.name, "From Other Mac")
+    }
+
+    func testAdoptRemoteJournalWithKnownIDJustSwitches() {
+        let originalID = store.activeJournalID!
+        _ = store.createJournal(name: "Second")
+        XCTAssertNotEqual(store.activeJournalID, originalID)
+
+        let info = store.adoptRemoteJournal(id: originalID, name: "whatever")
+
+        XCTAssertEqual(info.id, originalID)
+        XCTAssertEqual(store.activeJournalID, originalID)
+        XCTAssertEqual(store.journals.count, 2, "no duplicate journal for a known id")
+    }
+
+    func testAdoptRemoteJournalUniquifiesDisplayName() {
+        let existing = store.activeJournal!.name
+        let info = store.adoptRemoteJournal(id: UUID(), name: existing)
+        XCTAssertNotEqual(info.name.lowercased(), existing.lowercased())
+        XCTAssertTrue(info.name.hasPrefix(existing))
+    }
 }

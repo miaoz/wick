@@ -129,14 +129,22 @@ final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate, NSMenuDel
     }
 
     @objc private func requestNewJournal() {
-        NotificationCenter.default.post(name: .wickJournalLibraryNewRequested, object: nil)
+        // Post asynchronously: on macOS 13 a SwiftUI alert presented from inside
+        // menu tracking is swallowed while the menu finishes closing.
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .wickJournalLibraryNewRequested, object: nil)
+        }
     }
 
     @objc private func requestRenameJournal() {
-        NotificationCenter.default.post(name: .wickJournalLibraryRenameRequested, object: nil)
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .wickJournalLibraryRenameRequested, object: nil)
+        }
     }
 
     @objc private func requestDeleteJournal() {
-        NotificationCenter.default.post(name: .wickJournalLibraryDeleteRequested, object: nil)
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .wickJournalLibraryDeleteRequested, object: nil)
+        }
     }
 }

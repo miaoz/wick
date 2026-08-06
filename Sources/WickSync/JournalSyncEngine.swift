@@ -37,6 +37,9 @@ public final class JournalSyncEngine: ObservableObject {
     @Published public private(set) var status: Status = .idle
     @Published public private(set) var lastSyncAt: Date?
     @Published public private(set) var pendingConflicts: [SyncConflictRecord] = []
+    /// Manifests of journals found on the remote that are not the active
+    /// journal — candidates for adoption on this device.
+    @Published public private(set) var discoveredJournals: [JournalSyncManifest] = []
 
     private let backend: any JournalSyncBackend
     private let localSource: any JournalLocalSource
@@ -183,6 +186,10 @@ public final class JournalSyncEngine: ObservableObject {
 
         // 2. Manifest format gate — refuses to touch newer-format remotes.
         try await ensureManifest(journalID: journalID)
+
+        // 2b. Discovery: collect manifests of OTHER journals on the remote so
+        // the app can offer adopting them (best effort, never blocks sync).
+        await refreshDiscoveredJournals(currentJournalID: journalID)
 
         // 3. Reconcile every known day key.
         let snapshots = localSource.syncDaySnapshots()
@@ -540,6 +547,43 @@ public final class JournalSyncEngine: ObservableObject {
         return try JournalSyncEncoding.decoder.decode(JournalTombstone.self, from: data)
     }
 
+    // MARK: - Journal discovery
+
+    /// Scans the remote view for manifests of journals other than the active
+    /// one and caches them in state. Each manifest is downloaded once per rev.
+    private func refreshDiscoveredJournals(currentJournalID: UUID) async {
+        for path in state.remoteFiles.keys.sorted() {
+            guard let manifestJournalID = Self.manifestJournalID(from: path),
+                  manifestJournalID != currentJournalID,
+                  let meta = state.remoteFiles[path]
+            else { continue }
+
+            let key = manifestJournalID.uuidString.lowercased()
+            guard state.discoveredJournals[key]?.manifestRev != meta.rev else { continue }
+
+            guard let (data, _) = try? await backend.download(path: path),
+                  let manifest = try? JournalSyncEncoding.decoder.decode(JournalSyncManifest.self, from: data),
+                  manifest.journalID == manifestJournalID,
+                  manifest.formatVersion <= JournalSyncLayout.formatVersion
+            else { continue }
+
+            state.discoveredJournals[key] = DiscoveredJournalRecord(
+                manifest: manifest,
+                manifestRev: meta.rev
+            )
+        }
+    }
+
+    /// Parses `/journals/<uuid>/manifest.json` (nothing else matches).
+    private static func manifestJournalID(from path: String) -> UUID? {
+        let prefix = "/journals/"
+        let suffix = "/manifest.json"
+        guard path.hasPrefix(prefix), path.hasSuffix(suffix) else { return nil }
+        let middle = path.dropFirst(prefix.count).dropLast(suffix.count)
+        guard !middle.contains("/") else { return nil }
+        return UUID(uuidString: String(middle))
+    }
+
     private func tombstoneDayKey(from path: String, journalID: UUID) -> String? {
         let prefix = "\(JournalSyncLayout.journalRoot(for: journalID))/tombstones/"
         guard path.hasPrefix(prefix), path.hasSuffix(".json") else { return nil }
@@ -608,6 +652,10 @@ public final class JournalSyncEngine: ObservableObject {
     private func publishFromState() {
         lastSyncAt = state.lastSyncAt
         pendingConflicts = state.pendingConflicts
+        discoveredJournals = state.discoveredJournals.values
+            .map(\.manifest)
+            .filter { $0.journalID != stateJournalID }
+            .sorted { $0.journalName.localizedCaseInsensitiveCompare($1.journalName) == .orderedAscending }
     }
 
     private func saveAndPublish() {

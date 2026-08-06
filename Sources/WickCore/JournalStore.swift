@@ -258,6 +258,10 @@ final class JournalStore: ObservableObject {
     func defaultJournalName(for language: AppLanguage? = nil) -> String {
         let language = language ?? AppSettings.shared.language
         let base = L10n.string(.journalLibraryDefaultName, language: language)
+        return uniquifiedJournalName(base)
+    }
+
+    private func uniquifiedJournalName(_ base: String) -> String {
         let existing = Set(journals.map { $0.name.lowercased() })
         if !existing.contains(base.lowercased()) {
             return base
@@ -267,6 +271,55 @@ final class JournalStore: ObservableObject {
             index += 1
         }
         return "\(base) \(index)"
+    }
+
+    /// Adopts a journal discovered on another sync device: registers it locally
+    /// under the SAME id (the remote folder's identity) and switches to it.
+    /// The sync engine then pulls its contents down. Already-known ids just
+    /// switch. The local snapshot starts empty on purpose — engine applies
+    /// remote days onto it (never the other way around).
+    @discardableResult
+    func adoptRemoteJournal(id: UUID, name: String) -> JournalInfo {
+        if let existing = journals.first(where: { $0.id == id }) {
+            switchToJournal(id: existing.id)
+            return existing
+        }
+
+        flushActiveJournalSession()
+
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let info = JournalInfo(
+            id: id,
+            name: uniquifiedJournalName(trimmed.isEmpty ? defaultJournalName() : trimmed)
+        )
+        let dir = librariesRoot.appendingPathComponent(id.uuidString, isDirectory: true)
+        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(
+            at: dir.appendingPathComponent("images", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try? fileManager.createDirectory(
+            at: dir.appendingPathComponent("backups", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        // Seed an empty snapshot so load has a primary file.
+        if let data = try? encoder.encode(JournalSnapshot.empty) {
+            try? data.write(
+                to: dir.appendingPathComponent("journal.json", isDirectory: false),
+                options: .atomic
+            )
+        }
+
+        journals.append(info)
+        journals.sort { $0.createdAt < $1.createdAt }
+        activeJournalID = info.id
+        bindPaths(for: info.id)
+        resetSessionState()
+        entries = []
+        selection = nil
+        persistCatalog()
+        notifyActiveJournalChanged()
+        return info
     }
 
     // MARK: - Queries

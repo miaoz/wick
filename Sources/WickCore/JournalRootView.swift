@@ -10,13 +10,26 @@ struct JournalRootView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var exportStatus: String?
-    @State private var showStartFreshConfirm = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
-    // Multi-journal library actions (shared by toolbar menu).
-    @State private var showNewJournalAlert = false
-    @State private var showRenameJournalAlert = false
-    @State private var showDeleteJournalConfirm = false
+    // Multi-journal library actions (shared by toolbar menu). The dialog KIND
+    // is stored separately from the show flag so dismissing never swaps content
+    // mid-animation, and one modifier per dialog type avoids the macOS 13
+    // multiple-alert bug class.
+    private enum JournalNameAlert {
+        case new
+        case rename
+    }
+
+    private enum JournalConfirmDialog {
+        case startFresh
+        case deleteJournal
+    }
+
+    @State private var journalNameAlert: JournalNameAlert = .new
+    @State private var showJournalNameAlert = false
+    @State private var journalConfirmDialog: JournalConfirmDialog = .startFresh
+    @State private var showJournalConfirmDialog = false
     @State private var journalNameDraft = ""
 
     var body: some View {
@@ -47,51 +60,49 @@ struct JournalRootView: View {
         .preferredColorScheme(settings.preferredColorScheme)
         .background(palette.backgroundBottom.color)
         .confirmationDialog(
-            L10n.string(.journalStartFresh, language: settings.language),
-            isPresented: $showStartFreshConfirm,
+            journalConfirmDialog == .deleteJournal
+                ? L10n.string(.journalLibraryDeleteConfirm, language: settings.language)
+                : L10n.string(.journalStartFresh, language: settings.language),
+            isPresented: $showJournalConfirmDialog,
             titleVisibility: .visible
         ) {
-            Button(L10n.string(.journalStartFresh, language: settings.language), role: .destructive) {
-                try? store.abandonCorruptDatabaseAndStartFresh()
-            }
-            Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
-        }
-        .confirmationDialog(
-            L10n.string(.journalLibraryDeleteConfirm, language: settings.language),
-            isPresented: $showDeleteJournalConfirm,
-            titleVisibility: .visible
-        ) {
-            Button(L10n.string(.journalLibraryDelete, language: settings.language), role: .destructive) {
-                if let id = store.activeJournalID {
-                    _ = store.deleteJournal(id: id)
+            switch journalConfirmDialog {
+            case .deleteJournal:
+                Button(L10n.string(.journalLibraryDelete, language: settings.language), role: .destructive) {
+                    if let id = store.activeJournalID {
+                        _ = store.deleteJournal(id: id)
+                    }
                 }
+                Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
+            case .startFresh:
+                Button(L10n.string(.journalStartFresh, language: settings.language), role: .destructive) {
+                    try? store.abandonCorruptDatabaseAndStartFresh()
+                }
+                Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
             }
-            Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
         }
         .alert(
-            L10n.string(.journalLibraryNewTitle, language: settings.language),
-            isPresented: $showNewJournalAlert
+            journalNameAlert == .rename
+                ? L10n.string(.journalLibraryRenameTitle, language: settings.language)
+                : L10n.string(.journalLibraryNewTitle, language: settings.language),
+            isPresented: $showJournalNameAlert
         ) {
             TextField(
                 L10n.string(.journalLibraryNamePlaceholder, language: settings.language),
                 text: $journalNameDraft
             )
-            Button(L10n.string(.journalLibraryCreate, language: settings.language)) {
-                store.createJournal(name: journalNameDraft)
-            }
-            Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
-        }
-        .alert(
-            L10n.string(.journalLibraryRenameTitle, language: settings.language),
-            isPresented: $showRenameJournalAlert
-        ) {
-            TextField(
-                L10n.string(.journalLibraryNamePlaceholder, language: settings.language),
-                text: $journalNameDraft
-            )
-            Button(L10n.string(.journalLibrarySaveName, language: settings.language)) {
-                if let id = store.activeJournalID {
-                    store.renameJournal(id: id, to: journalNameDraft)
+            Button(
+                journalNameAlert == .rename
+                    ? L10n.string(.journalLibrarySaveName, language: settings.language)
+                    : L10n.string(.journalLibraryCreate, language: settings.language)
+            ) {
+                switch journalNameAlert {
+                case .rename:
+                    if let id = store.activeJournalID {
+                        store.renameJournal(id: id, to: journalNameDraft)
+                    }
+                case .new:
+                    store.createJournal(name: journalNameDraft)
                 }
             }
             Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
@@ -135,7 +146,7 @@ struct JournalRootView: View {
             beginRenameJournal()
         }
         .onReceive(NotificationCenter.default.publisher(for: .wickJournalLibraryDeleteRequested)) { _ in
-            showDeleteJournalConfirm = true
+            beginDeleteJournal()
         }
 
         // macOS 14+ installs a real window toolbar (the split view's own
@@ -193,7 +204,7 @@ struct JournalRootView: View {
                 L10n.string(.journalLibraryDelete, language: settings.language),
                 role: .destructive
             ) {
-                showDeleteJournalConfirm = true
+                beginDeleteJournal()
             }
             .disabled(store.journals.count <= 1)
         } label: {
@@ -209,14 +220,21 @@ struct JournalRootView: View {
     }
 
     private func beginNewJournal() {
+        journalNameAlert = .new
         journalNameDraft = store.defaultJournalName(for: settings.language)
-        showNewJournalAlert = true
+        showJournalNameAlert = true
     }
 
     private func beginRenameJournal() {
+        journalNameAlert = .rename
         journalNameDraft = store.activeJournal?.name
             ?? L10n.string(.journalLibraryDefaultName, language: settings.language)
-        showRenameJournalAlert = true
+        showJournalNameAlert = true
+    }
+
+    private func beginDeleteJournal() {
+        journalConfirmDialog = .deleteJournal
+        showJournalConfirmDialog = true
     }
 
     private var loadFailureBanner: some View {
@@ -230,7 +248,8 @@ struct JournalRootView: View {
                     importJournal()
                 }
                 Button(L10n.string(.journalStartFresh, language: settings.language), role: .destructive) {
-                    showStartFreshConfirm = true
+                    journalConfirmDialog = .startFresh
+                    showJournalConfirmDialog = true
                 }
                 Spacer()
                 if let exportStatus {
