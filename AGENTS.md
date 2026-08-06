@@ -40,7 +40,7 @@ SwiftPM target（`Package.swift`）：
 | `DayArcStrip.swift` | 弧光条组件本体 |
 | `JournalReminderScheduler.swift` | 每日本地通知（`UNUserNotificationCenter`） |
 | `JournalWindowController.swift` | 手动持有日记 `NSWindow`（因 `MenuBarExtra` 场景里 SwiftUI `openWindow` 不可用）；日记打开时把激活策略切为 `.regular`（Dock 显示图标、可 Cmd+Tab 切换），关闭时回 `.accessory`；macOS 13 下安装 AppKit `NSToolbar` |
-| `LegacyJournalToolbar.swift` | macOS 13 工具栏代理（`LegacyJournalToolbarDelegate`：折叠钮最左、日记本控件其次、新建钮最右；折叠走响应链 `toggleSidebar:`；日记本控件为**无边框 `NSPopUpButton`（pullsDown）**，菜单第 0 项即按钮标题（书本图标+当前日记本名，不出现在下拉里），随 `wickActiveJournalDidChange` 重建；菜单动作经 Notification 异步交给 SwiftUI 弹窗——同步派发会被 macOS 13 的菜单跟踪吞掉） |
+| `LegacyJournalToolbar.swift` | macOS 13 工具栏代理（`LegacyJournalToolbarDelegate`：日记本控件最左、新建钮最右；**无工具栏折叠钮**——折叠钮双栏时在侧栏搜索行、单栏时为 `JournalRootView` 内容区左上角浮钮，互斥不重样，均走响应链 `toggleSidebar:`；日记本控件为**无边框 `NSPopUpButton`（pullsDown）**，菜单第 0 项即按钮标题（书本图标+当前日记本名，不出现在下拉里），随 `wickActiveJournalDidChange` 重建；菜单动作经 Notification 异步交给 SwiftUI 弹窗——同步派发会被 macOS 13 的菜单跟踪吞掉） |
 | `MenuBarExtraPanel.swift` | 用启发式（类名/styleMask/NSPanel）关闭 `MenuBarExtra` 面板窗口；**带尺寸护栏**：高度 ≤30 或宽度 ≤60 的小窗一律不碰——macOS 13 的 `NSApp.windows` 里混有状态栏图标的宿主小窗，误关会让图标永久消失 |
 | `IMESafeTextViews.swift` | AppKit 包装的单行/多行文本输入，避免中文/日文/韩文 IME 组字（marked text）期间被外部写值吞字；多行编辑器为 `IMETextView` 子类（手动装配 scrollView，**不要用 `NSTextView.scrollableTextView()`**），并由 coordinator 监听 clip view bounds 同步文本视图宽度（macOS 13 不向 document view 传播缩小，不修则长行不换行溢出）；keyDown 里显式路由 ⌘V；单行框经 `control(_:textView:doCommandBy:)` 拦截粘贴命令；两者都在剪贴板含图片时交给 `onPasteImage`（图片进条目），否则走默认文本粘贴（注意 ⌘V 也可能以 `noop:` 形式到达，需按 `NSApp.currentEvent` 二次判定） |
 | `JournalImageProcessing.swift` | 图片导入处理：最长边 2048px，无 alpha 转 JPEG(0.82)，有 alpha 存 PNG |
