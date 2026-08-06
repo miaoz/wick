@@ -32,27 +32,50 @@ struct JournalTimelineSidebar: View {
     private var filterBar: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField(
-                    L10n.string(.journalSearchPlaceholder, language: settings.language),
-                    text: $store.searchText
-                )
-                .textFieldStyle(.plain)
-
-                if !store.searchText.isEmpty {
+                // macOS 13 only: an in-sidebar collapse affordance next to the
+                // search field (the toolbar toggle stays as the only way back
+                // once the sidebar is collapsed). Same responder-chain action
+                // as the system/keyboard toggle.
+                if journalNeedsInViewTopBar {
                     Button {
-                        store.clearSearch()
+                        NSApp.sendAction(
+                            #selector(NSSplitViewController.toggleSidebar(_:)),
+                            to: nil,
+                            from: nil
+                        )
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
+                        Image(systemName: "sidebar.left")
+                            .font(.system(size: 14, weight: .regular))
                             .foregroundStyle(.secondary)
+                            .frame(width: 20, height: 20)
                     }
                     .buttonStyle(.plain)
+                    .help(L10n.string(.journalToggleSidebar, language: settings.language))
                 }
+
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField(
+                        L10n.string(.journalSearchPlaceholder, language: settings.language),
+                        text: $store.searchText
+                    )
+                    .textFieldStyle(.plain)
+
+                    if !store.searchText.isEmpty {
+                        Button {
+                            store.clearSearch()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             if !store.allTags.isEmpty {
                 tagFlowSection

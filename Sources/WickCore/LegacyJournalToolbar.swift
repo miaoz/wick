@@ -6,9 +6,10 @@ import AppKit
 /// The toggle uses the responder chain so it drives the SwiftUI split view
 /// exactly like the system toggle does.
 ///
-/// The library control is a view-based button (book icon + active journal
-/// name, mirroring the macOS 14+ SwiftUI toolbar label) that pops a shared
-/// NSMenu — `NSMenuToolbarItem` cannot show a title next to its icon.
+/// The library control is a borderless pull-down NSPopUpButton showing the
+/// book icon + active journal name (mirroring the macOS 14+ SwiftUI toolbar
+/// menu) — `NSMenuToolbarItem` cannot show a title next to its icon, and a
+/// bezeled NSButton reads like a text field in the toolbar.
 @MainActor
 final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate, NSMenuDelegate {
     private enum ItemID {
@@ -18,7 +19,6 @@ final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate, NSMenuDel
     }
 
     private let libraryMenu = NSMenu()
-    private weak var libraryButton: NSButton?
     private var activeJournalObserver: NSObjectProtocol?
 
     override init() {
@@ -32,7 +32,7 @@ final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate, NSMenuDel
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.updateLibraryButtonTitle()
+                self?.rebuildLibraryMenu()
             }
         }
     }
@@ -52,27 +52,18 @@ final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate, NSMenuDel
             item.action = #selector(toggleSidebar)
             return item
         case ItemID.library:
-            let button = NSButton(
-                image: NSImage(systemSymbolName: "book.closed", accessibilityDescription: nil)
-                    ?? NSImage(),
-                target: self,
-                action: #selector(showLibraryMenu(_:))
-            )
-            button.bezelStyle = .texturedRounded
-            button.imagePosition = .imageLeading
-            button.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .medium)
-            button.lineBreakMode = .byTruncatingTail
-            button.title = JournalStore.shared.activeJournal?.name ?? ""
-            button.setAccessibilityLabel(
+            let popup = NSPopUpButton(frame: .zero, pullsDown: true)
+            popup.isBordered = false
+            popup.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .medium)
+            popup.menu = libraryMenu
+            popup.setAccessibilityLabel(
                 L10n.string(.journalLibraryMenu, language: AppSettings.shared.language)
             )
+            rebuildLibraryMenu()
 
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-            item.view = button
+            item.view = popup
             item.label = L10n.string(.journalLibraryMenu, language: AppSettings.shared.language)
-            item.minSize = NSSize(width: 80, height: 26)
-            item.maxSize = NSSize(width: 200, height: 28)
-            libraryButton = button
             return item
         case ItemID.newEntry:
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
@@ -95,19 +86,29 @@ final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate, NSMenuDel
         [ItemID.toggle, ItemID.library, .flexibleSpace, ItemID.newEntry]
     }
 
-    // MARK: - Library button title
-
-    private func updateLibraryButtonTitle() {
-        libraryButton?.title = JournalStore.shared.activeJournal?.name ?? ""
-    }
-
     // MARK: - NSMenuDelegate (rebuild journal list on open)
 
     func menuNeedsUpdate(_ menu: NSMenu) {
-        menu.removeAllItems()
-        let language = AppSettings.shared.language
+        rebuildLibraryMenu()
+    }
 
+    /// Rebuilds the shared menu. With `pullsDown`, item 0 is the button's
+    /// closed-state title (book icon + active journal name) and never appears
+    /// in the opened list — so the whole menu is rebuilt whenever the active
+    /// journal or a name changes.
+    private func rebuildLibraryMenu() {
+        libraryMenu.removeAllItems()
+        let language = AppSettings.shared.language
         let store = JournalStore.shared
+
+        let titleItem = NSMenuItem(
+            title: store.activeJournal?.name ?? "",
+            action: nil,
+            keyEquivalent: ""
+        )
+        titleItem.image = NSImage(systemSymbolName: "book.closed", accessibilityDescription: nil)
+        libraryMenu.addItem(titleItem)
+
         for journal in store.journals {
             let item = NSMenuItem(
                 title: journal.name,
@@ -117,10 +118,10 @@ final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate, NSMenuDel
             item.target = self
             item.representedObject = journal.id.uuidString
             item.state = journal.id == store.activeJournalID ? .on : .off
-            menu.addItem(item)
+            libraryMenu.addItem(item)
         }
 
-        menu.addItem(.separator())
+        libraryMenu.addItem(.separator())
 
         let newItem = NSMenuItem(
             title: L10n.string(.journalLibraryNew, language: language),
@@ -128,7 +129,7 @@ final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate, NSMenuDel
             keyEquivalent: ""
         )
         newItem.target = self
-        menu.addItem(newItem)
+        libraryMenu.addItem(newItem)
 
         let renameItem = NSMenuItem(
             title: L10n.string(.journalLibraryRename, language: language),
@@ -136,7 +137,7 @@ final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate, NSMenuDel
             keyEquivalent: ""
         )
         renameItem.target = self
-        menu.addItem(renameItem)
+        libraryMenu.addItem(renameItem)
 
         let deleteItem = NSMenuItem(
             title: L10n.string(.journalLibraryDelete, language: language),
@@ -145,7 +146,7 @@ final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate, NSMenuDel
         )
         deleteItem.target = self
         deleteItem.isEnabled = store.journals.count > 1
-        menu.addItem(deleteItem)
+        libraryMenu.addItem(deleteItem)
     }
 
     @objc private func toggleSidebar() {
@@ -154,17 +155,6 @@ final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate, NSMenuDel
 
     @objc private func newEntry() {
         _ = JournalStore.shared.openOrCreateToday()
-    }
-
-    @objc private func showLibraryMenu(_ sender: NSButton) {
-        // Rebuild contents right before showing (the delegate also does this on
-        // open, but an explicit pass keeps the checkmark/title guaranteed fresh).
-        menuNeedsUpdate(libraryMenu)
-        libraryMenu.popUp(
-            positioning: nil,
-            at: NSPoint(x: 0, y: sender.bounds.height + 4),
-            in: sender
-        )
     }
 
     @objc private func selectJournal(_ sender: NSMenuItem) {
