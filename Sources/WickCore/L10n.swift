@@ -104,6 +104,17 @@ enum L10n {
         case journalReviewNotePlaceholder
         case journalReviewClear
         case journalReviewHelp
+        case journalLibraryMenu
+        case journalLibraryDefaultName
+        case journalLibraryNew
+        case journalLibraryNewTitle
+        case journalLibraryNamePlaceholder
+        case journalLibraryRename
+        case journalLibraryRenameTitle
+        case journalLibraryDelete
+        case journalLibraryDeleteConfirm
+        case journalLibraryCreate
+        case journalLibrarySaveName
 
         // Settings extras
         case generalSection
@@ -220,6 +231,17 @@ enum L10n {
             case .journalReviewNotePlaceholder: return "补一句复盘…"
             case .journalReviewClear: return "清除复盘"
             case .journalReviewHelp: return "复盘此条目"
+            case .journalLibraryMenu: return "切换日记本"
+            case .journalLibraryDefaultName: return "日记"
+            case .journalLibraryNew: return "新建日记本…"
+            case .journalLibraryNewTitle: return "新建日记本"
+            case .journalLibraryNamePlaceholder: return "名称"
+            case .journalLibraryRename: return "重命名…"
+            case .journalLibraryRenameTitle: return "重命名日记本"
+            case .journalLibraryDelete: return "删除日记本…"
+            case .journalLibraryDeleteConfirm: return "确定删除这个日记本？其中的全部日记、条目与图片都会被永久删除。"
+            case .journalLibraryCreate: return "创建"
+            case .journalLibrarySaveName: return "保存"
 
             case .generalSection: return "通用"
             case .menuBarPercentage: return "菜单栏显示今日剩余"
@@ -337,6 +359,17 @@ enum L10n {
             case .journalReviewNotePlaceholder: return "Add a review note…"
             case .journalReviewClear: return "Clear review"
             case .journalReviewHelp: return "Review this item"
+            case .journalLibraryMenu: return "Switch Journal"
+            case .journalLibraryDefaultName: return "Journal"
+            case .journalLibraryNew: return "New Journal…"
+            case .journalLibraryNewTitle: return "New Journal"
+            case .journalLibraryNamePlaceholder: return "Name"
+            case .journalLibraryRename: return "Rename…"
+            case .journalLibraryRenameTitle: return "Rename Journal"
+            case .journalLibraryDelete: return "Delete Journal…"
+            case .journalLibraryDeleteConfirm: return "Delete this journal? All days, items, and images will be permanently removed."
+            case .journalLibraryCreate: return "Create"
+            case .journalLibrarySaveName: return "Save"
 
             case .generalSection: return "General"
             case .menuBarPercentage: return "Show day remaining in menu bar"

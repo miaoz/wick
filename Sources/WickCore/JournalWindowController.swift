@@ -10,6 +10,7 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
 
     private var window: NSWindow?
     private var languageObserver: NSObjectProtocol?
+    private var activeJournalObserver: NSObjectProtocol?
     private let legacyToolbarDelegate = LegacyJournalToolbarDelegate()
 
     private override init() {
@@ -112,11 +113,30 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
             }
         }
 
+        activeJournalObserver = NotificationCenter.default.addObserver(
+            forName: .wickActiveJournalDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let window = self.window else { return }
+                self.updateTitle(for: window)
+            }
+        }
+
         return window
     }
 
     private func updateTitle(for window: NSWindow) {
-        window.title = L10n.string(.journalTitle, language: AppSettings.shared.language)
+        let language = AppSettings.shared.language
+        let fallback = L10n.string(.journalTitle, language: language)
+        if let name = JournalStore.shared.activeJournal?.name,
+           !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            window.title = name
+        } else {
+            window.title = fallback
+        }
     }
 
     /// Syncs the window chrome (background behind the titlebar area) with the

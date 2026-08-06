@@ -29,7 +29,7 @@ SwiftPM 三个 target（`Package.swift`）：
 | `WickTheme.swift` | 「一日弧光」主题引擎：`WickRGB`（可插值/可做 WCAG 对比度计算的 sRGB 值类型）、`WickPalette`（全部色角色，含复盘判定色 `reviewCorrect`/`reviewWrong`）、`DayPhase`（晨光/白昼/暮色/夜幕四锚点）、`DayArcEngine`（按时刻在 4 相位 × 亮/暗 2 套锚点色板间插值；`MetricTheme` 色相族恒定、仅辉光随相位缩放；`WICK_ARC_TIME=HH:mm` 环境变量可伪造"当前时刻"用于调试/截图）；`\.wickPalette` 环境键 |
 | `TimeProgress.swift` | `TimeProgressCalculator`：日/周/月/年剩余比例的纯计算（可注入 `Date`/`Calendar`，便于测试） |
 | `JournalModels.swift` | 日记模型：`JournalEntry`（某日，1..n 个 `JournalItem`：标签/正文/图片文件名/可选 `JournalReview`）、`JournalReview`+`JournalReviewVerdict`（条目级复盘：correct/wrong + 一行批注）、`JournalSnapshot`（Codable，`currentVersion = 1`） |
-| `JournalStore.swift` | 日记存储（`@MainActor ObservableObject` 单例）：落盘、`.bak` 与滚动备份、加载失败只读保护、图片管理、zip 导入导出；**一天一篇**由 `createEntry`/`updateEntry` 的按日合并保证 |
+| `JournalStore.swift` | 多日记本存储（`@MainActor ObservableObject` 单例）：`catalog.json` + 每本独立目录；落盘、`.bak` 与滚动备份、加载失败只读保护、图片管理、zip 导入导出；启动时一次性把旧版 `Wick/Journal` 迁到多日记布局；**一天一篇**由 `createEntry`/`updateEntry` 的按日合并保证 |
 | `JournalRootView.swift` | 日记窗口根视图（`JournalRootView`，`NavigationSplitView` 双栏；macOS 14+ 用系统工具栏，macOS 13 用 `JournalWindowController` 安装的 AppKit `NSToolbar`，判定见 `journalNeedsInViewTopBar`；色值取自 `\.wickPalette`，根视图 300s `TimelineView` 刷新；加载失败/恢复横幅、隐藏快捷键按钮） |
 | `JournalSidebarView.swift` | 日记侧栏：搜索框 + 标签芯片过滤（超宽折叠为「更多 N」，展开换行/再点收起）、按日/按条目两种列表、空态；选中高亮为自绘 `listRowBackground`（`sidebarBackground` 打底 + `accentSoft`，替代系统蓝/灰药丸以保证跨 macOS 版本一致），两个 `List` 均挂 `TableViewSelectionSuppressor` 关掉底层 `NSTableView` 的系统高亮（否则点击瞬间会闪一帧系统蓝色）；标签打包逻辑在 `TagChipFlow.swift` |
 | `TableViewSelectionSuppressor.swift` | `NSViewRepresentable`：子树搜索找到 SwiftUI `List` 背后的列表视图（新系统为 `SwiftUIOutlineListView`，`NSTableView` 子类；注意它是兄弟子树而非祖先）并设 `selectionHighlightStyle = .none`，配合自绘选中背景消除按住/点击时的系统蓝高亮 |
@@ -39,7 +39,7 @@ SwiftPM 三个 target（`Package.swift`）：
 | `DayArcStrip.swift` | 弧光条组件本体 |
 | `JournalReminderScheduler.swift` | 每日本地通知（`UNUserNotificationCenter`） |
 | `JournalWindowController.swift` | 手动持有日记 `NSWindow`（因 `MenuBarExtra` 场景里 SwiftUI `openWindow` 不可用）；日记打开时把激活策略切为 `.regular`（Dock 显示图标、可 Cmd+Tab 切换），关闭时回 `.accessory`；macOS 13 下安装 AppKit `NSToolbar` |
-| `LegacyJournalToolbar.swift` | macOS 13 工具栏代理（`LegacyJournalToolbarDelegate`：折叠钮最左、新建钮最右，系统布局保证与红绿灯同线；折叠走响应链 `toggleSidebar:`） |
+| `LegacyJournalToolbar.swift` | macOS 13 工具栏代理（`LegacyJournalToolbarDelegate`：折叠钮最左、日记本下拉菜单其次、新建钮最右；折叠走响应链 `toggleSidebar:`；日记本菜单动作经 Notification 交给 SwiftUI 弹窗） |
 | `MenuBarExtraPanel.swift` | 用启发式（类名/styleMask/NSPanel）关闭 `MenuBarExtra` 面板窗口；**带尺寸护栏**：高度 ≤30 或宽度 ≤60 的小窗一律不碰——macOS 13 的 `NSApp.windows` 里混有状态栏图标的宿主小窗，误关会让图标永久消失 |
 | `IMESafeTextViews.swift` | AppKit 包装的单行/多行文本输入，避免中文/日文/韩文 IME 组字（marked text）期间被外部写值吞字；多行编辑器为 `IMETextView` 子类（手动装配 scrollView，**不要用 `NSTextView.scrollableTextView()`**），并由 coordinator 监听 clip view bounds 同步文本视图宽度（macOS 13 不向 document view 传播缩小，不修则长行不换行溢出）；keyDown 里显式路由 ⌘V；单行框经 `control(_:textView:doCommandBy:)` 拦截粘贴命令；两者都在剪贴板含图片时交给 `onPasteImage`（图片进条目），否则走默认文本粘贴（注意 ⌘V 也可能以 `noop:` 形式到达，需按 `NSApp.currentEvent` 二次判定） |
 | `JournalImageProcessing.swift` | 图片导入处理：最长边 2048px，无 alpha 转 JPEG(0.82)，有 alpha 存 PNG |
@@ -93,7 +93,7 @@ make clean         # rm -rf .build dist
 - 测试位于 `Tests/WickTests/`，XCTest + `@testable import WickCore`，CI 在打包前执行 `swift test`。
 - 现有五个测试文件：
   - `TimeProgressTests.swift`：剩余比例边界（0/1 钳制、起止时刻）、四类进度齐全、周一起始。
-  - `JournalStoreTests.swift`：用 `JournalStore(rootDirectory:)`（临时目录的测试专用初始化器）覆盖一天一篇、标签按条目过滤、删除条目清理图片、持久化重载、主文件损坏时从 `.bak` 恢复、无备份时进入只读且**不覆盖磁盘坏文件**。
+  - `JournalStoreTests.swift`：用 `JournalStore(rootDirectory:)`（临时多日记根目录）覆盖默认日记本、新建/切换/删除日记本、旧版单日记迁移、一天一篇、标签按条目过滤、删除条目清理图片、持久化重载、主文件损坏时从 `.bak` 恢复、无备份时进入只读且**不覆盖磁盘坏文件**。
   - `AppInfoTests.swift`：版本号比较。
   - `WickThemeTests.swift`：主题引擎——相位归属（锚点切换、跨午夜回绕）、插值中点、全天每 15 分钟 × 亮/暗的对比度护栏（textPrimary ≥4.5、accentText ≥4.0 等）、指标色相族稳定性。
   - `TagChipFlowTests.swift`：标签芯片换行打包（贪心换行、超宽独占一行）与折叠行裁剪（为「更多 N」腾出空间、全部裁掉的边界）。
@@ -122,9 +122,10 @@ make clean         # rm -rf .build dist
 ## 注意事项（安全与数据保护）
 
 - **日记数据安全是核心约束**，改动 `JournalStore` 时必须保持：
+  - 多日记布局：`~/Library/Application Support/Wick/Journals/catalog.json` + `<uuid>/{journal.json,.bak,backups/,images/}`；不再运行时兼容旧版单日记路径（仅启动时一次性迁移 `Wick/Journal` → `Journals/<uuid>/`）。
   - 加载失败进入 `isReadOnlyDueToLoadFailure`，**禁止任何写盘**（防止空数据覆盖损坏文件）；损坏文件移存为 `journal.corrupt-<ts>.json` 隔离。
   - 覆盖前先复制 sidecar `journal.json.bak`；滚动备份最多 5 份、间隔 ≥30 分钟。
-  - 退出（`applicationShouldTerminate`）与关日记窗前发 `wickWillFlushJournalDrafts` 并 `flushPendingWrites()`。
+  - 退出（`applicationShouldTerminate`）与关日记窗前发 `wickWillFlushJournalDrafts` 并 `flushPendingWrites()`；切换日记本前同样 `flushPendingWrites()`。
 - **UserNotifications 只能在正式 `.app` 包内使用**：`swift run`/裸二进制下调用会 abort，因此 `JournalReminderScheduler.notificationsAvailable` 做了包形态门控，新增通知相关代码必须维持该门控。
 - **`MenuBarExtra` 的 label 里禁止放 `TimelineView` 等高频失效源**：会触发 `requestUpdate` → `setImage` 死循环占满 CPU（`WickApp.swift` 有注释；当前 label 用 30s `Timer` 且仅在文本变化时更新状态）。
 - IME 组字：日记编辑用 `IMESafeTextViews` 里的封装，不要用原生 SwiftUI `TextField` 直接替换，否则中文输入会吞字（有专门修复提交）。

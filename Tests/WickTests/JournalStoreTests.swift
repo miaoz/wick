@@ -19,6 +19,96 @@ final class JournalStoreTests: XCTestCase {
         tempRoot = nil
     }
 
+    // MARK: - Multi-journal
+
+    func testFreshInstallCreatesDefaultJournal() {
+        XCTAssertEqual(store.journals.count, 1)
+        XCTAssertNotNil(store.activeJournalID)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: tempRoot.appendingPathComponent("catalog.json").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.databaseURL.path) || store.entries.isEmpty)
+    }
+
+    func testCreateSwitchAndDeleteJournals() {
+        let firstID = store.activeJournalID
+        XCTAssertNotNil(firstID)
+
+        let firstEntry = store.createEntry()
+        var draft = firstEntry
+        draft.title = "In First"
+        store.updateEntry(draft)
+
+        let second = store.createJournal(name: "Work")
+        XCTAssertEqual(store.journals.count, 2)
+        XCTAssertEqual(store.activeJournalID, second.id)
+        XCTAssertEqual(store.entries.count, 0)
+
+        _ = store.createEntry()
+        XCTAssertEqual(store.entries.count, 1)
+
+        store.switchToJournal(id: firstID!)
+        XCTAssertEqual(store.activeJournalID, firstID)
+        XCTAssertEqual(store.entries.first?.title, "In First")
+
+        XCTAssertTrue(store.deleteJournal(id: second.id))
+        XCTAssertEqual(store.journals.count, 1)
+        XCTAssertEqual(store.activeJournalID, firstID)
+        XCTAssertEqual(store.entries.first?.title, "In First")
+    }
+
+    func testCannotDeleteLastJournal() {
+        let only = store.activeJournalID!
+        XCTAssertFalse(store.deleteJournal(id: only))
+        XCTAssertEqual(store.journals.count, 1)
+    }
+
+    func testRenameJournalPersists() {
+        let id = store.activeJournalID!
+        store.renameJournal(id: id, to: "Trading")
+        XCTAssertEqual(store.activeJournal?.name, "Trading")
+
+        let reloaded = JournalStore(rootDirectory: tempRoot)
+        XCTAssertEqual(reloaded.activeJournal?.name, "Trading")
+    }
+
+    func testMigrateLegacySingleJournal() throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory
+            .appendingPathComponent("WickMigrate-\(UUID().uuidString)", isDirectory: true)
+        let multiRoot = base.appendingPathComponent("Journals", isDirectory: true)
+        let legacyRoot = base.appendingPathComponent("Journal", isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+
+        try fm.createDirectory(at: legacyRoot, withIntermediateDirectories: true)
+        try fm.createDirectory(
+            at: legacyRoot.appendingPathComponent("images", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+
+        let entryID = UUID().uuidString
+        let itemID = UUID().uuidString
+        let json = """
+        {"version":1,"entries":[{"id":"\(entryID)","date":"2026-01-15T00:00:00Z","title":"Legacy Day",\
+        "items":[{"id":"\(itemID)","tag":"BTC","body":"migrated","imageFilenames":[]}],\
+        "createdAt":"2026-01-15T00:00:00Z","updatedAt":"2026-01-15T00:00:00Z"}]}
+        """
+        try Data(json.utf8).write(to: legacyRoot.appendingPathComponent("journal.json"))
+
+        let migrated = JournalStore(rootDirectory: multiRoot, legacyDirectory: legacyRoot)
+
+        XCTAssertEqual(migrated.journals.count, 1)
+        XCTAssertEqual(migrated.entries.first?.title, "Legacy Day")
+        XCTAssertEqual(migrated.entries.first?.items.first?.body, "migrated")
+        XCTAssertTrue(fm.fileExists(atPath: multiRoot.appendingPathComponent("catalog.json").path))
+        // Legacy folder should have been moved away (no longer at original path).
+        XCTAssertFalse(fm.fileExists(atPath: legacyRoot.path))
+        // Reloading multi-root must not depend on legacy path.
+        let reloaded = JournalStore(rootDirectory: multiRoot, legacyDirectory: legacyRoot)
+        XCTAssertEqual(reloaded.entries.first?.title, "Legacy Day")
+        XCTAssertEqual(reloaded.journals.count, 1)
+    }
+
+    // MARK: - Entries (active journal)
+
     func testOneEntryPerDay() {
         let first = store.createEntry(on: Date())
         let second = store.createEntry(on: Date())
@@ -80,8 +170,8 @@ final class JournalStoreTests: XCTestCase {
         store.updateEntry(draft)
 
         // Ensure a known-good sidecar backup exists, then corrupt primary.
-        let db = tempRoot.appendingPathComponent("journal.json")
-        let bak = tempRoot.appendingPathComponent("journal.json.bak")
+        let db = store.databaseURL
+        let bak = store.backupURL
         if FileManager.default.fileExists(atPath: bak.path) {
             try FileManager.default.removeItem(at: bak)
         }
@@ -116,7 +206,7 @@ final class JournalStoreTests: XCTestCase {
         "items":[{"id":"\(itemID)","tag":"BTC","body":"test","imageFilenames":[]}],\
         "createdAt":"2026-01-15T00:00:00Z","updatedAt":"2026-01-15T00:00:00Z"}]}
         """
-        let db = tempRoot.appendingPathComponent("journal.json")
+        let db = store.databaseURL
         try Data(json.utf8).write(to: db)
 
         let reloaded = JournalStore(rootDirectory: tempRoot)
@@ -144,9 +234,9 @@ final class JournalStoreTests: XCTestCase {
         draft.title = "Lost?"
         store.updateEntry(draft)
 
-        let db = tempRoot.appendingPathComponent("journal.json")
+        let db = store.databaseURL
         try Data("{".utf8).write(to: db)
-        try? FileManager.default.removeItem(at: tempRoot.appendingPathComponent("journal.json.bak"))
+        try? FileManager.default.removeItem(at: store.backupURL)
 
         let reloaded = JournalStore(rootDirectory: tempRoot)
         XCTAssertTrue(reloaded.isReadOnlyDueToLoadFailure)

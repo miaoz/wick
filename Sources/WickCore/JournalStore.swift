@@ -29,16 +29,31 @@ enum JournalSelection: Hashable {
     case item(JournalItemRef)
 }
 
-/// File-backed journal store under Application Support.
-/// Layout:
-///   ~/Library/Application Support/Wick/Journal/
-///     journal.json
-///     journal.json.bak
-///     backups/journal-*.json  (rolling)
-///     images/<uuid>.png|jpg|...
+/// File-backed multi-journal store under Application Support.
+///
+/// Layout (multi-journal only — legacy single-journal is migrated once and discarded):
+///   ~/Library/Application Support/Wick/Journals/
+///     catalog.json
+///     <journal-uuid>/
+///       journal.json
+///       journal.json.bak
+///       backups/journal-*.json  (rolling)
+///       images/<uuid>.png|jpg|...
 @MainActor
 final class JournalStore: ObservableObject {
     static let shared = JournalStore()
+
+    // MARK: - Catalog (multi-journal)
+
+    @Published private(set) var journals: [JournalInfo] = []
+    @Published private(set) var activeJournalID: UUID?
+
+    var activeJournal: JournalInfo? {
+        guard let activeJournalID else { return nil }
+        return journals.first { $0.id == activeJournalID }
+    }
+
+    // MARK: - Active journal content
 
     @Published private(set) var entries: [JournalEntry] = []
     @Published var selection: JournalSelection?
@@ -64,43 +79,194 @@ final class JournalStore: ObservableObject {
         return decoder
     }()
 
-    private let rootDirectory: URL
-    private let imagesDirectory: URL
-    private let databaseURL: URL
-    private let backupURL: URL
-    private let backupsDirectory: URL
+    /// Root of the multi-journal library (`…/Wick/Journals`).
+    private let librariesRoot: URL
+    /// Legacy single-journal path (`…/Wick/Journal`), only used for one-shot migration.
+    private let legacyRoot: URL?
+    private let catalogURL: URL
+
+    // Active journal paths — recomputed on switch.
+    private(set) var journalDirectory: URL
+    private(set) var imagesDirectory: URL
+    private(set) var databaseURL: URL
+    private(set) var backupURL: URL
+    private var backupsDirectory: URL
 
     private let maxRollingBackups = 5
     private var lastRollingBackupAt: Date?
 
-    /// Testing / custom root initializer.
-    init(rootDirectory: URL) {
-        self.rootDirectory = rootDirectory
-        imagesDirectory = rootDirectory.appendingPathComponent("images", isDirectory: true)
-        databaseURL = rootDirectory.appendingPathComponent("journal.json", isDirectory: false)
-        backupURL = rootDirectory.appendingPathComponent("journal.json.bak", isDirectory: false)
-        backupsDirectory = rootDirectory.appendingPathComponent("backups", isDirectory: true)
+    // MARK: - Init
 
-        ensureDirectories()
-        load()
+    /// Testing / custom multi-journal root.
+    /// - Parameters:
+    ///   - rootDirectory: Multi-journal library root (`catalog.json` + per-journal folders).
+    ///   - legacyDirectory: Optional legacy single-journal folder to migrate once (tests).
+    init(rootDirectory: URL, legacyDirectory: URL? = nil) {
+        self.librariesRoot = rootDirectory
+        self.legacyRoot = legacyDirectory
+        self.catalogURL = rootDirectory.appendingPathComponent("catalog.json", isDirectory: false)
+
+        // Placeholder paths; `bootstrapLibrary` sets real ones.
+        let placeholder = rootDirectory.appendingPathComponent("_pending", isDirectory: true)
+        self.journalDirectory = placeholder
+        self.imagesDirectory = placeholder.appendingPathComponent("images", isDirectory: true)
+        self.databaseURL = placeholder.appendingPathComponent("journal.json", isDirectory: false)
+        self.backupURL = placeholder.appendingPathComponent("journal.json.bak", isDirectory: false)
+        self.backupsDirectory = placeholder.appendingPathComponent("backups", isDirectory: true)
+
+        bootstrapLibrary()
     }
 
     /// Shared app store under Application Support.
     private init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        let root = support.appendingPathComponent("Wick/Journal", isDirectory: true)
-        self.rootDirectory = root
-        imagesDirectory = root.appendingPathComponent("images", isDirectory: true)
-        databaseURL = root.appendingPathComponent("journal.json", isDirectory: false)
-        backupURL = root.appendingPathComponent("journal.json.bak", isDirectory: false)
-        backupsDirectory = root.appendingPathComponent("backups", isDirectory: true)
+        let wickRoot = support.appendingPathComponent("Wick", isDirectory: true)
+        let libraries = wickRoot.appendingPathComponent("Journals", isDirectory: true)
+        let legacy = wickRoot.appendingPathComponent("Journal", isDirectory: true)
 
-        ensureDirectories()
-        load()
+        self.librariesRoot = libraries
+        self.legacyRoot = legacy
+        self.catalogURL = libraries.appendingPathComponent("catalog.json", isDirectory: false)
+
+        let placeholder = libraries.appendingPathComponent("_pending", isDirectory: true)
+        self.journalDirectory = placeholder
+        self.imagesDirectory = placeholder.appendingPathComponent("images", isDirectory: true)
+        self.databaseURL = placeholder.appendingPathComponent("journal.json", isDirectory: false)
+        self.backupURL = placeholder.appendingPathComponent("journal.json.bak", isDirectory: false)
+        self.backupsDirectory = placeholder.appendingPathComponent("backups", isDirectory: true)
+
+        bootstrapLibrary()
     }
 
-    var dataDirectoryURL: URL { rootDirectory }
+    /// Multi-journal library root (contains `catalog.json` and per-journal folders).
+    var dataDirectoryURL: URL { librariesRoot }
+
+    /// Directory of the currently active journal.
+    var activeJournalDirectoryURL: URL { journalDirectory }
+
+    // MARK: - Multi-journal API
+
+    /// Switch the active journal. Flushes editor drafts + the current store first.
+    func switchToJournal(id: UUID) {
+        guard id != activeJournalID else { return }
+        guard journals.contains(where: { $0.id == id }) else { return }
+
+        flushActiveJournalSession()
+        activeJournalID = id
+        bindPaths(for: id)
+        resetSessionState()
+        loadActiveJournalContent()
+        persistCatalog()
+        notifyActiveJournalChanged()
+    }
+
+    /// Creates a new empty journal, switches to it, and returns its metadata.
+    @discardableResult
+    func createJournal(name: String) -> JournalInfo {
+        flushActiveJournalSession()
+
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedName = trimmed.isEmpty ? defaultJournalName() : trimmed
+        let info = JournalInfo(name: resolvedName)
+        let dir = librariesRoot.appendingPathComponent(info.id.uuidString, isDirectory: true)
+
+        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(
+            at: dir.appendingPathComponent("images", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try? fileManager.createDirectory(
+            at: dir.appendingPathComponent("backups", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+
+        // Seed an empty snapshot on disk so load has a primary file.
+        let empty = JournalSnapshot.empty
+        if let data = try? encoder.encode(empty) {
+            try? data.write(
+                to: dir.appendingPathComponent("journal.json", isDirectory: false),
+                options: .atomic
+            )
+        }
+
+        journals.append(info)
+        journals.sort { $0.createdAt < $1.createdAt }
+        activeJournalID = info.id
+        bindPaths(for: info.id)
+        resetSessionState()
+        entries = []
+        selection = nil
+        isReadOnlyDueToLoadFailure = false
+        loadFailureMessage = nil
+        didRestoreFromBackup = false
+        lastPersistError = nil
+        JournalThumbnailCache.shared.removeAll()
+        persistCatalog()
+        notifyActiveJournalChanged()
+        return info
+    }
+
+    /// Renames a journal in the catalog.
+    func renameJournal(id: UUID, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard let index = journals.firstIndex(where: { $0.id == id }) else { return }
+
+        journals[index].name = trimmed
+        journals[index].updatedAt = Date()
+        persistCatalog()
+        if id == activeJournalID {
+            notifyActiveJournalChanged()
+        }
+    }
+
+    /// Deletes a journal and its on-disk folder. Refuses to delete the last journal.
+    @discardableResult
+    func deleteJournal(id: UUID) -> Bool {
+        guard journals.count > 1 else { return false }
+        guard journals.contains(where: { $0.id == id }) else { return false }
+
+        let wasActive = id == activeJournalID
+        if wasActive {
+            flushActiveJournalSession()
+        }
+
+        let dir = librariesRoot.appendingPathComponent(id.uuidString, isDirectory: true)
+        try? fileManager.removeItem(at: dir)
+
+        journals.removeAll { $0.id == id }
+
+        if wasActive {
+            let next = journals.sorted { $0.updatedAt > $1.updatedAt }.first
+                ?? journals.first
+            activeJournalID = next?.id
+            if let nextID = activeJournalID {
+                bindPaths(for: nextID)
+                resetSessionState()
+                loadActiveJournalContent()
+            }
+        }
+
+        persistCatalog()
+        notifyActiveJournalChanged()
+        return true
+    }
+
+    /// Suggested default name for a newly created journal (language-aware).
+    func defaultJournalName(for language: AppLanguage? = nil) -> String {
+        let language = language ?? AppSettings.shared.language
+        let base = L10n.string(.journalLibraryDefaultName, language: language)
+        let existing = Set(journals.map { $0.name.lowercased() })
+        if !existing.contains(base.lowercased()) {
+            return base
+        }
+        var index = 2
+        while existing.contains("\(base) \(index)".lowercased()) {
+            index += 1
+        }
+        return "\(base) \(index)"
+    }
 
     // MARK: - Queries
 
@@ -225,6 +391,7 @@ final class JournalStore: ObservableObject {
         searchText = ""
         selection = .day(entry.id)
         persist()
+        touchActiveJournalMetadata()
         return entry
     }
 
@@ -257,6 +424,7 @@ final class JournalStore: ObservableObject {
         updated.updatedAt = Date()
         entries[index] = updated
         persist()
+        touchActiveJournalMetadata()
         reconcileSelectionAfterChange()
     }
 
@@ -274,6 +442,7 @@ final class JournalStore: ObservableObject {
             selection = defaultSelection()
         }
         persist()
+        touchActiveJournalMetadata()
     }
 
     @discardableResult
@@ -286,6 +455,7 @@ final class JournalStore: ObservableObject {
         entries[index].items.append(item)
         entries[index].updatedAt = Date()
         persist()
+        touchActiveJournalMetadata()
         return item
     }
 
@@ -318,6 +488,7 @@ final class JournalStore: ObservableObject {
             }
         }
         persist()
+        touchActiveJournalMetadata()
     }
 
     func selectDay(_ entryID: UUID?) {
@@ -441,6 +612,7 @@ final class JournalStore: ObservableObject {
         entries[entryIndex].items[itemIndex].imageFilenames.append(filename)
         entries[entryIndex].updatedAt = Date()
         persist()
+        touchActiveJournalMetadata()
         return filename
     }
 
@@ -480,6 +652,7 @@ final class JournalStore: ObservableObject {
         entries[entryIndex].updatedAt = Date()
         removeImageFile(filename)
         persist()
+        touchActiveJournalMetadata()
     }
 
     func pasteImageFromClipboard(to entryID: UUID, itemID: UUID) -> Bool {
@@ -508,10 +681,10 @@ final class JournalStore: ObservableObject {
     // MARK: - Export / Import / Reveal
 
     func revealDataDirectoryInFinder() {
-        NSWorkspace.shared.open(rootDirectory)
+        NSWorkspace.shared.open(librariesRoot)
     }
 
-    /// Exports `journal.json` + `images/` into a zip at `destinationURL`.
+    /// Exports the active journal's `journal.json` + `images/` into a zip at `destinationURL`.
     func exportArchive(to destinationURL: URL) throws {
         let tempRoot = fileManager.temporaryDirectory
             .appendingPathComponent("WickExport-\(UUID().uuidString)", isDirectory: true)
@@ -559,7 +732,7 @@ final class JournalStore: ObservableObject {
         try runZip(sourceDirectory: payloadDir, destinationZip: destinationURL)
     }
 
-    /// Imports a previously exported zip or a bare `journal.json`.
+    /// Imports a previously exported zip or a bare `journal.json` into the **active** journal.
     /// Replaces current data after writing a backup of the existing store.
     func importArchive(from sourceURL: URL) throws {
         // Import is an explicit recovery path — clear read-only so we can replace data.
@@ -622,6 +795,7 @@ final class JournalStore: ObservableObject {
         lastPersistError = nil
         JournalThumbnailCache.shared.removeAll()
         persist()
+        touchActiveJournalMetadata()
     }
 
     /// Forces a synchronous write of the in-memory snapshot (used on quit).
@@ -630,11 +804,17 @@ final class JournalStore: ObservableObject {
         persist()
     }
 
+    /// Ask editors to commit drafts, then persist the active journal.
+    private func flushActiveJournalSession() {
+        NotificationCenter.default.post(name: .wickWillFlushJournalDrafts, object: nil)
+        flushPendingWrites()
+    }
+
     /// Clears read-only mode after the user explicitly chooses to start fresh
     /// (existing on-disk file is first moved aside).
     func abandonCorruptDatabaseAndStartFresh() throws {
         if fileManager.fileExists(atPath: databaseURL.path) {
-            let quarantine = rootDirectory.appendingPathComponent(
+            let quarantine = journalDirectory.appendingPathComponent(
                 "journal.corrupt-\(Int(Date().timeIntervalSince1970)).json"
             )
             try? fileManager.moveItem(at: databaseURL, to: quarantine)
@@ -645,6 +825,187 @@ final class JournalStore: ObservableObject {
         loadFailureMessage = nil
         didRestoreFromBackup = false
         persist()
+    }
+
+    // MARK: - Bootstrap / migration
+
+    private func bootstrapLibrary() {
+        try? fileManager.createDirectory(at: librariesRoot, withIntermediateDirectories: true)
+        migrateLegacySingleJournalIfNeeded()
+        loadOrCreateCatalog()
+        guard let activeID = activeJournalID else { return }
+        bindPaths(for: activeID)
+        ensureDirectories()
+        loadActiveJournalContent()
+    }
+
+    /// One-shot migration: move `…/Wick/Journal` → `…/Wick/Journals/<uuid>/` and write catalog.
+    /// After this, the legacy path is never read again.
+    private func migrateLegacySingleJournalIfNeeded() {
+        guard let legacyRoot else { return }
+        guard !fileManager.fileExists(atPath: catalogURL.path) else { return }
+        guard fileManager.fileExists(atPath: legacyRoot.path) else { return }
+
+        // Only migrate if the legacy folder looks like a journal store.
+        let legacyDB = legacyRoot.appendingPathComponent("journal.json", isDirectory: false)
+        let legacyBak = legacyRoot.appendingPathComponent("journal.json.bak", isDirectory: false)
+        let legacyImages = legacyRoot.appendingPathComponent("images", isDirectory: true)
+        let hasLegacyContent = fileManager.fileExists(atPath: legacyDB.path)
+            || fileManager.fileExists(atPath: legacyBak.path)
+            || fileManager.fileExists(atPath: legacyImages.path)
+
+        guard hasLegacyContent else {
+            // Empty leftover folder — quarantine it so we never re-scan.
+            quarantineLegacyRoot(legacyRoot)
+            return
+        }
+
+        let journalID = UUID()
+        let destination = librariesRoot.appendingPathComponent(journalID.uuidString, isDirectory: true)
+
+        do {
+            if fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+            try fileManager.moveItem(at: legacyRoot, to: destination)
+
+            let info = JournalInfo(
+                id: journalID,
+                name: defaultMigratedJournalName()
+            )
+            let catalog = JournalCatalogSnapshot(
+                version: JournalCatalogSnapshot.currentVersion,
+                activeJournalID: journalID,
+                journals: [info]
+            )
+            let data = try encoder.encode(catalog)
+            try data.write(to: catalogURL, options: .atomic)
+            NSLog("Wick: migrated legacy single journal to multi-journal layout (\(journalID.uuidString))")
+        } catch {
+            NSLog("Wick: legacy journal migration failed: \(error.localizedDescription)")
+            // Best-effort: if move succeeded but catalog write failed, try to leave data recoverable.
+        }
+    }
+
+    private func quarantineLegacyRoot(_ legacyRoot: URL) {
+        let stamp = Int(Date().timeIntervalSince1970)
+        let quarantine = legacyRoot
+            .deletingLastPathComponent()
+            .appendingPathComponent("Journal.migrated-\(stamp)", isDirectory: true)
+        try? fileManager.moveItem(at: legacyRoot, to: quarantine)
+    }
+
+    private func defaultMigratedJournalName() -> String {
+        L10n.string(.journalLibraryDefaultName, language: AppSettings.shared.language)
+    }
+
+    private func loadOrCreateCatalog() {
+        if let catalog = loadCatalogFromDisk() {
+            journals = catalog.journals.sorted { $0.createdAt < $1.createdAt }
+            if journals.contains(where: { $0.id == catalog.activeJournalID }) {
+                activeJournalID = catalog.activeJournalID
+            } else {
+                activeJournalID = journals.first?.id
+            }
+            // Ensure every catalog entry has a directory.
+            for info in journals {
+                let dir = librariesRoot.appendingPathComponent(info.id.uuidString, isDirectory: true)
+                try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+            }
+            if activeJournalID == nil {
+                seedDefaultJournal()
+            } else if activeJournalID != catalog.activeJournalID {
+                persistCatalog()
+            }
+            return
+        }
+
+        // No catalog: start with one default journal.
+        seedDefaultJournal()
+    }
+
+    private func seedDefaultJournal() {
+        let info = JournalInfo(name: defaultJournalName())
+        let dir = librariesRoot.appendingPathComponent(info.id.uuidString, isDirectory: true)
+        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(
+            at: dir.appendingPathComponent("images", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try? fileManager.createDirectory(
+            at: dir.appendingPathComponent("backups", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+
+        journals = [info]
+        activeJournalID = info.id
+        persistCatalog()
+    }
+
+    private func loadCatalogFromDisk() -> JournalCatalogSnapshot? {
+        guard fileManager.fileExists(atPath: catalogURL.path) else { return nil }
+        do {
+            let data = try Data(contentsOf: catalogURL)
+            let catalog = try decoder.decode(JournalCatalogSnapshot.self, from: data)
+            guard !catalog.journals.isEmpty else { return nil }
+            return catalog
+        } catch {
+            NSLog("Wick catalog load failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func persistCatalog() {
+        guard let activeJournalID, !journals.isEmpty else { return }
+        let catalog = JournalCatalogSnapshot(
+            version: JournalCatalogSnapshot.currentVersion,
+            activeJournalID: activeJournalID,
+            journals: journals
+        )
+        do {
+            let data = try encoder.encode(catalog)
+            try fileManager.createDirectory(at: librariesRoot, withIntermediateDirectories: true)
+            try data.write(to: catalogURL, options: .atomic)
+        } catch {
+            NSLog("Wick catalog persist failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func bindPaths(for journalID: UUID) {
+        let dir = librariesRoot.appendingPathComponent(journalID.uuidString, isDirectory: true)
+        journalDirectory = dir
+        imagesDirectory = dir.appendingPathComponent("images", isDirectory: true)
+        databaseURL = dir.appendingPathComponent("journal.json", isDirectory: false)
+        backupURL = dir.appendingPathComponent("journal.json.bak", isDirectory: false)
+        backupsDirectory = dir.appendingPathComponent("backups", isDirectory: true)
+        lastRollingBackupAt = nil
+    }
+
+    private func resetSessionState() {
+        selectedTagFilter = nil
+        searchText = ""
+        selection = nil
+        isReadOnlyDueToLoadFailure = false
+        loadFailureMessage = nil
+        didRestoreFromBackup = false
+        lastPersistError = nil
+        JournalThumbnailCache.shared.removeAll()
+    }
+
+    private func loadActiveJournalContent() {
+        load()
+    }
+
+    private func touchActiveJournalMetadata() {
+        guard let activeJournalID,
+              let index = journals.firstIndex(where: { $0.id == activeJournalID })
+        else { return }
+        journals[index].updatedAt = Date()
+        persistCatalog()
+    }
+
+    private func notifyActiveJournalChanged() {
+        NotificationCenter.default.post(name: .wickActiveJournalDidChange, object: self)
     }
 
     // MARK: - Selection helpers
@@ -711,13 +1072,14 @@ final class JournalStore: ObservableObject {
         }
         selection = .day(destID)
         persist()
+        touchActiveJournalMetadata()
         reconcileSelectionAfterChange()
     }
 
-    // MARK: - Persistence
+    // MARK: - Persistence (active journal)
 
     private func ensureDirectories() {
-        try? fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: journalDirectory, withIntermediateDirectories: true)
         try? fileManager.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
         try? fileManager.createDirectory(at: backupsDirectory, withIntermediateDirectories: true)
     }
@@ -726,6 +1088,7 @@ final class JournalStore: ObservableObject {
         isReadOnlyDueToLoadFailure = false
         loadFailureMessage = nil
         didRestoreFromBackup = false
+        ensureDirectories()
 
         guard fileManager.fileExists(atPath: databaseURL.path) else {
             // Try backup if primary missing.
@@ -737,6 +1100,7 @@ final class JournalStore: ObservableObject {
                 return
             }
             entries = []
+            selection = nil
             return
         }
 
@@ -752,7 +1116,7 @@ final class JournalStore: ObservableObject {
                 selection = entries.first.map { .day($0.id) }
                 didRestoreFromBackup = true
                 // Quarantine corrupt primary, then rewrite from backup.
-                let quarantine = rootDirectory.appendingPathComponent(
+                let quarantine = journalDirectory.appendingPathComponent(
                     "journal.corrupt-\(Int(Date().timeIntervalSince1970)).json"
                 )
                 try? fileManager.moveItem(at: databaseURL, to: quarantine)

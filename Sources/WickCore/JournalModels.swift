@@ -166,3 +166,34 @@ struct JournalSnapshot: Codable, Equatable {
         JournalSnapshot(version: currentVersion, entries: [])
     }
 }
+
+// MARK: - Multi-journal catalog
+
+/// Metadata for one journal library (a named container of day entries).
+struct JournalInfo: Identifiable, Codable, Equatable, Hashable {
+    var id: UUID
+    var name: String
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+/// On-disk catalog of all journals under the multi-journal root.
+struct JournalCatalogSnapshot: Codable, Equatable {
+    var version: Int
+    var activeJournalID: UUID
+    var journals: [JournalInfo]
+
+    static let currentVersion = 1
+}

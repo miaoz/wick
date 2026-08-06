@@ -13,6 +13,12 @@ struct JournalRootView: View {
     @State private var showStartFreshConfirm = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
+    // Multi-journal library actions (shared by toolbar menu).
+    @State private var showNewJournalAlert = false
+    @State private var showRenameJournalAlert = false
+    @State private var showDeleteJournalConfirm = false
+    @State private var journalNameDraft = ""
+
     var body: some View {
         // Low-frequency day-arc palette refresh (5 min granularity is plenty).
         // This only re-resolves colors — it never writes bindings, so IME
@@ -50,6 +56,46 @@ struct JournalRootView: View {
             }
             Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
         }
+        .confirmationDialog(
+            L10n.string(.journalLibraryDeleteConfirm, language: settings.language),
+            isPresented: $showDeleteJournalConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.string(.journalLibraryDelete, language: settings.language), role: .destructive) {
+                if let id = store.activeJournalID {
+                    _ = store.deleteJournal(id: id)
+                }
+            }
+            Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
+        }
+        .alert(
+            L10n.string(.journalLibraryNewTitle, language: settings.language),
+            isPresented: $showNewJournalAlert
+        ) {
+            TextField(
+                L10n.string(.journalLibraryNamePlaceholder, language: settings.language),
+                text: $journalNameDraft
+            )
+            Button(L10n.string(.journalLibraryCreate, language: settings.language)) {
+                store.createJournal(name: journalNameDraft)
+            }
+            Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
+        }
+        .alert(
+            L10n.string(.journalLibraryRenameTitle, language: settings.language),
+            isPresented: $showRenameJournalAlert
+        ) {
+            TextField(
+                L10n.string(.journalLibraryNamePlaceholder, language: settings.language),
+                text: $journalNameDraft
+            )
+            Button(L10n.string(.journalLibrarySaveName, language: settings.language)) {
+                if let id = store.activeJournalID {
+                    store.renameJournal(id: id, to: journalNameDraft)
+                }
+            }
+            Button(L10n.string(.cancel, language: settings.language), role: .cancel) {}
+        }
         .background {
             // Hidden focusable buttons for shortcuts that aren't in the toolbar.
             Button("") {
@@ -81,9 +127,19 @@ struct JournalRootView: View {
                 .accessibilityHidden(true)
             }
         }
+        // Bridge AppKit toolbar (macOS 13) journal-library actions into SwiftUI alerts.
+        .onReceive(NotificationCenter.default.publisher(for: .wickJournalLibraryNewRequested)) { _ in
+            beginNewJournal()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .wickJournalLibraryRenameRequested)) { _ in
+            beginRenameJournal()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .wickJournalLibraryDeleteRequested)) { _ in
+            showDeleteJournalConfirm = true
+        }
 
         // macOS 14+ installs a real window toolbar (the split view's own
-        // sidebar toggle plus this new-entry item). On macOS 13 nothing
+        // sidebar toggle plus journal switcher + new-entry). On macOS 13 nothing
         // materializes in this manually created window, so
         // JournalWindowController installs an AppKit NSToolbar instead and
         // the shortcut keys below stay as hidden in-view buttons.
@@ -91,6 +147,9 @@ struct JournalRootView: View {
             base
         } else {
             base.toolbar {
+                ToolbarItem(placement: .navigation) {
+                    journalLibraryMenu
+                }
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button {
                         _ = store.openOrCreateToday()
@@ -105,6 +164,59 @@ struct JournalRootView: View {
                 }
             }
         }
+    }
+
+    /// Dropdown next to the sidebar toggle: select / create / rename / delete journals.
+    private var journalLibraryMenu: some View {
+        Menu {
+            ForEach(store.journals) { journal in
+                Button {
+                    store.switchToJournal(id: journal.id)
+                } label: {
+                    if journal.id == store.activeJournalID {
+                        Label(journal.name, systemImage: "checkmark")
+                    } else {
+                        Text(journal.name)
+                    }
+                }
+            }
+
+            Divider()
+
+            Button(L10n.string(.journalLibraryNew, language: settings.language)) {
+                beginNewJournal()
+            }
+            Button(L10n.string(.journalLibraryRename, language: settings.language)) {
+                beginRenameJournal()
+            }
+            Button(
+                L10n.string(.journalLibraryDelete, language: settings.language),
+                role: .destructive
+            ) {
+                showDeleteJournalConfirm = true
+            }
+            .disabled(store.journals.count <= 1)
+        } label: {
+            Label {
+                Text(store.activeJournal?.name ?? L10n.string(.journalLibraryDefaultName, language: settings.language))
+                    .lineLimit(1)
+            } icon: {
+                Image(systemName: "book.closed")
+            }
+        }
+        .help(L10n.string(.journalLibraryMenu, language: settings.language))
+        .menuIndicator(.visible)
+    }
+
+    private func beginNewJournal() {
+        journalNameDraft = store.defaultJournalName(for: settings.language)
+        showNewJournalAlert = true
+    }
+
+    private func beginRenameJournal() {
+        journalNameDraft = store.activeJournal?.name
+            ?? L10n.string(.journalLibraryDefaultName, language: settings.language)
+        showRenameJournalAlert = true
     }
 
     private var loadFailureBanner: some View {
@@ -182,4 +294,3 @@ var journalNeedsInViewTopBar: Bool {
     #endif
     return ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 14
 }
-
