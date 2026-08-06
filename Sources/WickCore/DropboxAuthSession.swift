@@ -11,28 +11,39 @@ enum DropboxAuthSession {
     private static var currentSession: ASWebAuthenticationSession?
 
     static func open(url: URL, callbackScheme: String) async throws -> URL {
-        try await withCheckedThrowingContinuation { continuation in
+        defer { currentSession = nil }
+        return try await withCheckedThrowingContinuation { continuation in
             let session = ASWebAuthenticationSession(
                 url: url,
-                callbackURLScheme: callbackScheme
-            ) { callbackURL, error in
-                currentSession = nil
-                if let callbackURL {
-                    continuation.resume(returning: callbackURL)
-                } else if let authError = error as? ASWebAuthenticationSessionError,
-                          authError.code == .canceledLogin {
-                    continuation.resume(throwing: SyncBackendError.authorizationCancelled)
-                } else {
-                    continuation.resume(
-                        throwing: error ?? SyncBackendError.server(status: 0, message: "auth session failed")
-                    )
-                }
-            }
+                callbackURLScheme: callbackScheme,
+                completionHandler: makeCompletionHandler(continuation: continuation)
+            )
             session.presentationContextProvider = WindowAnchorProvider.shared
             // Keep the shared Safari session so returning users stay signed in.
             session.prefersEphemeralWebBrowserSession = false
             currentSession = session
             session.start()
+        }
+    }
+
+    /// The completion handler is invoked synchronously on AuthenticationServices'
+    /// XPC reply queue. It MUST be created in a nonisolated context: a closure
+    /// inheriting MainActor isolation would trap on newer Swift runtimes when
+    /// called off the main queue (EXC_BREAKPOINT in swift_task_checkIsolated).
+    private nonisolated static func makeCompletionHandler(
+        continuation: CheckedContinuation<URL, Error>
+    ) -> (URL?, Error?) -> Void {
+        { callbackURL, error in
+            if let callbackURL {
+                continuation.resume(returning: callbackURL)
+            } else if let authError = error as? ASWebAuthenticationSessionError,
+                      authError.code == .canceledLogin {
+                continuation.resume(throwing: SyncBackendError.authorizationCancelled)
+            } else {
+                continuation.resume(
+                    throwing: error ?? SyncBackendError.server(status: 0, message: "auth session failed")
+                )
+            }
         }
     }
 
