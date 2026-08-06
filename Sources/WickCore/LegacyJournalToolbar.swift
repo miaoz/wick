@@ -1,11 +1,9 @@
 import AppKit
 
-/// Item source for the macOS 13 journal toolbar: journal-library menu at the
-/// leading edge, new-entry at the trailing edge. There is deliberately no
-/// toolbar sidebar toggle — it lives in the sidebar when expanded (and as a
-/// floating top-left button when collapsed), mirroring the new system where
-/// the toggle sits at the top of the sidebar column, so the two never
-/// duplicate. All toggles use the same responder-chain `toggleSidebar:`.
+/// Item source for the macOS 13 journal toolbar: sidebar toggle leftmost
+/// (responder-chain `toggleSidebar:`, same as the system item — traffic-light
+/// row, leading edge, present whether the sidebar is expanded or collapsed),
+/// journal-library menu next to it, new-entry at the trailing edge.
 ///
 /// The library control is a borderless pull-down NSPopUpButton showing the
 /// book icon + active journal name (mirroring the macOS 14+ SwiftUI toolbar
@@ -14,6 +12,7 @@ import AppKit
 @MainActor
 final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate, NSMenuDelegate {
     private enum ItemID {
+        static let toggle = NSToolbarItem.Identifier("wick.toggleSidebar")
         static let library = NSToolbarItem.Identifier("wick.journalLibrary")
         static let newEntry = NSToolbarItem.Identifier("wick.newEntry")
     }
@@ -43,6 +42,14 @@ final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate, NSMenuDel
         willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
         switch itemIdentifier {
+        case ItemID.toggle:
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: nil)
+            item.label = L10n.string(.journalToggleSidebar, language: AppSettings.shared.language)
+            item.toolTip = item.label
+            item.target = self
+            item.action = #selector(toggleSidebar)
+            return item
         case ItemID.library:
             let popup = NSPopUpButton(frame: .zero, pullsDown: true)
             popup.isBordered = false
@@ -75,7 +82,7 @@ final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate, NSMenuDel
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [ItemID.library, .flexibleSpace, ItemID.newEntry]
+        [ItemID.toggle, ItemID.library, .flexibleSpace, ItemID.newEntry]
     }
 
     // MARK: - NSMenuDelegate (rebuild journal list on open)
@@ -139,6 +146,10 @@ final class LegacyJournalToolbarDelegate: NSObject, NSToolbarDelegate, NSMenuDel
         deleteItem.target = self
         deleteItem.isEnabled = store.journals.count > 1
         libraryMenu.addItem(deleteItem)
+    }
+
+    @objc private func toggleSidebar() {
+        NSApplication.shared.sendAction(#selector(NSSplitViewController.toggleSidebar(_:)), to: nil, from: nil)
     }
 
     @objc private func newEntry() {

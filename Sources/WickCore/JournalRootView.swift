@@ -296,30 +296,6 @@ struct JournalRootView: View {
                 .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
         } detail: {
             JournalEditorPane()
-                .overlay(alignment: .topLeading) {
-                    // macOS 13 only: with no toolbar toggle, the collapsed state
-                    // needs its own restore affordance — floating at the same
-                    // top-left spot the in-sidebar button occupies when expanded.
-                    // Same responder-chain action as everything else.
-                    if journalNeedsInViewTopBar && columnVisibility == .detailOnly {
-                        Button {
-                            NSApp.sendAction(
-                                #selector(NSSplitViewController.toggleSidebar(_:)),
-                                to: nil,
-                                from: nil
-                            )
-                        } label: {
-                            Image(systemName: "sidebar.left")
-                                .font(.system(size: 14, weight: .regular))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 20, height: 20)
-                        }
-                        .buttonStyle(.plain)
-                        .help(L10n.string(.journalToggleSidebar, language: settings.language))
-                        .padding(.leading, 12)
-                        .padding(.top, 14)
-                    }
-                }
         }
     }
 }
