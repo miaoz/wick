@@ -4,12 +4,20 @@ import PackageDescription
 let package = Package(
     name: "Wick",
     platforms: [
-        .macOS(.v13)
+        .macOS(.v13),
+        // The shared WickSync target supports iOS; macOS-only targets are
+        // simply never built for it (the iPhone app links WickSync alone).
+        .iOS(.v16)
     ],
     products: [
         .executable(
             name: "Wick",
             targets: ["Wick"]
+        ),
+        // Consumed by the iOS app via a local package reference.
+        .library(
+            name: "WickSync",
+            targets: ["WickSync"]
         )
     ],
     targets: [

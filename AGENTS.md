@@ -15,9 +15,9 @@
 
 ## 仓库结构与模块划分
 
-SwiftPM target（`Package.swift`）：
+SwiftPM target（`Package.swift`；package 声明 `macOS 13+` 与 `iOS 16+`，macOS 专属 target 不参与 iOS 构建）：
 
-- `WickSync`（库，**纯 Foundation** 的日记模型 + 同步引擎 + Dropbox 后端；未来 iOS 客户端直接复用，其中文件禁止 `import AppKit`/`UIKit`）
+- `WickSync`（库，**纯 Foundation** 的日记模型 + 同步引擎 + Dropbox 后端；未来 iOS 客户端直接复用，其中文件禁止 `import AppKit`/`UIKit`；已作为 library product 暴露，并经 `swift build --target WickSync --triple arm64-apple-ios16.0` 验证可编译。iOS 工程将以**本地包引用**指回仓库根、只链接 `WickSync`，共享代码不挪子目录）
 - `WickCore`（库，macOS 其余几乎全部代码，可被测试 `@testable import`；依赖 `WickSync`）
 - `Wick`（可执行，`Sources/Wick/main.swift` 仅 3 行：调用 `WickApp.main()`）
 - `WickTests` / `WickSyncTests`（单元测试，分别依赖 `WickCore` / `WickSync`）
