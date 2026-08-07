@@ -273,6 +273,20 @@ final class JournalStore: ObservableObject {
         return "\(base) \(index)"
     }
 
+    /// Collision check for sync-applied renames: the journal being renamed must
+    /// not uniquify against itself.
+    private func uniquifiedJournalName(_ base: String, excluding journalID: UUID) -> String {
+        let existing = Set(journals.filter { $0.id != journalID }.map { $0.name.lowercased() })
+        if !existing.contains(base.lowercased()) {
+            return base
+        }
+        var index = 2
+        while existing.contains("\(base) \(index)".lowercased()) {
+            index += 1
+        }
+        return "\(base) \(index)"
+    }
+
     /// Adopts a journal discovered on another sync device: registers it locally
     /// under the SAME id (the remote folder's identity) and switches to it.
     /// The sync engine then pulls its contents down.
@@ -1456,6 +1470,26 @@ extension JournalStore: JournalLocalSource {
         }
         persist()
         touchActiveJournalMetadata()
+    }
+
+    /// Renames the active journal to the remote manifest's name, returning the
+    /// name actually applied (uniquified against OTHER local journals). The
+    /// engine records the result as its rename baseline.
+    @discardableResult
+    func applySyncedJournalName(_ name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let activeJournalID,
+              let index = journals.firstIndex(where: { $0.id == activeJournalID })
+        else { return activeJournal?.name ?? name }
+        let resolved = trimmed.isEmpty
+            ? journals[index].name
+            : uniquifiedJournalName(trimmed, excluding: activeJournalID)
+        guard resolved != journals[index].name else { return resolved }
+        journals[index].name = resolved
+        journals[index].updatedAt = Date()
+        persistCatalog()
+        notifyActiveJournalChanged()
+        return resolved
     }
 
     func syncedImageFilenames() -> Set<String> {

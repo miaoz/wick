@@ -23,6 +23,10 @@ public enum JournalSyncError: Error, Equatable {
 ///
 /// The single-writer assumption makes conflicts rare; every conflict path still
 /// preserves both sides.
+///
+/// Journal renames ride the manifest: a local rename pushes a rev-guarded
+/// rewrite, a remote rewrite is adopted locally, and a double rename resolves
+/// as last-push-wins (the loser adopts the winner on its next cycle).
 @MainActor
 public final class JournalSyncEngine: ObservableObject {
     public enum Status: Equatable {
@@ -524,33 +528,106 @@ public final class JournalSyncEngine: ObservableObject {
 
     private func ensureManifest(journalID: UUID) async throws {
         let path = JournalSyncLayout.manifestPath(for: journalID)
-        if let meta = state.remoteFiles[path] {
-            guard meta.rev != state.manifestRev else { return }
-            let (data, _) = try await backend.download(path: path)
-            let manifest = try JournalSyncEncoding.decoder.decode(JournalSyncManifest.self, from: data)
-            guard manifest.formatVersion <= JournalSyncLayout.formatVersion else {
-                throw JournalSyncError.unsupportedRemoteFormat(manifest.formatVersion)
+        let localName = localSource.syncJournalName
+
+        guard let meta = state.remoteFiles[path] else {
+            // First device to sync creates the manifest; a create race is harmless.
+            let manifest = JournalSyncManifest(
+                formatVersion: JournalSyncLayout.formatVersion,
+                journalID: journalID,
+                journalName: localName,
+                createdAt: Date(),
+                deviceID: deviceID
+            )
+            let data = try JournalSyncEncoding.encoder.encode(manifest)
+            if let rev = try? await backend.upload(path: path, data: data, ifRev: nil) {
+                state.remoteFiles[path] = RemoteFileRecord(
+                    rev: rev,
+                    contentHash: JournalSyncEncoding.contentHash(of: data)
+                )
+                state.manifestRev = rev
+                state.manifestName = localName
             }
-            state.manifestRev = meta.rev
             return
         }
 
-        // First device to sync creates the manifest; a create race is harmless.
-        let manifest = JournalSyncManifest(
-            formatVersion: JournalSyncLayout.formatVersion,
-            journalID: journalID,
-            journalName: localSource.syncJournalName,
-            createdAt: Date(),
-            deviceID: deviceID
-        )
-        let data = try JournalSyncEncoding.encoder.encode(manifest)
-        if let rev = try? await backend.upload(path: path, data: data, ifRev: nil) {
+        let revChanged = meta.rev != state.manifestRev
+
+        // One-time seed for state files written before journal names synced:
+        // take the remote name as the baseline. A divergence then reads as a
+        // local rename the old app never pushed — unless the remote manifest
+        // also moved, which only a rename-capable peer can do, so it wins.
+        var seededFromLegacyState = false
+        if state.manifestName == nil, state.manifestRev != nil {
+            let seeded = try await downloadManifest(path: path)
+            state.manifestName = seeded.journalName
+            seededFromLegacyState = true
+        }
+
+        let localRenamed = state.manifestName != nil && localName != state.manifestName
+        guard revChanged || localRenamed else { return }
+
+        if revChanged, !localRenamed || seededFromLegacyState {
+            // Only the remote renamed (fresh imports land here too — the
+            // remote name is authoritative for an adopted journal).
+            let manifest = try await downloadManifest(path: path)
+            state.manifestRev = meta.rev
+            try adoptJournalName(manifest.journalName, journalID: journalID)
+            return
+        }
+
+        // A local rename wins and is pushed, rev-guarded. A double rename
+        // resolves as last-push-wins: the other device adopts the winner on
+        // its next cycle.
+        let current = try await downloadManifest(path: path)
+        var updated = current
+        updated.journalName = localName
+        updated.deviceID = deviceID
+        let data = try JournalSyncEncoding.encoder.encode(updated)
+        do {
+            let rev = try await backend.upload(path: path, data: data, ifRev: meta.rev)
             state.remoteFiles[path] = RemoteFileRecord(
                 rev: rev,
                 contentHash: JournalSyncEncoding.contentHash(of: data)
             )
             state.manifestRev = rev
+            state.manifestName = localName
+        } catch SyncBackendError.writeConflict {
+            // Lost the race against another device's rename: adopt the winner.
+            let (winnerData, winnerRev) = try await backend.download(path: path)
+            let winner = try JournalSyncEncoding.decoder.decode(JournalSyncManifest.self, from: winnerData)
+            guard winner.formatVersion <= JournalSyncLayout.formatVersion else {
+                throw JournalSyncError.unsupportedRemoteFormat(winner.formatVersion)
+            }
+            state.remoteFiles[path] = RemoteFileRecord(
+                rev: winnerRev,
+                contentHash: JournalSyncEncoding.contentHash(of: winnerData)
+            )
+            state.manifestRev = winnerRev
+            try adoptJournalName(winner.journalName, journalID: journalID)
         }
+    }
+
+    private func downloadManifest(path: String) async throws -> JournalSyncManifest {
+        let (data, _) = try await backend.download(path: path)
+        let manifest = try JournalSyncEncoding.decoder.decode(JournalSyncManifest.self, from: data)
+        guard manifest.formatVersion <= JournalSyncLayout.formatVersion else {
+            throw JournalSyncError.unsupportedRemoteFormat(manifest.formatVersion)
+        }
+        return manifest
+    }
+
+    /// Applies a remote rename locally and records the APPLIED name as the new
+    /// baseline. Stores may uniquify on collision, so the applied name can
+    /// differ from the remote one — the baseline must follow the local result,
+    /// otherwise the next cycle would misread it as a local rename and fight.
+    private func adoptJournalName(_ name: String, journalID: UUID) throws {
+        guard name != localSource.syncJournalName else {
+            state.manifestName = name
+            return
+        }
+        try requireJournal(journalID)
+        state.manifestName = localSource.applySyncedJournalName(name)
     }
 
     private func downloadTombstone(path: String) async throws -> JournalTombstone {

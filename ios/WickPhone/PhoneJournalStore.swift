@@ -13,6 +13,7 @@ final class PhoneJournalStore: ObservableObject {
 
     @Published private(set) var journals: [JournalInfo] = []
     @Published private(set) var activeJournalID: UUID?
+    /// Kept sorted newest-first — DayListView renders the array as-is.
     @Published private(set) var entries: [JournalEntry] = []
     @Published private(set) var isReadOnlyDueToLoadFailure = false
 
@@ -194,6 +195,18 @@ final class PhoneJournalStore: ObservableObject {
         return "\(base) \(index)"
     }
 
+    /// Collision check for sync-applied renames: the journal being renamed must
+    /// not uniquify against itself.
+    private func uniquifiedJournalName(_ base: String, excluding journalID: UUID) -> String {
+        let existing = Set(journals.filter { $0.id != journalID }.map { $0.name.lowercased() })
+        guard existing.contains(base.lowercased()) else { return base }
+        var index = 2
+        while existing.contains("\(base) \(index)".lowercased()) {
+            index += 1
+        }
+        return "\(base) \(index)"
+    }
+
     private func seedJournalDirectory(for id: UUID) {
         let dir = librariesRoot.appendingPathComponent(id.uuidString, isDirectory: true)
         try? fileManager.createDirectory(
@@ -355,7 +368,28 @@ extension PhoneJournalStore: JournalLocalSource {
         } else {
             entries.append(applied)
         }
+        // Applies arrive in ascending day order; the day list is newest-first.
+        entries.sort { $0.date > $1.date }
         persist()
+    }
+
+    /// Renames the active journal to the remote manifest's name, returning the
+    /// name actually applied (uniquified against OTHER local journals). The
+    /// engine records the result as its rename baseline.
+    @discardableResult
+    func applySyncedJournalName(_ name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let activeJournalID,
+              let index = journals.firstIndex(where: { $0.id == activeJournalID })
+        else { return activeJournal?.name ?? name }
+        let resolved = trimmed.isEmpty
+            ? journals[index].name
+            : uniquifiedJournalName(trimmed, excluding: activeJournalID)
+        guard resolved != journals[index].name else { return resolved }
+        journals[index].name = resolved
+        journals[index].updatedAt = Date()
+        persistCatalog()
+        return resolved
     }
 
     func removeSyncedDay(dayKey: String) {

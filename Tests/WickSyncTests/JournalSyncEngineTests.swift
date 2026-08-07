@@ -99,15 +99,19 @@ final class FakeSyncBackend: JournalSyncBackend {
 @MainActor
 final class FakeLocalSource: JournalLocalSource {
     var journalID: UUID
+    var journalName: String
     var writable = true
     var days: [String: JournalEntry] = [:]
     var images: [String: Data] = [:]
     var removedDayKeys: [String] = []
 
-    init(journalID: UUID) { self.journalID = journalID }
+    init(journalID: UUID, name: String = "Test Journal") {
+        self.journalID = journalID
+        self.journalName = name
+    }
 
     var syncJournalID: UUID? { journalID }
-    var syncJournalName: String { "Test Journal" }
+    var syncJournalName: String { journalName }
     var syncIsWritable: Bool { writable }
 
     func syncDaySnapshots() -> [String: JournalEntry] { days }
@@ -115,6 +119,12 @@ final class FakeLocalSource: JournalLocalSource {
     func removeSyncedDay(dayKey: String) {
         days.removeValue(forKey: dayKey)
         removedDayKeys.append(dayKey)
+    }
+
+    @discardableResult
+    func applySyncedJournalName(_ name: String) -> String {
+        journalName = name
+        return name
     }
 
     func syncedImageFilenames() -> Set<String> { Set(days.values.flatMap(\.allImageFilenames)) }
@@ -147,8 +157,8 @@ final class JournalSyncEngineTests: XCTestCase {
 
     // MARK: helpers
 
-    private func makeSource() -> FakeLocalSource {
-        FakeLocalSource(journalID: journalID)
+    private func makeSource(name: String = "Test Journal") -> FakeLocalSource {
+        FakeLocalSource(journalID: journalID, name: name)
     }
 
     private func makeEngine(source: FakeLocalSource, stateDir: String, device: String) -> JournalSyncEngine {
@@ -618,5 +628,141 @@ final class JournalSyncEngineTests: XCTestCase {
         XCTAssertEqual(wiped.days["2026-08-01"]?.items.first?.body, "precious")
         XCTAssertTrue(backend.hasFile(dayPath("2026-08-01")))
         XCTAssertFalse(backend.hasFile(JournalSyncLayout.tombstonePath(for: journalID, dayKey: "2026-08-01")))
+    }
+
+    // MARK: journal name sync
+
+    private func decodeRemoteManifest() throws -> JournalSyncManifest {
+        let data = try XCTUnwrap(backend.fileData(JournalSyncLayout.manifestPath(for: journalID)))
+        return try JournalSyncEncoding.decoder.decode(JournalSyncManifest.self, from: data)
+    }
+
+    private func makeStateStore(_ stateDir: String) -> JournalSyncStateStore {
+        JournalSyncStateStore(directory: tempRoot.appendingPathComponent(stateDir, isDirectory: true))
+    }
+
+    func testRenamePushesToOtherDevice() async throws {
+        let a = makeSource()
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+
+        a.journalName = "Work Log"
+        await engineA.performSyncCycle()
+        XCTAssertEqual(try decodeRemoteManifest().journalName, "Work Log")
+
+        await engineB.performSyncCycle()
+        XCTAssertEqual(b.journalName, "Work Log")
+    }
+
+    func testRenameSyncConvergesWithoutEchoes() async {
+        let a = makeSource()
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+
+        a.journalName = "Renamed"
+        await engineA.performSyncCycle()
+        await engineB.performSyncCycle()
+        XCTAssertEqual(b.journalName, "Renamed")
+
+        // Once converged, further cycles touch nothing.
+        let uploads = backend.uploadCount
+        await engineB.performSyncCycle()
+        await engineA.performSyncCycle()
+        XCTAssertEqual(backend.uploadCount, uploads, "converged names must not re-upload")
+    }
+
+    func testDoubleRenameResolvesLastPushWins() async {
+        let a = makeSource()
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+
+        // Both rename while "offline" from each other; B pushes last and wins.
+        a.journalName = "A Name"
+        b.journalName = "B Name"
+        await engineA.performSyncCycle()
+        await engineB.performSyncCycle()
+        XCTAssertEqual(b.journalName, "B Name")
+
+        await engineA.performSyncCycle()
+        XCTAssertEqual(a.journalName, "B Name")
+    }
+
+    func testFreshImportAdoptsRemoteJournalName() async {
+        let a = makeSource()
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        // A device adopting the journal under a placeholder name follows the
+        // remote manifest instead of pushing its placeholder back.
+        let b = makeSource(name: "Local Placeholder")
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+        XCTAssertEqual(b.journalName, "Test Journal")
+
+        let uploads = backend.uploadCount
+        await engineB.performSyncCycle()
+        XCTAssertEqual(backend.uploadCount, uploads, "adopted name must become a stable baseline")
+    }
+
+    /// State files written before journal names synced carry no name baseline.
+    /// Seeded from the remote manifest, a rename the old app never pushed reads
+    /// as a local change and propagates on the first post-upgrade cycle.
+    func testLegacyStateWithoutNameBaselinePushesUnpropagatedRename() async throws {
+        let a = makeSource()
+        let storeA = makeStateStore("a")
+        await makeEngine(source: a, stateDir: "a", device: "A").performSyncCycle()
+
+        var legacy = storeA.load(for: journalID)
+        legacy.manifestName = nil
+        storeA.save(legacy, for: journalID)
+        a.journalName = "Renamed Before Upgrade"
+
+        let upgraded = makeEngine(source: a, stateDir: "a", device: "A")
+        await upgraded.performSyncCycle()
+
+        XCTAssertEqual(try decodeRemoteManifest().journalName, "Renamed Before Upgrade")
+
+        let uploads = backend.uploadCount
+        await upgraded.performSyncCycle()
+        XCTAssertEqual(backend.uploadCount, uploads, "seeded baseline must settle after the push")
+    }
+
+    /// The other legacy edge: a peer on an OLD build never rewrote manifests,
+    /// so a manifest that moved since the baseline was recorded can only come
+    /// from a rename-capable device — the upgraded peer's name wins over the
+    /// stale local one.
+    func testLegacyDeviceAdoptsRenamePushedByUpgradedPeer() async throws {
+        let a = makeSource()
+        let storeA = makeStateStore("a")
+        await makeEngine(source: a, stateDir: "a", device: "A").performSyncCycle()
+        let b = makeSource()
+        let storeB = makeStateStore("b")
+        await makeEngine(source: b, stateDir: "b", device: "B").performSyncCycle()
+
+        // Roll both back to legacy state files (no name baseline).
+        var legacyA = storeA.load(for: journalID)
+        legacyA.manifestName = nil
+        storeA.save(legacyA, for: journalID)
+        var legacyB = storeB.load(for: journalID)
+        legacyB.manifestName = nil
+        storeB.save(legacyB, for: journalID)
+
+        // A renamed while on the old app; upgrading pushes the rename.
+        a.journalName = "New Name"
+        await makeEngine(source: a, stateDir: "a", device: "A").performSyncCycle()
+
+        // B (still holding the old name) upgrades after the push: the remote
+        // manifest moved, so B adopts instead of pushing its stale name back.
+        await makeEngine(source: b, stateDir: "b", device: "B").performSyncCycle()
+        XCTAssertEqual(b.journalName, "New Name")
     }
 }

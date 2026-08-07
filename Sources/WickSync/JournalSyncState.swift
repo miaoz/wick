@@ -4,7 +4,8 @@ import Foundation
 
 /// Paths inside the cloud app folder:
 ///   /journals/<uuid>/
-///     manifest.json               format gate + journal identity
+///     manifest.json               format gate + journal identity (renames
+///                                 propagate by rewriting it, rev-guarded)
 ///     days/<dayKey>.json          one canonical JournalEntry per file
 ///     images/<uuid>.png|jpg|...   content-addressed, immutable
 ///     tombstones/<dayKey>.json    deletion marker (GC'd after retention)
@@ -191,6 +192,11 @@ public struct JournalSyncState: Codable, Equatable {
     public var days: [String: DaySyncState]
     public var pendingConflicts: [SyncConflictRecord]
     public var manifestRev: String?
+    /// Journal name this device last agreed on with the remote manifest — the
+    /// baseline rename detection compares `syncJournalName` against. Nil in
+    /// state files written before journal names synced (seeded once from the
+    /// remote manifest on the first cycle of a rename-capable build).
+    public var manifestName: String?
     public var lastSyncAt: Date?
     /// Manifests of OTHER journals found on the remote (journalID → record),
     /// used to offer adoption on this device.
@@ -202,6 +208,7 @@ public struct JournalSyncState: Codable, Equatable {
         days: [String: DaySyncState] = [:],
         pendingConflicts: [SyncConflictRecord] = [],
         manifestRev: String? = nil,
+        manifestName: String? = nil,
         lastSyncAt: Date? = nil,
         discoveredJournals: [String: DiscoveredJournalRecord] = [:]
     ) {
@@ -210,6 +217,7 @@ public struct JournalSyncState: Codable, Equatable {
         self.days = days
         self.pendingConflicts = pendingConflicts
         self.manifestRev = manifestRev
+        self.manifestName = manifestName
         self.lastSyncAt = lastSyncAt
         self.discoveredJournals = discoveredJournals
     }

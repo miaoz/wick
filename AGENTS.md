@@ -11,7 +11,7 @@
 - 其他能力：登录时启动（`SMAppService`）、亮/暗/跟随系统外观（配色由「一日弧光」主题引擎驱动）、中/英文界面、菜单栏百分比显示、基于 GitHub Releases 的检查更新。
 - **平台**：macOS 13+，Apple Silicon 与 Intel（正式打包产出 Universal 二进制）。
 - **技术栈**：Swift 6.1+（`Package.swift` 声明 `swift-tools-version: 6.1`；主开发环境为 Xcode 26 / Swift 6.3）、SwiftUI + AppKit、Swift Package Manager。**无任何第三方依赖**（无 `Package.resolved`）。
-- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.6.0 (28)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
+- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.7.0 (29)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
 
 ## 仓库结构与模块划分
 
@@ -29,7 +29,7 @@ SwiftPM target（`Package.swift`；package 声明 `macOS 13+` 与 `iOS 16+`，ma
 | `WickApp.swift` | `MenuBarExtra` 场景、`AppDelegate`（外观/登录项/提醒/更新检查启动、退出前落盘）、菜单栏 label（蜡烛图标 + 可选当日剩余百分比） |
 | `ProgressPanelView.swift` | 菜单栏弹出的进度面板与设置页 UI（`TimelineView` 每秒刷新；`PanelTheme` 为薄结构体，全部色值委托给 `DayArcEngine`） |
 | `WickTheme.swift` | 「一日弧光」主题引擎：`WickRGB`（可插值/可做 WCAG 对比度计算的 sRGB 值类型）、`WickPalette`（全部色角色，含复盘判定色 `reviewCorrect`/`reviewWrong`）、`DayPhase`（晨光/白昼/暮色/夜幕四锚点）、`DayArcEngine`（按时刻在 4 相位 × 亮/暗 2 套锚点色板间插值；`MetricTheme` 色相族恒定、仅辉光随相位缩放；`WICK_ARC_TIME=HH:mm` 环境变量可伪造"当前时刻"用于调试/截图）；`\.wickPalette` 环境键 |
-| `JournalStore.swift` | 多日记本存储（`@MainActor ObservableObject` 单例）：`catalog.json` + 每本独立目录；落盘、`.bak` 与滚动备份、加载失败只读保护、图片管理、zip 导入导出；启动时一次性把旧版 `Wick/Journal` 迁到多日记布局；**一天一篇**由 `createEntry`/`updateEntry` 的按日合并保证；`load()`/`loadSnapshot()`/导入均带 `JournalSnapshot.version` 版本门（遇到更新格式只读拒写）；文件尾部为 `JournalLocalSource` 同步桥接扩展（`syncDaySnapshots`/`applySyncedEntry`/`removeSyncedDay`/图片读写，远端文件名做防穿越校验） |
+| `JournalStore.swift` | 多日记本存储（`@MainActor ObservableObject` 单例）：`catalog.json` + 每本独立目录；落盘、`.bak` 与滚动备份、加载失败只读保护、图片管理、zip 导入导出；启动时一次性把旧版 `Wick/Journal` 迁到多日记布局；**一天一篇**由 `createEntry`/`updateEntry` 的按日合并保证；`load()`/`loadSnapshot()`/导入均带 `JournalSnapshot.version` 版本门（遇到更新格式只读拒写）；文件尾部为 `JournalLocalSource` 同步桥接扩展（`syncDaySnapshots`/`applySyncedEntry`/`removeSyncedDay`/`applySyncedJournalName`/图片读写，远端文件名做防穿越校验，远端改名与其他本地日记本撞名时去重后返回实际应用名） |
 | `JournalRootView.swift` | 日记窗口根视图（`JournalRootView`，`NavigationSplitView` 双栏；macOS 14+ 用系统工具栏，macOS 13 用 `JournalWindowController` 安装的 AppKit `NSToolbar`，判定见 `journalNeedsInViewTopBar`；色值取自 `\.wickPalette`，根视图 300s `TimelineView` 刷新；加载失败/恢复横幅、隐藏快捷键按钮） |
 | `JournalSidebarView.swift` | 日记侧栏：搜索框 + 标签芯片过滤（超宽折叠为「更多 N」，展开换行/再点收起）、按日/按条目两种列表、空态；选中高亮为自绘 `listRowBackground`（`sidebarBackground` 打底 + `accentSoft`，替代系统蓝/灰药丸以保证跨 macOS 版本一致），两个 `List` 均挂 `TableViewSelectionSuppressor` 关掉底层 `NSTableView` 的系统高亮（否则点击瞬间会闪一帧系统蓝色）；标签打包逻辑在 `TagChipFlow.swift` |
 | `TableViewSelectionSuppressor.swift` | `NSViewRepresentable`：子树搜索找到 SwiftUI `List` 背后的列表视图（新系统为 `SwiftUIOutlineListView`，`NSTableView` 子类；注意它是兄弟子树而非祖先）并设 `selectionHighlightStyle = .none`，配合自绘选中背景消除按住/点击时的系统蓝高亮 |
@@ -62,18 +62,18 @@ SwiftPM target（`Package.swift`；package 声明 `macOS 13+` 与 `iOS 16+`，ma
 | `L10n.swift` | 文案目录 + `AppLanguage`（`L10n.string(.key, language:)`，中/英双语；从 WickCore 迁入并公开化，iOS 复用） |
 | `TimeProgress.swift` | `TimeProgressCalculator`：日/周/月/年剩余比例的纯计算（可注入 `Date`/`Calendar`，便于测试；从 WickCore 迁入，iOS 首页复用） |
 | `JournalSyncEncoding.swift` | 规范 JSON 编码器（sortedKeys，与落盘格式一致）+ SHA-256 内容哈希（≤4MB 时与 Dropbox `content_hash` 逐字节一致，哈希可直接比对远端元数据） |
-| `JournalLocalSource.swift` | 引擎↔本地存储协议（按天快照/应用/删除 + 图片读写），未来 iOS 存储实现同一协议 |
+| `JournalLocalSource.swift` | 引擎↔本地存储协议（按天快照/应用/删除 + 日记名应用 + 图片读写），未来 iOS 存储实现同一协议 |
 | `JournalSyncBackend.swift` | 后端协议（listChanges 游标增量/download/upload rev 条件写/delete）+ `RemoteFileMeta` + `SyncBackendError` |
 | `DropboxSyncBackend.swift` | Dropbox API v2 实现：PKCE OAuth（`token_access_type=offline`，refresh token 存 Keychain，access token 单飞刷新）、`list_folder(+continue)`、`files/download|upload|delete_v2`；409 冲突/cursor 失效/429/401 分类 |
 | `PKCE.swift`、`KeychainTokenStore.swift` | PKCE 工具（无 App secret 的公共客户端）；Keychain 读写（无 access group——ad-hoc 重编译可能丢 token，表现为需重新授权） |
 | `JournalDayMerge.swift` | 同一天两版本合并：条目按 UUID 并集、同条目不同内容新 `updatedAt` 方胜（败者入 `losingItems` 保留）、标题同理、身份收敛到 `createdAt` 更早者 |
-| `JournalSyncState.swift` | 远端布局 `/journals/<uuid>/{manifest.json,days/,images/,tombstones/,conflicts/}`；manifest/墓碑/冲突载荷 Codable；每设备同步状态（cursor、远端文件视图、按天哈希/rev、pendingConflicts）与本地持久化（`~/Library/Application Support/Wick/SyncState/<uuid>.json`，**不参与同步**） |
-| `JournalSyncEngine.swift` | 对账引擎（`@MainActor ObservableObject`）：cursor 增量 → manifest `formatVersion` 版本门 → 发现其他日记本 manifest（`discoveredJournals`，供自动/手动导入，消失即剪除）→ 按天矩阵（本地变→条件上传；远端变→下载应用；双变→条目并集合并，败者存档 `conflicts/` 并出 `pendingConflicts`；本地删→先写墓碑再删远端；远端墓碑→本地删（本地有改动则改动方胜并清墓碑）；远端文件无墓碑消失→视为事故自动回传，绝不镜像删除）→ 图片按引用差集上传/下载 → 墓碑 30 天 GC；60s 周期 + 15s 防抖 + `syncOnce()`（退出用）+ `resetSyncState()`（重导入前调） |
+| `JournalSyncState.swift` | 远端布局 `/journals/<uuid>/{manifest.json,days/,images/,tombstones/,conflicts/}`；manifest/墓碑/冲突载荷 Codable；每设备同步状态（cursor、远端文件视图、按天哈希/rev、pendingConflicts、日记名基线 `manifestName`）与本地持久化（`~/Library/Application Support/Wick/SyncState/<uuid>.json`，**不参与同步**） |
+| `JournalSyncEngine.swift` | 对账引擎（`@MainActor ObservableObject`）：cursor 增量 → manifest `formatVersion` 版本门 + 日记名对账（本地改名→rev 条件写推送；远端 manifest 被改写→`applySyncedJournalName` 本地采用；双改→后推者胜、败方下轮采用；旧状态文件无 `manifestName` 基线则一次性播种——远端未动时本地未推送的改名补推、远端已动则信任远端）→ 发现其他日记本 manifest（`discoveredJournals`，供自动/手动导入，消失即剪除）→ 按天矩阵（本地变→条件上传；远端变→下载应用；双变→条目并集合并，败者存档 `conflicts/` 并出 `pendingConflicts`；本地删→先写墓碑再删远端；远端墓碑→本地删（本地有改动则改动方胜并清墓碑）；远端文件无墓碑消失→视为事故自动回传，绝不镜像删除）→ 图片按引用差集上传/下载 → 墓碑 30 天 GC；60s 周期 + 15s 防抖 + `syncOnce()`（退出用）+ `resetSyncState()`（重导入前调） |
 
 其他目录：
 
 - `assets/`：`AppIcon-master.png`、`AppIcon.icns`（`AppIcon.iconset/` 是生成中间产物，已 gitignore）
-- `ios/`：iPhone 客户端（v0，**仅中文 UI**，真机调试，未上架）。手写 `WickPhone.xcodeproj`（文件系统同步组——往里加源码文件不用改 pbxproj；`Info.plist` 放在 `ios/` 根而非同步文件夹内，否则会被当资源重复打包），本地包引用指回仓库根、只链接 `WickSync`。`WickPhone/` 下：`HomeView`（首页 = macOS 菜单栏面板的手机版：日/周/月/年剩余进度 + 相位 + 每秒刷新，日记经书本按钮进入）、`PhoneJournalStore`（实现 `JournalLocalSource` 的精简存储：同磁盘布局、`.bak`、版本门、只读保护，无滚动备份/迁移）、`PhoneSyncCoordinator`（同 macOS 协调器职责 + iOS `ASWebAuthenticationSession` 包装，回调闭包走 `nonisolated` 工厂——同 macOS 的崩溃教训）、`DayListView`/`EditorView`/`SettingsView`（列表 + 编辑器 + 同步设置；条目图片只展示，**暂不支持添加图片、复盘、多语言**）、`Assets.xcassets`（`AppIcon` 用 `assets/AppIcon-master.png` 单尺寸 1024）。真机运行：Xcode 打开工程选自己设备，Signing 选 Personal Team。CLI 校验：`xcodebuild -project ios/WickPhone.xcodeproj -target WickPhone build CODE_SIGNING_ALLOWED=NO OBJROOT=/tmp/x SYMROOT=/tmp/y`（本机无模拟器运行时，带 `-destination` 会报「platform not installed」）
+- `ios/`：iPhone 客户端（v0，**仅中文 UI**，真机调试，未上架）。手写 `WickPhone.xcodeproj`（文件系统同步组——往里加源码文件不用改 pbxproj；`Info.plist` 放在 `ios/` 根而非同步文件夹内，否则会被当资源重复打包），本地包引用指回仓库根、只链接 `WickSync`。`WickPhone/` 下：`HomeView`（首页 = macOS 菜单栏面板的手机版：日/周/月/年剩余进度 + 相位 + 每秒刷新，日记经书本按钮进入）、`PhoneJournalStore`（实现 `JournalLocalSource` 的精简存储：同磁盘布局、`.bak`、版本门、只读保护，无滚动备份/迁移；`entries` 保持新→旧有序——`DayListView` 按数组顺序渲染）、`PhoneSyncCoordinator`（同 macOS 协调器职责 + iOS `ASWebAuthenticationSession` 包装，回调闭包走 `nonisolated` 工厂——同 macOS 的崩溃教训）、`DayListView`/`EditorView`/`SettingsView`（列表 + 编辑器 + 同步设置；条目图片只展示，**暂不支持添加图片、复盘、多语言**）、`Assets.xcassets`（`AppIcon` 用 `assets/AppIcon-master.png` 单尺寸 1024）。真机运行：Xcode 打开工程选自己设备，Signing 选 Personal Team。CLI 校验：`xcodebuild -project ios/WickPhone.xcodeproj -target WickPhone build CODE_SIGNING_ALLOWED=NO OBJROOT=/tmp/x SYMROOT=/tmp/y`（本机无模拟器运行时，带 `-destination` 会报「platform not installed」）
 - `scripts/`：`package_app.sh`（打 `.app`，含生成 `InfoPlist.strings` 中英双语通知用途文案）、`package_zip.sh`（打 zip）、`generate_icon_assets.sh` + `generate_icon.swift`（代码绘制图标）
 - `.github/workflows/release.yml`：唯一的 CI 工作流
 - `dist/`：打包产物（已 gitignore）
@@ -114,13 +114,13 @@ make clean         # rm -rf .build dist
 - 现有测试文件：
   - `TimeProgressTests.swift`：剩余比例边界（0/1 钳制、起止时刻）、四类进度齐全、周一起始。
   - `JournalStoreTests.swift`：用 `JournalStore(rootDirectory:)`（临时多日记根目录）覆盖默认日记本、新建/切换/删除日记本、旧版单日记迁移、一天一篇、标签按条目过滤、删除条目清理图片、持久化重载、主文件损坏时从 `.bak` 恢复、无备份时进入只读且**不覆盖磁盘坏文件**。
-  - `JournalStoreSyncTests.swift`：同步桥接——快照版本门（v99 只读且磁盘原样、新版 `.bak` 不恢复）、`applySyncedEntry` 按 dayKey 插替/保 remote updatedAt/选中跟随身份变更/只读下拒绝、`removeSyncedDay` 清图片、图片读写与路径穿越防护。
+  - `JournalStoreSyncTests.swift`：同步桥接——快照版本门（v99 只读且磁盘原样、新版 `.bak` 不恢复）、`applySyncedEntry` 按 dayKey 插替/保 remote updatedAt/选中跟随身份变更/只读下拒绝、`removeSyncedDay` 清图片、图片读写与路径穿越防护、`applySyncedJournalName` 改名/撞名去重/同名幂等。
   - `AppInfoTests.swift`：版本号比较。
   - `WickThemeTests.swift`：主题引擎——相位归属（锚点切换、跨午夜回绕）、插值中点、全天每 15 分钟 × 亮/暗的对比度护栏（textPrimary ≥4.5、accentText ≥4.0 等）、指标色相族稳定性。
   - `TagChipFlowTests.swift`：标签芯片换行打包（贪心换行、超宽独占一行）与折叠行裁剪（为「更多 N」腾出空间、全部裁掉的边界）。
   - `WickSyncTests/JournalSyncModelTests.swift`：dayKey 生成/解码推导/往返、规范编码 decode→encode 字节稳定、SHA-256 已知向量。
   - `WickSyncTests/JournalDayMergeTests.swift`：并集、同条目冲突新者胜+败者记录、标题规则、占位空条目剔除、时间戳 min/max、身份按 createdAt 收敛（与参数顺序无关）。
-  - `WickSyncTests/JournalSyncEngineTests.swift`：内存假后端 + 假本地源模拟**双设备**——首同步上传、二次空转、拉取、推送、不同条目并集合并、同条目冲突存档、删除墓碑传播、删除 vs 编辑两方向、远端文件消失自愈回传、图片双向、新版 manifest 阻断、cursor 失效恢复、状态跨实例恢复、切换日记本不串数据。
+  - `WickSyncTests/JournalSyncEngineTests.swift`：内存假后端 + 假本地源模拟**双设备**——首同步上传、二次空转、拉取、推送、不同条目并集合并、同条目冲突存档、删除墓碑传播、删除 vs 编辑两方向、远端文件消失自愈回传、图片双向、新版 manifest 阻断、cursor 失效恢复、状态跨实例恢复、切换日记本不串数据、日记名改名双向传播/收敛无回波/双改后推者胜/导入采用远端名/旧状态基线播种两方向。
 - 新增可测逻辑时的落点：纯计算放 `TimeProgressCalculator` / `DayArcEngine` 这类可注入 `Date`/`Calendar` 的静态方法；存储行为扩展 `JournalStoreTests`；同步行为扩展 `WickSyncTests`（引擎一切分支都应能用假后端复现，不碰网络）。UI 层无测试。
 
 ## CI 与发版

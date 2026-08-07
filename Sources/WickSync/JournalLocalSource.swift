@@ -27,6 +27,13 @@ public protocol JournalLocalSource: AnyObject {
     /// Removes the day with the given key together with its image files.
     func removeSyncedDay(dayKey: String)
 
+    /// Renames the active journal to the name from the remote manifest and
+    /// returns the name actually applied (stores may uniquify on collision
+    /// with another local journal). The engine records the returned name as
+    /// the new rename baseline, so the result must stay stable across cycles.
+    @discardableResult
+    func applySyncedJournalName(_ name: String) -> String
+
     /// Image filenames referenced by any local entry.
     func syncedImageFilenames() -> Set<String>
     func syncedImageData(filename: String) -> Data?

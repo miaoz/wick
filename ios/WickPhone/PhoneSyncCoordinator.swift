@@ -76,7 +76,11 @@ final class PhoneSyncCoordinator: ObservableObject {
             .store(in: &cancellables)
 
         PhoneJournalStore.shared.$journals
-            .sink { [weak self] in self?.trackLocalJournalDeletions($0) }
+            .sink { [weak self] in
+                self?.trackLocalJournalDeletions($0)
+                // Renames ride the next sync cycle (debounced; no-op otherwise).
+                self?.engine.requestSync()
+            }
             .store(in: &cancellables)
 
         if syncEnabled {

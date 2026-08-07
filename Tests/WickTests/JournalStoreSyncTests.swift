@@ -194,4 +194,37 @@ final class JournalStoreSyncTests: XCTestCase {
         XCTAssertTrue(reloaded.journals.contains { $0.id == remoteID })
         XCTAssertEqual(reloaded.activeJournalID, originalID)
     }
+
+    // MARK: - applySyncedJournalName
+
+    func testApplySyncedJournalNameRenamesActiveAndPersists() {
+        let applied = store.applySyncedJournalName("Renamed Remotely")
+
+        XCTAssertEqual(applied, "Renamed Remotely")
+        XCTAssertEqual(store.activeJournal?.name, "Renamed Remotely")
+        let reloaded = JournalStore(rootDirectory: tempRoot)
+        XCTAssertEqual(reloaded.activeJournal?.name, "Renamed Remotely")
+    }
+
+    func testApplySyncedJournalNameUniquifiesAgainstOtherJournals() {
+        let existing = store.activeJournal!.name
+        _ = store.createJournal(name: "Second")
+
+        let applied = store.applySyncedJournalName(existing)
+
+        XCTAssertNotEqual(applied.lowercased(), existing.lowercased(),
+                          "a collision with another journal must uniquify")
+        XCTAssertEqual(store.activeJournal?.name, applied)
+
+        // The applied name is the sync baseline: re-applying it is a no-op.
+        XCTAssertEqual(store.applySyncedJournalName(applied), applied)
+    }
+
+    func testApplySyncedJournalNameWithCurrentNameIsNoOp() {
+        let current = store.activeJournal!.name
+        let updatedAt = store.activeJournal!.updatedAt
+
+        XCTAssertEqual(store.applySyncedJournalName(current), current)
+        XCTAssertEqual(store.activeJournal?.updatedAt, updatedAt, "no-op apply must not touch metadata")
+    }
 }
