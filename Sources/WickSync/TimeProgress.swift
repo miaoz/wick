@@ -1,18 +1,18 @@
 import Foundation
 
-struct TimeProgress: Identifiable {
-    let id: String
-    let title: String
-    let subtitle: String
-    let fractionRemaining: Double
-    let percentageText: String
-    let remainingText: String
-    let endText: String
+public struct TimeProgress: Identifiable {
+    public let id: String
+    public let title: String
+    public let subtitle: String
+    public let fractionRemaining: Double
+    public let percentageText: String
+    public let remainingText: String
+    public let endText: String
 }
 
-enum TimeProgressCalculator {
+public enum TimeProgressCalculator {
     /// Fraction of the current local day still remaining in `[0, 1]`.
-    static func dayFractionRemaining(
+    public static func dayFractionRemaining(
         at date: Date = Date(),
         calendar: Calendar = .current
     ) -> Double {
@@ -22,7 +22,7 @@ enum TimeProgressCalculator {
         return remainingFraction(for: interval, at: date)
     }
 
-    static func allProgress(
+    public static func allProgress(
         at date: Date,
         language: AppLanguage,
         calendar: Calendar = .current
@@ -122,7 +122,7 @@ enum TimeProgressCalculator {
         }
     }
 
-    static func remainingFraction(for interval: DateInterval, at date: Date) -> Double {
+    public static func remainingFraction(for interval: DateInterval, at date: Date) -> Double {
         let remaining = interval.end.timeIntervalSince(date)
         guard interval.duration > 0 else {
             return 0

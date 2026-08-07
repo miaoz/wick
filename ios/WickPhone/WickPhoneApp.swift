@@ -9,7 +9,7 @@ struct WickPhoneApp: App {
 
     var body: some Scene {
         WindowGroup {
-            DayListView()
+            HomeView()
                 .environmentObject(store)
                 .environmentObject(sync)
         }

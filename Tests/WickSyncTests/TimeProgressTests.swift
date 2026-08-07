@@ -1,5 +1,5 @@
 import XCTest
-@testable import WickCore
+@testable import WickSync
 
 final class TimeProgressTests: XCTestCase {
     func testDayFractionRemainingAtStartOfDayIsNearOne() {

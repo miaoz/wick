@@ -1,7 +1,38 @@
 import Foundation
 
-enum L10n {
-    static func string(_ key: Key, language: AppLanguage) -> String {
+/// App display language. Shared with the iPhone client.
+public enum AppLanguage: String, CaseIterable, Identifiable {
+    case chinese = "zh-Hans"
+    case english = "en"
+
+    public var id: String { rawValue }
+
+    public var locale: Locale {
+        switch self {
+        case .chinese:
+            return Locale(identifier: "zh_CN")
+        case .english:
+            return Locale(identifier: "en_US")
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .chinese:
+            return "中文"
+        case .english:
+            return "English"
+        }
+    }
+
+    /// Follows the system preferred languages.
+    public static var system: AppLanguage {
+        Locale.preferredLanguages.first?.hasPrefix("zh") == true ? .chinese : .english
+    }
+}
+
+public enum L10n {
+    public static func string(_ key: Key, language: AppLanguage) -> String {
         switch language {
         case .chinese:
             return key.chinese
@@ -10,7 +41,7 @@ enum L10n {
         }
     }
 
-    enum Key {
+    public enum Key {
         case motto
         case quit
         case settings
@@ -158,7 +189,7 @@ enum L10n {
         case checkUpdatesOnLaunch
         case dataSection
 
-        var chinese: String {
+        public var chinese: String {
             switch self {
             case .motto: return "一寸光阴一寸金。"
             case .quit: return "退出"
@@ -306,7 +337,7 @@ enum L10n {
             }
         }
 
-        var english: String {
+        public var english: String {
             switch self {
             case .motto: return "Time is precious."
             case .quit: return "Quit"

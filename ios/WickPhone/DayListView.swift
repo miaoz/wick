@@ -3,49 +3,43 @@ import WickSync
 
 /// Day list: newest first, tap to edit. v0 UI is Chinese-only (the macOS app
 /// stays bilingual via L10n; phone localization lands with the feature set).
+/// Lives inside HomeView's NavigationStack.
 struct DayListView: View {
     @EnvironmentObject private var store: PhoneJournalStore
     @EnvironmentObject private var sync: PhoneSyncCoordinator
 
+    @Binding var path: NavigationPath
     @State private var showSettings = false
-    @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack(path: $path) {
-            List {
-                ForEach(store.entries) { entry in
-                    NavigationLink(value: entry.dayKey) {
-                        DayRow(entry: entry)
-                    }
-                }
-                .onDelete(perform: deleteDays)
-            }
-            .navigationTitle(store.activeJournal?.name ?? "日记")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        showSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        let entry = store.openOrCreateToday()
-                        path.append(entry.dayKey)
-                    } label: {
-                        Image(systemName: "square.and.pencil")
-                    }
+        List {
+            ForEach(store.entries) { entry in
+                NavigationLink(value: entry.dayKey) {
+                    DayRow(entry: entry)
                 }
             }
-            .navigationDestination(for: String.self) { dayKey in
-                if let entry = store.entries.first(where: { $0.dayKey == dayKey }) {
-                    EditorView(entry: entry)
+            .onDelete(perform: deleteDays)
+        }
+        .navigationTitle(store.activeJournal?.name ?? "日记")
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
                 }
             }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    let entry = store.openOrCreateToday()
+                    path.append(entry.dayKey)
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
             }
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
         }
     }
 

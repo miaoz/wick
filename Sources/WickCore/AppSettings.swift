@@ -1,30 +1,5 @@
 import SwiftUI
 
-enum AppLanguage: String, CaseIterable, Identifiable {
-    case chinese = "zh-Hans"
-    case english = "en"
-
-    var id: String { rawValue }
-
-    var locale: Locale {
-        switch self {
-        case .chinese:
-            return Locale(identifier: "zh_CN")
-        case .english:
-            return Locale(identifier: "en_US")
-        }
-    }
-
-    var displayName: String {
-        switch self {
-        case .chinese:
-            return "中文"
-        case .english:
-            return "English"
-        }
-    }
-}
-
 enum AppAppearance: String, CaseIterable, Identifiable {
     case light
     case dark
