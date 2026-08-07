@@ -3,3 +3,6 @@
 dist/
 .DS_Store
 assets/AppIcon.iconset/
+build/
+ios/build/
+xcuserdata/
