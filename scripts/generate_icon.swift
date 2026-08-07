@@ -161,11 +161,14 @@ func applyIconMask(to bitmap: NSBitmapImageRep, path: CGPath, size: Int) {
 }
 
 guard CommandLine.arguments.count > 1 else {
-    fputs("usage: generate_icon.swift <output-png-path>\n", stderr)
+    fputs("usage: generate_icon.swift <output-png-path> [--ios]\n", stderr)
     exit(1)
 }
 
 let outputURL = URL(fileURLWithPath: CommandLine.arguments[1])
+/// iOS icons are full-bleed (the system applies its own mask), unlike the
+/// macOS silhouette with its transparent margin.
+let isIOS = CommandLine.arguments.contains("--ios")
 let size = 1024
 
 guard let bitmap = NSBitmapImageRep(
@@ -204,8 +207,19 @@ let roundedCanvas = iconMask.path
 // Clip every paint operation to the icon silhouette so unclipped gradients
 // cannot fill the transparent corners (that previously made Launchpad show a square).
 context.saveGState()
-context.addPath(roundedCanvas)
-context.clip()
+if isIOS {
+    // Full bleed: the artwork is composed for the macOS 832pt inner box;
+    // expand it to cover the whole canvas (iOS masks the corners itself).
+    // Scale about the canvas center so the inner box maps exactly to [0, size].
+    let scale = CGFloat(size) / 832.0
+    context.translateBy(x: CGFloat(size) / 2, y: CGFloat(size) / 2)
+    context.scaleBy(x: scale, y: scale)
+    context.translateBy(x: -CGFloat(size) / 2, y: -CGFloat(size) / 2)
+    context.clip(to: CGRect(x: 0, y: 0, width: size, height: size))
+} else {
+    context.addPath(roundedCanvas)
+    context.clip()
+}
 
 drawLinearGradient(
     context,
@@ -259,7 +273,10 @@ drawLinearGradient(
 context.setLineWidth(4)
 context.addPath(roundedCanvas)
 context.setStrokeColor(NSColor(hex: 0xFFD6A4, alpha: 0.18).cgColor)
-context.strokePath()
+if !isIOS {
+    // Squircle rim highlight — meaningless once iOS applies its own mask.
+    context.strokePath()
+}
 
 let haloCenter = CGPoint(x: 512, y: 648)
 drawRadialGradient(
@@ -435,8 +452,17 @@ drawRadialGradient(
 context.restoreGState()
 NSGraphicsContext.restoreGraphicsState()
 
-// Belt-and-suspenders: force transparent corners even if a draw call escapes the clip.
-applyIconMask(to: bitmap, path: roundedCanvas, size: size)
+if isIOS {
+    // Full-bleed artwork must be fully opaque (no alpha at the corners).
+    if let pixels = bitmap.bitmapData {
+        for i in 0..<(size * size) {
+            pixels[i * 4 + 3] = 255
+        }
+    }
+} else {
+    // Belt-and-suspenders: force transparent corners even if a draw call escapes the clip.
+    applyIconMask(to: bitmap, path: roundedCanvas, size: size)
+}
 
 guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
     fputs("failed to create png data\n", stderr)

@@ -69,6 +69,12 @@ final class PhoneSyncCoordinator: ObservableObject {
             .sink { [weak self] in self?.autoImportRemoteJournals($0) }
             .store(in: &cancellables)
 
+        // Journal switches re-point the engine (it syncs the active journal).
+        PhoneJournalStore.shared.$activeJournalID
+            .dropFirst()
+            .sink { [weak self] _ in self?.engine.syncNow() }
+            .store(in: &cancellables)
+
         PhoneJournalStore.shared.$journals
             .sink { [weak self] in self?.trackLocalJournalDeletions($0) }
             .store(in: &cancellables)

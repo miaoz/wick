@@ -3,13 +3,23 @@ import WickSync
 
 /// Day list: newest first, tap to edit. v0 UI is Chinese-only (the macOS app
 /// stays bilingual via L10n; phone localization lands with the feature set).
-/// Lives inside HomeView's NavigationStack.
+/// Lives inside HomeView's NavigationStack. The leading menu manages journals
+/// (switch / create / rename / delete), mirroring the macOS library menu.
 struct DayListView: View {
     @EnvironmentObject private var store: PhoneJournalStore
     @EnvironmentObject private var sync: PhoneSyncCoordinator
 
     @Binding var path: NavigationPath
-    @State private var showSettings = false
+
+    private enum NameAlert {
+        case new
+        case rename
+    }
+
+    @State private var nameAlertMode: NameAlert = .new
+    @State private var showNameAlert = false
+    @State private var nameDraft = ""
+    @State private var showDeleteConfirm = false
 
     var body: some View {
         List {
@@ -23,11 +33,7 @@ struct DayListView: View {
         .navigationTitle(store.activeJournal?.name ?? "日记")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    showSettings = true
-                } label: {
-                    Image(systemName: "gearshape")
-                }
+                journalMenu
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -38,8 +44,75 @@ struct DayListView: View {
                 }
             }
         }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
+        .alert(
+            nameAlertMode == .rename ? "重命名日记本" : "新建日记本",
+            isPresented: $showNameAlert
+        ) {
+            TextField("名称", text: $nameDraft)
+            Button(nameAlertMode == .rename ? "保存" : "创建") {
+                switch nameAlertMode {
+                case .rename:
+                    if let id = store.activeJournalID {
+                        store.renameJournal(id: id, to: nameDraft)
+                    }
+                case .new:
+                    store.createJournal(name: nameDraft)
+                }
+            }
+            Button("取消", role: .cancel) {}
+        }
+        .confirmationDialog(
+            "删除当前日记本？",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("删除", role: .destructive) {
+                if let id = store.activeJournalID {
+                    _ = store.deleteJournal(id: id)
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将删除「\(store.activeJournal?.name ?? "")」在本机的全部内容，且不可撤销。")
+        }
+    }
+
+    private var journalMenu: some View {
+        Menu {
+            ForEach(store.journals) { journal in
+                Button {
+                    store.switchToJournal(id: journal.id)
+                } label: {
+                    if journal.id == store.activeJournalID {
+                        Label(journal.name, systemImage: "checkmark")
+                    } else {
+                        Text(journal.name)
+                    }
+                }
+            }
+
+            Divider()
+
+            Button("新建日记本…") {
+                nameAlertMode = .new
+                nameDraft = ""
+                showNameAlert = true
+            }
+            Button("重命名…") {
+                nameAlertMode = .rename
+                nameDraft = store.activeJournal?.name ?? ""
+                showNameAlert = true
+            }
+            Button("删除日记本…", role: .destructive) {
+                showDeleteConfirm = true
+            }
+            .disabled(store.journals.count <= 1)
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "book.closed")
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+            }
         }
     }
 

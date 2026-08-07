@@ -119,15 +119,82 @@ final class PhoneJournalStore: ObservableObject {
             return existing
         }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let base = trimmed.isEmpty ? "日记" : trimmed
-        var resolved = base
+        let info = JournalInfo(
+            id: id,
+            name: uniquifiedJournalName(trimmed.isEmpty ? "日记" : trimmed)
+        )
+        seedJournalDirectory(for: id)
+        journals.append(info)
+        journals.sort { $0.createdAt < $1.createdAt }
+        persistCatalog()
+        return info
+    }
+
+    /// Creates a new empty journal and switches to it.
+    @discardableResult
+    func createJournal(name: String) -> JournalInfo {
+        flushPendingWrites()
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let info = JournalInfo(
+            name: uniquifiedJournalName(trimmed.isEmpty ? "日记" : trimmed)
+        )
+        seedJournalDirectory(for: info.id)
+        journals.append(info)
+        journals.sort { $0.createdAt < $1.createdAt }
+        activeJournalID = info.id
+        bindPaths(for: info.id)
+        isReadOnlyDueToLoadFailure = false
+        entries = []
+        persistCatalog()
+        return info
+    }
+
+    func renameJournal(id: UUID, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let index = journals.firstIndex(where: { $0.id == id })
+        else { return }
+        journals[index].name = trimmed
+        journals[index].updatedAt = Date()
+        persistCatalog()
+    }
+
+    /// Deletes a journal and its on-disk folder. Refuses to delete the last one.
+    @discardableResult
+    func deleteJournal(id: UUID) -> Bool {
+        guard journals.count > 1, journals.contains(where: { $0.id == id }) else { return false }
+        let wasActive = id == activeJournalID
+        if wasActive {
+            flushPendingWrites()
+        }
+        let dir = librariesRoot.appendingPathComponent(id.uuidString, isDirectory: true)
+        try? fileManager.removeItem(at: dir)
+        journals.removeAll { $0.id == id }
+        if wasActive {
+            let next = journals.sorted { $0.updatedAt > $1.updatedAt }.first ?? journals.first
+            activeJournalID = next?.id
+            if let nextID = activeJournalID {
+                bindPaths(for: nextID)
+                ensureDirectories()
+                isReadOnlyDueToLoadFailure = false
+                load()
+            }
+        }
+        persistCatalog()
+        return true
+    }
+
+    private func uniquifiedJournalName(_ base: String) -> String {
+        let existing = Set(journals.map { $0.name.lowercased() })
+        guard existing.contains(base.lowercased()) else { return base }
         var index = 2
-        let existingNames = Set(journals.map { $0.name.lowercased() })
-        while existingNames.contains(resolved.lowercased()) {
-            resolved = "\(base) \(index)"
+        while existing.contains("\(base) \(index)".lowercased()) {
             index += 1
         }
-        let info = JournalInfo(id: id, name: resolved)
+        return "\(base) \(index)"
+    }
+
+    private func seedJournalDirectory(for id: UUID) {
         let dir = librariesRoot.appendingPathComponent(id.uuidString, isDirectory: true)
         try? fileManager.createDirectory(
             at: dir.appendingPathComponent("images", isDirectory: true),
@@ -139,10 +206,6 @@ final class PhoneJournalStore: ObservableObject {
                 options: .atomic
             )
         }
-        journals.append(info)
-        journals.sort { $0.createdAt < $1.createdAt }
-        persistCatalog()
-        return info
     }
 
     // MARK: - Entries

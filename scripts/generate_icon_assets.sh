@@ -30,3 +30,9 @@ cp "$MASTER_PNG" "$ICONSET_DIR/icon_512x512@2x.png"
 
 iconutil -c icns "$ICONSET_DIR" -o "$ICNS_FILE"
 printf 'Created %s\n' "$ICNS_FILE"
+
+# iOS app icon: full-bleed variant (no macOS margin/squircle mask).
+IOS_PNG="$ASSETS_DIR/AppIcon-ios.png"
+swift "$ROOT_DIR/scripts/generate_icon.swift" "$IOS_PNG" --ios >/dev/null
+cp "$IOS_PNG" "$ROOT_DIR/ios/WickPhone/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png"
+printf 'Created %s\n' "$IOS_PNG"
