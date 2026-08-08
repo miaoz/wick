@@ -12,7 +12,7 @@
 - 内置 **交易日历**：进度面板书签按钮左侧的日历按钮打开「交易日历」窗口——himekuri（https://github.com/pluk-inc/himekuri）「黄历」主题的撕页日历（绿墨×米白纸、双线描边、大号日期、竖排星期填色列、装订/纸堆/撕痕），**无边框透明穿透窗口**（贴桌对象，pad 区外点击穿透），撕下时碎页在单独叠加窗里从 pad 飘落到**屏幕外**并伴**程序合成撕纸音效**；每一页显示该日全球宏观事件，由 akshare `macro_info_ws` 背后的（无密钥）华尔街见闻 REST 接口直连取数（Swift `URLSession`，非 WebSocket、不打包 Python）。
 - **平台**：macOS 13+，Apple Silicon 与 Intel（正式打包产出 Universal 二进制）。
 - **技术栈**：Swift 6.1+（`Package.swift` 声明 `swift-tools-version: 6.1`；主开发环境为 Xcode 26 / Swift 6.3）、SwiftUI + AppKit、Swift Package Manager。**无任何第三方依赖**（无 `Package.resolved`）。
-- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.7.0 (29)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
+- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.8.0 (30)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
 
 ## 仓库结构与模块划分
 
@@ -39,7 +39,7 @@ SwiftPM target（`Package.swift`；package 声明 `macOS 13+` 与 `iOS 16+`，ma
 | `JournalReviewBadge.swift` | 复盘判定贴纸：`JournalReviewBadge`（`.seal` 双环印章微旋转、`size` 可调（编辑器卡片 56pt、气泡选项 34pt）；`.mini` 纯色字形，侧栏条目行用），verdict→字形/颜色映射也在此（correct=reviewCorrect、wrong=reviewWrong） |
 | `DayArcStrip.swift` | 弧光条组件本体 |
 | `MacroCalendarModels.swift` | 交易日历数据：`MacroCalendarEvent`（time/country/title/importance/actual/forecast/previous/link，`public` Codable）+ `MacroCalendarPayloadDecoder`（解析华尔街见闻 `data.items`，镜像 akshare：`revised` 回填 `previous` 后丢弃、空/非数值→`nil`；数据方会用不同 ticker 重复收录同一发布，按 时间+国家+标题 去重保留首条；`calendar_key` 可能为空字符串，id 回退顺序为 非空 calendar_key → 数字 id → 时间-标题——空 id 会被 SwiftUI 当重复身份重复渲染）；`MacroCalendarError` |
-| `MacroCalendarClient.swift` | Swift 直连 akshare `macro_info_ws` 背后的公开 REST 端点（`api-one-wscn.awtmt.com/apiv1/finance/macrodatas?start=&end=`，keyless GET，非 WebSocket）；端点 `end` 为包含式、会漏入次日零点事件（相邻两天页面重复显示），解码后按 `[start, end)` 过滤；`dayUnixRange` 纯计算（本地某日零点起 86400s）可测 |
+| `MacroCalendarClient.swift` | Swift 直连 akshare `macro_info_ws` 背后的公开 REST 端点（`api-one-wscn.awtmt.com/apiv1/finance/macrodatas?start=&end=`，keyless GET，非 WebSocket）；端点 `end` 为包含式、会漏入次日零点事件（相邻两天页面重复显示），解码后按 `[start, end)` 过滤；`dayUnixRange` 纯计算（本地某日零点起 86400s）可测。见闻日历历史上另有 财报/新股/活动 三类（`finance/report/list`、`finance/ipodatas`、`finance/meetings`），**现已在后端下线或清空（404/恒空），不要再尝试接入**；其内容实质已并入 `macrodatas`——响应按 `calendar_type` 混排 `FD`（数据发布：有 ticker、今值/预期/前值）与 `FE`（事件：打新/发布会/讲话/财报电话会，无 ticker、`calendar_key` 为空、数值全空） |
 | `MacroCalendarStore.swift` | `@MainActor` 交易日历数据单例：按本地日取数/加载态/错误态，内存缓存 + 磁盘 JSON 缓存（`…/Wick/MacroCalendarCache/`，离线仍可读，失败不覆盖；读缓存时重建旧版写入的空 id——重复 SwiftUI 身份会把行重复渲染）；`MacroCalendarFormat` 事件时间（Asia/Shanghai） |
 | `TradingCalendarTheme.swift` | himekuri「黄历」配色（`paper` #FBFBF8 米白、`ink` #168349 绿墨、`red` #D13821、`grain`/`paperEdge`）+ 字体助手（HiraginoSans-W7/HiraMinProN-W6/system serif）+ 纯函数 `ganzhiYear`（干支）+ `TradingCalendarGeometry`（页/装订/撕线/窗口尺寸）+ `Color.blended` |
 | `MacroDayPageView.swift` | 「黄历」页本体（被快照成纹理供撕纸变形）：双线描边、报头（公历/星期，**顶部留空在撕线 `tearY` 之下**保证首行可见）、大号日期数字、右侧竖排星期填色列、**中部农历行**（农历月日 + 干支年 + 生肖）、宏观事件为**固定栏目**（农历行下双细线分隔、栏高撑满到页脚、内容顶对齐——空白永远留在栏内，翻页不串版）：栏头 chip + 独立计数文本（`·` 混排进 HiraginoSans-W7 的 CJK 串会重叠，故拆开）、按事件数分档密度（1–2 条宽松大字 / 3 条标准 / ≥4 条紧凑单行）、≤5 条整版排下、更多则按 `MacroEventPaging` **每版 4 行分页**（几何固定，栏底翻页行非末版「另有 N 项 ›」、末版「‹ 回到首页」、首版附翻页提示小字）、按重要性降序（同级按时间先后）、无事件日为红色方印章（周末「休市」/工作日「本日无事」，2×2 印章按右列先读排字）、加载/错误态同栏居中、页脚「交易日历」chip；日期/农历/干支为纯计算 |
