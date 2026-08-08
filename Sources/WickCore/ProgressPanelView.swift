@@ -142,14 +142,6 @@ struct ProgressPanelView: View {
                 ) {
                     showsSettings = true
                 }
-
-                headerButton(
-                    systemName: "power",
-                    help: L10n.string(.quit, language: language),
-                    theme: theme
-                ) {
-                    NSApplication.shared.terminate(nil)
-                }
             }
         }
     }
@@ -221,7 +213,7 @@ struct ProgressPanelView: View {
     }
 }
 
-/// Menu-bar panel header icon (journal / settings / quit / back).
+/// Menu-bar panel header icon (calendar / journal / settings / back).
 /// Keeps the day-arc control chrome idle; hover adds a soft accent mask.
 private struct PanelHeaderIconButton: View {
     let systemName: String
@@ -678,6 +670,29 @@ private struct SettingsContentView: View {
                     }
                 }
             }
+
+            Button {
+                NSApplication.shared.terminate(nil)
+            } label: {
+                HStack {
+                    Image(systemName: "power")
+                    Text(L10n.string(.quit, language: language))
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                    Spacer()
+                }
+                .foregroundStyle(theme.primaryText)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(theme.controlBackground)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(theme.controlBorder, lineWidth: 1)
+                }
+            }
+            .buttonStyle(.plain)
         }
         .confirmationDialog(
             L10n.string(.syncDisconnectConfirmTitle, language: language),
