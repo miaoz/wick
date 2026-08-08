@@ -38,6 +38,7 @@ struct TradingCalendarRootView: View {
     @State private var lastVelocity: CGSize = .zero
     @State private var lastTickLevel = 0
     @State private var tornCount = 0
+    @State private var eventsPage = 0
 
     private var sceneW: CGFloat {
         TradingCalendarGeometry.pageW + 2 * TradingCalendarGeometry.overhangX
@@ -67,12 +68,32 @@ struct TradingCalendarRootView: View {
         .onChange(of: currentEvents) { _ in
             refreshPageTexture()
         }
+        .onChange(of: eventsPage) { _ in
+            refreshPageTexture()
+        }
         .onExitCommand {
             TradingCalendarWindowController.shared.closeCalendar()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .wickCalendarFlipEventsPage)) { note in
+            guard let direction = note.userInfo?["direction"] as? Int else { return }
+            flipEventsPage(by: direction)
         }
     }
 
     private var currentEvents: [MacroCalendarEvent] { store.events(for: currentDate) }
+
+    private var currentEventPageCount: Int {
+        MacroEventPaging.pageCount(for: currentEvents.count)
+    }
+
+    /// Advances the events page with wrap-around; a no-op on quiet days.
+    /// Shared by taps on the pane and the window's arrow-key / scroll input.
+    private func flipEventsPage(by delta: Int) {
+        let count = currentEventPageCount
+        guard count > 1 else { return }
+        eventsPage = (eventsPage + delta + count) % count
+        Haptics.tick()
+    }
 
     private var nextDate: Date {
         Calendar.current.date(byAdding: .day, value: 1, to: currentDate) ?? currentDate
@@ -106,7 +127,8 @@ struct TradingCalendarRootView: View {
                 events: nextEvents,
                 isLoading: store.isLoading(for: nextDate),
                 errorText: store.errorText(for: nextDate),
-                language: settings.language
+                language: settings.language,
+                eventsPage: 0
             )
             .overlay(nextPageShading)
             .padding(.top, TradingCalendarGeometry.pageTopInset)
@@ -262,6 +284,14 @@ struct TradingCalendarRootView: View {
                     tornMidDrag = false
                     return
                 }
+                // A tap on the events pane flips through event pages instead of
+                // tearing; it falls through to the settle path (pulled ≈ 0,
+                // so the sheet just springs back) after cycling the page.
+                if abs(value.translation.width) < 8, abs(value.translation.height) < 8,
+                   value.startLocation.y + TradingCalendarGeometry.pageH * (1 - TradingCalendarGeometry.tearZone)
+                       >= TradingCalendarGeometry.eventsPaneTopY {
+                    flipEventsPage(by: 1)
+                }
                 let flickDown = drag.height > 60 && value.predictedEndTranslation.height > 240
                 let flickUp = drag.height < -50 && value.predictedEndTranslation.height < -260
                 let pulled = max(drag.height / TradingCalendarGeometry.tearThreshold,
@@ -311,7 +341,8 @@ struct TradingCalendarRootView: View {
             events: currentEvents,
             isLoading: store.isLoading(for: currentDate),
             errorText: store.errorText(for: currentDate),
-            language: settings.language
+            language: settings.language,
+            eventsPage: eventsPage
         )
         if let cg = CalendarSnapshot.cgImage(of: page, scale: 2) {
             paperScene.setPageTexture(SKTexture(cgImage: cg))
@@ -327,6 +358,7 @@ struct TradingCalendarRootView: View {
             date: currentDate,
             events: store.events(for: currentDate),
             language: settings.language,
+            eventsPage: eventsPage,
             seed: tearSeed(for: tornCount),
             start: CGSize(
                 width: drag.width * 0.3,
@@ -348,6 +380,7 @@ struct TradingCalendarRootView: View {
             hold = 0
             damage = 0
             tornCount += 1
+            eventsPage = 0
         }
         sim.reset()
     }

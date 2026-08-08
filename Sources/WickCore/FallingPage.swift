@@ -7,6 +7,8 @@ struct FallingPage: Identifiable {
     let date: Date
     let events: [MacroCalendarEvent]
     let language: AppLanguage
+    /// The events page the sheet was flipped to when it came off.
+    let eventsPage: Int
     let seed: UInt64
     let start: CGSize
     let grabX: CGFloat
@@ -122,7 +124,8 @@ struct FallingPageView: View {
             events: page.events,
             isLoading: false,
             errorText: nil,
-            language: page.language
+            language: page.language,
+            eventsPage: page.eventsPage
         )
         .clipShape(TornPieceShape(seed: page.seed))
         .padding(14)

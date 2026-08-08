@@ -97,6 +97,66 @@ final class MacroCalendarTests: XCTestCase {
         XCTAssertTrue(events.isEmpty)
     }
 
+    func testDecodeCollapsesDuplicateReleases() throws {
+        // The feed sometimes lists the same release twice under different
+        // tickers/ids; only the first copy is kept.
+        let json = """
+        { "code": 0, "data": { "items": [
+          {
+            "id": 1584987, "public_date": 1785488400, "country": "欧元区",
+            "title": "7月调和CPI同比初值", "importance": 2,
+            "actual": "2.9", "forecast": "2.9", "previous": "2.8",
+            "calendar_key": "68c33400bed5a4f2291d0982a63b0b22"
+          },
+          {
+            "id": 1584986, "public_date": 1785488400, "country": "欧元区",
+            "title": "7月调和CPI同比初值", "importance": 2,
+            "actual": "2.9", "forecast": "2.9", "previous": "2.8",
+            "calendar_key": "6fc335bc57530feec6e863aa038375ce"
+          },
+          {
+            "id": 3, "public_date": 1785490000, "country": "欧元区",
+            "title": "7月调和CPI同比初值", "importance": 1
+          }
+        ] } }
+        """
+        let events = try MacroCalendarPayloadDecoder.decode(Data(json.utf8))
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(events[0].id, "68c33400bed5a4f2291d0982a63b0b22")
+        // Same title at a different time is a distinct event.
+        XCTAssertEqual(events[1].time, Date(timeIntervalSince1970: 1_785_490_000))
+    }
+
+    func testDecodeFallsBackToNumericIDWhenCalendarKeyIsEmpty() throws {
+        // Event-style entries arrive with `calendar_key: ""`; the id must fall
+        // back to the numeric feed id, never the empty string (duplicate empty
+        // ids make SwiftUI repeat rows).
+        let json = """
+        { "code": 0, "data": { "items": [
+          { "id": 14742, "public_date": 1786317840, "country": "中国",
+            "title": "宇树科技：8月10日打新", "importance": 4, "calendar_key": "" },
+          { "id": 14784, "public_date": 1786315200, "country": "中国",
+            "title": "长鑫科技获纳入MSCI中国全股票指数", "importance": 3, "calendar_key": "  " }
+        ] } }
+        """
+        let events = try MacroCalendarPayloadDecoder.decode(Data(json.utf8))
+        XCTAssertEqual(events.map(\.id), ["14742", "14784"])
+        XCTAssertEqual(Set(events.map(\.id)).count, events.count)
+    }
+
+    // MARK: - Event paging
+
+    func testEventPagingPageCounts() {
+        // Days up to the single-page limit print whole; beyond that, uniform
+        // 4-row pages (one row is always reserved for the overflow line).
+        XCTAssertEqual(MacroEventPaging.pageCount(for: 0), 1)
+        XCTAssertEqual(MacroEventPaging.pageCount(for: 5), 1)
+        XCTAssertEqual(MacroEventPaging.pageCount(for: 6), 2)
+        XCTAssertEqual(MacroEventPaging.pageCount(for: 8), 2)
+        XCTAssertEqual(MacroEventPaging.pageCount(for: 9), 3)
+        XCTAssertEqual(MacroEventPaging.pageCount(for: 16), 4)
+    }
+
     // MARK: - Number coercion
 
     func testNumberCoercion() {

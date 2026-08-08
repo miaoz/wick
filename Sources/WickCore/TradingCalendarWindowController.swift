@@ -40,6 +40,24 @@ final class TradingCalendarWindowController: NSObject, NSWindowDelegate {
 
     private(set) var window: NSWindow?
 
+    /// Local input monitors translating arrow keys / scroll gestures into
+    /// events-page flips. Installed once at window creation; every handler
+    /// re-checks `event.window`, so they only act when the calendar itself is
+    /// the target (key for keys, under the pointer for scrolls).
+    private var keyMonitor: Any?
+    private var scrollMonitor: Any?
+    /// Mutable scroll state for the monitor handler. AppKit delivers local
+    /// monitors on the main thread only, so a plain box is safe here — and
+    /// unlike the controller itself it can be touched from a non-isolated
+    /// closure without violating actor rules.
+    private let scrollState = ScrollAccumulator()
+
+    /// Scroll-wheel accumulation shared with the monitor closure.
+    private final class ScrollAccumulator {
+        var total: CGFloat = 0
+        var cooldownUntil = Date.distantPast
+    }
+
     private override init() {
         super.init()
     }
@@ -130,6 +148,7 @@ final class TradingCalendarWindowController: NSObject, NSWindowDelegate {
         window.setFrameAutosaveName("WickTradingCalendarWindow")
 
         self.window = window
+        installInputMonitors()
         return window
     }
 
@@ -145,5 +164,56 @@ final class TradingCalendarWindowController: NSObject, NSWindowDelegate {
         if !JournalWindowController.shared.hasOpenJournalWindow {
             NSApp.setActivationPolicy(.accessory)
         }
+    }
+
+    // MARK: - Event-page input
+
+    /// Arrow keys (→ ↓ next / ← ↑ previous) and the scroll wheel flip the events
+    /// page. `event.window` does all the scoping: keys only reach us while the
+    /// calendar is key, scrolls only while the pointer is over the pad
+    /// (everything outside it is click-through). The handlers stay non-isolated
+    /// (NotificationCenter is thread-safe) because `NSEvent` is non-Sendable.
+    private func installInputMonitors() {
+        guard let window else { return }
+        if keyMonitor == nil {
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak window] event in
+                guard event.window === window else { return event }
+                switch event.keyCode {
+                case 124, 125: Self.postEventsPageFlip(1, object: event.window)   // → ↓
+                case 123, 126: Self.postEventsPageFlip(-1, object: event.window)  // ← ↑
+                default: return event
+                }
+                return nil
+            }
+        }
+        if scrollMonitor == nil {
+            let scrollState = self.scrollState
+            scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak window] event in
+                guard event.window === window else { return event }
+                let now = Date()
+                if now >= scrollState.cooldownUntil {
+                    scrollState.total += event.scrollingDeltaY
+                    // A fixed distance per flip keeps trackpads and wheel mice
+                    // calm; the cooldown absorbs trackpad momentum.
+                    if abs(scrollState.total) >= 32 {
+                        Self.postEventsPageFlip(scrollState.total < 0 ? 1 : -1, object: event.window)
+                        scrollState.total = 0
+                        scrollState.cooldownUntil = now.addingTimeInterval(0.35)
+                    }
+                }
+                if event.phase == .ended || event.phase == .cancelled {
+                    scrollState.total = 0
+                }
+                return event
+            }
+        }
+    }
+
+    private nonisolated static func postEventsPageFlip(_ direction: Int, object: Any?) {
+        NotificationCenter.default.post(
+            name: .wickCalendarFlipEventsPage,
+            object: object,
+            userInfo: ["direction": direction]
+        )
     }
 }

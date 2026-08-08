@@ -15,6 +15,9 @@ enum TradingCalendarGeometry {
     static let tearThreshold: CGFloat = 118
     /// Fraction of the page (from the bottom) that responds to the tear gesture.
     static let tearZone: CGFloat = 0.93
+    /// Page-local y where the events compartment begins (≈ top pad + masthead +
+    /// hero + lunar line). Only used to hit-test taps that flip event pages.
+    static let eventsPaneTopY: CGFloat = 170
     /// Transparent margin around the top page so the sheet can swing/droop unclipped.
     static let overhangX: CGFloat = 70
     static let overhangBottom: CGFloat = 210

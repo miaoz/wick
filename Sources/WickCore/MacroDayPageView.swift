@@ -1,5 +1,19 @@
 import SwiftUI
 
+/// Event-pane pagination for busy days. A day with up to `singlePageLimit`
+/// events prints whole; beyond that the pane flips between uniform
+/// `rowsPerPage`-row pages so every page keeps the same geometry (one row is
+/// always reserved for the overflow / return line).
+enum MacroEventPaging {
+    static let singlePageLimit = 5
+    static let rowsPerPage = 4
+
+    static func pageCount(for eventCount: Int) -> Int {
+        guard eventCount > singlePageLimit else { return 1 }
+        return Int(ceil(Double(eventCount) / Double(rowsPerPage)))
+    }
+}
+
 /// The "printed page" for a single trading-calendar day, drawn in himekuri's「黄历」
 /// style (green ink on cream paper, double rule, big day numeral, filled weekday column).
 /// This view is snapshotted to a texture and warped by the paper physics in `PaperScene`.
@@ -9,6 +23,8 @@ struct MacroDayPageView: View {
     let isLoading: Bool
     let errorText: String?
     let language: AppLanguage
+    /// Which events page a busy day is flipped to (0-based; taps cycle pages).
+    let eventsPage: Int
 
     private let calendar = Calendar.current
 
@@ -255,32 +271,57 @@ struct MacroDayPageView: View {
         }
     }
 
-    /// A fixed-size printed page has no scrolling — render the rows that fit
-    /// the density tier and summarize the rest instead of clipping mid-row.
+    /// A fixed-size printed page has no scrolling — busy days are split into
+    /// uniform pages (taps on the pane flip them) instead of clipping mid-row.
     private var eventList: some View {
         let ranked = rankedEvents
         let density = EventDensity.forCount(ranked.count)
-        // A "more" line costs a row, so days that overflow show one row less.
-        let cap = density.valueFont == nil && ranked.count > 5 ? 4 : 5
-        let rows = Array(ranked.prefix(cap))
-        let hidden = ranked.count - rows.count
+        let pageCount = MacroEventPaging.pageCount(for: ranked.count)
+        let page = min(max(eventsPage, 0), pageCount - 1)
+        let rows: [MacroCalendarEvent]
+        if pageCount > 1 {
+            let start = page * MacroEventPaging.rowsPerPage
+            rows = Array(ranked[start..<min(start + MacroEventPaging.rowsPerPage, ranked.count)])
+        } else {
+            rows = ranked
+        }
+        let remaining = ranked.count - page * MacroEventPaging.rowsPerPage - rows.count
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(rows) { event in
                 eventRow(event, density: density)
             }
-            if hidden > 0 {
-                HStack(spacing: 6) {
-                    hairline
-                    Text(String(format: L10n.string(.macroMoreEventsFormat, language: language), hidden))
-                        .font(TradingCalendarTheme.mincho(7.5))
-                        .foregroundStyle(TradingCalendarTheme.faintInk)
-                        .fixedSize()
-                    hairline
+            if pageCount > 1 {
+                VStack(spacing: 3) {
+                    HStack(spacing: 6) {
+                        hairline
+                        Text(overflowText(remaining: remaining))
+                            .font(TradingCalendarTheme.mincho(7.5))
+                            .foregroundStyle(TradingCalendarTheme.faintInk)
+                            .fixedSize()
+                        hairline
+                    }
+                    // The flip affordance is invisible otherwise — annotate it
+                    // on the first page (where the overflow first appears).
+                    if page == 0 {
+                        Text(L10n.string(.macroEventsFlipHint, language: language))
+                            .font(TradingCalendarTheme.mincho(6.5))
+                            .tracking(0.5)
+                            .foregroundStyle(TradingCalendarTheme.faintInk.opacity(0.75))
+                    }
                 }
                 .padding(.top, 5)
             }
         }
         .padding(.top, 4)
+    }
+
+    /// The pane's footer line: overflow count with a "next page" chevron, or
+    /// the return affordance once the last page is reached.
+    private func overflowText(remaining: Int) -> String {
+        if remaining > 0 {
+            return String(format: L10n.string(.macroMoreEventsFormat, language: language), remaining) + " ›"
+        }
+        return "‹ " + L10n.string(.macroEventsFirstPage, language: language)
     }
 
     private var hairline: some View {

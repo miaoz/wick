@@ -180,6 +180,8 @@ public enum L10n {
         case macroImportance
         case macroLunar
         case macroMoreEventsFormat
+        case macroEventsFirstPage
+        case macroEventsFlipHint
 
         // Settings extras
         case generalSection
@@ -339,6 +341,8 @@ public enum L10n {
             case .macroImportance: return "重要性"
             case .macroLunar: return "农历"
             case .macroMoreEventsFormat: return "另有 %d 项"
+            case .macroEventsFirstPage: return "回到首页"
+            case .macroEventsFlipHint: return "轻点 / 滚轮 / 方向键翻页"
 
             case .generalSection: return "通用"
             case .menuBarPercentage: return "菜单栏显示今日剩余"
@@ -499,6 +503,8 @@ public enum L10n {
             case .macroImportance: return "Importance"
             case .macroLunar: return "Lunar"
             case .macroMoreEventsFormat: return "%d more"
+            case .macroEventsFirstPage: return "First page"
+            case .macroEventsFlipHint: return "Tap / scroll / arrow keys to flip"
 
             case .generalSection: return "General"
             case .menuBarPercentage: return "Show day remaining in menu bar"

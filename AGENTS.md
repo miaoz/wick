@@ -38,16 +38,16 @@ SwiftPM target（`Package.swift`；package 声明 `macOS 13+` 与 `iOS 16+`，ma
 | `JournalItemEditorCard.swift` | 条目卡片（单层平面：无内部盒子，标签为琥珀色纯文本、正文无框、图片区为缩略图网格，卡片描边弱化、填充 65% 不透明；顶栏为 条目N/添加图片/删除，整卡为图片拖放区）+ 图片缩略图组件；早于今天的条目右下角为「复盘」位——未复盘是「复盘」按钮、已复盘是放大的 `JournalReviewBadge` 印章（56pt，非当前判定贴纸在气泡内淡显），复盘选择（对/错贴纸即选项）在系统 `popover` 中进行——点外部任意处自动关闭（放弃选择不留痕迹），批注输入框始终在场（未判定时先存草稿、选定时并入复盘），已复盘条目的批注显示为铅笔图标批注行（不用斜体：CJK 无斜体字形）|
 | `JournalReviewBadge.swift` | 复盘判定贴纸：`JournalReviewBadge`（`.seal` 双环印章微旋转、`size` 可调（编辑器卡片 56pt、气泡选项 34pt）；`.mini` 纯色字形，侧栏条目行用），verdict→字形/颜色映射也在此（correct=reviewCorrect、wrong=reviewWrong） |
 | `DayArcStrip.swift` | 弧光条组件本体 |
-| `MacroCalendarModels.swift` | 交易日历数据：`MacroCalendarEvent`（time/country/title/importance/actual/forecast/previous/link，`public` Codable）+ `MacroCalendarPayloadDecoder`（解析华尔街见闻 `data.items`，镜像 akshare：`revised` 回填 `previous` 后丢弃、空/非数值→`nil`）；`MacroCalendarError` |
-| `MacroCalendarClient.swift` | Swift 直连 akshare `macro_info_ws` 背后的公开 REST 端点（`api-one-wscn.awtmt.com/apiv1/finance/macrodatas?start=&end=`，keyless GET，非 WebSocket）；`dayUnixRange` 纯计算（本地某日零点起 86400s）可测 |
-| `MacroCalendarStore.swift` | `@MainActor` 交易日历数据单例：按本地日取数/加载态/错误态，内存缓存 + 磁盘 JSON 缓存（`…/Wick/MacroCalendarCache/`，离线仍可读，失败不覆盖）；`MacroCalendarFormat` 事件时间（Asia/Shanghai） |
+| `MacroCalendarModels.swift` | 交易日历数据：`MacroCalendarEvent`（time/country/title/importance/actual/forecast/previous/link，`public` Codable）+ `MacroCalendarPayloadDecoder`（解析华尔街见闻 `data.items`，镜像 akshare：`revised` 回填 `previous` 后丢弃、空/非数值→`nil`；数据方会用不同 ticker 重复收录同一发布，按 时间+国家+标题 去重保留首条；`calendar_key` 可能为空字符串，id 回退顺序为 非空 calendar_key → 数字 id → 时间-标题——空 id 会被 SwiftUI 当重复身份重复渲染）；`MacroCalendarError` |
+| `MacroCalendarClient.swift` | Swift 直连 akshare `macro_info_ws` 背后的公开 REST 端点（`api-one-wscn.awtmt.com/apiv1/finance/macrodatas?start=&end=`，keyless GET，非 WebSocket）；端点 `end` 为包含式、会漏入次日零点事件（相邻两天页面重复显示），解码后按 `[start, end)` 过滤；`dayUnixRange` 纯计算（本地某日零点起 86400s）可测 |
+| `MacroCalendarStore.swift` | `@MainActor` 交易日历数据单例：按本地日取数/加载态/错误态，内存缓存 + 磁盘 JSON 缓存（`…/Wick/MacroCalendarCache/`，离线仍可读，失败不覆盖；读缓存时重建旧版写入的空 id——重复 SwiftUI 身份会把行重复渲染）；`MacroCalendarFormat` 事件时间（Asia/Shanghai） |
 | `TradingCalendarTheme.swift` | himekuri「黄历」配色（`paper` #FBFBF8 米白、`ink` #168349 绿墨、`red` #D13821、`grain`/`paperEdge`）+ 字体助手（HiraginoSans-W7/HiraMinProN-W6/system serif）+ 纯函数 `ganzhiYear`（干支）+ `TradingCalendarGeometry`（页/装订/撕线/窗口尺寸）+ `Color.blended` |
-| `MacroDayPageView.swift` | 「黄历」页本体（被快照成纹理供撕纸变形）：双线描边、报头（公历/星期，**顶部留空在撕线 `tearY` 之下**保证首行可见）、大号日期数字、右侧竖排星期填色列、**中部农历行**（农历月日 + 干支年 + 生肖）、宏观事件为**固定栏目**（农历行下双细线分隔、栏高撑满到页脚、内容顶对齐——空白永远留在栏内，翻页不串版）：栏头 chip + 独立计数文本（`·` 混排进 HiraginoSans-W7 的 CJK 串会重叠，故拆开）、按事件数分档密度（1–2 条宽松大字 / 3 条标准 / ≥4 条紧凑单行、最多 5 行，超出以「另有 N 项」虚线行收尾，绝不中途截行）、按重要性降序（同级按时间先后）、无事件日为红色方印章（周末「休市」/工作日「本日无事」，2×2 印章按右列先读排字）、加载/错误态同栏居中、页脚「交易日历」chip；日期/农历/干支为纯计算 |
+| `MacroDayPageView.swift` | 「黄历」页本体（被快照成纹理供撕纸变形）：双线描边、报头（公历/星期，**顶部留空在撕线 `tearY` 之下**保证首行可见）、大号日期数字、右侧竖排星期填色列、**中部农历行**（农历月日 + 干支年 + 生肖）、宏观事件为**固定栏目**（农历行下双细线分隔、栏高撑满到页脚、内容顶对齐——空白永远留在栏内，翻页不串版）：栏头 chip + 独立计数文本（`·` 混排进 HiraginoSans-W7 的 CJK 串会重叠，故拆开）、按事件数分档密度（1–2 条宽松大字 / 3 条标准 / ≥4 条紧凑单行）、≤5 条整版排下、更多则按 `MacroEventPaging` **每版 4 行分页**（几何固定，栏底翻页行非末版「另有 N 项 ›」、末版「‹ 回到首页」、首版附翻页提示小字）、按重要性降序（同级按时间先后）、无事件日为红色方印章（周末「休市」/工作日「本日无事」，2×2 印章按右列先读排字）、加载/错误态同栏居中、页脚「交易日历」chip；日期/农历/干支为纯计算 |
 | `LunarDate.swift` | 公历→农历转换（`LunarCalendar`，标准 1900–2100 月长表算法，纯可测）+ 显示助手：干支年/生肖（以公元 4 年=甲子锚定，`mod(year-4,…)`）、农历月名（正月/冬月/腊月）、农历日名（初一…三十） |
 | `PaperSim.swift` | himekuri `PaperSim` 移植：verlet 布料网格（11×14，row0 钉于装订、row1 撕线按 `fiberIntact` 逐列钉/断）、结构/剪切/弯曲约束、重力、拖拽 grab(z lift)、`setSeam` 累计断纤（不重接）、sleep 判定；纯 Foundation 可测 |
 | `CalendarPaperScene.swift` | `SKScene`：把当日页纹理经 `SKWarpGeometryGrid` 每帧按 sim 网格变形（仅顶层页，pad/下页/手势在 SwiftUI）；`warpPositions` 做 y 翻转映射 |
-| `TradingCalendarRootView.swift` | 撕页日历根视图：SwiftUI `ZStack`（软阴影/PadStack 纸堆/下一天页带阴影凹陷/弓起影子/SpriteView 顶层页/撕痕亮线/撕剩残根 StubShape/装订/隐形手势层）+ 拖拽裂纹模型（`damage` 永久撕痕、`tornFront` 跑裂纹、撕下即切到次日并触发 `FallingPageOverlay`）；接线撕纸音效/触觉；装订可拖拽移窗、右上角 × 关闭、Esc 关闭；`CalendarSnapshot`（ImageRenderer） |
-| `TradingCalendarWindowController.swift` | 交易日历窗口为 **无边框透明、可穿透** 的贴桌对象（仿 himekuri `PaperWindow`/`PassThroughHostingView`：pad 区接收点击、其余穿透到下层）；打开转 `.regular`、关闭回 `.accessory`（仅当日记窗口也未开）、dismiss 菜单栏面板、`closeCalendar()` |
+| `TradingCalendarRootView.swift` | 撕页日历根视图：SwiftUI `ZStack`（软阴影/PadStack 纸堆/下一天页带阴影凹陷/弓起影子/SpriteView 顶层页/撕痕亮线/撕剩残根 StubShape/装订/隐形手势层）+ 拖拽裂纹模型（`damage` 永久撕痕、`tornFront` 跑裂纹、撕下即切到次日并触发 `FallingPageOverlay`）；接线撕纸音效/触觉；装订可拖拽移窗、右上角 × 关闭、Esc 关闭；`CalendarSnapshot`（ImageRenderer）；事件区**翻页**：`eventsPage` 状态驱动纹理重快照，轻点（位移 <8pt 且落在事件区）/方向键/滚轮经 `flipEventsPage` 统一翻页（回绕），撕页时把当前版号传给 `FallingPage` 并归零 |
+| `TradingCalendarWindowController.swift` | 交易日历窗口为 **无边框透明、可穿透** 的贴桌对象（仿 himekuri `PaperWindow`/`PassThroughHostingView`：pad 区接收点击、其余穿透到下层）；打开转 `.regular`、关闭回 `.accessory`（仅当日记窗口也未开）、dismiss 菜单栏面板、`closeCalendar()`；建窗时安装**方向键/滚轮本地事件监听**（handler 按 `event.window` 判定作用域——按键要求本窗为 key、滚轮要求指针在 pad 上；`NSEvent` 非 Sendable 故 handler 保持非隔离、经 Notification 直发翻页，滚轮带累积阈值 + 冷却防触控板惯性连翻） |
 | `PaperTear.swift` | 撕口几何（移植 himekuri `Shapes`）：`tearEdgePoints`/`TornPieceShape`（飘落碎片锯齿上缘）/`StubShape`（撕剩残根，与碎片同 seed 互补）/`TearEdgeLine`（撕痕亮线）；约 1/3 为「完美撕开」 |
 | `FallingPage.swift` | 撕下的碎片单独在一个**横跨 pad 到屏幕底部、透明可穿透的叠加窗**里飘落，最终完全滑出屏幕（`FallingPageOverlay.spawn(from:)`）；`FallingPageView` 用 `FallPlan` 的手工 Catmull-Rom 插值（macOS 13 无 `KeyframeAnimator`），纸片带阴影/3D 倾斜/左右摆荡 |
 | `FallPlan.swift` | 飘落轨迹的纯数值（`FallState`/`FallTrack`/`FallPlan.make`）：下坠/上扬、侧向 carry、bank 旋转、planing 倾斜 |
@@ -66,7 +66,7 @@ SwiftPM target（`Package.swift`；package 声明 `macOS 13+` 与 `iOS 16+`，ma
 | `AppInfo.swift` | 版本读取与语义化比较（`isVersion(_:newerThan:)`） |
 | `UpdateChecker.swift` | 查询 GitHub Releases latest API（`miaoz/wick`），15s 超时，自定义 UA |
 | `LaunchAtLogin.swift` | `SMAppService.mainApp` 封装（macOS 13+） |
-| `AppNotifications.swift` | 自定义 `Notification.Name`（退出/关窗前冲刷草稿、存储恢复通知） |
+| `AppNotifications.swift` | 自定义 `Notification.Name`（退出/关窗前冲刷草稿、存储恢复通知、日历事件区翻页） |
 | `SyncCoordinator.swift` | 同步生命周期单例：持有 `DropboxSyncBackend` + `JournalSyncEngine`（localSource 为 `JournalStore.shared`）；启动时按 `wick.sync.enabled` 启停；`$entries` 变更 → 15s 防抖同步、切换日记本/失去激活 → 触发同步；连接/断开 Dropbox；**自动导入**远端发现的日记本（`registerRemoteJournal` 不切换活跃本，内容在用户打开时拉取；本地删除过的 UUID 记入 `wick.sync.ignoredRemoteJournals` 不再自动导入，设置页手动导入为逃生口）；导入前必须 `resetSyncState`（否则陈旧基线会把空本地误判为全删、向远端写墓碑）；退出前一次 5s 上限的最终同步（`applicationShouldTerminate` 返回 `.terminateLater`） |
 | `DropboxAuthSession.swift` | `ASWebAuthenticationSession` 包装（OAuth 浏览器授权 + 回调 URL）；需窗口 anchor，且回调 scheme 只在打包 `.app` 内注册，`swift run` 收不到回调 |
 
@@ -135,7 +135,7 @@ make clean         # rm -rf .build dist
   - `AppInfoTests.swift`：版本号比较。
   - `WickThemeTests.swift`：主题引擎——相位归属（锚点切换、跨午夜回绕）、插值中点、全天每 15 分钟 × 亮/暗的对比度护栏（textPrimary ≥4.5、accentText ≥4.0 等）、指标色相族稳定性。
   - `TagChipFlowTests.swift`：标签芯片换行打包（贪心换行、超宽独占一行）与折叠行裁剪（为「更多 N」腾出空间、全部裁掉的边界）。
-  - `MacroCalendarTests.swift`：`dayUnixRange` 本地日跨度/零点边界；华尔街见闻载荷解析字段映射与 `revised→previous` 回填；空 items/畸形载荷报错/无 release_time 跳过；数值强转（`%` 容忍、空/非数值→nil）。
+  - `MacroCalendarTests.swift`：`dayUnixRange` 本地日跨度/零点边界；华尔街见闻载荷解析字段映射与 `revised→previous` 回填；空 items/畸形载荷报错/无 release_time 跳过；重复收录条目去重；空 `calendar_key` 的 id 回退；事件分页计数；数值强转（`%` 容忍、空/非数值→nil）。
   - `PaperSimTests.swift`：rest 网格几何（row0 顶边、row1 撕线、末行页底）；静止步进有限值稳定；`setSeam` 按列断纤；全撕后重力下垂。
   - `LunarDateTests.swift`：公历→农历已知日期（春节正月初一、年中某日）；干支/生肖（甲子锚定）、农历月名（正月/冬月/腊月）、日名（初一…三十）。
   - `WickSyncTests/JournalSyncModelTests.swift`：dayKey 生成/解码推导/往返、规范编码 decode→encode 字节稳定、SHA-256 已知向量。
