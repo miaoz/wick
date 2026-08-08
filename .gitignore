@@ -6,3 +6,4 @@ assets/AppIcon.iconset/
 build/
 ios/build/
 xcuserdata/
+.zcode/

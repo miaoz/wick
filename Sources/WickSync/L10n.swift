@@ -168,6 +168,18 @@ public enum L10n {
         case journalLibraryCreate
         case journalLibrarySaveName
 
+        // Trading calendar
+        case tradingCalendar
+        case macroEventsSection
+        case macroLoading
+        case macroLoadFailed
+        case macroNoEvents
+        case macroActual
+        case macroForecast
+        case macroPrevious
+        case macroImportance
+        case macroLunar
+
         // Settings extras
         case generalSection
         case menuBarPercentage
@@ -314,6 +326,17 @@ public enum L10n {
             case .journalLibraryDeleteConfirm: return "确定删除这个日记本？其中的全部日记、条目与图片都会被永久删除。"
             case .journalLibraryCreate: return "创建"
             case .journalLibrarySaveName: return "保存"
+
+            case .tradingCalendar: return "交易日历"
+            case .macroEventsSection: return "宏观事件"
+            case .macroLoading: return "加载中…"
+            case .macroLoadFailed: return "加载失败"
+            case .macroNoEvents: return "今日暂无宏观事件"
+            case .macroActual: return "今值"
+            case .macroForecast: return "预期"
+            case .macroPrevious: return "前值"
+            case .macroImportance: return "重要性"
+            case .macroLunar: return "农历"
 
             case .generalSection: return "通用"
             case .menuBarPercentage: return "菜单栏显示今日剩余"
@@ -462,6 +485,17 @@ public enum L10n {
             case .journalLibraryDeleteConfirm: return "Delete this journal? All days, items, and images will be permanently removed."
             case .journalLibraryCreate: return "Create"
             case .journalLibrarySaveName: return "Save"
+
+            case .tradingCalendar: return "Trading Calendar"
+            case .macroEventsSection: return "Macro Events"
+            case .macroLoading: return "Loading…"
+            case .macroLoadFailed: return "Failed to load"
+            case .macroNoEvents: return "No macro events today"
+            case .macroActual: return "Actual"
+            case .macroForecast: return "Forecast"
+            case .macroPrevious: return "Previous"
+            case .macroImportance: return "Importance"
+            case .macroLunar: return "Lunar"
 
             case .generalSection: return "General"
             case .menuBarPercentage: return "Show day remaining in menu bar"

@@ -120,6 +120,14 @@ struct ProgressPanelView: View {
 
             HStack(spacing: 8) {
                 headerButton(
+                    systemName: "calendar",
+                    help: L10n.string(.tradingCalendar, language: language),
+                    theme: theme
+                ) {
+                    TradingCalendarWindowController.shared.openCalendar()
+                }
+
+                headerButton(
                     systemName: "book.closed",
                     help: L10n.string(.journal, language: language),
                     theme: theme
