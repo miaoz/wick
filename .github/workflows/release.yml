@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Match local Xcode when available (this machine: 26.6 / 17F113).
       # Falls back to the newest installed 26.x if 26.6 is missing on a future image.
@@ -86,7 +86,7 @@ jobs:
           ls -lh dist/*.zip
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Wick-macOS-${{ steps.version.outputs.version }}
           path: dist/Wick-macOS-*.zip
@@ -95,7 +95,7 @@ jobs:
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/Wick-macOS-*.zip
           generate_release_notes: true
