@@ -15,7 +15,11 @@ struct CalendarView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let scale = min(
+            // Fill the whole screen: on a portrait phone the taller dimension is the
+            // screen height, so we scale the pad to span top-to-bottom. The page (300pt
+            // wide, centered in the 480pt design) is narrow enough to still fit the
+            // width, so the calendar fills the display instead of floating in a band.
+            let scale = max(
                 geo.size.width / TradingCalendarGeometry.windowW,
                 geo.size.height / TradingCalendarGeometry.windowH
             )
