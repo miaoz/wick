@@ -1,6 +1,6 @@
-import AppKit
 import SpriteKit
 import SwiftUI
+import WickSync
 
 /// Renders a SwiftUI page to a bitmap the paper solver can warp.
 @MainActor
@@ -15,9 +15,16 @@ enum CalendarSnapshot {
 /// The trading calendar — a himekuri-style「黄历」tear-off pad whose pages show that
 /// day's global macro events. The pad stack, next page, binding, tear seam and the
 /// torn piece are SwiftUI; only the top page is a SpriteKit-warped texture, and a torn
-/// sheet falls off-screen in its own transparent overlay window (with a procedural rip).
-struct TradingCalendarRootView: View {
-    @EnvironmentObject private var settings: AppSettings
+/// sheet is handed to the host via `onPageTorn` to fall away (macOS: an overlay window,
+/// iOS: a full-screen overlay).
+///
+/// Platform-agnostic: the host supplies the language, a close action, and a closure
+/// that presents the torn page.
+public struct TradingCalendarRootView: View {
+    let language: AppLanguage
+    let onClose: () -> Void
+    let onPageTorn: (FallingPage) -> Void
+
     @ObservedObject private var store = MacroCalendarStore.shared
 
     @State private var currentDate = Date()
@@ -40,6 +47,16 @@ struct TradingCalendarRootView: View {
     @State private var tornCount = 0
     @State private var eventsPage = 0
 
+    public init(
+        language: AppLanguage,
+        onClose: @escaping () -> Void,
+        onPageTorn: @escaping (FallingPage) -> Void
+    ) {
+        self.language = language
+        self.onClose = onClose
+        self.onPageTorn = onPageTorn
+    }
+
     private var sceneW: CGFloat {
         TradingCalendarGeometry.pageW + 2 * TradingCalendarGeometry.overhangX
     }
@@ -49,7 +66,7 @@ struct TradingCalendarRootView: View {
 
     // MARK: - Body
 
-    var body: some View {
+    public var body: some View {
         ZStack(alignment: .top) {
             padBlock
                 .padding(.top, TradingCalendarGeometry.blockTopPad)
@@ -71,13 +88,15 @@ struct TradingCalendarRootView: View {
         .onChange(of: eventsPage) { _ in
             refreshPageTexture()
         }
-        .onExitCommand {
-            TradingCalendarWindowController.shared.closeCalendar()
-        }
         .onReceive(NotificationCenter.default.publisher(for: .wickCalendarFlipEventsPage)) { note in
             guard let direction = note.userInfo?["direction"] as? Int else { return }
             flipEventsPage(by: direction)
         }
+        #if os(macOS)
+        .onExitCommand {
+            onClose()
+        }
+        #endif
     }
 
     private var currentEvents: [MacroCalendarEvent] { store.events(for: currentDate) }
@@ -127,7 +146,7 @@ struct TradingCalendarRootView: View {
                 events: nextEvents,
                 isLoading: store.isLoading(for: nextDate),
                 errorText: store.errorText(for: nextDate),
-                language: settings.language,
+                language: language,
                 eventsPage: 0
             )
             .overlay(nextPageShading)
@@ -178,8 +197,8 @@ struct TradingCalendarRootView: View {
                     .allowsHitTesting(false)
             }
 
-            // The stapled binding across the top; drag it to move the pad.
-            CalendarPadBinding()
+            // The stapled binding across the top; drag it to move the pad (macOS).
+            CalendarPadBinding(onClose: onClose)
 
             tearHitLayer
         }
@@ -224,9 +243,7 @@ struct TradingCalendarRootView: View {
             .frame(width: TradingCalendarGeometry.pageW, height: TradingCalendarGeometry.pageH * TradingCalendarGeometry.tearZone)
             .contentShape(Rectangle())
             .gesture(tearGesture)
-            .onHover { inside in
-                (inside ? NSCursor.openHand : NSCursor.arrow).set()
-            }
+            .calendarCursorOnHover()
             .padding(.top, TradingCalendarGeometry.pageTopInset + TradingCalendarGeometry.pageH * (1 - TradingCalendarGeometry.tearZone))
     }
 
@@ -278,7 +295,7 @@ struct TradingCalendarRootView: View {
             .onEnded { value in
                 dragging = false
                 lastTickLevel = 0
-                NSCursor.openHand.set()
+                CalendarCursor.openHand()
                 sim.release()
                 if tornMidDrag {
                     tornMidDrag = false
@@ -313,7 +330,7 @@ struct TradingCalendarRootView: View {
         if damage < 0.02 { tearCenterX = grabX }
         lastTickLevel = Int(damage * 4)
         sim.setGrab(at: CGPoint(x: grabX, y: grabY))
-        NSCursor.closedHand.set()
+        CalendarCursor.closedHand()
         withAnimation(.spring(response: 0.22, dampingFraction: 0.62)) {
             hold = 1
         }
@@ -341,7 +358,7 @@ struct TradingCalendarRootView: View {
             events: currentEvents,
             isLoading: store.isLoading(for: currentDate),
             errorText: store.errorText(for: currentDate),
-            language: settings.language,
+            language: language,
             eventsPage: eventsPage
         )
         if let cg = CalendarSnapshot.cgImage(of: page, scale: 2) {
@@ -349,15 +366,14 @@ struct TradingCalendarRootView: View {
         }
     }
 
-    /// Irreversible. The page comes off and falls past the bottom of the screen in its
-    /// own transparent overlay; the next day is revealed underneath.
+    /// Irreversible. The page comes off and is handed to the host to fall away
+    /// (past the bottom of the screen); the next day is revealed underneath.
     private func performTear() {
-        guard let window = TradingCalendarWindowController.shared.window else { return }
         let upward = drag.height < 0 || lastVelocity.height < -200
         let piece = FallingPage(
             date: currentDate,
             events: store.events(for: currentDate),
-            language: settings.language,
+            language: language,
             eventsPage: eventsPage,
             seed: tearSeed(for: tornCount),
             start: CGSize(
@@ -370,7 +386,7 @@ struct TradingCalendarRootView: View {
         )
         TearSound.shared.playRip()
         Haptics.rip()
-        FallingPageOverlay.spawn(piece, from: window)
+        onPageTorn(piece)
 
         var transaction = Transaction()
         transaction.disablesAnimations = true
@@ -412,9 +428,11 @@ private struct CalendarPadStack: View {
     }
 }
 
-/// The stapled binding across the top of the pad. Dragging it moves the pad; the
-/// top-right × closes the calendar.
+/// The stapled binding across the top of the pad. Dragging it moves the pad (macOS);
+/// the top-right × closes the calendar.
 private struct CalendarPadBinding: View {
+    let onClose: () -> Void
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 3)
@@ -448,7 +466,7 @@ private struct CalendarPadBinding: View {
         .windowDragHandle()
         .overlay(alignment: .topTrailing) {
             Button {
-                TradingCalendarWindowController.shared.closeCalendar()
+                onClose()
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 7, weight: .bold))

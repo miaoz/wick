@@ -1,5 +1,4 @@
 import AVFoundation
-import AppKit
 
 /// Procedurally synthesized paper sounds — no audio assets (ported from himekuri).
 /// A rip is a dense train of fibrous micro-transients that swells mid-tear; crackles
@@ -134,16 +133,5 @@ final class TearSound {
             buffer.floatChannelData![0].update(from: src.baseAddress!, count: samples.count)
         }
         return buffer
-    }
-}
-
-/// Trackpad haptics for the tear.
-enum Haptics {
-    static func tick() {
-        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-    }
-
-    static func rip() {
-        NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
     }
 }

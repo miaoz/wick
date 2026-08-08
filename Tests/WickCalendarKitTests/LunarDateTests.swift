@@ -1,5 +1,5 @@
 import XCTest
-@testable import WickCore
+@testable import WickCalendarKit
 
 final class LunarDateTests: XCTestCase {
     private var calendar: Calendar {

@@ -105,9 +105,14 @@ final class TradingCalendarWindowController: NSObject, NSWindowDelegate {
             return window
         }
 
-        let root = TradingCalendarRootView()
-            .environmentObject(AppSettings.shared)
-            .environmentObject(MacroCalendarStore.shared)
+        let root = TradingCalendarRootView(
+            language: AppSettings.shared.language,
+            onClose: { [weak self] in self?.closeCalendar() },
+            onPageTorn: { [weak self] piece in
+                guard let window = self?.window else { return }
+                FallingPageOverlay.spawn(piece, from: window)
+            }
+        )
 
         let rect = NSRect(
             x: 0, y: 0,

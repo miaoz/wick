@@ -1,4 +1,5 @@
 import SwiftUI
+import WickSync
 
 /// Event-pane pagination for busy days. A day with up to `singlePageLimit`
 /// events prints whole; beyond that the pane flips between uniform

@@ -1,14 +1,22 @@
-import AppKit
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 extension View {
     /// Makes this view a handle that moves the containing window (ported from himekuri).
-    /// We always use the overlaid AppKit view — `WindowDragGesture` is macOS 15+.
+    /// On macOS we always use the overlaid AppKit view — `WindowDragGesture` is 15+.
+    /// On iOS there is no movable window, so it's a no-op.
     func windowDragHandle() -> some View {
+        #if os(macOS)
         modifier(WindowDragHandleModifier())
+        #else
+        self
+        #endif
     }
 }
 
+#if os(macOS)
 private struct WindowDragHandleModifier: ViewModifier {
     func body(content: Content) -> some View {
         content.overlay(LegacyWindowDragHandle())
@@ -30,3 +38,4 @@ private struct LegacyWindowDragHandle: NSViewRepresentable {
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     }
 }
+#endif

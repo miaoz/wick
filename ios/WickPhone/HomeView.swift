@@ -10,6 +10,7 @@ struct HomeView: View {
 
     @State private var path = NavigationPath()
     @State private var showSettings = false
+    @State private var showCalendar = false
 
     private let language = AppLanguage.system
 
@@ -56,6 +57,16 @@ struct HomeView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 6)
                         }
+
+                        Button {
+                            showCalendar = true
+                        } label: {
+                            Label("交易日历", systemImage: "calendar")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .navigationTitle("Wick")
@@ -75,6 +86,9 @@ struct HomeView: View {
                 }
                 .sheet(isPresented: $showSettings) {
                     SettingsView()
+                }
+                .fullScreenCover(isPresented: $showCalendar) {
+                    CalendarView()
                 }
             }
         }

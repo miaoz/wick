@@ -18,8 +18,4 @@ extension Notification.Name {
 
     /// AppKit toolbar (macOS 13) → SwiftUI: open the delete-journal confirmation.
     static let wickJournalLibraryDeleteRequested = Notification.Name("wick.journalLibraryDeleteRequested")
-
-    /// Calendar window input (arrow keys / scroll wheel) → SwiftUI: flip the events
-    /// page. `userInfo["direction"]` is +1 (next) or -1 (previous); pages wrap.
-    static let wickCalendarFlipEventsPage = Notification.Name("wick.calendarFlipEventsPage")
 }

@@ -1,4 +1,5 @@
 import Foundation
+import WickSync
 
 /// Per-day display + value formatting for the trading calendar page.
 enum MacroCalendarFormat {
@@ -19,8 +20,8 @@ enum MacroCalendarFormat {
 /// `~/Library/Application Support/Wick/MacroCalendarCache/` so past days stay readable offline.
 /// Cached data is shown immediately while a background refresh updates it.
 @MainActor
-final class MacroCalendarStore: ObservableObject {
-    static let shared = MacroCalendarStore()
+public final class MacroCalendarStore: ObservableObject {
+    public static let shared = MacroCalendarStore()
 
     private struct DayState {
         var events: [MacroCalendarEvent] = []
@@ -39,21 +40,21 @@ final class MacroCalendarStore: ObservableObject {
         try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
     }
 
-    func events(for date: Date) -> [MacroCalendarEvent] {
+    public func events(for date: Date) -> [MacroCalendarEvent] {
         days[dayKey(for: date)]?.events ?? []
     }
 
-    func isLoading(for date: Date) -> Bool {
+    public func isLoading(for date: Date) -> Bool {
         days[dayKey(for: date)]?.isLoading ?? false
     }
 
-    func errorText(for date: Date) -> String? {
+    public func errorText(for date: Date) -> String? {
         days[dayKey(for: date)]?.error
     }
 
     /// Loads a day's events if they are not already cached in memory. Cached disk
     /// data is shown immediately and a background network refresh tops it up.
-    func loadIfNeeded(for date: Date) {
+    public func loadIfNeeded(for date: Date) {
         let key = dayKey(for: date)
         guard days[key] == nil else { return }
 

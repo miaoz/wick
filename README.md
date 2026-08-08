@@ -176,7 +176,7 @@ git push origin v1.2
 
 ```text
 wick/
-├── Package.swift                 # Swift Package 清单（WickSync + WickCore + Wick + 测试）
+├── Package.swift                 # Swift Package 清单（WickSync + WickCalendarKit + WickCore + Wick + 测试）
 ├── Sources/WickSync/             # 平台无关（纯 Foundation）日记模型 + 同步引擎 + Dropbox 后端
 │   ├── JournalModels.swift       # 日记数据模型（含 dayKey 同步主键）
 │   ├── JournalSyncEngine.swift   # 按天对账引擎（推/拉/合并/墓碑/自愈 + 日记名对账）
@@ -184,18 +184,25 @@ wick/
 │   ├── DropboxSyncBackend.swift  # Dropbox API v2 + PKCE OAuth
 │   ├── L10n.swift / TimeProgress.swift  # 文案与进度计算（iOS 复用）
 │   └── …                         # 状态/布局/协议/Keychain 等
-├── Sources/WickCore/             # macOS 应用逻辑与 UI
+├── Sources/WickCalendarKit/      # 跨平台交易日历（macOS + iOS 共用同一份）
+│   ├── TradingCalendarRootView.swift  # 撕页日历根视图（黄历页 + 撕纸物理 + 飘落）
+│   ├── MacroCalendar*.swift      # 宏观事件数据层（akshare macro_info_ws 直连 + 缓存）
+│   ├── PaperSim.swift            # verlet 撕纸物理（SpriteKit 变形）
+│   ├── MacroDayPageView.swift    # 「黄历」页（农历 + 宏观事件固定栏目）
+│   └── …                         # 主题 / 撕口 / 飘落轨迹 / 程序合成音效 / 平台 shim
+├── Sources/WickCore/             # macOS 应用逻辑与 UI（依赖 WickSync + WickCalendarKit）
 │   ├── WickApp.swift             # MenuBarExtra、AppDelegate
-│   ├── ProgressPanelView.swift   # 进度面板与设置 UI（含同步设置）
+│   ├── ProgressPanelView.swift   # 进度面板与设置 UI（含同步设置、日历按钮）
 │   ├── JournalStore.swift        # 本地持久化、备份、导入导出（尾部为同步桥接扩展）
 │   ├── JournalRootView.swift     # 日记双栏窗口
 │   ├── SyncCoordinator.swift     # 同步生命周期、连接/断开、退出前最终同步
+│   ├── TradingCalendarWindowController.swift / FallingPageOverlay.swift  # 日历窗口与碎纸叠加窗（macOS 专属）
 │   ├── JournalReminderScheduler.swift  # 每日提醒
 │   ├── AppSettings.swift         # 语言、外观、提醒、登录项、同步开关等
 │   └── MenuBarIcon.swift         # 菜单栏模板图标
 ├── Sources/Wick/main.swift       # 可执行入口
-├── ios/                          # iPhone 客户端（v0，仅中文 UI，真机调试；链接 WickSync）
-├── Tests/                        # WickTests + WickSyncTests 单元测试
+├── ios/                          # iPhone 客户端（v0，仅中文 UI，真机调试；链接 WickSync + WickCalendarKit）
+├── Tests/                        # WickTests + WickSyncTests + WickCalendarKitTests 单元测试
 ├── assets/                       # 应用图标
 ├── scripts/                      # 图标生成与打包
 ├── build.sh / Makefile           # 默认构建入口

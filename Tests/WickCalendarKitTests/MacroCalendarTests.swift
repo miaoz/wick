@@ -1,5 +1,5 @@
 import XCTest
-@testable import WickCore
+@testable import WickCalendarKit
 
 final class MacroCalendarTests: XCTestCase {
     // MARK: - Day range

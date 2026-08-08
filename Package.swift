@@ -18,6 +18,12 @@ let package = Package(
         .library(
             name: "WickSync",
             targets: ["WickSync"]
+        ),
+        // Shared trading calendar (physics + data + SwiftUI/SpriteKit rendering),
+        // consumed by both the macOS app and the iOS app.
+        .library(
+            name: "WickCalendarKit",
+            targets: ["WickCalendarKit"]
         )
     ],
     targets: [
@@ -26,9 +32,16 @@ let package = Package(
             name: "WickSync",
             path: "Sources/WickSync"
         ),
+        // Cross-platform trading calendar (macOS + iOS): data, paper physics, and the
+        // SwiftUI/SpriteKit rendering. Depends on WickSync for L10n/AppLanguage/day keys.
+        .target(
+            name: "WickCalendarKit",
+            dependencies: ["WickSync"],
+            path: "Sources/WickCalendarKit"
+        ),
         .target(
             name: "WickCore",
-            dependencies: ["WickSync"],
+            dependencies: ["WickSync", "WickCalendarKit"],
             path: "Sources/WickCore"
         ),
         .executableTarget(
@@ -45,6 +58,11 @@ let package = Package(
             name: "WickSyncTests",
             dependencies: ["WickSync"],
             path: "Tests/WickSyncTests"
+        ),
+        .testTarget(
+            name: "WickCalendarKitTests",
+            dependencies: ["WickCalendarKit"],
+            path: "Tests/WickCalendarKitTests"
         )
     ]
 )

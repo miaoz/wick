@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		B10000000000000000000100 /* WickSync in Frameworks */ = {isa = PBXBuildFile; productRef = B10000000000000000000101 /* WickSync */; };
+		B10000000000000000000103 /* WickCalendarKit in Frameworks */ = {isa = PBXBuildFile; productRef = B10000000000000000000102 /* WickCalendarKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -25,6 +26,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B10000000000000000000100 /* WickSync in Frameworks */,
+				B10000000000000000000103 /* WickCalendarKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -69,6 +71,7 @@
 			name = WickPhone;
 			packageProductDependencies = (
 				B10000000000000000000101 /* WickSync */,
+				B10000000000000000000102 /* WickCalendarKit */,
 			);
 			productName = WickPhone;
 			productReference = B10000000000000000000132 /* WickPhone.app */;
@@ -311,6 +314,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B10000000000000000000160 /* XCLocalSwiftPackageReference ".." */;
 			productName = WickSync;
+		};
+		B10000000000000000000102 /* WickCalendarKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B10000000000000000000160 /* XCLocalSwiftPackageReference ".." */;
+			productName = WickCalendarKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
