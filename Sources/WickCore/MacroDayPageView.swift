@@ -26,7 +26,6 @@ struct MacroDayPageView: View {
             masthead
             hero
             lunarLine
-            Spacer(minLength: 8)
             eventsSection
             footer
         }
@@ -148,92 +147,180 @@ struct MacroDayPageView: View {
                 .foregroundStyle(TradingCalendarTheme.dimInk)
         }
         .padding(.vertical, 7)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(TradingCalendarTheme.ink.opacity(0.12))
-                .frame(height: 0.6)
-        }
     }
 
     // MARK: - Events
 
+    /// Row density adapts to the day's event count, mirroring how a real 黄历
+    /// packs its lower half: few items get large print, many get dense print.
+    private struct EventDensity {
+        let metaFont: CGFloat      // time / country / stars
+        let titleFont: CGFloat
+        let titleLines: Int
+        let valueFont: CGFloat?    // nil hides the values row entirely
+        let rowGap: CGFloat
+
+        static func forCount(_ count: Int) -> EventDensity {
+            switch count {
+            case ...2:
+                return EventDensity(metaFont: 9.5, titleFont: 12, titleLines: 2, valueFont: 8.5, rowGap: 10)
+            case 3:
+                return EventDensity(metaFont: 8, titleFont: 9, titleLines: 2, valueFont: 7.5, rowGap: 4)
+            default:
+                return EventDensity(metaFont: 7.5, titleFont: 8.5, titleLines: 1, valueFont: nil, rowGap: 4)
+            }
+        }
+    }
+
+    /// Most newsworthy first; ties keep chronological order.
+    private var rankedEvents: [MacroCalendarEvent] {
+        events.sorted { a, b in
+            if a.importance != b.importance { return a.importance > b.importance }
+            return a.time < b.time
+        }
+    }
+
+    /// The events pane is a fixed compartment: everything between the lunar
+    /// line and the footer. Content is top-aligned, so sparse days leave paper
+    /// whitespace *inside* the pane and the page never reshuffles between days.
     @ViewBuilder
     private var eventsSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text(L10n.string(.macroEventsSection, language: language))
-                    .font(TradingCalendarTheme.kanji(9))
-                    .foregroundStyle(TradingCalendarTheme.paper)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Rectangle().fill(TradingCalendarTheme.ink))
-                Spacer()
-                if isLoading {
-                    Text(L10n.string(.macroLoading, language: language))
-                        .font(TradingCalendarTheme.mincho(7))
-                        .foregroundStyle(TradingCalendarTheme.dimInk)
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            // Compartment divider — a double rule echoing the page border.
+            VStack(spacing: 2) {
+                Rectangle().fill(TradingCalendarTheme.ink.opacity(0.5)).frame(height: 1)
+                Rectangle().fill(TradingCalendarTheme.ink.opacity(0.28)).frame(height: 0.5)
             }
+            .padding(.top, 2)
 
-            if let errorText, events.isEmpty {
-                Text(errorText)
-                    .font(TradingCalendarTheme.mincho(8))
-                    .foregroundStyle(TradingCalendarTheme.red)
-                    .frame(maxWidth: .infinity, minHeight: 90, alignment: .center)
+            eventsHeader
+                .padding(.top, 5)
+
+            if isLoading, events.isEmpty {
+                panePlaceholder { loadingMark }
+            } else if let errorText, events.isEmpty {
+                panePlaceholder {
+                    Text(errorText)
+                        .font(TradingCalendarTheme.mincho(8.5))
+                        .foregroundStyle(TradingCalendarTheme.red)
+                }
             } else if events.isEmpty {
-                Text(L10n.string(.macroNoEvents, language: language))
-                    .font(TradingCalendarTheme.mincho(9))
-                    .foregroundStyle(TradingCalendarTheme.dimInk)
-                    .frame(maxWidth: .infinity, minHeight: 90, alignment: .center)
+                panePlaceholder { quietSeal }
             } else {
                 eventList
             }
         }
+        .frame(maxHeight: .infinity, alignment: .top)
         .clipped()
     }
 
-    /// A fixed-size printed page has no scrolling — render the events that fit.
-    private var eventList: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(events.prefix(maxEventRows)) { event in
-                eventRow(event)
+    private var eventsHeader: some View {
+        HStack(spacing: 6) {
+            Text(L10n.string(.macroEventsSection, language: language))
+                .font(TradingCalendarTheme.kanji(9))
+                .foregroundStyle(TradingCalendarTheme.paper)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Rectangle().fill(TradingCalendarTheme.ink))
+            if !events.isEmpty {
+                // Kept as a separate mincho text: HiraginoSans-W7 mis-renders
+                // a middle dot inside the chip's CJK run.
+                Text("· \(events.count)")
+                    .font(TradingCalendarTheme.mincho(8.5))
+                    .foregroundStyle(TradingCalendarTheme.dimInk)
+            }
+            Spacer()
+            if isLoading, !events.isEmpty {
+                Text(L10n.string(.macroLoading, language: language))
+                    .font(TradingCalendarTheme.mincho(7))
+                    .foregroundStyle(TradingCalendarTheme.dimInk)
             }
         }
-        .padding(.top, 2)
     }
 
-    private var maxEventRows: Int { 4 }
+    /// Centers an empty/loading/error state within the pane's remaining space.
+    private func panePlaceholder<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
 
-    private func eventRow(_ event: MacroCalendarEvent) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+    private var loadingMark: some View {
+        HStack(spacing: 5) {
+            Rectangle()
+                .fill(TradingCalendarTheme.red.opacity(0.85))
+                .frame(width: 4, height: 4)
+            Text(L10n.string(.macroLoading, language: language))
+                .font(TradingCalendarTheme.mincho(8.5))
+                .foregroundStyle(TradingCalendarTheme.dimInk)
+        }
+    }
+
+    /// A fixed-size printed page has no scrolling — render the rows that fit
+    /// the density tier and summarize the rest instead of clipping mid-row.
+    private var eventList: some View {
+        let ranked = rankedEvents
+        let density = EventDensity.forCount(ranked.count)
+        // A "more" line costs a row, so days that overflow show one row less.
+        let cap = density.valueFont == nil && ranked.count > 5 ? 4 : 5
+        let rows = Array(ranked.prefix(cap))
+        let hidden = ranked.count - rows.count
+        return VStack(alignment: .leading, spacing: 0) {
+            ForEach(rows) { event in
+                eventRow(event, density: density)
+            }
+            if hidden > 0 {
+                HStack(spacing: 6) {
+                    hairline
+                    Text(String(format: L10n.string(.macroMoreEventsFormat, language: language), hidden))
+                        .font(TradingCalendarTheme.mincho(7.5))
+                        .foregroundStyle(TradingCalendarTheme.faintInk)
+                        .fixedSize()
+                    hairline
+                }
+                .padding(.top, 5)
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    private var hairline: some View {
+        Rectangle().fill(TradingCalendarTheme.ink.opacity(0.18)).frame(height: 0.5)
+    }
+
+    private func eventRow(_ event: MacroCalendarEvent, density: EventDensity) -> some View {
+        VStack(alignment: .leading, spacing: 1.5) {
             HStack(spacing: 5) {
                 Text(MacroCalendarFormat.eventTime(event.time))
-                    .font(TradingCalendarTheme.mincho(8))
+                    .font(TradingCalendarTheme.mincho(density.metaFont))
                     .foregroundStyle(TradingCalendarTheme.red)
                     .monospacedDigit()
                 Text(event.country)
-                    .font(TradingCalendarTheme.kanji(8, weight: .semibold))
+                    .font(TradingCalendarTheme.kanji(density.metaFont))
                     .foregroundStyle(TradingCalendarTheme.dimInk)
+                    .lineLimit(1)
                 Spacer(minLength: 4)
-                importanceStars(event.importance)
+                importanceStars(event.importance, size: density.metaFont - 0.5)
             }
             Text(event.title)
-                .font(TradingCalendarTheme.mincho(9.5))
+                .font(TradingCalendarTheme.mincho(density.titleFont))
                 .foregroundStyle(TradingCalendarTheme.ink)
-                .lineLimit(2)
+                .lineLimit(density.titleLines)
                 .lineSpacing(0.5)
-            valuesRow(event)
+            if let valueFont = density.valueFont {
+                valuesRow(event, fontSize: valueFont)
+            }
         }
-        .padding(.bottom, 3)
+        .padding(.bottom, 2.5)
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(TradingCalendarTheme.ink.opacity(0.12))
                 .frame(height: 0.4)
         }
+        .padding(.bottom, density.rowGap)
     }
 
     @ViewBuilder
-    private func valuesRow(_ event: MacroCalendarEvent) -> some View {
+    private func valuesRow(_ event: MacroCalendarEvent, fontSize: CGFloat) -> some View {
         let hasValue = event.actual != nil || event.forecast != nil || event.previous != nil
         if hasValue {
             HStack(spacing: 8) {
@@ -241,7 +328,7 @@ struct MacroDayPageView: View {
                 valueChip(L10n.string(.macroForecast, language: language), event.forecast)
                 valueChip(L10n.string(.macroPrevious, language: language), event.previous)
             }
-            .font(TradingCalendarTheme.mincho(7.5))
+            .font(TradingCalendarTheme.mincho(fontSize))
             .foregroundStyle(TradingCalendarTheme.dimInk)
         }
     }
@@ -254,13 +341,54 @@ struct MacroDayPageView: View {
         }
     }
 
-    private func importanceStars(_ importance: Int) -> some View {
+    private func importanceStars(_ importance: Int, size: CGFloat) -> some View {
         let stars = min(max(importance, 0), 2)
         return HStack(spacing: 1) {
             ForEach(0..<2, id: \.self) { i in
                 Text("★")
-                    .font(TradingCalendarTheme.kanji(7))
+                    .font(TradingCalendarTheme.kanji(size))
                     .foregroundStyle(i < stars ? TradingCalendarTheme.red : TradingCalendarTheme.ink.opacity(0.15))
+            }
+        }
+    }
+
+    // MARK: - Quiet-day seal
+
+    /// Sparse days get a red「印章」instead of a dead text hole — on a 黄历 the
+    /// lower half is always printed, so "nothing today" is print, not absence.
+    private var quietSeal: some View {
+        let weekend = weekday == 1 || weekday == 7
+        return VStack(spacing: 9) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .strokeBorder(TradingCalendarTheme.red.opacity(0.8), lineWidth: 2.2)
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .strokeBorder(TradingCalendarTheme.red.opacity(0.4), lineWidth: 0.8)
+                    .padding(4.5)
+                sealCharacters(weekend: weekend)
+            }
+            .frame(width: 62, height: 62)
+            .rotationEffect(.degrees(-3))
+            Text(weekend ? "MARKET CLOSED" : "A QUIET DAY")
+                .font(TradingCalendarTheme.mincho(6.5))
+                .tracking(2)
+                .foregroundStyle(TradingCalendarTheme.faintInk)
+        }
+    }
+
+    /// 休市 reads top-to-bottom; 本日无事 is set as a 2×2 seal read in the
+    /// traditional order — right column (本日) first, then left (无事).
+    private func sealCharacters(weekend: Bool) -> some View {
+        let columns: [[String]] = weekend ? [["休", "市"]] : [["无", "事"], ["本", "日"]]
+        return HStack(spacing: 4) {
+            ForEach(columns, id: \.self) { column in
+                VStack(spacing: 1) {
+                    ForEach(column, id: \.self) { ch in
+                        Text(ch)
+                            .font(TradingCalendarTheme.kanji(weekend ? 20 : 16))
+                            .foregroundStyle(TradingCalendarTheme.red.opacity(0.85))
+                    }
+                }
             }
         }
     }
@@ -329,9 +457,14 @@ struct MacroDayPageView: View {
         calendar.monthSymbols[max(0, min(11, month - 1))]
     }
 
+    /// Prints values the way a newspaper does: integers plain, one decimal
+    /// when it's exact, two only when the precision is real.
     private func formatValue(_ value: Double) -> String {
         if value == value.rounded() {
             return String(format: "%.0f", value)
+        }
+        if (value * 10).rounded() == value * 10 {
+            return String(format: "%.1f", value)
         }
         return String(format: "%.2f", value)
     }

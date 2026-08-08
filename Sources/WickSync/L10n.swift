@@ -179,6 +179,7 @@ public enum L10n {
         case macroPrevious
         case macroImportance
         case macroLunar
+        case macroMoreEventsFormat
 
         // Settings extras
         case generalSection
@@ -337,6 +338,7 @@ public enum L10n {
             case .macroPrevious: return "前值"
             case .macroImportance: return "重要性"
             case .macroLunar: return "农历"
+            case .macroMoreEventsFormat: return "另有 %d 项"
 
             case .generalSection: return "通用"
             case .menuBarPercentage: return "菜单栏显示今日剩余"
@@ -496,6 +498,7 @@ public enum L10n {
             case .macroPrevious: return "Previous"
             case .macroImportance: return "Importance"
             case .macroLunar: return "Lunar"
+            case .macroMoreEventsFormat: return "%d more"
 
             case .generalSection: return "General"
             case .menuBarPercentage: return "Show day remaining in menu bar"
