@@ -103,8 +103,25 @@ final class MacroCalendarStore: ObservableObject {
 
     private func readCache(key: String) -> [MacroCalendarEvent]? {
         let url = cacheURL(for: key)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode([MacroCalendarEvent].self, from: data)
+        guard let data = try? Data(contentsOf: url),
+              let events = try? JSONDecoder().decode([MacroCalendarEvent].self, from: data)
+        else { return nil }
+        // Caches written before the empty-calendar_key fix can carry empty ids
+        // (duplicate SwiftUI identities render as repeated rows) — rebuild them.
+        return events.map { event in
+            guard event.id.isEmpty else { return event }
+            return MacroCalendarEvent(
+                id: "\(Int(event.time.timeIntervalSince1970))-\(event.title)",
+                time: event.time,
+                country: event.country,
+                title: event.title,
+                importance: event.importance,
+                actual: event.actual,
+                forecast: event.forecast,
+                previous: event.previous,
+                link: event.link
+            )
+        }
     }
 
     private func writeCache(_ events: [MacroCalendarEvent], key: String) {

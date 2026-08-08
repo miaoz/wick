@@ -83,6 +83,7 @@ enum MacroCalendarPayloadDecoder {
             throw MacroCalendarError.badPayload("missing_items")
         }
 
+        var seen = Set<String>()
         return items.compactMap { item in
             // Events without a release time are not calendar-addressable.
             guard let publicDate = item.public_date else { return nil }
@@ -94,11 +95,15 @@ enum MacroCalendarPayloadDecoder {
             // akshare: where a revision exists it supersedes the previous value.
             let previous = Self.number(item.revised) ?? Self.number(item.previous)
 
-            let id = item.calendar_key
+            // `calendar_key` can be present but empty (common for event-style
+            // entries) — an empty id is worse than none, since SwiftUI renders
+            // duplicate identities as repeated rows.
+            let calendarKey = item.calendar_key?.trimmingCharacters(in: .whitespaces)
+            let id = (calendarKey?.isEmpty == false ? calendarKey : nil)
                 ?? (item.id.map { String($0) })
                 ?? "\(publicDate)-\(title)"
 
-            return MacroCalendarEvent(
+            let event = MacroCalendarEvent(
                 id: id,
                 time: Date(timeIntervalSince1970: Double(publicDate)),
                 country: (item.country ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
@@ -109,6 +114,12 @@ enum MacroCalendarPayloadDecoder {
                 previous: previous,
                 link: item.uri.flatMap(URL.init(string:))
             )
+
+            // The feed occasionally lists the same release twice under
+            // different tickers/ids — collapse identical rows.
+            let dedupKey = "\(publicDate)|\(event.country)|\(title)"
+            guard seen.insert(dedupKey).inserted else { return nil }
+            return event
         }
     }
 

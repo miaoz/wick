@@ -36,6 +36,12 @@ enum MacroCalendarClient {
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             throw MacroCalendarError.http(http.statusCode)
         }
-        return try MacroCalendarPayloadDecoder.decode(data)
+        // The endpoint treats `end` as inclusive, so events at the following
+        // midnight leak into today's payload (and reappear on tomorrow's page).
+        // Clamp to the requested half-open range [start, end).
+        return try MacroCalendarPayloadDecoder.decode(data).filter { event in
+            let t = Int(event.time.timeIntervalSince1970)
+            return t >= range.start && t < range.end
+        }
     }
 }
