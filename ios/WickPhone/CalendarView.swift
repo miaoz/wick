@@ -4,9 +4,12 @@ import WickSync
 
 /// Full-screen host for the shared `WickCalendarKit` trading calendar on iOS.
 ///
-/// The pad is drawn at its native design size and scaled to fit the screen; a torn
-/// page is presented as a full-screen overlay (the iOS counterpart of the macOS
-/// click-through overlay window) so it falls off the bottom of the display.
+/// The pad is drawn at its native design size and scaled to **fill the screen**:
+/// on a portrait phone the taller dimension (screen height) wins, so the calendar
+/// spans top-to-bottom while the 300pt page is narrow enough to still fit the width.
+/// The scaled pad is centered and clipped to the screen so nothing spills off-edge,
+/// and a torn page is presented as a full-screen overlay (the iOS counterpart of the
+/// macOS click-through overlay window) that falls off the bottom of the display.
 struct CalendarView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var tornPiece: FallingPage?
@@ -15,10 +18,6 @@ struct CalendarView: View {
 
     var body: some View {
         GeometryReader { geo in
-            // Fill the whole screen: on a portrait phone the taller dimension is the
-            // screen height, so we scale the pad to span top-to-bottom. The page (300pt
-            // wide, centered in the 480pt design) is narrow enough to still fit the
-            // width, so the calendar fills the display instead of floating in a band.
             let scale = max(
                 geo.size.width / TradingCalendarGeometry.windowW,
                 geo.size.height / TradingCalendarGeometry.windowH
@@ -30,8 +29,10 @@ struct CalendarView: View {
                     onClose: { dismiss() },
                     onPageTorn: { tornPiece = $0 }
                 )
-                .scaleEffect(scale)
+                .scaleEffect(scale, anchor: .center)
             }
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
+            .clipped()
             .overlay {
                 if let tornPiece {
                     iOSFallingPageOverlay(piece: tornPiece, scale: scale) {
@@ -46,7 +47,10 @@ struct CalendarView: View {
     /// The wall the pad hangs on (dark so the cream page and green ink pop).
     private var wall: some View {
         LinearGradient(
-            colors: [Color(red: 0.14, green: 0.16, blue: 0.15), Color(red: 0.08, green: 0.10, blue: 0.09)],
+            colors: [
+                Color(red: 0.16, green: 0.18, blue: 0.17),
+                Color(red: 0.10, green: 0.12, blue: 0.11)
+            ],
             startPoint: .top,
             endPoint: .bottom
         )
@@ -68,7 +72,7 @@ private struct iOSFallingPageOverlay: View {
                 - TradingCalendarGeometry.pageTopInset
                 + 60
             FallingPageView(page: piece, fallDistance: max(fallDistance, 400))
-                .scaleEffect(scale)
+                .scaleEffect(scale, anchor: .top)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .ignoresSafeArea()
