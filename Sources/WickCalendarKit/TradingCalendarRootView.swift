@@ -12,27 +12,26 @@ enum CalendarSnapshot {
     }
 }
 
-/// The trading calendar — a himekuri-style「黄历」tear-off pad whose pages show that
+/// The trading calendar - a himekuri-style「黄历」tear-off pad whose pages show that
 /// day's global macro events. The pad stack, next page, binding, tear seam and the
 /// torn piece are SwiftUI; only the top page is a SpriteKit-warped texture, and a torn
 /// sheet is handed to the host via `onPageTorn` to fall away (macOS: an overlay window,
 /// iOS: a full-screen overlay).
 ///
-/// Platform-agnostic: the host supplies the language, a close action, and a closure
-/// that presents the torn page.
+/// Platform-agnostic: the host supplies the language, a close action, a closure
+/// that presents the torn page, and the pad's `PaperLayout` (desktop widget by
+/// default; the iPhone app passes a full-screen layout whose page is the display).
 public struct TradingCalendarRootView: View {
     let language: AppLanguage
     let onClose: () -> Void
     let onPageTorn: (FallingPage) -> Void
+    let layout: PaperLayout
 
     @ObservedObject private var store = MacroCalendarStore.shared
 
     @State private var currentDate = Date()
-    @State private var sim = PaperSim()
-    @State private var paperScene = CalendarPaperScene(size: CGSize(
-        width: TradingCalendarGeometry.pageW + 2 * TradingCalendarGeometry.overhangX,
-        height: TradingCalendarGeometry.pageH + TradingCalendarGeometry.overhangBottom
-    ))
+    @State private var sim: PaperSim
+    @State private var paperScene: CalendarPaperScene
 
     @State private var damage: CGFloat = 0
     @State private var drag: CGSize = .zero
@@ -40,7 +39,7 @@ public struct TradingCalendarRootView: View {
     @State private var dragging = false
     @State private var grabX: CGFloat = 0
     @State private var grabY: CGFloat = 0
-    @State private var tearCenterX: CGFloat = TradingCalendarGeometry.pageW * 0.7
+    @State private var tearCenterX: CGFloat
     @State private var tornMidDrag = false
     @State private var lastVelocity: CGSize = .zero
     @State private var lastTickLevel = 0
@@ -50,28 +49,29 @@ public struct TradingCalendarRootView: View {
     public init(
         language: AppLanguage,
         onClose: @escaping () -> Void,
-        onPageTorn: @escaping (FallingPage) -> Void
+        onPageTorn: @escaping (FallingPage) -> Void,
+        layout: PaperLayout = .desktop
     ) {
         self.language = language
         self.onClose = onClose
         self.onPageTorn = onPageTorn
+        self.layout = layout
+        _sim = State(initialValue: PaperSim(layout: layout))
+        _paperScene = State(initialValue: CalendarPaperScene(layout: layout))
+        _tearCenterX = State(initialValue: layout.pageW * 0.7)
     }
 
-    private var sceneW: CGFloat {
-        TradingCalendarGeometry.pageW + 2 * TradingCalendarGeometry.overhangX
-    }
-    private var sceneH: CGFloat {
-        TradingCalendarGeometry.pageH + TradingCalendarGeometry.overhangBottom
-    }
+    private var sceneW: CGFloat { layout.sceneW }
+    private var sceneH: CGFloat { layout.sceneH }
 
     // MARK: - Body
 
     public var body: some View {
         ZStack(alignment: .top) {
             padBlock
-                .padding(.top, TradingCalendarGeometry.blockTopPad)
+                .padding(.top, layout.blockTopPad)
         }
-        .frame(width: TradingCalendarGeometry.windowW, height: TradingCalendarGeometry.windowH, alignment: .top)
+        .frame(width: layout.windowW, height: layout.windowH, alignment: .top)
         .onAppear {
             paperScene.sim = sim
             store.loadIfNeeded(for: currentDate)
@@ -102,7 +102,7 @@ public struct TradingCalendarRootView: View {
     private var currentEvents: [MacroCalendarEvent] { store.events(for: currentDate) }
 
     private var currentEventPageCount: Int {
-        MacroEventPaging.pageCount(for: currentEvents.count)
+        MacroEventPaging.pageCount(for: currentEvents.count, layout: layout)
     }
 
     /// Advances the events page with wrap-around; a no-op on quiet days.
@@ -131,14 +131,17 @@ public struct TradingCalendarRootView: View {
 
     private var padBlock: some View {
         ZStack(alignment: .top) {
-            // Soft shadow the whole pad casts on the wall.
-            RoundedRectangle(cornerRadius: 3)
-                .fill(Color.black.opacity(0.25))
-                .frame(width: TradingCalendarGeometry.pageW, height: TradingCalendarGeometry.pageH)
-                .offset(x: 6, y: TradingCalendarGeometry.pageTopInset + 14)
-                .blur(radius: 16)
+            // Soft shadow the whole pad casts on the wall (desktop only - a
+            // full-bleed page *is* the wall's replacement).
+            if layout.hasWall {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color.black.opacity(0.25))
+                    .frame(width: layout.pageW, height: layout.pageH)
+                    .offset(x: 6, y: layout.pageTopInset + 14)
+                    .blur(radius: 16)
+            }
 
-            CalendarPadStack(remainingFraction: remainingFraction)
+            CalendarPadStack(remainingFraction: remainingFraction, layout: layout)
 
             // Next page recessed in the stack, shaded by the sheet above.
             MacroDayPageView(
@@ -147,21 +150,23 @@ public struct TradingCalendarRootView: View {
                 isLoading: store.isLoading(for: nextDate),
                 errorText: store.errorText(for: nextDate),
                 language: language,
-                eventsPage: 0
+                eventsPage: 0,
+                layout: layout
             )
             .overlay(nextPageShading)
-            .padding(.top, TradingCalendarGeometry.pageTopInset)
+            .padding(.top, layout.pageTopInset)
 
             // Shadow the bowing sheet casts onto the page beneath.
             if abs(drag.height) > 2 {
+                let s = layout.contentScale
                 let p = min(abs(drag.height) / 110, 1)
                 let up = drag.height < 0
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color.black.opacity(0.24 * p))
-                    .frame(width: TradingCalendarGeometry.pageW - 20, height: 110 + 60 * p)
+                    .frame(width: layout.pageW - 20 * s, height: 110 * s + 60 * s * p)
                     .offset(
                         x: drag.width * 0.25,
-                        y: TradingCalendarGeometry.pageTopInset + TradingCalendarGeometry.pageH - 130 + (up ? -60 * p : 10 * p)
+                        y: layout.pageTopInset + layout.pageH - 130 * s + (up ? -60 * s * p : 10 * s * p)
                     )
                     .blur(radius: 14 + 10 * p)
                     .allowsHitTesting(false)
@@ -170,39 +175,39 @@ public struct TradingCalendarRootView: View {
             // Top page: a printed texture warped by the paper solver.
             SpriteView(scene: paperScene, options: [.allowsTransparency])
                 .frame(width: sceneW, height: sceneH)
-                .padding(.top, TradingCalendarGeometry.pageTopInset)
+                .padding(.top, layout.pageTopInset)
                 .allowsHitTesting(false)
 
             // A half-torn seam: parted fibers catch the light where the last pull left off.
             if damage > 0.03 {
-                TearEdgeLine(seed: tearSeed(for: tornCount))
+                TearEdgeLine(seed: tearSeed(for: tornCount), base: layout.tearY)
                     .stroke(Color.white.opacity(0.55), lineWidth: 0.7)
-                    .frame(width: TradingCalendarGeometry.pageW, height: 36)
+                    .frame(width: layout.pageW, height: layout.tearY + 16)
                     .mask {
                         Rectangle()
-                            .frame(width: max(tornFront * 2 - 36, 0), height: 36)
+                            .frame(width: max(tornFront * 2 - 36, 0), height: layout.tearY + 16)
                             .blur(radius: 16)
-                            .position(x: tearCenterX, y: 18)
+                            .position(x: tearCenterX, y: (layout.tearY + 16) / 2)
                     }
-                    .padding(.top, TradingCalendarGeometry.pageTopInset)
+                    .padding(.top, layout.pageTopInset)
                     .allowsHitTesting(false)
             }
 
             // A torn remnant left under the staples.
             if tornCount > 0 {
-                StubShape(seed: tearSeed(for: tornCount - 1))
+                StubShape(seed: tearSeed(for: tornCount - 1), base: layout.tearY)
                     .fill(TradingCalendarTheme.paperEdge)
-                    .frame(width: TradingCalendarGeometry.pageW, height: 44)
-                    .padding(.top, TradingCalendarGeometry.pageTopInset)
+                    .frame(width: layout.pageW, height: layout.tearY + 24)
+                    .padding(.top, layout.pageTopInset)
                     .allowsHitTesting(false)
             }
 
             // The stapled binding across the top; drag it to move the pad (macOS).
-            CalendarPadBinding(onClose: onClose)
+            CalendarPadBinding(onClose: onClose, layout: layout)
 
             tearHitLayer
         }
-        .frame(width: sceneW, height: TradingCalendarGeometry.pageH + 60, alignment: .top)
+        .frame(width: sceneW, height: layout.pageH + 60, alignment: .top)
     }
 
     private var nextPageShading: some View {
@@ -217,12 +222,19 @@ public struct TradingCalendarRootView: View {
     // MARK: - Crack model
 
     private var upSpan: CGFloat {
-        max(0.95 * (grabY - TradingCalendarGeometry.tearY), 110)
+        max(0.95 * (grabY - layout.tearY), 110)
+    }
+
+    /// Pull needed to tear. A physical finger distance on the mouse-driven
+    /// desktop pad; scaled with the page on a full-bleed pad so a phone swipe
+    /// must be a deliberate drag, not a scroll-length flick.
+    private var tearThreshold: CGFloat {
+        TradingCalendarGeometry.tearThreshold * max(1, layout.contentScale)
     }
 
     private var liveTearProgress: CGFloat {
         let pulled = max(
-            max(drag.height / TradingCalendarGeometry.tearThreshold, -drag.height / upSpan),
+            max(drag.height / tearThreshold, -drag.height / upSpan),
             0
         )
         return pulled * (1 + 0.8 * damage)
@@ -233,18 +245,18 @@ public struct TradingCalendarRootView: View {
     }
 
     private var seamSpan: CGFloat {
-        max(tearCenterX, TradingCalendarGeometry.pageW - tearCenterX) + 90
+        max(tearCenterX, layout.pageW - tearCenterX) + 90 * layout.contentScale
     }
 
     // MARK: - Tear gesture
 
     private var tearHitLayer: some View {
         Color.clear
-            .frame(width: TradingCalendarGeometry.pageW, height: TradingCalendarGeometry.pageH * TradingCalendarGeometry.tearZone)
+            .frame(width: layout.pageW, height: layout.pageH * layout.tearZone)
             .contentShape(Rectangle())
             .gesture(tearGesture)
             .calendarCursorOnHover()
-            .padding(.top, TradingCalendarGeometry.pageTopInset + TradingCalendarGeometry.pageH * (1 - TradingCalendarGeometry.tearZone))
+            .padding(.top, layout.pageTopInset + layout.pageH * (1 - layout.tearZone))
     }
 
     private var tearGesture: some Gesture {
@@ -258,7 +270,7 @@ public struct TradingCalendarRootView: View {
                 // lifting up is the flip that follows the hand until the fibers give.
                 let y: CGFloat
                 if dy >= 0 {
-                    let capDown: CGFloat = 190
+                    let capDown: CGFloat = 190 * max(1, layout.contentScale)
                     y = capDown * tanh(dy / capDown)
                 } else {
                     y = dy
@@ -274,7 +286,7 @@ public struct TradingCalendarRootView: View {
                 )
                 sim.setSeam(centerX: tearCenterX, front: tornFront)
 
-                let pulled = max(y / TradingCalendarGeometry.tearThreshold, -y / upSpan)
+                let pulled = max(y / tearThreshold, -y / upSpan)
                 let progress = damage + max(pulled, 0) * (1 + 0.8 * damage)
 
                 // Crackles tick as fibers give way, picking up from the damage.
@@ -305,13 +317,18 @@ public struct TradingCalendarRootView: View {
                 // tearing; it falls through to the settle path (pulled ≈ 0,
                 // so the sheet just springs back) after cycling the page.
                 if abs(value.translation.width) < 8, abs(value.translation.height) < 8,
-                   value.startLocation.y + TradingCalendarGeometry.pageH * (1 - TradingCalendarGeometry.tearZone)
-                       >= TradingCalendarGeometry.eventsPaneTopY {
+                   value.startLocation.y + layout.pageH * (1 - layout.tearZone)
+                       >= layout.eventsPaneTopY {
                     flipEventsPage(by: 1)
                 }
-                let flickDown = drag.height > 60 && value.predictedEndTranslation.height > 240
-                let flickUp = drag.height < -50 && value.predictedEndTranslation.height < -260
-                let pulled = max(drag.height / TradingCalendarGeometry.tearThreshold,
+                // Velocity flicks feel right with a mouse but would let a
+                // careless phone swipe skip a day with no tearing at all -
+                // desktop pad only.
+                let flickDown = !layout.isFullBleed
+                    && drag.height > 60 && value.predictedEndTranslation.height > 240
+                let flickUp = !layout.isFullBleed
+                    && drag.height < -50 && value.predictedEndTranslation.height < -260
+                let pulled = max(drag.height / tearThreshold,
                                  -drag.height / upSpan)
                 let amplified = max(pulled, 0) * (1 + 0.8 * damage)
                 if damage + amplified >= 0.95 || flickDown || flickUp {
@@ -324,8 +341,8 @@ public struct TradingCalendarRootView: View {
 
     private func beginGrab(at start: CGPoint) {
         dragging = true
-        grabX = min(max(start.x, 0), TradingCalendarGeometry.pageW)
-        grabY = TradingCalendarGeometry.pageH * (1 - TradingCalendarGeometry.tearZone) + start.y
+        grabX = min(max(start.x, 0), layout.pageW)
+        grabY = layout.pageH * (1 - layout.tearZone) + start.y
         // An untouched seam starts parting wherever you grab; a damaged one keeps tearing.
         if damage < 0.02 { tearCenterX = grabX }
         lastTickLevel = Int(damage * 4)
@@ -359,7 +376,8 @@ public struct TradingCalendarRootView: View {
             isLoading: store.isLoading(for: currentDate),
             errorText: store.errorText(for: currentDate),
             language: language,
-            eventsPage: eventsPage
+            eventsPage: eventsPage,
+            layout: layout
         )
         if let cg = CalendarSnapshot.cgImage(of: page, scale: 2) {
             paperScene.setPageTexture(SKTexture(cgImage: cg))
@@ -382,7 +400,8 @@ public struct TradingCalendarRootView: View {
             ),
             grabX: grabX,
             upward: upward,
-            throwVelocity: lastVelocity
+            throwVelocity: lastVelocity,
+            layout: layout
         )
         TearSound.shared.playRip()
         Haptics.rip()
@@ -405,6 +424,7 @@ public struct TradingCalendarRootView: View {
 /// The unturned pages beneath the top sheet, thicker while the year is young.
 private struct CalendarPadStack: View {
     let remainingFraction: Double
+    let layout: PaperLayout
 
     var body: some View {
         let layers = max(4, Int(remainingFraction * 22))
@@ -418,8 +438,8 @@ private struct CalendarPadStack: View {
                             by: Double(depth) / Double(layers) * 0.9
                         )
                     )
-                    .frame(width: TradingCalendarGeometry.pageW, height: TradingCalendarGeometry.pageH)
-                    .offset(x: depth * 0.55, y: TradingCalendarGeometry.pageTopInset + depth * 0.85)
+                    .frame(width: layout.pageW, height: layout.pageH)
+                    .offset(x: depth * 0.55, y: layout.pageTopInset + depth * 0.85)
             }
         }
         .compositingGroup()
@@ -429,11 +449,14 @@ private struct CalendarPadStack: View {
 }
 
 /// The stapled binding across the top of the pad. Dragging it moves the pad (macOS);
-/// the top-right × closes the calendar.
+/// the close button dismisses the calendar. On a full-bleed pad the strip spans the
+/// notch row so the pad reads as stapled to the very top of the screen.
 private struct CalendarPadBinding: View {
     let onClose: () -> Void
+    let layout: PaperLayout
 
     var body: some View {
+        let s = layout.contentScale
         ZStack {
             RoundedRectangle(cornerRadius: 3)
                 .fill(LinearGradient(
@@ -448,37 +471,57 @@ private struct CalendarPadBinding: View {
                     // The green spine tape peeking over the top.
                     Rectangle()
                         .fill(TradingCalendarTheme.ink.opacity(0.9))
-                        .frame(height: 2.5)
-                        .padding(.horizontal, 2)
-                        .padding(.top, 0.5)
+                        .frame(height: 2.5 * s)
+                        .padding(.horizontal, 2 * s)
+                        .padding(.top, 0.5 * s)
                 }
             HStack {
                 staple
                 Spacer()
-                hangingHole
+                if layout.showsHangingHole {
+                    hangingHole
+                }
                 Spacer()
                 staple
             }
-            .padding(.horizontal, 46)
+            .padding(.horizontal, 46 * s)
+            .padding(.top, layout.bindingSafeTop)
         }
-        .frame(width: TradingCalendarGeometry.pageW + 10, height: TradingCalendarGeometry.bindingH)
+        .frame(
+            width: layout.isFullBleed ? layout.windowW : layout.pageW + 10,
+            height: layout.bindingH
+        )
         .shadow(color: .black.opacity(0.18), radius: 2, y: 1.5)
         .windowDragHandle()
         .overlay(alignment: .topTrailing) {
-            Button {
-                onClose()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 7, weight: .bold))
-                    .foregroundStyle(TradingCalendarTheme.ink.opacity(0.6))
-                    .frame(width: 16, height: 16)
-                    .background(Circle().fill(Color.white.opacity(0.6)))
-                    .overlay(Circle().strokeBorder(TradingCalendarTheme.ink.opacity(0.2), lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
-            .help("close")
-            .offset(x: -6, y: 4)
+            closeButton
         }
+    }
+
+    /// 16pt for the mouse-driven desktop pad; a 34pt touch target that stays
+    /// clear of the Dynamic Island on a full-bleed pad.
+    private var closeButton: some View {
+        let isFullScreen = layout.isFullBleed
+        let size: CGFloat = isFullScreen ? 34 : 16
+        return Button {
+            onClose()
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: isFullScreen ? 11 : 7, weight: .bold))
+                .foregroundStyle(TradingCalendarTheme.ink.opacity(0.6))
+                .frame(width: size, height: size)
+                .background(Circle().fill(Color.white.opacity(0.6)))
+                .overlay(Circle().strokeBorder(TradingCalendarTheme.ink.opacity(0.2), lineWidth: 0.5))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help("close")
+        .offset(
+            x: isFullScreen ? -10 : -6,
+            y: isFullScreen
+                ? layout.bindingSafeTop + (layout.bindingH - layout.bindingSafeTop - 34) / 2
+                : 4
+        )
     }
 
     private var staple: some View {
@@ -487,7 +530,7 @@ private struct CalendarPadBinding: View {
                 colors: [Color(white: 0.55), Color(white: 0.75), Color(white: 0.45)],
                 startPoint: .top, endPoint: .bottom
             ))
-            .frame(width: 16, height: 3.5)
+            .frame(width: 16 * layout.contentScale, height: 3.5 * layout.contentScale)
     }
 
     private var hangingHole: some View {

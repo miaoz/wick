@@ -14,8 +14,10 @@ public struct FallingPage: Identifiable {
     public let grabX: CGFloat
     /// Torn by an upward flick: the piece is flung over the staples first.
     public let upward: Bool
-    /// Hand speed at the moment the fibers gave — the throw it inherits.
+    /// Hand speed at the moment the fibers gave - the throw it inherits.
     public let throwVelocity: CGSize
+    /// The pad the sheet came off - it renders and falls in this page size.
+    public let layout: PaperLayout
 
     public init(
         date: Date,
@@ -26,7 +28,8 @@ public struct FallingPage: Identifiable {
         start: CGSize,
         grabX: CGFloat,
         upward: Bool,
-        throwVelocity: CGSize
+        throwVelocity: CGSize,
+        layout: PaperLayout = .desktop
     ) {
         self.date = date
         self.events = events
@@ -37,6 +40,7 @@ public struct FallingPage: Identifiable {
         self.grabX = grabX
         self.upward = upward
         self.throwVelocity = throwVelocity
+        self.layout = layout
     }
 }
 
@@ -62,7 +66,7 @@ public struct FallingPageView: View {
         self.page = page
         self.fallDistance = fallDistance
         self.headroom = headroom
-        let dir: Double = page.grabX < TradingCalendarGeometry.pageW / 2 ? -1 : 1
+        let dir: Double = page.grabX < page.layout.pageW / 2 ? -1 : 1
         let rise = Double(max(min(headroom - 40, 210), 0))
         self.dir = dir
         self.plan = FallPlan.make(page: page, fallDistance: fallDistance, dir: dir, rise: rise)
@@ -73,7 +77,7 @@ public struct FallingPageView: View {
             let t = timeline.date.timeIntervalSince(start)
             sheet(plan.state(at: t))
         }
-        .padding(.top, headroom + TradingCalendarGeometry.blockTopPad + TradingCalendarGeometry.pageTopInset - 14)
+        .padding(.top, headroom + page.layout.blockTopPad + page.layout.pageTopInset - 14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear { start = Date() }
         .allowsHitTesting(false)
@@ -89,10 +93,13 @@ public struct FallingPageView: View {
             isLoading: false,
             errorText: nil,
             language: page.language,
-            eventsPage: page.eventsPage
+            eventsPage: page.eventsPage,
+            layout: page.layout
         )
-        .clipShape(TornPieceShape(seed: page.seed))
-        .padding(14)
+        .clipShape(TornPieceShape(seed: page.seed, base: page.layout.tearY))
+        // The padding gives the drop shadow room; a full-bleed piece starts
+        // exactly on the pad instead, and its shadow only matters mid-flight.
+        .padding(page.layout.isFullBleed ? 0 : 14)
         .compositingGroup()
         .shadow(
             color: .black.opacity(0.30 - 0.18 * depth),

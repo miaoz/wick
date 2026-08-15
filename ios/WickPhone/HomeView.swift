@@ -90,6 +90,15 @@ struct HomeView: View {
                 .fullScreenCover(isPresented: $showCalendar) {
                     CalendarView()
                 }
+                #if DEBUG
+                .onAppear {
+                    // Simulator/UI verification hook: launch with
+                    // `-wick-open-calendar` to land straight in the calendar.
+                    if ProcessInfo.processInfo.arguments.contains("-wick-open-calendar") {
+                        showCalendar = true
+                    }
+                }
+                #endif
             }
         }
     }

@@ -8,11 +8,12 @@ import simd
 /// projection, exactly like real paper.
 ///
 /// Grid: `cols × rows`. Row 0 is the page top edge (pinned under the staples);
-/// row 1 is the tear line — a column is only pinned there while its fiber is intact.
+/// row 1 is the tear line - a column is only pinned there while its fiber is intact.
 final class PaperSim {
     nonisolated static let cols = 11
     nonisolated static let rows = 14
 
+    private let layout: PaperLayout
     private(set) var pos: [SIMD3<Float>] = []
     private var prev: [SIMD3<Float>] = []
     private var home: [SIMD3<Float>] = []
@@ -31,28 +32,29 @@ final class PaperSim {
     private var grabTarget = SIMD3<Float>(0, 0, 0)
     private var sleeping = true
 
-    init() {
+    init(layout: PaperLayout = .desktop) {
+        self.layout = layout
         reset()
     }
 
     /// Grid vertex positions for a flat page at rest (page coordinates, z = 0).
     /// Row 0 sits at the top edge; row 1 is the tear line; the rest spread below.
-    nonisolated static func restLayout() -> [SIMD3<Float>] {
-        let w = Float(TradingCalendarGeometry.pageW)
-        var layout: [SIMD3<Float>] = []
-        layout.reserveCapacity(rows * cols)
+    nonisolated static func restLayout(for layout: PaperLayout = .desktop) -> [SIMD3<Float>] {
+        let w = Float(layout.pageW)
+        var points: [SIMD3<Float>] = []
+        points.reserveCapacity(rows * cols)
         for r in 0..<rows {
-            let y = restRowY(r)
+            let y = restRowY(r, layout: layout)
             for c in 0..<cols {
-                layout.append(SIMD3(Float(c) / Float(cols - 1) * w, y, 0))
+                points.append(SIMD3(Float(c) / Float(cols - 1) * w, y, 0))
             }
         }
-        return layout
+        return points
     }
 
-    private nonisolated static func restRowY(_ r: Int) -> Float {
-        let h = Float(TradingCalendarGeometry.pageH)
-        let tearY = Float(TradingCalendarGeometry.tearY)
+    private nonisolated static func restRowY(_ r: Int, layout: PaperLayout) -> Float {
+        let h = Float(layout.pageH)
+        let tearY = Float(layout.tearY)
         switch r {
         case 0: return 0
         case 1: return tearY
@@ -62,7 +64,7 @@ final class PaperSim {
 
     /// Rest state: a flat page hanging on the pad.
     func reset() {
-        pos = Self.restLayout()
+        pos = Self.restLayout(for: layout)
         // A hair of z noise so in-plane compression buckles OUT (toward the viewer)
         // instead of fighting a perfect plane.
         var jitter = SeededRandom(seed: 0xC0FFEE)
@@ -132,7 +134,7 @@ final class PaperSim {
     /// points of `centerX` (page x) have lost their fiber at the tear line.
     /// Fibers never reattach, so damage is cumulative.
     func setSeam(centerX: CGFloat, front: CGFloat) {
-        let w = Float(TradingCalendarGeometry.pageW)
+        let w = Float(layout.pageW)
         for c in 0..<Self.cols {
             let x = Float(c) / Float(Self.cols - 1) * w
             let broken = abs(x - Float(centerX)) < Float(front)

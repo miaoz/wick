@@ -1,15 +1,15 @@
 import SwiftUI
+import UIKit
 import WickCalendarKit
 import WickSync
 
-/// Full-screen host for the shared `WickCalendarKit` trading calendar on iOS.
-///
-/// The pad is drawn at its native design size and scaled to **fill the screen**:
-/// on a portrait phone the taller dimension (screen height) wins, so the calendar
-/// spans top-to-bottom while the 300pt page is narrow enough to still fit the width.
-/// The scaled pad is centered and clipped to the screen so nothing spills off-edge,
-/// and a torn page is presented as a full-screen overlay (the iOS counterpart of the
-/// macOS click-through overlay window) that falls off the bottom of the display.
+/// Full-screen host for the shared `WickCalendarKit` trading calendar on iPhone.
+/// The pad is laid out like a normal app: the cream page fills the display
+/// edge-to-edge (stapled binding across the notch row, printed matter clear of
+/// the Dynamic Island and home indicator), and the layout scales with the
+/// device so it reads the same from SE to Pro Max. A torn sheet is presented as
+/// a full-screen overlay (the iOS counterpart of the macOS click-through
+/// overlay window) that falls off the bottom of the display.
 struct CalendarView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var tornPiece: FallingPage?
@@ -18,24 +18,37 @@ struct CalendarView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let scale = max(
-                geo.size.width / TradingCalendarGeometry.windowW,
-                geo.size.height / TradingCalendarGeometry.windowH
+            // A GeometryReader under .ignoresSafeArea() reports ZERO safe-area
+            // insets on some OS versions, which would shove the printed frame
+            // under the Dynamic Island - ask the key window directly instead.
+            let safe = keyWindowSafeInsets
+            let layout = PaperLayout.fullScreen(
+                size: geo.size,
+                safeTop: min(max(safe.top, geo.safeAreaInsets.top), 140),
+                safeBottom: min(max(safe.bottom, geo.safeAreaInsets.bottom), 60)
             )
             ZStack {
-                wall
-                TradingCalendarRootView(
-                    language: language,
-                    onClose: { dismiss() },
-                    onPageTorn: { tornPiece = $0 }
-                )
-                .scaleEffect(scale, anchor: .center)
+                // The paper is the app - no wall behind it, no scaling: the pad
+                // is composed directly at screen size.
+                TradingCalendarTheme.paper
+                if geo.size.width > 1, geo.size.height > 1 {
+                    TradingCalendarRootView(
+                        language: language,
+                        onClose: { dismiss() },
+                        onPageTorn: { tornPiece = $0 },
+                        layout: layout
+                    )
+                    // The solver/scene state is sized when the pad is inserted;
+                    // the cover's first layout proposal can be zero-size, so key
+                    // the whole pad to the final metrics and let it rebuild once
+                    // they settle.
+                    .id(layout)
+                }
             }
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
-            .clipped()
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
             .overlay {
                 if let tornPiece {
-                    iOSFallingPageOverlay(piece: tornPiece, scale: scale) {
+                    iOSFallingPageOverlay(piece: tornPiece) {
                         self.tornPiece = nil
                     }
                 }
@@ -44,36 +57,34 @@ struct CalendarView: View {
         .ignoresSafeArea()
     }
 
-    /// The wall the pad hangs on (dark so the cream page and green ink pop).
-    private var wall: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.16, green: 0.18, blue: 0.17),
-                Color(red: 0.10, green: 0.12, blue: 0.11)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea()
+    private var keyWindowSafeInsets: (top: CGFloat, bottom: CGFloat) {
+        let keyWindow = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }?
+            .keyWindow
+        if let insets = keyWindow?.safeAreaInsets {
+            return (insets.top, insets.bottom)
+        }
+        return (0, 0)
     }
 }
 
 /// A torn page falling off the bottom of the screen, in a full-screen overlay.
 private struct iOSFallingPageOverlay: View {
     let piece: FallingPage
-    let scale: CGFloat
     let onFinished: () -> Void
 
     var body: some View {
         GeometryReader { geo in
-            // From the pad's resting spot to fully past the screen bottom.
+            // From the page's resting spot to fully past the screen bottom.
+            // headroom cancels FallingPageView's own top padding so the torn
+            // edge starts exactly on the pad's tear line (the pad sits at the
+            // very top of a full-screen layout, so there is no air above it).
             let fallDistance = geo.size.height
-                - TradingCalendarGeometry.blockTopPad
-                - TradingCalendarGeometry.pageTopInset
+                - piece.layout.blockTopPad
+                - piece.layout.pageTopInset
                 + 60
-            FallingPageView(page: piece, fallDistance: max(fallDistance, 400))
-                .scaleEffect(scale, anchor: .top)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            FallingPageView(page: piece, fallDistance: max(fallDistance, 400), headroom: 14)
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)

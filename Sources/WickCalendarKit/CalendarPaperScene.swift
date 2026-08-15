@@ -7,15 +7,17 @@ import SpriteKit
 @MainActor
 final class CalendarPaperScene: SKScene {
     var sim: PaperSim?
+    private let layout: PaperLayout
     private var sprite: SKSpriteNode?
     private var sourcePositions: [vector_float2] = []
     private var lastTime: TimeInterval = 0
 
-    override init(size: CGSize) {
-        super.init(size: size)
+    init(layout: PaperLayout) {
+        self.layout = layout
+        super.init(size: CGSize(width: layout.sceneW, height: layout.sceneH))
         backgroundColor = .clear
         scaleMode = .resizeFill
-        sourcePositions = Self.warpPositions(for: PaperSim.restLayout())
+        sourcePositions = Self.warpPositions(for: PaperSim.restLayout(for: layout), layout: layout)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -24,14 +26,8 @@ final class CalendarPaperScene: SKScene {
         if sprite == nil {
             let node = SKSpriteNode(texture: texture)
             node.anchorPoint = .zero
-            node.size = CGSize(
-                width: TradingCalendarGeometry.pageW,
-                height: TradingCalendarGeometry.pageH
-            )
-            node.position = CGPoint(
-                x: TradingCalendarGeometry.overhangX,
-                y: TradingCalendarGeometry.overhangBottom
-            )
+            node.size = CGSize(width: layout.pageW, height: layout.pageH)
+            node.position = CGPoint(x: layout.overhangX, y: layout.overhangBottom)
             addChild(node)
             sprite = node
         } else {
@@ -49,21 +45,21 @@ final class CalendarPaperScene: SKScene {
             columns: PaperSim.cols - 1,
             rows: PaperSim.rows - 1,
             sourcePositions: sourcePositions,
-            destinationPositions: Self.warpPositions(for: sim.pos)
+            destinationPositions: Self.warpPositions(for: sim.pos, layout: layout)
         )
     }
 
-    /// Solver grid (page coords, y down, row-major from the top) → warp grid
+    /// Solver grid (page coords, y down, row-major from the top) -> warp grid
     /// (normalized sprite coords, y up, row-major from the BOTTOM-left).
-    private nonisolated static func warpPositions(for grid: [SIMD3<Float>]) -> [vector_float2] {
+    private nonisolated static func warpPositions(for grid: [SIMD3<Float>], layout: PaperLayout) -> [vector_float2] {
         var out = [vector_float2](repeating: .zero, count: grid.count)
         for r in 0..<PaperSim.rows {
             for c in 0..<PaperSim.cols {
                 let p = grid[r * PaperSim.cols + c]
                 let gi = (PaperSim.rows - 1 - r) * PaperSim.cols + c
                 out[gi] = vector_float2(
-                    p.x / Float(TradingCalendarGeometry.pageW),
-                    1 - p.y / Float(TradingCalendarGeometry.pageH)
+                    p.x / Float(layout.pageW),
+                    1 - p.y / Float(layout.pageH)
                 )
             }
         }

@@ -4,20 +4,27 @@ import WickSync
 /// Event-pane pagination for busy days. A day with up to `singlePageLimit`
 /// events prints whole; beyond that the pane flips between uniform
 /// `rowsPerPage`-row pages so every page keeps the same geometry (one row is
-/// always reserved for the overflow / return line).
+/// always reserved for the overflow / return line). Full-bleed layouts print
+/// more rows per page since their pane is taller.
 enum MacroEventPaging {
     static let singlePageLimit = 5
     static let rowsPerPage = 4
 
-    static func pageCount(for eventCount: Int) -> Int {
-        guard eventCount > singlePageLimit else { return 1 }
-        return Int(ceil(Double(eventCount) / Double(rowsPerPage)))
+    static func pageCount(for eventCount: Int, layout: PaperLayout? = nil) -> Int {
+        let rows = layout?.rowsPerPage ?? rowsPerPage
+        guard eventCount > max(singlePageLimit, rows) else { return 1 }
+        return Int(ceil(Double(eventCount) / Double(rows)))
     }
 }
 
 /// The "printed page" for a single trading-calendar day, drawn in himekuri's「黄历」
 /// style (green ink on cream paper, double rule, big day numeral, filled weekday column).
 /// This view is snapshotted to a texture and warped by the paper physics in `PaperScene`.
+///
+/// The desktop layout prints the fixed 300×400 design; a full-bleed layout sizes
+/// the page to its container, scales the typography with the width, keeps the
+/// printed matter clear of the notch/home indicator, and spreads the event rows
+/// evenly across the taller pane so the sheet always reads as one complete page.
 struct MacroDayPageView: View {
     let date: Date
     let events: [MacroCalendarEvent]
@@ -26,8 +33,12 @@ struct MacroDayPageView: View {
     let language: AppLanguage
     /// Which events page a busy day is flipped to (0-based; taps cycle pages).
     let eventsPage: Int
+    let layout: PaperLayout
 
     private let calendar = Calendar.current
+
+    /// Typographic scale relative to the 300pt-wide desktop design.
+    private var s: CGFloat { layout.contentScale }
 
     var body: some View {
         ZStack {
@@ -35,7 +46,7 @@ struct MacroDayPageView: View {
             FibreGrain()
             pageContent
         }
-        .frame(width: TradingCalendarGeometry.pageW, height: TradingCalendarGeometry.pageH)
+        .frame(width: layout.pageW, height: layout.pageH)
     }
 
     private var pageContent: some View {
@@ -47,123 +58,142 @@ struct MacroDayPageView: View {
             footer
         }
         // The top of the page (above the tear line at `tearY`) sits under the binding,
-        // so the masthead starts below it — matching himekuri's top inset.
-        .padding(.horizontal, 18)
-        .padding(.top, 26)
-        .padding(.bottom, 12)
+        // so the masthead starts below it - matching himekuri's top inset. On a
+        // full-bleed page these insets also clear the notch row under the binding
+        // and the home indicator, keeping the printed matter inside the frame.
+        .padding(.horizontal, layout.isFullBleed ? layout.frameSideInset + 11 * s : 18 * s)
+        .padding(.top, layout.contentTopInset)
+        .padding(.bottom, layout.contentBottomInset)
         .overlay(borderRules)
     }
 
     // MARK: - Borders
 
+    /// The double rule around the printed matter. On a full-bleed page the frame
+    /// is inset from the screen edges (below the binding/notch, above the rounded
+    /// corners and home indicator) - a printed margin, not a screen border.
     private var borderRules: some View {
-        RoundedRectangle(cornerRadius: 2, style: .continuous)
-            .strokeBorder(TradingCalendarTheme.ink.opacity(0.9), lineWidth: 2.2)
-            .padding(7)
+        let outer = EdgeInsets(
+            top: layout.frameTopInset,
+            leading: layout.frameSideInset,
+            bottom: layout.frameBottomInset,
+            trailing: layout.frameSideInset
+        )
+        let inner = EdgeInsets(
+            top: layout.frameTopInset + 4.5 * s,
+            leading: layout.frameSideInset + 4.5 * s,
+            bottom: layout.frameBottomInset + 4.5 * s,
+            trailing: layout.frameSideInset + 4.5 * s
+        )
+        return RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .strokeBorder(TradingCalendarTheme.ink.opacity(0.9), lineWidth: 2.2 * s)
+            .padding(outer)
             .overlay {
                 RoundedRectangle(cornerRadius: 1, style: .continuous)
-                    .strokeBorder(TradingCalendarTheme.ink.opacity(0.7), lineWidth: 0.7)
-                    .padding(11.5)
+                    .strokeBorder(TradingCalendarTheme.ink.opacity(0.7), lineWidth: 0.7 * s)
+                    .padding(inner)
             }
     }
 
     // MARK: - Masthead
 
     private var masthead: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 2 * s) {
             Text("公历 \(year)年\(month)月\(day)日 · \(weekdayName)")
-                .font(TradingCalendarTheme.mincho(9))
-                .tracking(0.6)
+                .font(TradingCalendarTheme.mincho(9 * s))
+                .tracking(0.6 * s)
                 .foregroundStyle(TradingCalendarTheme.ink.opacity(0.85))
             Text(englishMonth)
-                .font(TradingCalendarTheme.mincho(7.5))
-                .tracking(0.5)
+                .font(TradingCalendarTheme.mincho(7.5 * s))
+                .tracking(0.5 * s)
                 .foregroundStyle(TradingCalendarTheme.faintInk)
         }
         .frame(maxWidth: .infinity)
-        .padding(.bottom, 6)
+        .padding(.bottom, 6 * s)
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(TradingCalendarTheme.ink.opacity(0.5))
-                .frame(height: 0.7)
+                .frame(height: 0.7 * s)
         }
     }
 
     // MARK: - Hero
 
     private var hero: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: 10 * s) {
             // Left: vertical Chinese month column.
             VStack(spacing: 0) {
                 ForEach(Array(chineseMonth.enumerated()), id: \.offset) { _, ch in
                     Text(String(ch))
-                        .font(TradingCalendarTheme.mincho(9))
+                        .font(TradingCalendarTheme.mincho(9 * s))
                         .foregroundStyle(TradingCalendarTheme.ink.opacity(0.8))
                 }
             }
-            .frame(width: 26)
+            .frame(width: 26 * s)
 
             Spacer(minLength: 0)
 
             // Center: the big day numeral.
-            VStack(spacing: 2) {
+            VStack(spacing: 2 * s) {
                 Text("\(day)")
-                    .font(TradingCalendarTheme.numeral(day >= 10 ? 66 : 78))
+                    .font(TradingCalendarTheme.numeral(day >= 10 ? 66 * s : 78 * s))
                     .foregroundStyle(TradingCalendarTheme.ink)
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                 Text("第\(dayOfYear)天 · 剩\(daysLeft)天")
-                    .font(TradingCalendarTheme.mincho(6.5))
+                    .font(TradingCalendarTheme.mincho(6.5 * s))
                     .foregroundStyle(TradingCalendarTheme.dimInk)
             }
 
             Spacer(minLength: 0)
 
-            // Right: filled weekday column.
-            VStack(spacing: 3) {
+            // Right: filled weekday column - on a full-bleed page it runs the
+            // full height of the hero like the spine label of a real pad.
+            VStack(spacing: 3 * s) {
                 ForEach(Array(weekdayName.enumerated()), id: \.offset) { _, ch in
                     Text(String(ch))
-                        .font(TradingCalendarTheme.kanji(11))
+                        .font(TradingCalendarTheme.kanji(11 * s))
                         .foregroundStyle(TradingCalendarTheme.paper)
                 }
                 Text(englishWeekday)
-                    .font(TradingCalendarTheme.kanji(7, weight: .semibold))
-                    .tracking(0.5)
+                    .font(TradingCalendarTheme.kanji(7 * s, weight: .semibold))
+                    .tracking(0.5 * s)
                     .foregroundStyle(TradingCalendarTheme.paper.opacity(0.85))
             }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 6)
+            .padding(.vertical, 8 * s)
+            .padding(.horizontal, 6 * s)
+            .frame(maxHeight: layout.isFullBleed ? .infinity : nil)
             .background(
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
                     .fill(TradingCalendarTheme.ink)
             )
-            .frame(width: 34)
+            .frame(width: 34 * s)
         }
-        .frame(height: 82)
+        .frame(height: 82 * s)
     }
 
     // MARK: - Lunar info (middle)
 
     private var lunarLine: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 6 * s) {
             Text(L10n.string(.macroLunar, language: language))
-                .font(TradingCalendarTheme.kanji(7))
+                .font(TradingCalendarTheme.kanji(7 * s))
                 .foregroundStyle(TradingCalendarTheme.paper)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1.5)
+                .padding(.horizontal, 5 * s)
+                .padding(.vertical, 1.5 * s)
                 .background(Rectangle().fill(TradingCalendarTheme.ink))
 
             Text(lunarMonthDayText)
-                .font(TradingCalendarTheme.mincho(10))
+                .font(TradingCalendarTheme.mincho(10 * s))
                 .foregroundStyle(TradingCalendarTheme.ink)
 
-            Spacer(minLength: 6)
+            Spacer(minLength: 6 * s)
 
             Text("\(lunarGanzhi)年 · 属\(lunarZodiac)")
-                .font(TradingCalendarTheme.mincho(7.5))
+                .font(TradingCalendarTheme.mincho(7.5 * s))
                 .foregroundStyle(TradingCalendarTheme.dimInk)
         }
-        .padding(.vertical, 7)
+        .padding(.vertical, 7 * s)
     }
 
     // MARK: - Events
@@ -177,14 +207,14 @@ struct MacroDayPageView: View {
         let valueFont: CGFloat?    // nil hides the values row entirely
         let rowGap: CGFloat
 
-        static func forCount(_ count: Int) -> EventDensity {
+        static func forCount(_ count: Int, scale: CGFloat = 1) -> EventDensity {
             switch count {
             case ...2:
-                return EventDensity(metaFont: 9.5, titleFont: 12, titleLines: 2, valueFont: 8.5, rowGap: 10)
+                return EventDensity(metaFont: 9.5 * scale, titleFont: 12 * scale, titleLines: 2, valueFont: 8.5 * scale, rowGap: 10 * scale)
             case 3:
-                return EventDensity(metaFont: 8, titleFont: 9, titleLines: 2, valueFont: 7.5, rowGap: 4)
+                return EventDensity(metaFont: 8 * scale, titleFont: 9 * scale, titleLines: 2, valueFont: 7.5 * scale, rowGap: 4 * scale)
             default:
-                return EventDensity(metaFont: 7.5, titleFont: 8.5, titleLines: 1, valueFont: nil, rowGap: 4)
+                return EventDensity(metaFont: 7.5 * scale, titleFont: 8.5 * scale, titleLines: 1, valueFont: nil, rowGap: 4 * scale)
             }
         }
     }
@@ -198,27 +228,29 @@ struct MacroDayPageView: View {
     }
 
     /// The events pane is a fixed compartment: everything between the lunar
-    /// line and the footer. Content is top-aligned, so sparse days leave paper
-    /// whitespace *inside* the pane and the page never reshuffles between days.
+    /// line and the footer. On the fixed desktop page content is top-aligned,
+    /// so sparse days leave paper whitespace *inside* the pane and the page
+    /// never reshuffles between days; a full-bleed page instead spreads its
+    /// rows into equal bands so the pane is always used evenly.
     @ViewBuilder
     private var eventsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Compartment divider — a double rule echoing the page border.
-            VStack(spacing: 2) {
-                Rectangle().fill(TradingCalendarTheme.ink.opacity(0.5)).frame(height: 1)
-                Rectangle().fill(TradingCalendarTheme.ink.opacity(0.28)).frame(height: 0.5)
+            // Compartment divider - a double rule echoing the page border.
+            VStack(spacing: 2 * s) {
+                Rectangle().fill(TradingCalendarTheme.ink.opacity(0.5)).frame(height: 1 * s)
+                Rectangle().fill(TradingCalendarTheme.ink.opacity(0.28)).frame(height: 0.5 * s)
             }
-            .padding(.top, 2)
+            .padding(.top, 2 * s)
 
             eventsHeader
-                .padding(.top, 5)
+                .padding(.top, 5 * s)
 
             if isLoading, events.isEmpty {
                 panePlaceholder { loadingMark }
             } else if let errorText, events.isEmpty {
                 panePlaceholder {
                     Text(errorText)
-                        .font(TradingCalendarTheme.mincho(8.5))
+                        .font(TradingCalendarTheme.mincho(8.5 * s))
                         .foregroundStyle(TradingCalendarTheme.red)
                 }
             } else if events.isEmpty {
@@ -232,24 +264,24 @@ struct MacroDayPageView: View {
     }
 
     private var eventsHeader: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 6 * s) {
             Text(L10n.string(.macroEventsSection, language: language))
-                .font(TradingCalendarTheme.kanji(9))
+                .font(TradingCalendarTheme.kanji(9 * s))
                 .foregroundStyle(TradingCalendarTheme.paper)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
+                .padding(.horizontal, 5 * s)
+                .padding(.vertical, 2 * s)
                 .background(Rectangle().fill(TradingCalendarTheme.ink))
             if !events.isEmpty {
                 // Kept as a separate mincho text: HiraginoSans-W7 mis-renders
                 // a middle dot inside the chip's CJK run.
                 Text("· \(events.count)")
-                    .font(TradingCalendarTheme.mincho(8.5))
+                    .font(TradingCalendarTheme.mincho(8.5 * s))
                     .foregroundStyle(TradingCalendarTheme.dimInk)
             }
             Spacer()
             if isLoading, !events.isEmpty {
                 Text(L10n.string(.macroLoading, language: language))
-                    .font(TradingCalendarTheme.mincho(7))
+                    .font(TradingCalendarTheme.mincho(7 * s))
                     .foregroundStyle(TradingCalendarTheme.dimInk)
             }
         }
@@ -262,58 +294,95 @@ struct MacroDayPageView: View {
     }
 
     private var loadingMark: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 5 * s) {
             Rectangle()
                 .fill(TradingCalendarTheme.red.opacity(0.85))
-                .frame(width: 4, height: 4)
+                .frame(width: 4 * s, height: 4 * s)
             Text(L10n.string(.macroLoading, language: language))
-                .font(TradingCalendarTheme.mincho(8.5))
+                .font(TradingCalendarTheme.mincho(8.5 * s))
                 .foregroundStyle(TradingCalendarTheme.dimInk)
         }
     }
 
-    /// A fixed-size printed page has no scrolling — busy days are split into
-    /// uniform pages (taps on the pane flip them) instead of clipping mid-row.
+    /// A printed page has no scrolling - busy days are split into uniform
+    /// pages (taps on the pane flip them) instead of clipping mid-row.
+    ///
+    /// Full-bleed pages set the type from the band height: print that fills
+    /// its row like real printed matter (meta / title / values, values always
+    /// shown) with normal leading, the block centered in the pane - a busy day
+    /// reads as a ruled table, a quiet one as a few large centered lines.
     private var eventList: some View {
         let ranked = rankedEvents
-        let density = EventDensity.forCount(ranked.count)
-        let pageCount = MacroEventPaging.pageCount(for: ranked.count)
+        let pageCount = MacroEventPaging.pageCount(for: ranked.count, layout: layout)
         let page = min(max(eventsPage, 0), pageCount - 1)
         let rows: [MacroCalendarEvent]
         if pageCount > 1 {
-            let start = page * MacroEventPaging.rowsPerPage
-            rows = Array(ranked[start..<min(start + MacroEventPaging.rowsPerPage, ranked.count)])
+            let start = page * layout.rowsPerPage
+            rows = Array(ranked[start..<min(start + layout.rowsPerPage, ranked.count)])
         } else {
             rows = ranked
         }
-        let remaining = ranked.count - page * MacroEventPaging.rowsPerPage - rows.count
+        let remaining = ranked.count - page * layout.rowsPerPage - rows.count
+        let density: EventDensity
+        let leadingGap: CGFloat?
+        var listTopPadding: CGFloat = 4 * s
+        if layout.isFullBleed {
+            // Print sizes from the nominal band (the pane split into its
+            // rows-per-page, capped so quiet days don't blow up to poster
+            // type); rows are then set at their natural height with a uniform
+            // leading - the way a real table prints, ragged rows and all.
+            let band = min(
+                layout.eventPaneHeight / CGFloat(max(layout.rowsPerPage, 1)),
+                50 * layout.contentScale
+            )
+            leadingGap = 0.33 * band
+            listTopPadding = 0.25 * band
+            density = EventDensity(
+                metaFont: 0.175 * band,
+                titleFont: 0.215 * band,
+                titleLines: 1,
+                valueFont: 0.155 * band,
+                rowGap: 0
+            )
+        } else {
+            leadingGap = nil
+            density = EventDensity.forCount(ranked.count, scale: s)
+        }
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(rows) { event in
-                eventRow(event, density: density)
+                eventRow(event, density: density, leadingGap: leadingGap)
             }
             if pageCount > 1 {
-                VStack(spacing: 3) {
-                    HStack(spacing: 6) {
+                VStack(spacing: 3 * s) {
+                    HStack(spacing: 6 * s) {
                         hairline
                         Text(overflowText(remaining: remaining))
-                            .font(TradingCalendarTheme.mincho(7.5))
+                            .font(TradingCalendarTheme.mincho(7.5 * s))
                             .foregroundStyle(TradingCalendarTheme.faintInk)
                             .fixedSize()
                         hairline
                     }
-                    // The flip affordance is invisible otherwise — annotate it
+                    // The flip affordance is invisible otherwise - annotate it
                     // on the first page (where the overflow first appears).
+                    // The full-bleed pad is touch-driven: no wheel or arrows.
                     if page == 0 {
-                        Text(L10n.string(.macroEventsFlipHint, language: language))
-                            .font(TradingCalendarTheme.mincho(6.5))
-                            .tracking(0.5)
+                        Text(L10n.string(
+                            layout.isFullBleed ? .macroEventsFlipHintTouch : .macroEventsFlipHint,
+                            language: language
+                        ))
+                            .font(TradingCalendarTheme.mincho(6.5 * s))
+                            .tracking(0.5 * s)
                             .foregroundStyle(TradingCalendarTheme.faintInk.opacity(0.75))
                     }
                 }
-                .padding(.top, 5)
+                .padding(.top, layout.isFullBleed ? 10 * s : 5 * s)
             }
         }
-        .padding(.top, 4)
+        .padding(.top, listTopPadding)
+        // Top-aligned under the section header - leftover space stays at the
+        // pane's bottom (like the desktop page), never between the header and
+        // the first row.
+        .frame(maxHeight: layout.isFullBleed ? .infinity : nil, alignment: .top)
     }
 
     /// The pane's footer line: overflow count with a "next page" chevron, or
@@ -326,12 +395,17 @@ struct MacroDayPageView: View {
     }
 
     private var hairline: some View {
-        Rectangle().fill(TradingCalendarTheme.ink.opacity(0.18)).frame(height: 0.5)
+        Rectangle().fill(TradingCalendarTheme.ink.opacity(0.18)).frame(height: 0.5 * s)
     }
 
-    private func eventRow(_ event: MacroCalendarEvent, density: EventDensity) -> some View {
-        VStack(alignment: .leading, spacing: 1.5) {
-            HStack(spacing: 5) {
+    @ViewBuilder
+    private func eventRow(
+        _ event: MacroCalendarEvent,
+        density: EventDensity,
+        leadingGap: CGFloat?
+    ) -> some View {
+        let content = VStack(alignment: .leading, spacing: 1.5 * s) {
+            HStack(spacing: 5 * s) {
                 Text(MacroCalendarFormat.eventTime(event.time))
                     .font(TradingCalendarTheme.mincho(density.metaFont))
                     .foregroundStyle(TradingCalendarTheme.red)
@@ -340,32 +414,46 @@ struct MacroDayPageView: View {
                     .font(TradingCalendarTheme.kanji(density.metaFont))
                     .foregroundStyle(TradingCalendarTheme.dimInk)
                     .lineLimit(1)
-                Spacer(minLength: 4)
+                Spacer(minLength: 4 * s)
                 importanceStars(event.importance, size: density.metaFont - 0.5)
             }
             Text(event.title)
                 .font(TradingCalendarTheme.mincho(density.titleFont))
                 .foregroundStyle(TradingCalendarTheme.ink)
                 .lineLimit(density.titleLines)
-                .lineSpacing(0.5)
+                .lineSpacing(0.5 * s)
             if let valueFont = density.valueFont {
                 valuesRow(event, fontSize: valueFont)
             }
         }
-        .padding(.bottom, 2.5)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(TradingCalendarTheme.ink.opacity(0.12))
-                .frame(height: 0.4)
+        if let leadingGap {
+            // A full-bleed row is set at its natural height; the uniform
+            // leading and the hairline under the text make the pane read as
+            // one ruled table no matter how tall each row is.
+            content
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(TradingCalendarTheme.ink.opacity(0.12))
+                        .frame(height: 0.4 * s)
+                }
+                .padding(.bottom, leadingGap)
+        } else {
+            content
+                .padding(.bottom, 2.5 * s)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(TradingCalendarTheme.ink.opacity(0.12))
+                        .frame(height: 0.4 * s)
+                }
+                .padding(.bottom, density.rowGap)
         }
-        .padding(.bottom, density.rowGap)
     }
 
     @ViewBuilder
     private func valuesRow(_ event: MacroCalendarEvent, fontSize: CGFloat) -> some View {
         let hasValue = event.actual != nil || event.forecast != nil || event.previous != nil
         if hasValue {
-            HStack(spacing: 8) {
+            HStack(spacing: 8 * s) {
                 valueChip(L10n.string(.macroActual, language: language), event.actual)
                 valueChip(L10n.string(.macroForecast, language: language), event.forecast)
                 valueChip(L10n.string(.macroPrevious, language: language), event.previous)
@@ -385,7 +473,7 @@ struct MacroDayPageView: View {
 
     private func importanceStars(_ importance: Int, size: CGFloat) -> some View {
         let stars = min(max(importance, 0), 2)
-        return HStack(spacing: 1) {
+        return HStack(spacing: 1 * s) {
             ForEach(0..<2, id: \.self) { i in
                 Text("★")
                     .font(TradingCalendarTheme.kanji(size))
@@ -396,38 +484,38 @@ struct MacroDayPageView: View {
 
     // MARK: - Quiet-day seal
 
-    /// Sparse days get a red「印章」instead of a dead text hole — on a 黄历 the
+    /// Sparse days get a red「印章」instead of a dead text hole - on a 黄历 the
     /// lower half is always printed, so "nothing today" is print, not absence.
     private var quietSeal: some View {
         let weekend = weekday == 1 || weekday == 7
-        return VStack(spacing: 9) {
+        return VStack(spacing: 9 * s) {
             ZStack {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .strokeBorder(TradingCalendarTheme.red.opacity(0.8), lineWidth: 2.2)
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .strokeBorder(TradingCalendarTheme.red.opacity(0.4), lineWidth: 0.8)
-                    .padding(4.5)
+                RoundedRectangle(cornerRadius: 5 * s, style: .continuous)
+                    .strokeBorder(TradingCalendarTheme.red.opacity(0.8), lineWidth: 2.2 * s)
+                RoundedRectangle(cornerRadius: 3 * s, style: .continuous)
+                    .strokeBorder(TradingCalendarTheme.red.opacity(0.4), lineWidth: 0.8 * s)
+                    .padding(4.5 * s)
                 sealCharacters(weekend: weekend)
             }
-            .frame(width: 62, height: 62)
+            .frame(width: 62 * s, height: 62 * s)
             .rotationEffect(.degrees(-3))
             Text(weekend ? "MARKET CLOSED" : "A QUIET DAY")
-                .font(TradingCalendarTheme.mincho(6.5))
-                .tracking(2)
+                .font(TradingCalendarTheme.mincho(6.5 * s))
+                .tracking(2 * s)
                 .foregroundStyle(TradingCalendarTheme.faintInk)
         }
     }
 
     /// 休市 reads top-to-bottom; 本日无事 is set as a 2×2 seal read in the
-    /// traditional order — right column (本日) first, then left (无事).
+    /// traditional order - right column (本日) first, then left (无事).
     private func sealCharacters(weekend: Bool) -> some View {
         let columns: [[String]] = weekend ? [["休", "市"]] : [["无", "事"], ["本", "日"]]
-        return HStack(spacing: 4) {
+        return HStack(spacing: 4 * s) {
             ForEach(columns, id: \.self) { column in
-                VStack(spacing: 1) {
+                VStack(spacing: 1 * s) {
                     ForEach(column, id: \.self) { ch in
                         Text(ch)
-                            .font(TradingCalendarTheme.kanji(weekend ? 20 : 16))
+                            .font(TradingCalendarTheme.kanji((weekend ? 20 : 16) * s))
                             .foregroundStyle(TradingCalendarTheme.red.opacity(0.85))
                     }
                 }
@@ -440,18 +528,18 @@ struct MacroDayPageView: View {
     private var footer: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("宏观数据源 · WallStreetCN")
-                .font(TradingCalendarTheme.mincho(6.5))
+                .font(TradingCalendarTheme.mincho(6.5 * s))
                 .foregroundStyle(TradingCalendarTheme.faintInk)
             Spacer()
             Text(L10n.string(.tradingCalendar, language: language))
-                .font(TradingCalendarTheme.kanji(9, weight: .semibold))
+                .font(TradingCalendarTheme.kanji(9 * s, weight: .semibold))
                 .foregroundStyle(TradingCalendarTheme.paper)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
+                .padding(.horizontal, 7 * s)
+                .padding(.vertical, 3 * s)
                 .background(Rectangle().fill(TradingCalendarTheme.ink))
                 .rotationEffect(.degrees(-2))
         }
-        .padding(.top, 5)
+        .padding(.top, 5 * s)
     }
 
     // MARK: - Date / lunar helpers
@@ -516,7 +604,8 @@ struct MacroDayPageView: View {
 private struct FibreGrain: View {
     var body: some View {
         Canvas { context, size in
-            let count = 380
+            // Constant density per unit area (380 specks on the 300×400 design).
+            let count = min(1600, max(380, Int(380 * size.width * size.height / 120_000)))
             for _ in 0..<count {
                 let x = CGFloat.random(in: 0..<size.width)
                 let y = CGFloat.random(in: 0..<size.height)

@@ -2,12 +2,11 @@ import SwiftUI
 
 /// Generates the jagged tear-line y offsets for a given seed and width (ported from himekuri).
 ///
-/// Every tear is different: about a third are *perfect* — the fibers part right along the
-/// binding and leave nothing visible — while the rest leave ragged remnants in patches,
-/// the way real paper lets go unevenly.
-func tearEdgePoints(seed: UInt64, width: CGFloat) -> [CGPoint] {
+/// Every tear is different: about a third are *perfect* - the fibers part right along the
+/// binding and leave nothing visible - while the rest leave ragged remnants in patches,
+/// the way real paper lets go unevenly. `base` is the page-local tear-line y.
+func tearEdgePoints(seed: UInt64, width: CGFloat, base: CGFloat) -> [CGPoint] {
     var rng = SeededRandom(seed: seed)
-    let base = TradingCalendarGeometry.tearY
     let clean = rng.unit() < 0.35
 
     var y = base + (clean ? rng.cg(-2...1) : rng.cg(-3...5))
@@ -31,10 +30,11 @@ func tearEdgePoints(seed: UInt64, width: CGFloat) -> [CGPoint] {
 /// The piece that falls: full page below a jagged top edge.
 struct TornPieceShape: Shape {
     let seed: UInt64
+    let base: CGFloat
 
     func path(in rect: CGRect) -> Path {
         var p = Path()
-        let edge = tearEdgePoints(seed: seed, width: rect.width)
+        let edge = tearEdgePoints(seed: seed, width: rect.width, base: base)
         p.move(to: edge[0])
         for pt in edge.dropFirst() { p.addLine(to: pt) }
         p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
@@ -47,10 +47,11 @@ struct TornPieceShape: Shape {
 /// The remnant left under the staples: jagged bottom edge, same seed.
 struct StubShape: Shape {
     let seed: UInt64
+    let base: CGFloat
 
     func path(in rect: CGRect) -> Path {
         var p = Path()
-        let edge = tearEdgePoints(seed: seed, width: rect.width)
+        let edge = tearEdgePoints(seed: seed, width: rect.width, base: base)
         p.move(to: CGPoint(x: rect.minX, y: rect.minY))
         p.addLine(to: edge[0])
         for pt in edge.dropFirst() { p.addLine(to: pt) }
@@ -60,13 +61,14 @@ struct StubShape: Shape {
     }
 }
 
-/// Just the torn edge polyline — stroked to catch the light on loose fibers.
+/// Just the torn edge polyline - stroked to catch the light on loose fibers.
 struct TearEdgeLine: Shape {
     let seed: UInt64
+    let base: CGFloat
 
     func path(in rect: CGRect) -> Path {
         var p = Path()
-        let edge = tearEdgePoints(seed: seed, width: rect.width)
+        let edge = tearEdgePoints(seed: seed, width: rect.width, base: base)
         p.move(to: edge[0])
         for pt in edge.dropFirst() { p.addLine(to: pt) }
         return p
