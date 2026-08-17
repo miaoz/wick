@@ -34,6 +34,33 @@ public enum JournalSyncLayout {
         "\(journalRoot(for: journalID))/tombstones/\(dayKey).json"
     }
 
+    /// A settlement marker file for a day: `settlements/<dayKey>-<stamp>-<uuid>.json`.
+    /// Uploaded by the device that resolved the day's conflict; other devices use
+    /// it to drop their stale pending-conflict records without manual action.
+    public static func settlementPath(for journalID: UUID, dayKey: String, stamp: Date, uniqueID: UUID = UUID()) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let suffix = uniqueID.uuidString.prefix(8)
+        return "\(journalRoot(for: journalID))/settlements/\(dayKey)-\(formatter.string(from: stamp))-\(suffix).json"
+    }
+
+    /// Extracts the day key from a settlements/ path, nil for anything else.
+    public static func settlementDayKey(from path: String, journalID: UUID) -> String? {
+        let prefix = "\(journalRoot(for: journalID))/settlements/"
+        guard path.hasPrefix(prefix), path.hasSuffix(".json") else { return nil }
+        let key = path.dropFirst(prefix.count).dropLast(".json".count)
+        guard key.range(of: #"^\d{4}-\d{2}-\d{2}-"#, options: .regularExpression) != nil else { return nil }
+        return String(key.prefix(10))
+    }
+
+    /// True for any file inside `settlements/` (used by marker GC).
+    public static func isSettlementPath(_ path: String, journalID: UUID) -> Bool {
+        path.hasPrefix("\(journalRoot(for: journalID))/settlements/") && path.hasSuffix(".json")
+    }
+
     public static func conflictPath(for journalID: UUID, dayKey: String, stamp: Date, uniqueID: UUID = UUID()) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -93,6 +120,26 @@ public struct JournalTombstone: Codable, Equatable {
     }
 }
 
+/// Peer signal that a device settled a day's conflict. The resolving device
+/// uploads one after settling; a device that still holds a stale pending record
+/// for the day clears it automatically once the live remote content matches
+/// `settledHash` (i.e. the day has converged to the settled version). Markers
+/// are tiny, best-effort, and GC'd after `tombstoneRetention`.
+public struct JournalSettlementMarker: Codable, Equatable {
+    public var dayKey: String
+    /// Hash of the day content the remote holds after the settlement.
+    public var settledHash: String
+    public var deviceID: String
+    public var stamp: Date
+
+    public init(dayKey: String, settledHash: String, deviceID: String, stamp: Date) {
+        self.dayKey = dayKey
+        self.settledHash = settledHash
+        self.deviceID = deviceID
+        self.stamp = stamp
+    }
+}
+
 /// Losing side of an item-level conflict, archived remotely until the user
 /// settles the conflict (keep local/remote/merged); once settled, the next
 /// sync cycle deletes the archive - the chosen version supersedes it.
@@ -140,6 +187,11 @@ public struct DaySyncState: Codable, Equatable {
     /// the remote right now (pull priority, no re-merge). The recorded
     /// snapshot may be stale, so we follow the live remote instead.
     public var settleAdoptRemote: Bool
+    /// Hash of the version this device settled on when nothing needs pushing
+    /// ("keep merged" / dismiss — the merge is already applied and uploaded).
+    /// The next cycle uploads a settlement marker so peers drop their stale
+    /// reminders for the day.
+    public var settleMarkHash: String?
 
     public init(
         localHash: String? = nil,
@@ -148,7 +200,8 @@ public struct DaySyncState: Codable, Equatable {
         tombstoneRev: String? = nil,
         tombstoneDeletedAt: Date? = nil,
         settledPushHash: String? = nil,
-        settleAdoptRemote: Bool = false
+        settleAdoptRemote: Bool = false,
+        settleMarkHash: String? = nil
     ) {
         self.localHash = localHash
         self.remoteRev = remoteRev
@@ -157,12 +210,13 @@ public struct DaySyncState: Codable, Equatable {
         self.tombstoneDeletedAt = tombstoneDeletedAt
         self.settledPushHash = settledPushHash
         self.settleAdoptRemote = settleAdoptRemote
+        self.settleMarkHash = settleMarkHash
     }
 
     public enum CodingKeys: String, CodingKey {
         case localHash, remoteRev, remoteContentHash
         case tombstoneRev, tombstoneDeletedAt
-        case settledPushHash, settleAdoptRemote
+        case settledPushHash, settleAdoptRemote, settleMarkHash
     }
 
     /// Newer fields decode with defaults so state files written by older
@@ -176,6 +230,7 @@ public struct DaySyncState: Codable, Equatable {
         tombstoneDeletedAt = try container.decodeIfPresent(Date.self, forKey: .tombstoneDeletedAt)
         settledPushHash = try container.decodeIfPresent(String.self, forKey: .settledPushHash)
         settleAdoptRemote = try container.decodeIfPresent(Bool.self, forKey: .settleAdoptRemote) ?? false
+        settleMarkHash = try container.decodeIfPresent(String.self, forKey: .settleMarkHash)
     }
 }
 

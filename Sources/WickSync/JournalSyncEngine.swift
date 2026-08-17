@@ -117,6 +117,14 @@ public final class JournalSyncEngine: ObservableObject {
 
     public func dismissConflict(id: UUID) {
         guard let index = state.pendingConflicts.firstIndex(where: { $0.id == id }) else { return }
+        let record = state.pendingConflicts[index]
+        // Dismissing means "keep what is already applied" — the merge is on the
+        // remote, so let peers drop their stale reminder for the day too.
+        if let merged = record.mergedEntry {
+            var dayState = state.days[record.dayKey] ?? DaySyncState()
+            dayState.settleMarkHash = try? JournalSyncEncoding.contentHash(for: merged)
+            state.days[record.dayKey] = dayState
+        }
         queueConflictArchiveCleanup(state.pendingConflicts[index])
         state.pendingConflicts.remove(at: index)
         saveAndPublish()
@@ -169,6 +177,11 @@ public final class JournalSyncEngine: ObservableObject {
         case .merged:
             dayState.settledPushHash = nil
             dayState.settleAdoptRemote = false
+            // The merge is already applied and on the remote — just mark it so
+            // peers drop their stale reminders for the day.
+            if let merged = record.mergedEntry {
+                dayState.settleMarkHash = try? JournalSyncEncoding.contentHash(for: merged)
+            }
         }
         state.days[record.dayKey] = dayState
 
@@ -350,6 +363,17 @@ public final class JournalSyncEngine: ObservableObject {
         let remoteFile = state.remoteFiles[dayPath]
         let remoteTomb = state.remoteFiles[tombPath]
 
+        // A peer that settled this day left a settlement marker; once the live
+        // remote matches it, our stale reminder for the day is moot — drop it
+        // without manual action.
+        if state.pendingConflicts.contains(where: { $0.dayKey == dayKey }),
+           let remoteFile,
+           let remoteHash = remoteFile.contentHash,
+           let marker = try? await peerSettlementMarker(for: dayKey, journalID: journalID),
+           marker.settledHash == remoteHash {
+            removeConflicts(for: dayKey)
+        }
+
         // A user-settled conflict propagates authoritatively instead of
         // re-running the divergence matrix (which would re-record the conflict
         // on the next cycle and make the count grow every time it is resolved).
@@ -358,6 +382,9 @@ public final class JournalSyncEngine: ObservableObject {
             removeConflicts(for: dayKey)
             guard let remoteFile else { return }
             try await pullDay(remoteFile: remoteFile, dayPath: dayPath, dayKey: dayKey, journalID: journalID)
+            if let hash = state.remoteFiles[dayPath]?.contentHash {
+                await uploadSettlementMarker(dayKey: dayKey, settledHash: hash, journalID: journalID)
+            }
             return
         }
         if let settledHash = prev?.settledPushHash {
@@ -365,11 +392,19 @@ public final class JournalSyncEngine: ObservableObject {
                 state.days[dayKey]?.settledPushHash = nil
                 removeConflicts(for: dayKey)
                 try await pushDay(local, journalID: journalID, currentRemoteRev: remoteFile?.rev)
+                await uploadSettlementMarker(dayKey: dayKey, settledHash: settledHash, journalID: journalID)
                 return
             }
             // Local moved on after the settlement — drop the marker and
             // reconcile normally from here.
             state.days[dayKey]?.settledPushHash = nil
+        }
+        if let markHash = prev?.settleMarkHash {
+            state.days[dayKey]?.settleMarkHash = nil
+            await uploadSettlementMarker(dayKey: dayKey, settledHash: markHash, journalID: journalID)
+            // Fall through to the normal divergence matrix: the merge is
+            // already applied and uploaded, so the day just continues syncing
+            // (pulling any newer remote) rather than short-circuiting.
         }
 
         let localChanged = local != nil && local!.hash != prev?.localHash
@@ -630,6 +665,42 @@ public final class JournalSyncEngine: ObservableObject {
         state.pendingConflicts.removeAll { $0.dayKey == dayKey }
     }
 
+    /// Uploads a settlement marker so other devices can drop their stale
+    /// pending-conflict records for this day. Best-effort — a failed marker
+    /// never blocks the settlement itself.
+    private func uploadSettlementMarker(dayKey: String, settledHash: String, journalID: UUID) async {
+        let marker = JournalSettlementMarker(
+            dayKey: dayKey,
+            settledHash: settledHash,
+            deviceID: deviceID,
+            stamp: Date()
+        )
+        guard let data = try? JournalSyncEncoding.encoder.encode(marker) else { return }
+        let path = JournalSyncLayout.settlementPath(for: journalID, dayKey: dayKey, stamp: Date())
+        do {
+            let rev = try await backend.upload(path: path, data: data, ifRev: nil)
+            state.remoteFiles[path] = RemoteFileRecord(
+                rev: rev,
+                contentHash: JournalSyncEncoding.contentHash(of: data)
+            )
+        } catch {
+            NSLog("Wick sync: settlement marker failed for \(dayKey): \(String(describing: error))")
+        }
+    }
+
+    /// Finds a peer's settlement marker for a day, if any (downloads the first
+    /// matching file; markers are tiny and rare).
+    private func peerSettlementMarker(for dayKey: String, journalID: UUID) async throws -> JournalSettlementMarker? {
+        for path in state.remoteFiles.keys where JournalSyncLayout.isSettlementPath(path, journalID: journalID) {
+            guard JournalSyncLayout.settlementDayKey(from: path, journalID: journalID) == dayKey else { continue }
+            let (data, _) = try await backend.download(path: path)
+            if let marker = try? JournalSyncEncoding.decoder.decode(JournalSettlementMarker.self, from: data) {
+                return marker
+            }
+        }
+        return nil
+    }
+
     // MARK: - Images
 
     private func reconcileImages(journalID: UUID) async throws {
@@ -846,6 +917,17 @@ public final class JournalSyncEngine: ObservableObject {
                 state.days[dayKey]?.tombstoneRev = nil
                 state.days[dayKey]?.tombstoneDeletedAt = nil
             }
+        }
+
+        // Settlement markers nobody consumed (e.g. the resolving device's own)
+        // age out like tombstones.
+        for path in state.remoteFiles.keys where JournalSyncLayout.isSettlementPath(path, journalID: journalID) {
+            guard let (data, _) = try? await backend.download(path: path),
+                  let marker = try? JournalSyncEncoding.decoder.decode(JournalSettlementMarker.self, from: data),
+                  now.timeIntervalSince(marker.stamp) > JournalSyncLayout.tombstoneRetention
+            else { continue }
+            try? await backend.delete(path: path)
+            state.remoteFiles.removeValue(forKey: path)
         }
     }
 

@@ -449,11 +449,12 @@ final class JournalSyncEngineTests: XCTestCase {
         XCTAssertEqual(try decodeRemoteDay("2026-08-01").items.first?.body, "B2")
     }
 
-    func testResolvingKeepRemoteOnAPropagatesWithoutNewConflictsOnB() async throws {
+    func testResolvingKeepRemoteOnAPropagatesAndPeerAutoClears() async throws {
         let f = try await makeDualConflictFixture()
 
-        // Only A resolves (keep remote); B later syncs but has not touched its
-        // own record yet — B must adopt the settled day, not re-conflict.
+        // Only A resolves (keep remote); B later syncs without touching its own
+        // record. The settlement marker makes B auto-clear its stale record and
+        // adopt the settled day — no manual clearing on B.
         for conflict in f.engineA.pendingConflicts {
             f.engineA.resolveConflict(id: conflict.id, resolution: .remote)
         }
@@ -462,9 +463,7 @@ final class JournalSyncEngineTests: XCTestCase {
 
         await f.engineB.performSyncCycle()
         XCTAssertEqual(f.b.days["2026-08-01"]?.items.first?.body, "B2")
-        // B still owns its own unresolved record for the day (it never chose),
-        // but the engine must NOT have added a second one from A's resolution.
-        XCTAssertEqual(f.engineB.pendingConflicts.count, 1)
+        XCTAssertTrue(f.engineB.pendingConflicts.isEmpty, "peer must auto-clear its stale record")
     }
 
     func testResolvingKeepLocalPropagatesWithoutReconflict() async throws {
@@ -554,15 +553,66 @@ final class JournalSyncEngineTests: XCTestCase {
         }
 
         XCTAssertTrue(f.engineA.pendingConflicts.isEmpty)
-        // B keeps only its own historical record — the engine never adds a
-        // fresh one from A's settlement.
-        XCTAssertEqual(
-            f.engineB.pendingConflicts.count, 1,
-            "idle peer must keep only its own record, never more"
-        )
+        // B's stale record is auto-cleared by A's settlement marker — nothing
+        // lingers and nothing multiplies.
+        XCTAssertTrue(f.engineB.pendingConflicts.isEmpty, "idle peer must auto-clear, never accumulate")
         // Both devices converge on the remote's content (B's latest).
         XCTAssertEqual(f.a.days["2026-08-01"]?.items.first?.body, "B2")
         XCTAssertEqual(f.b.days["2026-08-01"]?.items.first?.body, "B2")
+    }
+
+    func testPeerAutoClearsStaleRecordAfterKeepLocalSettlement() async throws {
+        let f = try await makeDualConflictFixture()
+        XCTAssertEqual(f.engineB.pendingConflicts.count, 1)
+
+        // Operator keeps A's own version; the pushed content + marker reach B.
+        for conflict in f.engineA.pendingConflicts {
+            f.engineA.resolveConflict(id: conflict.id, resolution: .local)
+        }
+        await f.engineA.performSyncCycle()
+        await f.engineB.performSyncCycle()
+
+        XCTAssertTrue(f.engineB.pendingConflicts.isEmpty, "peer must auto-clear its stale record")
+        XCTAssertEqual(f.b.days["2026-08-01"]?.items.first?.body, "A1")
+        XCTAssertEqual(try decodeRemoteDay("2026-08-01").items.first?.body, "A1")
+    }
+
+    func testKeepMergedResolutionUploadsSettlementMarker() async throws {
+        let f = try await makeDualConflictFixture()
+
+        for conflict in f.engineA.pendingConflicts {
+            f.engineA.resolveConflict(id: conflict.id, resolution: .merged)
+        }
+        await f.engineA.performSyncCycle()
+
+        // A uploaded a marker so peers can drop their stale reminder once the
+        // day is at the settled (merged) version.
+        let markers = backend.allPaths().filter {
+            JournalSyncLayout.isSettlementPath($0, journalID: journalID)
+        }
+        XCTAssertEqual(markers.count, 1, "keep-merged must upload one settlement marker")
+    }
+
+    func testStaleSettlementMarkerDoesNotClearFreshRecord() async throws {
+        let f = try await makeDualConflictFixture()
+        XCTAssertEqual(f.engineB.pendingConflicts.count, 1)
+
+        // A marker whose hash matches nothing on the remote (a settlement for a
+        // different version of the day) must not clear B's record.
+        let stale = JournalSettlementMarker(
+            dayKey: "2026-08-01",
+            settledHash: "deadbeefdeadbeef",
+            deviceID: "X",
+            stamp: Date()
+        )
+        let data = try JournalSyncEncoding.encoder.encode(stale)
+        backend.seedFile(
+            JournalSyncLayout.settlementPath(for: journalID, dayKey: "2026-08-01", stamp: Date()),
+            data: data
+        )
+
+        await f.engineB.performSyncCycle()
+        XCTAssertEqual(f.engineB.pendingConflicts.count, 1, "mismatched marker must not clear the record")
     }
 
     func testConflictRecordCarriesAllThreeVersions() async throws {
