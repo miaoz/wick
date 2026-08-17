@@ -138,11 +138,7 @@ public struct TradingPosition: Codable, Identifiable, Equatable, Sendable {
     /// Quote asset inferred from the symbol suffix (display only; no
     /// exchangeInfo round-trip for v1).
     public var quoteAsset: String? {
-        let known = ["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "USDP", "DAI", "USD", "BNB", "BTC", "ETH"]
-        for asset in known where symbol.hasSuffix(asset) {
-            return asset
-        }
-        return nil
+        SymbolTagMatcher.quoteAsset(of: symbol)
     }
 }
 

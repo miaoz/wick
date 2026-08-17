@@ -301,10 +301,27 @@ final class ExchangePositionCoordinator: ObservableObject {
         )
         guard !plan.isEmpty else { return }
 
+        // New items adopt the user's own spelling when one exists (they write
+        // BTC, the symbol is BTCUSDT -> tag the new item BTC); otherwise the
+        // derived base asset (BTCUSDT -> BTC, 1000PEPEUSDT -> PEPE). Existing
+        // tags are never rewritten.
+        var tagCounts: [String: Int] = [:]
+        for entry in JournalStore.shared.entries {
+            for item in entry.items {
+                let tag = item.tag.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !tag.isEmpty else { continue }
+                tagCounts[tag, default: 0] += 1
+            }
+        }
+        func tagForSymbol(_ symbol: String) -> String {
+            SymbolTagMatcher.preferredTag(matching: symbol, tagCounts: tagCounts)
+                ?? SymbolTagMatcher.baseAsset(of: symbol)
+        }
+
         let skeletons = plan.map { planned in
             (
                 day: planned.day,
-                items: planned.symbols.map { JournalItem(tag: $0) }
+                items: planned.symbols.map { JournalItem(tag: tagForSymbol($0)) }
             )
         }
         let created = JournalStore.shared.autoCreateEntries(skeletons)

@@ -296,6 +296,63 @@ final class SymbolTagMatcherTests: XCTestCase {
         )
         XCTAssertEqual(SymbolTagMatcher.filter(positions, matchingTag: "").count, 0)
     }
+
+    // MARK: Preferred (user's own) tag naming for auto-created items
+
+    func testPreferredTagPicksMostUsedMatchingSpelling() {
+        XCTAssertEqual(
+            SymbolTagMatcher.preferredTag(
+                matching: "BTCUSDT",
+                tagCounts: ["BTC": 5, "btc": 2, "ETH": 9]
+            ),
+            "BTC"
+        )
+    }
+
+    func testPreferredTagTiePrefersShorterSpelling() {
+        XCTAssertEqual(
+            SymbolTagMatcher.preferredTag(
+                matching: "BTCUSDT",
+                tagCounts: ["BTCUSDT": 3, "BTC": 3]
+            ),
+            "BTC"
+        )
+    }
+
+    func testPreferredTagReusesExactSymbolSpelling() {
+        XCTAssertEqual(
+            SymbolTagMatcher.preferredTag(
+                matching: "BTCUSDT",
+                tagCounts: ["BTCUSDT": 4, "BTC": 1]
+            ),
+            "BTCUSDT"
+        )
+    }
+
+    func testPreferredTagReturnsNilWithoutAnyMatch() {
+        XCTAssertNil(
+            SymbolTagMatcher.preferredTag(matching: "BTCUSDT", tagCounts: ["ETH": 3, "SOL": 1])
+        )
+        XCTAssertNil(SymbolTagMatcher.preferredTag(matching: "BTCUSDT", tagCounts: [:]))
+    }
+
+    // MARK: Base-asset derivation (auto-created item tags)
+
+    func testBaseAssetStripsQuoteSuffix() {
+        XCTAssertEqual(SymbolTagMatcher.baseAsset(of: "BTCUSDT"), "BTC")
+        XCTAssertEqual(SymbolTagMatcher.baseAsset(of: "BTCUSDC"), "BTC")
+        XCTAssertEqual(SymbolTagMatcher.baseAsset(of: "XAUTUSDT"), "XAUT")
+        XCTAssertEqual(SymbolTagMatcher.baseAsset(of: "ETHBTC"), "ETH")
+    }
+
+    func testBaseAssetStripsDerivativePrefix() {
+        XCTAssertEqual(SymbolTagMatcher.baseAsset(of: "1000PEPEUSDT"), "PEPE")
+        XCTAssertEqual(SymbolTagMatcher.baseAsset(of: "1000000MOGUSDT"), "MOG")
+    }
+
+    func testBaseAssetFallsBackToSymbolWithoutKnownQuote() {
+        XCTAssertEqual(SymbolTagMatcher.baseAsset(of: "SUPERSTRANGE"), "SUPERSTRANGE")
+    }
 }
 
 final class TradingModelTests: XCTestCase {
