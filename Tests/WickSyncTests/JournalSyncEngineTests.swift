@@ -488,6 +488,52 @@ final class JournalSyncEngineTests: XCTestCase {
         XCTAssertEqual(f.b.days["2026-08-01"]?.items.first?.body, "A1")
     }
 
+    func testResolvingKeepLocalOnBothDevicesConvergesToLastWriter() async throws {
+        let f = try await makeDualConflictFixture()
+
+        // Both devices keep their OWN versions — the settlement pushes use the
+        // fresh rev from each cycle's listing, so they settle sequentially
+        // (last writer wins) without spawning fresh conflicts.
+        for conflict in f.engineA.pendingConflicts {
+            f.engineA.resolveConflict(id: conflict.id, resolution: .local)
+        }
+        await f.engineA.performSyncCycle()
+        for conflict in f.engineB.pendingConflicts {
+            f.engineB.resolveConflict(id: conflict.id, resolution: .local)
+        }
+        await f.engineB.performSyncCycle()
+        await f.engineA.performSyncCycle()
+
+        XCTAssertTrue(f.engineA.pendingConflicts.isEmpty)
+        XCTAssertTrue(f.engineB.pendingConflicts.isEmpty)
+        // Last writer (B) wins and the other device adopts it.
+        XCTAssertEqual(f.b.days["2026-08-01"]?.items.first?.body, "B2")
+        XCTAssertEqual(f.a.days["2026-08-01"]?.items.first?.body, "B2")
+        XCTAssertEqual(try decodeRemoteDay("2026-08-01").items.first?.body, "B2")
+    }
+
+    func testResolvingKeepMergedOnBothDevicesConvergesWithoutReconflict() async throws {
+        let f = try await makeDualConflictFixture()
+
+        // keep-merged writes nothing — the merge is already applied and on
+        // Dropbox — so both devices just clear their notice and adopt whatever
+        // the remote holds. No fresh conflict can come from this path.
+        for conflict in f.engineA.pendingConflicts {
+            f.engineA.resolveConflict(id: conflict.id, resolution: .merged)
+        }
+        for conflict in f.engineB.pendingConflicts {
+            f.engineB.resolveConflict(id: conflict.id, resolution: .merged)
+        }
+        await f.engineA.performSyncCycle()
+        await f.engineB.performSyncCycle()
+
+        XCTAssertTrue(f.engineA.pendingConflicts.isEmpty)
+        XCTAssertTrue(f.engineB.pendingConflicts.isEmpty)
+        XCTAssertEqual(f.a.days["2026-08-01"]?.items.first?.body, "B2")
+        XCTAssertEqual(f.b.days["2026-08-01"]?.items.first?.body, "B2")
+        XCTAssertEqual(try decodeRemoteDay("2026-08-01").items.first?.body, "B2")
+    }
+
     func testConflictRecordCarriesAllThreeVersions() async throws {
         let fixture = try await makeResolvableConflict()
 
