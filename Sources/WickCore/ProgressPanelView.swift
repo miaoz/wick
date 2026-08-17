@@ -468,6 +468,12 @@ private struct SettingsContentView: View {
             }
 
             settingsSection(
+                title: L10n.string(.exchangeSection, language: language)
+            ) {
+                ExchangeSettingsContent(theme: theme, language: language)
+            }
+
+            settingsSection(
                 title: L10n.string(.syncSection, language: language)
             ) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -1074,7 +1080,8 @@ private struct WickProgressBar: View {
 
 /// Resolved day-arc theme for the panel. All roles delegate to `WickPalette`
 /// so the view templates below stay unchanged from the static-theme era.
-private struct PanelTheme {
+/// (Internal so the exchange settings section in its own file can reuse it.)
+struct PanelTheme {
     let palette: WickPalette
     let phase: DayPhase
     let metrics: [MetricTheme]

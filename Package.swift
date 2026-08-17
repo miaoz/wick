@@ -24,6 +24,12 @@ let package = Package(
         .library(
             name: "WickCalendarKit",
             targets: ["WickCalendarKit"]
+        ),
+        // Pure-Foundation exchange integration (Binance futures positions),
+        // consumed by the macOS app and reusable by the iOS app.
+        .library(
+            name: "WickTrading",
+            targets: ["WickTrading"]
         )
     ],
     targets: [
@@ -39,9 +45,15 @@ let package = Package(
             dependencies: ["WickSync"],
             path: "Sources/WickCalendarKit"
         ),
+        // Pure-Foundation Binance client + position aggregation + loose tag
+        // matching. No AppKit/UIKit so the iOS app can link it later.
+        .target(
+            name: "WickTrading",
+            path: "Sources/WickTrading"
+        ),
         .target(
             name: "WickCore",
-            dependencies: ["WickSync", "WickCalendarKit"],
+            dependencies: ["WickSync", "WickCalendarKit", "WickTrading"],
             path: "Sources/WickCore"
         ),
         .executableTarget(
@@ -63,6 +75,11 @@ let package = Package(
             name: "WickCalendarKitTests",
             dependencies: ["WickCalendarKit"],
             path: "Tests/WickCalendarKitTests"
+        ),
+        .testTarget(
+            name: "WickTradingTests",
+            dependencies: ["WickTrading"],
+            path: "Tests/WickTradingTests"
         )
     ]
 )

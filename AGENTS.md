@@ -9,10 +9,11 @@
 - 内置**日记**功能：一天一篇日记，篇内多条目（标签 + 正文 + 图片），支持按标签/全文以条目粒度检索、每日本地通知提醒、zip 导出/导入。
 - 可选 **Dropbox 同步**：本地存储始终是唯一真源，`WickSync` 模块的同步引擎按「天」与 Dropbox App folder 双向对账（OAuth PKCE，客户端不内置 App secret）；删除靠墓碑传播、同日冲突按条目并集合并并保留败者、远端文件意外消失自动回传。模型/引擎为纯 Foundation，为未来 iPhone 客户端设计。
 - 其他能力：登录时启动（`SMAppService`）、亮/暗/跟随系统外观（配色由「一日弧光」主题引擎驱动）、中/英文界面、菜单栏百分比显示、基于 GitHub Releases 的检查更新。
+- 可选 **Binance 仓位同步**：设置页填入 API Key（key/secret 只存 Keychain），`WickTrading` 模块直连 Binance USDⓈ-M 合约 REST（HMAC-SHA256 签名、先对时再 7 天分块拉 `userTrades` 成交明细、时间分页，窗口近 180 天），同步窗口下界为**最早一篇日记的日期**（无日记时回退近 180 天），更早的历史仓位不拉取；缓存快照保存原始成交，刷新为**增量**（只拉上次覆盖点之后的尾部；日记变得更早时一次性向后扩展，历史成交不可变），客户端把成交聚合成开平仓会话（`PositionAggregator`，支持单向/双向对冲、加仓 VWAP、部分平仓、翻仓拆两段；数量用 Double 累加，**净值按 epsilon 吸附归零**（`max(1e-12, lane成交额*1e-9)`），否则十进制恰好全平的仓位会因 ~1e-18 浮点残差永远显示「持仓中」、甚至翻越零产生幽灵微尘仓位），按「开仓日 = 日记日期 && 宽松标签匹配」展示在条目卡片内；**开仓日没有日记时经 `PositionEntryPlanner` 自动创建日记条目**（每天一条、每 symbol 一个带标签的条目，`JournalStore.autoCreateEntries` 静默批量建不抢选中），每个仓位只决策一次（已处理 ID 同时存快照与 `wick.binance.handledPositionIDs`，断开重连也不复活用户删掉的自动日记）（`BTC` 匹配 `BTCUSDT`/`BTCUSDC`、`1000PEPE` 前缀剥离、忽略大小写与分隔符）；匹配纯展示时计算，绝不回写日记数据。
 - 内置 **交易日历**：进度面板书签按钮左侧的日历按钮打开「交易日历」窗口——himekuri（https://github.com/pluk-inc/himekuri）「黄历」主题的撕页日历（绿墨×米白纸、双线描边、大号日期、竖排星期填色列、装订/纸堆/撕痕），**无边框透明穿透窗口**（贴桌对象，pad 区外点击穿透），撕下时碎页在单独叠加窗里从 pad 飘落到**屏幕外**并伴**程序合成撕纸音效**；每一页显示该日全球宏观事件，由 akshare `macro_info_ws` 背后的（无密钥）华尔街见闻 REST 接口直连取数（Swift `URLSession`，非 WebSocket、不打包 Python）。
 - **平台**：macOS 13+，Apple Silicon 与 Intel（正式打包产出 Universal 二进制）。
 - **技术栈**：Swift 6.1+（`Package.swift` 声明 `swift-tools-version: 6.1`；主开发环境为 Xcode 26 / Swift 6.3）、SwiftUI + AppKit、Swift Package Manager。**无任何第三方依赖**（无 `Package.resolved`）。
-- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.8.0 (30)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
+- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.9.0 (31)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
 
 ## 仓库结构与模块划分
 
@@ -20,9 +21,10 @@ SwiftPM target（`Package.swift`；package 声明 `macOS 13+` 与 `iOS 16+`，ma
 
 - `WickSync`（库，**纯 Foundation** 的日记模型 + 同步引擎 + Dropbox 后端 + `L10n`/`AppLanguage`/`JournalDayKey`；禁止 `import AppKit`/`UIKit`；iOS 工程**本地包引用**指回仓库根并链接它）
 - `WickCalendarKit`（库，**跨平台交易日历**：数据 + verlet 撕纸物理 + SwiftUI/SpriteKit 渲染 + 程序合成音效（物理/场景/页面/撕口全部按 `PaperLayout` 参数化：桌面固定 300×400 小部件、iPhone 页即屏幕满屏，两条路径共用同一份代码）；依赖 `WickSync`，macOS 与 iOS 共用同一份；`#if os(macOS)` 只隔离窗口呈现、光标、触觉、`Color.blended` 等平台 API；可经 `swift build --target WickCalendarKit --triple arm64-apple-ios16.0 --sdk <iphoneos-sdk>` 验证可编译 iOS）
-- `WickCore`（库，macOS 其余几乎全部代码，可被测试 `@testable import`；依赖 `WickSync` + `WickCalendarKit`，`Exports.swift` 同时 `@_exported` 两者）
+- `WickTrading`（库，**纯 Foundation + CryptoKit 的交易所集成**：Binance USDⓈ-M 合约客户端（签名/分块分页/错误映射，transport 可注入）+ 成交->仓位聚合器 + 宽松标签匹配器；零依赖，iOS 未来可复用）
+- `WickCore`（库，macOS 其余几乎全部代码，可被测试 `@testable import`；依赖 `WickSync` + `WickCalendarKit` + `WickTrading`，`Exports.swift` 同时 `@_exported` 三者）
 - `Wick`（可执行，`Sources/Wick/main.swift` 仅 3 行：调用 `WickApp.main()`）
-- `WickTests` / `WickSyncTests` / `WickCalendarKitTests`（单元测试，分别依赖 `WickCore` / `WickSync` / `WickCalendarKit`）
+- `WickTests` / `WickSyncTests` / `WickCalendarKitTests` / `WickTradingTests`（单元测试，分别依赖 `WickCore` / `WickSync` / `WickCalendarKit` / `WickTrading`）
 
 `Sources/WickCore/` 各文件职责：
 
@@ -50,13 +52,16 @@ SwiftPM target（`Package.swift`；package 声明 `macOS 13+` 与 `iOS 16+`，ma
 | `IMESafeTextViews.swift` | AppKit 包装的单行/多行文本输入，避免中文/日文/韩文 IME 组字（marked text）期间被外部写值吞字；多行编辑器为 `IMETextView` 子类（手动装配 scrollView，**不要用 `NSTextView.scrollableTextView()`**），并由 coordinator 监听 clip view bounds 同步文本视图宽度（macOS 13 不向 document view 传播缩小，不修则长行不换行溢出）；keyDown 里显式路由 ⌘V；单行框经 `control(_:textView:doCommandBy:)` 拦截粘贴命令；两者都在剪贴板含图片时交给 `onPasteImage`（图片进条目），否则走默认文本粘贴（注意 ⌘V 也可能以 `noop:` 形式到达，需按 `NSApp.currentEvent` 二次判定） |
 | `JournalImageProcessing.swift` | 图片导入处理：最长边 2048px，无 alpha 转 JPEG(0.82)，有 alpha 存 PNG |
 | `MenuBarIcon.swift` | 代码绘制的蜡烛模板 `NSImage`（1x/2x，`isTemplate = true`，只创建一次不再变更） |
-| `AppSettings.swift` | 设置单例（`AppSettings.shared`）：语言/外观/提醒/菜单栏百分比/周一起始/登录项/更新检查，全部持久化到 `UserDefaults`（键前缀 `wick.`） |
-| `Exports.swift` | 两行 `@_exported import WickSync` + `@_exported import WickCalendarKit`——让 WickCore 全部文件免逐文件 import 即可用共享类型 |
+| `AppSettings.swift` | 设置单例（`AppSettings.shared`）：语言/外观/提醒/菜单栏百分比/周一起始/登录项/更新检查/Binance 仓位开关（`wick.binance.positionsEnabled`，凭据本体在 Keychain），全部持久化到 `UserDefaults`（键前缀 `wick.`） |
+| `Exports.swift` | 三行 `@_exported import WickSync` + `WickCalendarKit` + `WickTrading`——让 WickCore 全部文件免逐文件 import 即可用共享类型 |
 | `AppInfo.swift` | 版本读取与语义化比较（`isVersion(_:newerThan:)`） |
 | `UpdateChecker.swift` | 查询 GitHub Releases latest API（`miaoz/wick`），15s 超时，自定义 UA |
 | `LaunchAtLogin.swift` | `SMAppService.mainApp` 封装（macOS 13+） |
 | `AppNotifications.swift` | 自定义 `Notification.Name`（退出/关窗前冲刷草稿、存储恢复、日记本切换/工具栏弹窗；日历事件区翻页通知已移入 kit） |
 | `SyncCoordinator.swift` | 同步生命周期单例：持有 `DropboxSyncBackend` + `JournalSyncEngine`（localSource 为 `JournalStore.shared`）；启动时按 `wick.sync.enabled` 启停；`$entries` 变更 → 15s 防抖同步、切换日记本/失去激活 → 触发同步；连接/断开 Dropbox；**自动导入**远端发现的日记本（`registerRemoteJournal` 不切换活跃本，内容在用户打开时拉取；本地删除过的 UUID 记入 `wick.sync.ignoredRemoteJournals` 不再自动导入，设置页手动导入为逃生口）；导入前必须 `resetSyncState`（否则陈旧基线会把空本地误判为全删、向远端写墓碑）；退出前一次 5s 上限的最终同步（`applicationShouldTerminate` 返回 `.terminateLater`） |
+| `ExchangePositionCoordinator.swift` | 交易所仓位生命周期单例：Binance key/secret 存 Keychain（复用 `KeychainTokenStore`，service `com.miaoz.wick.binance`）；缓存快照 `Wick/TradingPositions.json`（**存原始成交**，增量刷新：窗口下界=最早日记日、无日记回退 180 天、向后扩展 + 尾部增量 + 按 symbol#id 去重）；启动 `start()` / 开日记窗 `refreshIfStale()` / 30 分钟定时刷新；`saveAndSync` 保存即验证，鉴权失败保留凭据但停自动同步；同步成功后 `PositionEntryPlanner` 规划 + `JournalStore.autoCreateEntries` 补建缺日记的开仓日（每 symbol 一个条目，静默不抢选中；已处理 ID 存快照 + UserDefaults，删掉的自动日记不复活，上限 5000）；`positions(entryDayKey:tag:)` 供日记按「开仓日 + 标签」查询（纯展示时过滤，不改日记数据） |
+| `ExchangeSettingsContent.swift` | 设置页「交易所」区块内容：未连接 = 说明 + API Key/Secret 输入 + 保存并同步（鉴权失败就地报错可改）；已连接 = 窗口说明 + 上次同步/错误态 + 立即刷新 + 断开（确认弹窗，删 Keychain 凭据并清缓存） |
+| `JournalExchangePositions.swift` | 条目卡片内的「交易所仓位」区块：命中仓位逐行展示 交易对/多空/持仓中-已平仓/数量@开仓价->平仓价/已实现盈亏（PnL 着色复用 `reviewCorrect`/`reviewWrong`）；无命中时整块隐藏 |
 | `DropboxAuthSession.swift` | `ASWebAuthenticationSession` 包装（OAuth 浏览器授权 + 回调 URL）；需窗口 anchor，且回调 scheme 只在打包 `.app` 内注册，`swift run` 收不到回调 |
 
 `Sources/WickCalendarKit/`（**跨平台交易日历**，macOS 13 + iOS 16；依赖 `WickSync`；`#if os(macOS)` 只隔离窗口呈现/光标/触觉/`Color.blended`）各文件职责：
@@ -94,7 +99,7 @@ SwiftPM target（`Package.swift`；package 声明 `macOS 13+` 与 `iOS 16+`，ma
 | `JournalLocalSource.swift` | 引擎↔本地存储协议（按天快照/应用/删除 + 日记名应用 + 图片读写），未来 iOS 存储实现同一协议 |
 | `JournalSyncBackend.swift` | 后端协议（listChanges 游标增量/download/upload rev 条件写/delete）+ `RemoteFileMeta` + `SyncBackendError` |
 | `DropboxSyncBackend.swift` | Dropbox API v2 实现：PKCE OAuth（`token_access_type=offline`，refresh token 存 Keychain，access token 单飞刷新）、`list_folder(+continue)`、`files/download|upload|delete_v2`；409 冲突/cursor 失效/429/401 分类 |
-| `PKCE.swift`、`KeychainTokenStore.swift` | PKCE 工具（无 App secret 的公共客户端）；Keychain 读写（无 access group——ad-hoc 重编译可能丢 token，表现为需重新授权） |
+| `PKCE.swift`、`KeychainTokenStore.swift` | PKCE 工具（无 App secret 的公共客户端）；通用 Keychain 读写（service+account 参数化，Dropbox token 与 Binance key/secret 共用；无 access group——ad-hoc 重编译可能丢 token，表现为需重新授权） |
 | `JournalDayMerge.swift` | 同一天两版本合并：条目按 UUID 并集、同条目不同内容新 `updatedAt` 方胜（败者入 `losingItems` 保留）、标题同理、身份收敛到 `createdAt` 更早者 |
 | `JournalSyncState.swift` | 远端布局 `/journals/<uuid>/{manifest.json,days/,images/,tombstones/,conflicts/}`；manifest/墓碑/冲突载荷 Codable；每设备同步状态（cursor、远端文件视图、按天哈希/rev、pendingConflicts、日记名基线 `manifestName`）与本地持久化（`~/Library/Application Support/Wick/SyncState/<uuid>.json`，**不参与同步**） |
 | `JournalSyncEngine.swift` | 对账引擎（`@MainActor ObservableObject`）：cursor 增量 → manifest `formatVersion` 版本门 + 日记名对账（本地改名→rev 条件写推送；远端 manifest 被改写→`applySyncedJournalName` 本地采用；双改→后推者胜、败方下轮采用；旧状态文件无 `manifestName` 基线则一次性播种——远端未动时本地未推送的改名补推、远端已动则信任远端）→ 发现其他日记本 manifest（`discoveredJournals`，供自动/手动导入，消失即剪除）→ 按天矩阵（本地变→条件上传；远端变→下载应用；双变→条目并集合并，败者存档 `conflicts/` 并出 `pendingConflicts`；本地删→先写墓碑再删远端；远端墓碑→本地删（本地有改动则改动方胜并清墓碑）；远端文件无墓碑消失→视为事故自动回传，绝不镜像删除）→ 图片按引用差集上传/下载 → 墓碑 30 天 GC；60s 周期 + 15s 防抖 + `syncOnce()`（退出用）+ `resetSyncState()`（重导入前调） |
@@ -153,6 +158,9 @@ make clean         # rm -rf .build dist
   - `WickSyncTests/JournalSyncModelTests.swift`：dayKey 生成/解码推导/往返、规范编码 decode→encode 字节稳定、SHA-256 已知向量。
   - `WickSyncTests/JournalDayMergeTests.swift`：并集、同条目冲突新者胜+败者记录、标题规则、占位空条目剔除、时间戳 min/max、身份按 createdAt 收敛（与参数顺序无关）。
   - `WickSyncTests/JournalSyncEngineTests.swift`：内存假后端 + 假本地源模拟**双设备**——首同步上传、二次空转、拉取、推送、不同条目并集合并、同条目冲突存档、删除墓碑传播、删除 vs 编辑两方向、远端文件消失自愈回传、图片双向、新版 manifest 阻断、cursor 失效恢复、状态跨实例恢复、切换日记本不串数据、日记名改名双向传播/收敛无回波/双改后推者胜/导入采用远端名/旧状态基线播种两方向。
+  - `WickTradingTests/PositionAggregatorTests.swift`：成交->仓位会话重建--开平往返、加仓 VWAP 与分批止盈、空头、**翻仓拆两段**（平仓段吃掉 realizedPnl/手续费）、对冲双 lane 独立、结束仍持仓、同 lane 先后两会话、峰值仓位跨部分平仓保留、零数量忽略与乱序输入、多交易对按开仓时间排序；`SymbolTagMatcherTests`：BTC 匹配 BTCUSDT/BTCUSDC、大小写与分隔符归一（`btc-usdt`）、`1000PEPE`/`1000000MOG` 前缀剥离、精确标签不跨对、空标签不命中；`TradingModelTests`：Binance 字符串数值解码、快照 JSON 往返、计价货币后缀推断。
+    - `WickTradingTests/PositionEntryPlannerTests.swift`：缺日记开仓日规划--每天一条/多 symbol 各一条、同日同 symbol 会话合并、已有日记跳过、已处理跳过（删后不复活）、按日升序。
+- `WickTradingTests/BinanceFuturesClientTests.swift`：HMAC 已知向量（openssl 独立生成）与签名请求拼装（URL/头/方法）、假 transport 下的时间分页与分块、server time 偏移只作用于 `timestamp` 不动数据窗口、-2015/429/畸形载荷错误映射、`fetchPositions` 聚合贯通。
 - 新增可测逻辑时的落点：纯计算放 `TimeProgressCalculator` / `DayArcEngine` 这类可注入 `Date`/`Calendar` 的静态方法；存储行为扩展 `JournalStoreTests`；同步行为扩展 `WickSyncTests`（引擎一切分支都应能用假后端复现，不碰网络）。UI 层无测试。
 
 ## CI 与发版
@@ -188,6 +196,6 @@ make clean         # rm -rf .build dist
 - **`MenuBarExtra` 的 label 里禁止放 `TimelineView` 等高频失效源**：会触发 `requestUpdate` → `setImage` 死循环占满 CPU（`WickApp.swift` 有注释；当前 label 用 30s `Timer` 且仅在文本变化时更新状态）。
 - IME 组字：日记编辑用 `IMESafeTextViews` 里的封装，不要用原生 SwiftUI `TextField` 直接替换，否则中文输入会吞字（有专门修复提交）。
 - **手动 `NSWindow` + `NSHostingController` 且标题栏透明/隐藏标题时，macOS 13 不会安装任何工具栏**（SwiftUI `.toolbar` 项与 `NavigationSplitView` 的侧栏折叠按钮都不出现；视图内 `safeAreaInset`/`ignoresSafeArea` 的条带方案在各版本间落点不一致，已弃用）；因此 macOS 13 由 `JournalWindowController` 安装真正的 **AppKit `NSToolbar`**（`LegacyJournalToolbarDelegate`：折叠钮最左、新建钮最右，系统布局保证与红绿灯同线），折叠动作走响应链 `toggleSidebar:`（与系统按钮同机制，勿用自研 binding 桥）；快捷键 ⌘N/⌃⌘S 以隐藏按钮形式留在视图里（`journalNeedsInViewTopBar` 判定，`WICK_INVIEW_TOPBAR=1` 仅 DEBUG 构建可强制预览）。`sidebarTrackingSeparator` 不要用于本窗口——内容 VC 是 `NSHostingController` 而非 `NSSplitViewController`，关联不合法且实测导致窗口状态异常。
-- 网络面很小：检查更新访问 `api.github.com`（15s 超时）；交易日历访问华尔街见闻 `api-one-wscn.awtmt.com`（keyless REST，15s 超时，失败/离线走缓存与空态）；无遥测、无账号体系。
+- 网络面很小：检查更新访问 `api.github.com`（15s 超时）；交易日历访问华尔街见闻 `api-one-wscn.awtmt.com`（keyless REST，15s 超时，失败/离线走缓存与空态）；Binance 仓位同步访问 `fapi.binance.com`（只读 `userTrades`/`time`，HMAC 签名，每请求 20s 超时，凭据只在 Keychain）；无遥测、无账号体系。
 - 发布包 ad-hoc 签名、未公证——不要在文档/脚本中暗示已签名公证。
 - 许可：仓库暂无 `LICENSE`，README 声明保留版权，新增第三方代码前需与维护者确认。

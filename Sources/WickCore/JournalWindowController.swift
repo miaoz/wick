@@ -28,6 +28,8 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         if createTodayIfNeeded {
             _ = JournalStore.shared.openOrCreateToday()
         }
+        // Opening the journal is the natural moment to top up position data.
+        ExchangePositionCoordinator.shared.refreshIfStale()
 
         // For LSUIElement / accessory apps, promote activation policy *before*
         // keying the window — otherwise notification taps often open the

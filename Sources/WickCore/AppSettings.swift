@@ -55,6 +55,7 @@ final class AppSettings: ObservableObject {
         static let deviceID = "wick.deviceID"
         static let syncEnabled = "wick.sync.enabled"
         static let syncAccountEmail = "wick.sync.accountEmail"
+        static let binancePositionsEnabled = "wick.binance.positionsEnabled"
     }
 
     /// Suppresses reminder rescheduling while loading defaults in `init`.
@@ -132,6 +133,14 @@ final class AppSettings: ObservableObject {
     @Published var syncEnabled: Bool {
         didSet {
             UserDefaults.standard.set(syncEnabled, forKey: Keys.syncEnabled)
+        }
+    }
+
+    /// Binance position sync master switch (driven by
+    /// `ExchangePositionCoordinator`; the key/secret live in the Keychain).
+    @Published var binancePositionsEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(binancePositionsEnabled, forKey: Keys.binancePositionsEnabled)
         }
     }
 
@@ -245,6 +254,7 @@ final class AppSettings: ObservableObject {
 
         syncEnabled = UserDefaults.standard.bool(forKey: Keys.syncEnabled)
         syncAccountEmail = UserDefaults.standard.string(forKey: Keys.syncAccountEmail) ?? ""
+        binancePositionsEnabled = UserDefaults.standard.bool(forKey: Keys.binancePositionsEnabled)
 
         lastKnownRemoteVersion = UserDefaults.standard.string(forKey: Keys.lastKnownRemoteVersion) ?? ""
         lastKnownRemoteURL = UserDefaults.standard.string(forKey: Keys.lastKnownRemoteURL) ?? ""

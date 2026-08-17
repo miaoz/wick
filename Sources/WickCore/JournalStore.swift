@@ -473,6 +473,30 @@ final class JournalStore: ObservableObject {
         createEntry(on: Date())
     }
 
+    /// Quiet batch creation for exchange auto-population: creates one entry
+    /// per day that has none yet, without touching selection/filters (unlike
+    /// `createEntry`, which also selects). One persist for the whole batch.
+    /// Returns the days actually created; existing days are skipped.
+    @discardableResult
+    func autoCreateEntries(_ skeletons: [(day: Date, items: [JournalItem])]) -> [Date] {
+        guard !isReadOnlyDueToLoadFailure, !skeletons.isEmpty else { return [] }
+
+        let calendar = Calendar.current
+        var created: [Date] = []
+        for skeleton in skeletons {
+            let day = calendar.startOfDay(for: skeleton.day)
+            guard entry(on: day) == nil else { continue }
+            let items = skeleton.items.isEmpty ? [JournalItem()] : skeleton.items
+            entries.insert(JournalEntry(date: day, items: items), at: 0)
+            created.append(day)
+        }
+        guard !created.isEmpty else { return [] }
+
+        persist()
+        touchActiveJournalMetadata()
+        return created
+    }
+
     func updateEntry(_ entry: JournalEntry) {
         guard !isReadOnlyDueToLoadFailure else { return }
         guard let index = entries.firstIndex(where: { $0.id == entry.id }) else {

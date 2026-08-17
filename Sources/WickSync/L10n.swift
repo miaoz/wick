@@ -168,6 +168,31 @@ public enum L10n {
         case journalLibraryCreate
         case journalLibrarySaveName
 
+        // Exchange positions
+        case exchangeSection
+        case exchangeExplanation
+        case exchangeApiKey
+        case exchangeSecretKey
+        case exchangeSaveAndSync
+        case exchangeSyncNow
+        case exchangeDisconnect
+        case exchangeDisconnectConfirmTitle
+        case exchangeDisconnectConfirmBody
+        case exchangeReadonlyHint
+        case exchangeWindowHint
+        case exchangeSyncing
+        case exchangeLastSync
+        case exchangeNeverSynced
+        case exchangeErrorInvalidKey
+        case exchangeErrorRateLimited
+        case exchangeErrorNetwork
+        case exchangeErrorOther
+        case exchangePositionsTitle
+        case exchangePositionLong
+        case exchangePositionShort
+        case exchangePositionOpen
+        case exchangePositionClosed
+
         // Trading calendar
         case tradingCalendar
         case macroEventsSection
@@ -331,6 +356,30 @@ public enum L10n {
             case .journalLibraryCreate: return "创建"
             case .journalLibrarySaveName: return "保存"
 
+            case .exchangeSection: return "交易所"
+            case .exchangeExplanation: return "填入 Binance API Key，自动同步自最早一篇日记起的合约仓位，并按「开仓日期 + 标签」显示在对应日记条目中（如标签 BTC 匹配 BTCUSDT、BTCUSDC）；没有日记的开仓日会自动创建日记条目。"
+            case .exchangeApiKey: return "API Key"
+            case .exchangeSecretKey: return "Secret Key"
+            case .exchangeSaveAndSync: return "保存并同步"
+            case .exchangeSyncNow: return "立即刷新"
+            case .exchangeDisconnect: return "断开 Binance"
+            case .exchangeDisconnectConfirmTitle: return "断开 Binance？"
+            case .exchangeDisconnectConfirmBody: return "将删除本机保存的 API Key 并清空已同步的仓位。日记内容不受影响。"
+            case .exchangeReadonlyHint: return "密钥仅保存在本机钥匙串，不会上传；建议使用「只读取」权限的 API Key。"
+            case .exchangeWindowHint: return "同步范围从最早的一篇日记开始（没有日记时为近 180 天），仅同步 USDⓈ-M 合约；开仓日没有日记时会自动创建条目，删除后不会自动重建。"
+            case .exchangeSyncing: return "正在同步…"
+            case .exchangeLastSync: return "上次同步"
+            case .exchangeNeverSynced: return "尚未同步"
+            case .exchangeErrorInvalidKey: return "API Key 无效或权限不足"
+            case .exchangeErrorRateLimited: return "请求过于频繁，请稍后再试"
+            case .exchangeErrorNetwork: return "网络错误，稍后自动重试"
+            case .exchangeErrorOther: return "同步失败"
+            case .exchangePositionsTitle: return "交易所仓位"
+            case .exchangePositionLong: return "多"
+            case .exchangePositionShort: return "空"
+            case .exchangePositionOpen: return "持仓中"
+            case .exchangePositionClosed: return "已平仓"
+
             case .tradingCalendar: return "交易日历"
             case .macroEventsSection: return "宏观事件"
             case .macroLoading: return "加载中…"
@@ -493,6 +542,30 @@ public enum L10n {
             case .journalLibraryDeleteConfirm: return "Delete this journal? All days, items, and images will be permanently removed."
             case .journalLibraryCreate: return "Create"
             case .journalLibrarySaveName: return "Save"
+
+            case .exchangeSection: return "Exchange"
+            case .exchangeExplanation: return "Enter a Binance API key to sync futures positions from your earliest journal day onward and show them on journal items by open date + tag (tag BTC matches BTCUSDT, BTCUSDC, …); position days without a journal entry get one created automatically."
+            case .exchangeApiKey: return "API Key"
+            case .exchangeSecretKey: return "Secret Key"
+            case .exchangeSaveAndSync: return "Save & Sync"
+            case .exchangeSyncNow: return "Refresh Now"
+            case .exchangeDisconnect: return "Disconnect Binance"
+            case .exchangeDisconnectConfirmTitle: return "Disconnect Binance?"
+            case .exchangeDisconnectConfirmBody: return "The stored API key and synced positions will be removed. Journal content is not affected."
+            case .exchangeReadonlyHint: return "Secrets stay in this Mac’s Keychain; a read-only API key is recommended."
+            case .exchangeWindowHint: return "Syncing covers from your earliest journal day (last 180 days when the journal is empty), USDⓈ-M futures only; missing position days get an entry created automatically, and deletions are respected."
+            case .exchangeSyncing: return "Syncing…"
+            case .exchangeLastSync: return "Last synced"
+            case .exchangeNeverSynced: return "Not synced yet"
+            case .exchangeErrorInvalidKey: return "Invalid API key or missing permission"
+            case .exchangeErrorRateLimited: return "Rate limited - try again later"
+            case .exchangeErrorNetwork: return "Network error - will retry later"
+            case .exchangeErrorOther: return "Sync failed"
+            case .exchangePositionsTitle: return "Exchange positions"
+            case .exchangePositionLong: return "Long"
+            case .exchangePositionShort: return "Short"
+            case .exchangePositionOpen: return "Open"
+            case .exchangePositionClosed: return "Closed"
 
             case .tradingCalendar: return "Trading Calendar"
             case .macroEventsSection: return "Macro Events"

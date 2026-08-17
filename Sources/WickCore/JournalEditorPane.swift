@@ -449,6 +449,7 @@ struct JournalEditorPane: View {
 
         return JournalItemEditorCard(
             entryID: entryID,
+            entryDayKey: draft.dayKey,
             index: index,
             item: binding(entryID: entryID, itemID: itemID),
             canDelete: canDelete,

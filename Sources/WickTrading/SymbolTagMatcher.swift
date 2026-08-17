@@ -1,0 +1,44 @@
+import Foundation
+
+/// Loose matching between a journal item tag and an exchange trading pair.
+///
+/// Journal tags are free-form, so matching is deliberately wide:
+/// - case-insensitive, separators (`/`, `-`, spaces) ignored: `btc/usdt` -> BTCUSDT
+/// - a base-asset tag matches any pair on that base: `BTC` -> BTCUSDT, BTCUSDC
+/// - derivative notional prefixes are stripped from the symbol:
+///   `PEPE` -> 1000PEPEUSDT, `MOG` -> 1000000MOGUSDT
+public enum SymbolTagMatcher {
+    private static let derivativePrefixes = ["1000000", "10000", "1000"]
+
+    public static func matches(tag: String, symbol: String) -> Bool {
+        guard let normalizedTag = normalize(tag),
+              let normalizedSymbol = normalize(symbol)
+        else { return false }
+
+        if normalizedSymbol == normalizedTag { return true }
+        if normalizedSymbol.hasPrefix(normalizedTag) { return true }
+        for prefix in derivativePrefixes where normalizedSymbol.hasPrefix(prefix) {
+            if normalizedSymbol.dropFirst(prefix.count).hasPrefix(normalizedTag) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Positions whose symbol loosely matches `tag`. Callers pair this with
+    /// their own day filter (open date == journal day).
+    public static func filter(
+        _ positions: [TradingPosition],
+        matchingTag tag: String
+    ) -> [TradingPosition] {
+        let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        return positions.filter { matches(tag: trimmed, symbol: $0.symbol) }
+    }
+
+    /// Uppercased alphanumerics only; nil when nothing usable remains.
+    static func normalize(_ raw: String) -> String? {
+        let normalized = raw.uppercased().filter { $0.isLetter || $0.isNumber }
+        return normalized.isEmpty ? nil : normalized
+    }
+}
