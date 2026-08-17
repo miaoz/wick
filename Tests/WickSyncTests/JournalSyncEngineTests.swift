@@ -380,6 +380,114 @@ final class JournalSyncEngineTests: XCTestCase {
         Set((source.days["2026-08-01"]?.items ?? []).map(\.body))
     }
 
+    /// Two devices that both hold a pending conflict record for the SAME day
+    /// (each recorded one while being the "second syncer" in a different
+    /// divergence round) — the state the user calls "各自保留".
+    private func makeDualConflictFixture() async throws -> (
+        a: FakeLocalSource, engineA: JournalSyncEngine,
+        b: FakeLocalSource, engineB: JournalSyncEngine
+    ) {
+        let itemID = UUID()
+        let a = makeSource()
+        let b = makeSource()
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+
+        a.days["2026-08-01"] = JournalEntry(
+            date: t0,
+            dayKey: "2026-08-01",
+            items: [JournalItem(id: itemID, body: "v1")],
+            createdAt: t0,
+            updatedAt: t0
+        )
+        b.days["2026-08-01"] = a.days["2026-08-01"]!
+        await engineA.performSyncCycle()
+        await engineB.performSyncCycle()
+
+        // Round 1 — B pushes first, so A is the second syncer and records a conflict.
+        a.days["2026-08-01"]!.items[0].body = "A1"
+        a.days["2026-08-01"]!.updatedAt = t0.addingTimeInterval(100)
+        b.days["2026-08-01"]!.items[0].body = "B1"
+        b.days["2026-08-01"]!.updatedAt = t0.addingTimeInterval(200)
+        await engineB.performSyncCycle() // push B1
+        await engineA.performSyncCycle() // A merges -> conflict on A
+
+        // Round 2 — A pushes first, so B is the second syncer and records a conflict.
+        a.days["2026-08-01"]!.items[0].body = "A2"
+        a.days["2026-08-01"]!.updatedAt = t0.addingTimeInterval(250)
+        b.days["2026-08-01"]!.items[0].body = "B2"
+        b.days["2026-08-01"]!.updatedAt = t0.addingTimeInterval(300)
+        await engineA.performSyncCycle() // push A2
+        await engineB.performSyncCycle() // B merges -> conflict on B
+
+        return (a, engineA, b, engineB)
+    }
+
+    // MARK: two-device resolution must converge, not multiply
+
+    func testResolvingKeepRemoteOnBothDevicesConvergesWithoutReconflict() async throws {
+        let f = try await makeDualConflictFixture()
+        XCTAssertEqual(f.engineA.pendingConflicts.count, 1)
+        XCTAssertEqual(f.engineB.pendingConflicts.count, 1)
+
+        // The user resolves every conflict on A, then on B, both with
+        // "keep remote" — this used to re-merge and spawn a fresh conflict.
+        for conflict in f.engineA.pendingConflicts {
+            f.engineA.resolveConflict(id: conflict.id, resolution: .remote)
+        }
+        await f.engineA.performSyncCycle()
+        for conflict in f.engineB.pendingConflicts {
+            f.engineB.resolveConflict(id: conflict.id, resolution: .remote)
+        }
+        await f.engineB.performSyncCycle()
+
+        XCTAssertTrue(f.engineA.pendingConflicts.isEmpty, "A resolving keep-remote must not spawn a fresh conflict")
+        XCTAssertTrue(f.engineB.pendingConflicts.isEmpty, "B resolving keep-remote must not spawn a fresh conflict")
+        // Both devices and the remote converge to the current remote content.
+        XCTAssertEqual(f.a.days["2026-08-01"]?.items.first?.body, "B2")
+        XCTAssertEqual(f.b.days["2026-08-01"]?.items.first?.body, "B2")
+        XCTAssertEqual(try decodeRemoteDay("2026-08-01").items.first?.body, "B2")
+    }
+
+    func testResolvingKeepRemoteOnAPropagatesWithoutNewConflictsOnB() async throws {
+        let f = try await makeDualConflictFixture()
+
+        // Only A resolves (keep remote); B later syncs but has not touched its
+        // own record yet — B must adopt the settled day, not re-conflict.
+        for conflict in f.engineA.pendingConflicts {
+            f.engineA.resolveConflict(id: conflict.id, resolution: .remote)
+        }
+        await f.engineA.performSyncCycle()
+        XCTAssertTrue(f.engineA.pendingConflicts.isEmpty)
+
+        await f.engineB.performSyncCycle()
+        XCTAssertEqual(f.b.days["2026-08-01"]?.items.first?.body, "B2")
+        // B still owns its own unresolved record for the day (it never chose),
+        // but the engine must NOT have added a second one from A's resolution.
+        XCTAssertEqual(f.engineB.pendingConflicts.count, 1)
+    }
+
+    func testResolvingKeepLocalPropagatesWithoutReconflict() async throws {
+        let f = try await makeDualConflictFixture()
+
+        // A adopts B's latest first (fresh rev baseline), then keeps its OWN
+        // older version from the conflict record.
+        await f.engineA.performSyncCycle()
+        XCTAssertEqual(f.a.days["2026-08-01"]?.items.first?.body, "B2")
+
+        let record = try XCTUnwrap(f.engineA.pendingConflicts.first)
+        f.engineA.resolveConflict(id: record.id, resolution: .local)
+        XCTAssertTrue(f.engineA.pendingConflicts.isEmpty)
+
+        await f.engineA.performSyncCycle()
+        XCTAssertTrue(f.engineA.pendingConflicts.isEmpty, "keep-local must not spawn a fresh conflict")
+        XCTAssertEqual(f.a.days["2026-08-01"]?.items.first?.body, "A1")
+        XCTAssertEqual(try decodeRemoteDay("2026-08-01").items.first?.body, "A1")
+
+        await f.engineB.performSyncCycle()
+        XCTAssertEqual(f.b.days["2026-08-01"]?.items.first?.body, "A1")
+    }
+
     func testConflictRecordCarriesAllThreeVersions() async throws {
         let fixture = try await makeResolvableConflict()
 
@@ -408,7 +516,7 @@ final class JournalSyncEngineTests: XCTestCase {
         XCTAssertEqual(bodies(fixture.a), ["B edit", "B extra"])
     }
 
-    func testResolveConflictKeepRemoteDiscardsLocalExtras() async throws {
+    func testResolveConflictKeepRemoteAdoptsLiveRemote() async throws {
         let fixture = try await makeResolvableConflict()
         let record = try XCTUnwrap(fixture.engineB.pendingConflicts.first)
         let archivePath = record.remotePath
@@ -417,12 +525,14 @@ final class JournalSyncEngineTests: XCTestCase {
         fixture.engineB.resolveConflict(id: record.id, resolution: .remote)
 
         XCTAssertTrue(fixture.engineB.pendingConflicts.isEmpty)
-        XCTAssertEqual(bodies(fixture.b), ["A edit"])
+        // "keep remote" adopts the live remote — here the merge already applied
+        // and uploaded, so the union stays (nothing stale is resurrected).
         await fixture.engineB.performSyncCycle()
         XCTAssertEqual(
             Set(try decodeRemoteDay("2026-08-01").items.map(\.body)),
-            ["A edit"]
+            ["A edit", "B extra"]
         )
+        XCTAssertEqual(bodies(fixture.b), ["A edit", "B extra"])
     }
 
     func testDismissConflictDeletesRemoteArchiveOnNextCycle() async throws {

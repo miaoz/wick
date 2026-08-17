@@ -132,32 +132,45 @@ public final class JournalSyncEngine: ObservableObject {
         case merged
     }
 
-    /// Applies the user's choice for a recorded conflict. The chosen version
-    /// is written into the local store right away; the day's sync state still
-    /// records the merged hash, so the next cycle sees the local content
-    /// change and pushes the resolution to the remote (and from there to the
-    /// other devices). `.merged` changes nothing - the merge is already in
-    /// place locally and remotely.
+    /// Applies the user's choice for a recorded conflict. The chosen version is
+    /// written into the local store right away and the day is marked *settled*
+    /// so the next cycle propagates the choice authoritatively instead of
+    /// re-running the divergence matrix (which would re-record the conflict):
+    /// - `.local`  → push that exact version even if the remote moved meanwhile;
+    /// - `.remote` → adopt the *live* remote (the recorded snapshot may be
+    ///   stale), so "keep Dropbox" follows what is actually on Dropbox;
+    /// - `.merged` → the merge is already in place locally and remotely, so the
+    ///   notice is simply cleared.
     public func resolveConflict(id: UUID, resolution: SyncConflictResolution) {
         guard let index = state.pendingConflicts.firstIndex(where: { $0.id == id }) else { return }
         let record = state.pendingConflicts[index]
 
-        let chosen: JournalEntry?
-        switch resolution {
-        case .local: chosen = record.localEntry
-        case .remote: chosen = record.remoteEntry
-        case .merged: chosen = nil
-        }
+        let writable = stateJournalID != nil
+            && localSource.syncJournalID == stateJournalID
+            && localSource.syncIsWritable
 
-        if let chosen {
-            guard let journalID = stateJournalID,
-                  localSource.syncJournalID == journalID,
-                  localSource.syncIsWritable
-            else { return }
+        var dayState = state.days[record.dayKey] ?? DaySyncState()
+        switch resolution {
+        case .local:
+            // Keep this device's version: write it now and push that exact
+            // content on the next cycle (push priority, no re-merge). Only the
+            // store write needs a writable source; a read-only store keeps the
+            // record so the conflict stays visible.
+            guard let chosen = record.localEntry, writable else { return }
             localSource.applySyncedEntry(chosen)
-            // The store now differs from the merged hash the day state
-            // remembers; the regular edit-driven cycle re-uploads it.
+            dayState.settledPushHash = try? JournalSyncEncoding.contentHash(for: chosen)
+            dayState.settleAdoptRemote = false
+        case .remote:
+            // Keep what is on Dropbox: the recorded snapshot may be stale, so
+            // do not resurrect it locally — the next cycle adopts the live
+            // remote, which converges on every device without re-merging.
+            dayState.settleAdoptRemote = true
+            dayState.settledPushHash = nil
+        case .merged:
+            dayState.settledPushHash = nil
+            dayState.settleAdoptRemote = false
         }
+        state.days[record.dayKey] = dayState
 
         queueConflictArchiveCleanup(record)
         state.pendingConflicts.remove(at: index)
@@ -337,6 +350,28 @@ public final class JournalSyncEngine: ObservableObject {
         let remoteFile = state.remoteFiles[dayPath]
         let remoteTomb = state.remoteFiles[tombPath]
 
+        // A user-settled conflict propagates authoritatively instead of
+        // re-running the divergence matrix (which would re-record the conflict
+        // on the next cycle and make the count grow every time it is resolved).
+        if prev?.settleAdoptRemote == true {
+            state.days[dayKey]?.settleAdoptRemote = false
+            removeConflicts(for: dayKey)
+            guard let remoteFile else { return }
+            try await pullDay(remoteFile: remoteFile, dayPath: dayPath, dayKey: dayKey, journalID: journalID)
+            return
+        }
+        if let settledHash = prev?.settledPushHash {
+            if let local, local.hash == settledHash {
+                state.days[dayKey]?.settledPushHash = nil
+                removeConflicts(for: dayKey)
+                try await pushDay(local, journalID: journalID, currentRemoteRev: remoteFile?.rev)
+                return
+            }
+            // Local moved on after the settlement — drop the marker and
+            // reconcile normally from here.
+            state.days[dayKey]?.settledPushHash = nil
+        }
+
         let localChanged = local != nil && local!.hash != prev?.localHash
         let localDeleted = local == nil && prev?.localHash != nil
         let remoteChanged: Bool = {
@@ -504,7 +539,7 @@ public final class JournalSyncEngine: ObservableObject {
 
         // Archive the losing side before overwriting anything.
         if !result.losingItems.isEmpty || result.losingTitle != nil {
-            let archivePath = try await archiveConflict(result: result, dayKey: dayKey, journalID: journalID)
+            let archivePath = await archiveConflict(result: result, dayKey: dayKey, journalID: journalID)
             recordConflict(
                 dayKey: dayKey,
                 summary: "item-content-conflict",
@@ -539,12 +574,14 @@ public final class JournalSyncEngine: ObservableObject {
         }
     }
 
-    /// Uploads the losing side to `conflicts/`; returns the archive path.
+    /// Uploads the losing side to `conflicts/`; returns the archive path, or an
+    /// empty string when the upload fails (the archive is a best-effort safety
+    /// net — a failed archive must never block the merge itself).
     private func archiveConflict(
         result: JournalDayMergeResult,
         dayKey: String,
         journalID: UUID
-    ) async throws -> String {
+    ) async -> String {
         let now = Date()
         let payload = JournalConflictPayload(
             dayKey: dayKey,
@@ -554,9 +591,15 @@ public final class JournalSyncEngine: ObservableObject {
             losingItems: result.losingItems,
             losingTitle: result.losingTitle
         )
-        let data = try JournalSyncEncoding.encoder.encode(payload)
+        let data = try? JournalSyncEncoding.encoder.encode(payload)
+        guard let data else { return "" }
         let path = JournalSyncLayout.conflictPath(for: journalID, dayKey: dayKey, stamp: now)
-        _ = try await backend.upload(path: path, data: data, ifRev: nil)
+        do {
+            _ = try await backend.upload(path: path, data: data, ifRev: nil)
+        } catch {
+            NSLog("Wick sync: conflict archive failed for \(dayKey): \(String(describing: error))")
+            return ""
+        }
         return path
     }
 
@@ -579,6 +622,12 @@ public final class JournalSyncEngine: ObservableObject {
                 mergedEntry: merged
             )
         )
+    }
+
+    /// Drops every pending conflict record for a day (used when the day is
+    /// settled, so a resolved conflict cannot linger and nag again).
+    private func removeConflicts(for dayKey: String) {
+        state.pendingConflicts.removeAll { $0.dayKey == dayKey }
     }
 
     // MARK: - Images

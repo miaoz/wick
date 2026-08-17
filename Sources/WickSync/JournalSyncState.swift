@@ -34,13 +34,16 @@ public enum JournalSyncLayout {
         "\(journalRoot(for: journalID))/tombstones/\(dayKey).json"
     }
 
-    public static func conflictPath(for journalID: UUID, dayKey: String, stamp: Date) -> String {
+    public static func conflictPath(for journalID: UUID, dayKey: String, stamp: Date, uniqueID: UUID = UUID()) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.timeZone = TimeZone(identifier: "UTC")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        return "\(journalRoot(for: journalID))/conflicts/\(dayKey)-\(formatter.string(from: stamp)).json"
+        // The unique suffix keeps two same-second archives (e.g. two devices
+        // merging the same day) from colliding on one remote path.
+        let suffix = uniqueID.uuidString.prefix(8)
+        return "\(journalRoot(for: journalID))/conflicts/\(dayKey)-\(formatter.string(from: stamp))-\(suffix).json"
     }
 
     /// Extracts the day key from a remote days/ path, nil for anything else.
@@ -129,19 +132,50 @@ public struct DaySyncState: Codable, Equatable {
     /// Rev of the remote tombstone already processed; prevents re-processing.
     public var tombstoneRev: String?
     public var tombstoneDeletedAt: Date?
+    /// When the user settled this day's conflict with a specific local version
+    /// ("keep local"), the next cycle propagates exactly this hash (push
+    /// priority, no re-merge) instead of treating it as a plain local edit.
+    public var settledPushHash: String?
+    /// When the user chose "keep remote", the next cycle adopts whatever is on
+    /// the remote right now (pull priority, no re-merge). The recorded
+    /// snapshot may be stale, so we follow the live remote instead.
+    public var settleAdoptRemote: Bool
 
     public init(
         localHash: String? = nil,
         remoteRev: String? = nil,
         remoteContentHash: String? = nil,
         tombstoneRev: String? = nil,
-        tombstoneDeletedAt: Date? = nil
+        tombstoneDeletedAt: Date? = nil,
+        settledPushHash: String? = nil,
+        settleAdoptRemote: Bool = false
     ) {
         self.localHash = localHash
         self.remoteRev = remoteRev
         self.remoteContentHash = remoteContentHash
         self.tombstoneRev = tombstoneRev
         self.tombstoneDeletedAt = tombstoneDeletedAt
+        self.settledPushHash = settledPushHash
+        self.settleAdoptRemote = settleAdoptRemote
+    }
+
+    public enum CodingKeys: String, CodingKey {
+        case localHash, remoteRev, remoteContentHash
+        case tombstoneRev, tombstoneDeletedAt
+        case settledPushHash, settleAdoptRemote
+    }
+
+    /// Newer fields decode with defaults so state files written by older
+    /// builds keep loading.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        localHash = try container.decodeIfPresent(String.self, forKey: .localHash)
+        remoteRev = try container.decodeIfPresent(String.self, forKey: .remoteRev)
+        remoteContentHash = try container.decodeIfPresent(String.self, forKey: .remoteContentHash)
+        tombstoneRev = try container.decodeIfPresent(String.self, forKey: .tombstoneRev)
+        tombstoneDeletedAt = try container.decodeIfPresent(Date.self, forKey: .tombstoneDeletedAt)
+        settledPushHash = try container.decodeIfPresent(String.self, forKey: .settledPushHash)
+        settleAdoptRemote = try container.decodeIfPresent(Bool.self, forKey: .settleAdoptRemote) ?? false
     }
 }
 
