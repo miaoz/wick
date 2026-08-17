@@ -534,6 +534,37 @@ final class JournalSyncEngineTests: XCTestCase {
         XCTAssertEqual(try decodeRemoteDay("2026-08-01").items.first?.body, "B2")
     }
 
+    /// The app's real usage model: one person operates one device at a time
+    /// while the others stay online and idle (their local content equals their
+    /// baseline, so they pull rather than re-merge). An idle peer must adopt the
+    /// operator's settled day and never accumulate fresh conflict records.
+    func testOnlineIdlePeerAdoptsSettlementWithoutMultiplyingConflicts() async throws {
+        let f = try await makeDualConflictFixture()
+
+        // Operator resolves every conflict on A with keep remote.
+        for conflict in f.engineA.pendingConflicts {
+            f.engineA.resolveConflict(id: conflict.id, resolution: .remote)
+        }
+        await f.engineA.performSyncCycle()
+
+        // B stays online and idle for several sync cycles.
+        for _ in 0..<5 {
+            await f.engineB.performSyncCycle()
+            await f.engineA.performSyncCycle()
+        }
+
+        XCTAssertTrue(f.engineA.pendingConflicts.isEmpty)
+        // B keeps only its own historical record — the engine never adds a
+        // fresh one from A's settlement.
+        XCTAssertEqual(
+            f.engineB.pendingConflicts.count, 1,
+            "idle peer must keep only its own record, never more"
+        )
+        // Both devices converge on the remote's content (B's latest).
+        XCTAssertEqual(f.a.days["2026-08-01"]?.items.first?.body, "B2")
+        XCTAssertEqual(f.b.days["2026-08-01"]?.items.first?.body, "B2")
+    }
+
     func testConflictRecordCarriesAllThreeVersions() async throws {
         let fixture = try await makeResolvableConflict()
 
