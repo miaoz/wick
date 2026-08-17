@@ -5,7 +5,7 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%2013%2B-black)](https://github.com/miaoz/wick)
 [![Swift](https://img.shields.io/badge/Swift-6.1%2B-F05138)](https://www.swift.org)
 
-**Wick** 是一款原生 macOS 菜单栏应用：在状态栏显示蜡烛图标，点击后弹出面板，展示**日 / 周 / 月 / 年**还剩多少时间；并内置**日记**，用标签与图片按条目记录与回顾。
+**Wick** 是一款原生 macOS 菜单栏应用：在状态栏显示蜡烛图标，点击后弹出面板，展示**日 / 周 / 月 / 年**还剩多少时间；内置**日记**用标签与图片按条目记录与回顾，提供撕页**交易日历**查看全球宏观事件，并可把**交易所仓位**挂到对应日记条目上。
 
 <p align="center">
   <img src="assets/AppIcon-master.png" alt="Wick icon" width="128" height="128">
@@ -19,8 +19,8 @@
 - **多日记本**：工具栏侧栏折叠钮旁可切换 / 新建 / 重命名 / 删除日记本；旧版单日记数据首次启动自动迁移
 - **数据安全**：退出/关窗强制落盘、`journal.json.bak` 与滚动备份、加载失败只读保护、导出/导入 zip
 - **Dropbox 同步（可选）**：本地存储始终是唯一真源，同步引擎按「天」与 Dropbox 双向对账；日记本改名跨设备同步；删除以墓碑传播、冲突保留双方内容、远端文件意外丢失自动回传；OAuth PKCE 登录，不在客户端内置 App secret
-- **交易日历**：进度面板日历按钮打开 himekuri「黄历」风格的撕页日历，每页展示当日全球宏观事件（源自 akshare `macro_info_ws` 背后的公开接口，直连取数）；拖拽撕纸，撕下一张即翻到次日
-- **交易所仓位（可选，初版支持 Binance）**：在设置中填入 Binance API Key（建议「只读取」权限，密钥仅存本机钥匙串），自动同步 USDⓈ-M 合约历史仓位——范围从最早一篇日记开始（没有日记时为近 180 天），日常刷新只增量拉取；仓位按「开仓日期 + 标签」显示在对应的日记条目中，标签匹配宽松，如标签 `BTC` 可匹配 `BTCUSDT`、`BTCUSDC` 等交易对；开仓日没有日记时会自动创建对应条目（标签用基础币种命名，如 `BTCUSDT`/`BTCUSDC` 的条目标签都是 `BTC`，已写过的惯用标签优先沿用；删除后不会自动重建）
+- **交易日历**：进度面板的日历按钮打开 himekuri「黄历」风格的撕页日历——每页展示当日全球宏观事件，拖拽撕纸即翻到次日；无边框透明窗口可贴在桌面上（详见 [交易日历](#交易日历)）
+- **交易所仓位（可选，初版支持 Binance）**：填入只读 API Key（仅存钥匙串），自动把 USDⓈ-M 合约历史仓位按「开仓日期 + 标签」挂到日记条目上；开仓日没写日记会自动补建条目（详见 [交易所仓位同步](#交易所仓位同步)）
 - **登录启动**：可选「登录时启动」（`SMAppService`）
 - **一日弧光主题**：面板与日记配色随一天的时间流动（晨光 / 白昼 / 暮色 / 夜幕四相位平滑过渡），亮 / 暗 / 跟随系统外观三档可选
 - **设置**：语言、外观、提醒、菜单栏百分比、数据目录、版本与检查更新（GitHub Releases）
@@ -60,7 +60,8 @@ open dist/Wick.app
 1. 启动后，菜单栏会出现蜡烛图标（系统会按菜单栏风格着色）
 2. 点击图标打开进度面板，查看日 / 周 / 月 / 年剩余时间
 3. 点击书本图标（或设置里的「打开日记」）打开日记窗口
-4. 在设置中可切换语言与外观、配置日记提醒，或退出应用
+4. 点击进度面板上日历按钮（书签按钮左侧）打开交易日历
+5. 在设置中可切换语言与外观、配置日记提醒、连接交易所同步仓位，或退出应用
 
 应用为 `LSUIElement` 菜单栏工具，不会在 Dock 中显示图标。
 
@@ -98,6 +99,37 @@ open dist/Wick.app
 | 快捷键 | 日记窗口 `⌘N` 打开/创建今日日记 |
 
 > **说明：** 本地通知依赖正式 `.app` 包（含 Bundle ID）。`swift run` 开发运行时会跳过提醒调度，打包后的 `Wick.app` 可正常使用。
+
+### 交易日历
+
+进度面板书签按钮左侧的日历按钮打开「交易日历」——一款 himekuri「黄历」主题的撕页日历（[himekuri](https://github.com/pluk-inc/himekuri)）：绿墨 × 米白纸、双线描边、大号日期、竖排星期填色列、中部农历与干支。窗口**无边框透明**，日历 pad 之外的区域点击穿透，可以像实体台历一样贴在桌面上。
+
+每一页展示**当天全球宏观事件**：
+
+| 内容 | 说明 |
+| --- | --- |
+| 事件 | 经济数据发布、央行讲话、财报电话会、打新 / 发布会等；按重要性降序，数值行常显「今值 / 预期 / 前值」 |
+| 数据源 | 华尔街见闻宏观日历公开 REST 接口直连取数（即 akshare `macro_info_ws` 背后的接口），无需任何密钥 |
+| 翻页 | 拖住页角撕下即翻到次日，碎纸从 pad 飘落到屏幕外并伴程序合成撕纸音效；事件较多的日子自动分页，可用**方向键 / 滚轮**翻动事件页 |
+| 无事件日 | 盖一枚红色方印章（周末「休市」/ 工作日「本日无事」） |
+| 离线 | 数据有本地缓存，断网也能翻看已缓存的日子；取数失败不会覆盖缓存 |
+
+> iPhone 客户端同样内置交易日历，以**全屏页面**呈现（iOS 16+，见下文「iPhone 客户端」）。
+
+### 交易所仓位同步（可选，初版支持 Binance）
+
+在设置 →「交易所」填入 Binance API Key 与 Secret（**建议创建只读 API Key**：仅开启读取类权限即可，应用只用只读接口，绝不会替你下单），密钥只保存在本机**钥匙串**。保存后立即同步，应用会把 USDⓈ-M 合约的**历史仓位**整理进日记：
+
+- **同步范围**：从**最早一篇日记的日期**起（没有任何日记时回退为近 180 天），更早的历史仓位不拉取；日常刷新是**增量**的，只拉上次同步点之后的成交，并每 30 分钟 + 打开日记时自动补一次。
+- **展示**：仓位按「开仓日期 + 标签」显示在对应日记条目卡片中——交易对、方向、持仓状态、数量、开/平仓价与已实现盈亏；标签匹配是宽松的，例如标签 `BTC` 可匹配 `BTCUSDT`、`BTCUSDC` 等（忽略大小写与分隔符，`1000PEPE` 一类名义前缀会被剥离）。
+- **自动补条目**：某仓位开仓日恰好没有写日记时，会自动创建一条（每个交易日、每个交易对各一条），标签优先沿用你日记里已写过的惯用写法（比如你常写 `BTC` 就建 `BTC`），否则用基础币种命名（`BTCUSDT` / `BTCUSDC` → `BTC`，`1000PEPEUSDT` → `PEPE`）；**删除的自动条目不会复活**。
+- **只读不写**：匹配与展示都在读路径上完成，绝不改写你已有的日记数据，开仓日已有条目只是被「挂」上仓位信息。
+
+> **说明：** 同步只访问 Binance `fapi.binance.com` 的只读接口（`userTrades` / `time`），需要网络可用；凭证仅在钥匙串中，应用内不落盘、不上传。
+
+### iPhone 客户端（开发中）
+
+仓库 `ios/` 附带一个 iPhone 客户端（v0，仅中文 UI，真机调试，尚未上架）。首页是菜单栏进度面板的手机版（日 / 周 / 月 / 年剩余进度，每秒刷新），日记经书本按钮进入；**交易日历**同样内置其中，以**全屏撕页页面**呈现——米白纸页铺满整屏、装订条横跨刘海行、内容避让安全区。真机运行：用 Xcode 打开 `ios/WickPhone.xcodeproj`，Signing 选择 Personal Team 后运行到自己的设备。
 
 ## 从源码构建
 
@@ -177,7 +209,7 @@ git push origin v1.2
 
 ```text
 wick/
-├── Package.swift                 # Swift Package 清单（WickSync + WickCalendarKit + WickCore + Wick + 测试）
+├── Package.swift                 # Swift Package 清单（WickSync + WickCalendarKit + WickTrading + WickCore + Wick + 测试）
 ├── Sources/WickSync/             # 平台无关（纯 Foundation）日记模型 + 同步引擎 + Dropbox 后端
 │   ├── JournalModels.swift       # 日记数据模型（含 dayKey 同步主键）
 │   ├── JournalSyncEngine.swift   # 按天对账引擎（推/拉/合并/墓碑/自愈 + 日记名对账）
@@ -191,19 +223,26 @@ wick/
 │   ├── PaperSim.swift            # verlet 撕纸物理（SpriteKit 变形）
 │   ├── MacroDayPageView.swift    # 「黄历」页（农历 + 宏观事件固定栏目）
 │   └── …                         # 主题 / 撕口 / 飘落轨迹 / 程序合成音效 / 平台 shim
-├── Sources/WickCore/             # macOS 应用逻辑与 UI（依赖 WickSync + WickCalendarKit）
+├── Sources/WickTrading/          # 交易所集成（纯 Foundation：Binance 客户端 + 仓位聚合 + 标签匹配）
+│   ├── BinanceFuturesClient.swift      # 签名 / 分页 / 错误映射的只读客户端
+│   ├── PositionAggregator.swift        # 成交 → 开平仓会话聚合
+│   ├── PositionEntryPlanner.swift      # 缺日记开仓日的自动条目规划
+│   ├── SymbolTagMatcher.swift          # 宽松标签匹配 / 基础币种推导
+│   └── TradingPositionModels.swift     # 仓位快照模型
+├── Sources/WickCore/             # macOS 应用逻辑与 UI（依赖 WickSync + WickCalendarKit + WickTrading）
 │   ├── WickApp.swift             # MenuBarExtra、AppDelegate
 │   ├── ProgressPanelView.swift   # 进度面板与设置 UI（含同步设置、日历按钮）
 │   ├── JournalStore.swift        # 本地持久化、备份、导入导出（尾部为同步桥接扩展）
 │   ├── JournalRootView.swift     # 日记双栏窗口
 │   ├── SyncCoordinator.swift     # 同步生命周期、连接/断开、退出前最终同步
+│   ├── ExchangePositionCoordinator.swift / ExchangeSettingsContent.swift / JournalExchangePositions.swift  # 交易所仓位同步（生命周期 / 设置 UI / 条目卡片展示）
 │   ├── TradingCalendarWindowController.swift / FallingPageOverlay.swift  # 日历窗口与碎纸叠加窗（macOS 专属）
 │   ├── JournalReminderScheduler.swift  # 每日提醒
 │   ├── AppSettings.swift         # 语言、外观、提醒、登录项、同步开关等
 │   └── MenuBarIcon.swift         # 菜单栏模板图标
 ├── Sources/Wick/main.swift       # 可执行入口
 ├── ios/                          # iPhone 客户端（v0，仅中文 UI，真机调试；链接 WickSync + WickCalendarKit）
-├── Tests/                        # WickTests + WickSyncTests + WickCalendarKitTests 单元测试
+├── Tests/                        # WickTests + WickSyncTests + WickCalendarKitTests + WickTradingTests 单元测试
 ├── assets/                       # 应用图标
 ├── scripts/                      # 图标生成与打包
 ├── build.sh / Makefile           # 默认构建入口
