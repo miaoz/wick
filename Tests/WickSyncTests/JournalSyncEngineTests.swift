@@ -340,6 +340,134 @@ final class JournalSyncEngineTests: XCTestCase {
         XCTAssertEqual(payload.losingItems.first?.body, "B edit")
     }
 
+    // MARK: conflict resolution (keep local / remote / merged)
+
+    private func makeResolvableConflict() async throws -> (
+        a: FakeLocalSource, engineA: JournalSyncEngine,
+        b: FakeLocalSource, engineB: JournalSyncEngine, extraItemID: UUID
+    ) {
+        let itemID = UUID()
+        let a = makeSource()
+        a.days["2026-08-01"] = JournalEntry(
+            date: t0,
+            dayKey: "2026-08-01",
+            items: [JournalItem(id: itemID, body: "original")],
+            createdAt: t0,
+            updatedAt: t0
+        )
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+
+        // Both edit the same item (A newer, so A wins the merge); B also has
+        // a local-only extra item so the three versions stay distinguishable.
+        a.days["2026-08-01"]!.items[0].body = "A edit"
+        a.days["2026-08-01"]!.updatedAt = t0.addingTimeInterval(200)
+        let extraItem = JournalItem(body: "B extra")
+        b.days["2026-08-01"]!.items[0].body = "B edit"
+        b.days["2026-08-01"]!.items.append(extraItem)
+        b.days["2026-08-01"]!.updatedAt = t0.addingTimeInterval(100)
+
+        await engineA.performSyncCycle()
+        await engineB.performSyncCycle() // conflict recorded on B
+        return (a, engineA, b, engineB, extraItem.id)
+    }
+
+    private func bodies(_ source: FakeLocalSource) -> Set<String> {
+        Set((source.days["2026-08-01"]?.items ?? []).map(\.body))
+    }
+
+    func testConflictRecordCarriesAllThreeVersions() async throws {
+        let fixture = try await makeResolvableConflict()
+
+        let record = try XCTUnwrap(fixture.engineB.pendingConflicts.first)
+        XCTAssertTrue(record.offersChoice)
+        XCTAssertEqual(record.localEntry?.items.map(\.body), ["B edit", "B extra"])
+        XCTAssertEqual(record.remoteEntry?.items.map(\.body), ["A edit"])
+        XCTAssertEqual(record.mergedEntry?.items.map(\.body), ["A edit", "B extra"])
+    }
+
+    func testResolveConflictKeepLocalPushesLocalVersion() async throws {
+        let fixture = try await makeResolvableConflict()
+        let record = try XCTUnwrap(fixture.engineB.pendingConflicts.first)
+
+        fixture.engineB.resolveConflict(id: record.id, resolution: .local)
+
+        XCTAssertTrue(fixture.engineB.pendingConflicts.isEmpty)
+        XCTAssertEqual(bodies(fixture.b), ["B edit", "B extra"])
+        // The resolution propagates: B pushes, A pulls.
+        await fixture.engineB.performSyncCycle()
+        XCTAssertEqual(
+            Set(try decodeRemoteDay("2026-08-01").items.map(\.body)),
+            ["B edit", "B extra"]
+        )
+        await fixture.engineA.performSyncCycle()
+        XCTAssertEqual(bodies(fixture.a), ["B edit", "B extra"])
+    }
+
+    func testResolveConflictKeepRemoteDiscardsLocalExtras() async throws {
+        let fixture = try await makeResolvableConflict()
+        let record = try XCTUnwrap(fixture.engineB.pendingConflicts.first)
+        let archivePath = record.remotePath
+        XCTAssertTrue(backend.hasFile(archivePath))
+
+        fixture.engineB.resolveConflict(id: record.id, resolution: .remote)
+
+        XCTAssertTrue(fixture.engineB.pendingConflicts.isEmpty)
+        XCTAssertEqual(bodies(fixture.b), ["A edit"])
+        await fixture.engineB.performSyncCycle()
+        XCTAssertEqual(
+            Set(try decodeRemoteDay("2026-08-01").items.map(\.body)),
+            ["A edit"]
+        )
+    }
+
+    func testDismissConflictDeletesRemoteArchiveOnNextCycle() async throws {
+        let fixture = try await makeResolvableConflict()
+        let record = try XCTUnwrap(fixture.engineB.pendingConflicts.first)
+        XCTAssertTrue(backend.hasFile(record.remotePath))
+
+        fixture.engineB.dismissConflict(id: record.id)
+
+        // Archive lives until the next cycle settles the deletion.
+        XCTAssertTrue(backend.hasFile(record.remotePath))
+        await fixture.engineB.performSyncCycle()
+        XCTAssertFalse(backend.hasFile(record.remotePath))
+    }
+
+    func testResolvedConflictArchiveDeletedOnNextCycle() async throws {
+        let fixture = try await makeResolvableConflict()
+        let record = try XCTUnwrap(fixture.engineB.pendingConflicts.first)
+
+        fixture.engineB.resolveConflict(id: record.id, resolution: .local)
+        await fixture.engineB.performSyncCycle()
+
+        XCTAssertFalse(backend.hasFile(record.remotePath))
+        // The chosen day content is unaffected by the archive cleanup.
+        XCTAssertEqual(
+            Set(try decodeRemoteDay("2026-08-01").items.map(\.body)),
+            ["B edit", "B extra"]
+        )
+    }
+
+    func testResolveConflictKeepMergedOnlyClearsNotice() async throws {
+        let fixture = try await makeResolvableConflict()
+        let record = try XCTUnwrap(fixture.engineB.pendingConflicts.first)
+
+        fixture.engineB.resolveConflict(id: record.id, resolution: .merged)
+
+        XCTAssertTrue(fixture.engineB.pendingConflicts.isEmpty)
+        XCTAssertEqual(bodies(fixture.b), ["A edit", "B extra"])
+        await fixture.engineB.performSyncCycle()
+        XCTAssertEqual(
+            Set(try decodeRemoteDay("2026-08-01").items.map(\.body)),
+            ["A edit", "B extra"]
+        )
+    }
+
     func testDeletePropagatesViaTombstone() async {
         let a = makeSource()
         a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "doomed")

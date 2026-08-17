@@ -560,27 +560,11 @@ private struct SettingsContentView: View {
                     }
 
                     if !syncCoordinator.engine.pendingConflicts.isEmpty {
-                        HStack(spacing: 8) {
-                            Text(
-                                String(
-                                    format: L10n.string(.syncConflictNoticeFormat, language: language),
-                                    syncCoordinator.engine.pendingConflicts.count
-                                )
-                            )
-                            .font(.caption)
-                            .foregroundStyle(theme.secondaryText)
-                            Spacer()
-                            Button {
-                                for conflict in syncCoordinator.engine.pendingConflicts {
-                                    syncCoordinator.engine.dismissConflict(id: conflict.id)
-                                }
-                            } label: {
-                                Text(L10n.string(.syncConflictDismiss, language: language))
-                                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(theme.selectionAccent)
-                        }
+                        SyncConflictResolutionList(
+                            engine: syncCoordinator.engine,
+                            theme: theme,
+                            language: language
+                        )
                     }
                 }
             }

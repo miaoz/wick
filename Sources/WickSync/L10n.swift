@@ -142,6 +142,19 @@ public enum L10n {
         case syncNeverSynced
         case syncConflictNoticeFormat
         case syncConflictDismiss
+        case syncConflictDismissAll
+        case syncConflictKindItem
+        case syncConflictKindDeleteEdit
+        case syncConflictKindResurrect
+        case syncConflictLocalVersion
+        case syncConflictRemoteVersion
+        case syncConflictMergedVersion
+        case syncConflictKeepLocal
+        case syncConflictKeepRemote
+        case syncConflictKeepMerged
+        case syncConflictEmptyVersion
+        case syncConflictMoreItemsFormat
+        case syncConflictNoChoiceHint
         case syncDisconnectConfirmTitle
         case syncDisconnectConfirmBody
         case syncRemoteJournalFormat
@@ -330,6 +343,19 @@ public enum L10n {
             case .syncNeverSynced: return "尚未同步"
             case .syncConflictNoticeFormat: return "发现 %lld 个同步冲突，双方内容均已保留"
             case .syncConflictDismiss: return "知道了"
+            case .syncConflictDismissAll: return "全部保留合并结果"
+            case .syncConflictKindItem: return "双方都修改了这一天"
+            case .syncConflictKindDeleteEdit: return "远端删除与本机编辑冲突，已保留编辑"
+            case .syncConflictKindResurrect: return "本机删除被远端编辑覆盖，已恢复"
+            case .syncConflictLocalVersion: return "本机版本"
+            case .syncConflictRemoteVersion: return "远端版本"
+            case .syncConflictMergedVersion: return "合并结果（当前）"
+            case .syncConflictKeepLocal: return "保留本机"
+            case .syncConflictKeepRemote: return "保留远端"
+            case .syncConflictKeepMerged: return "保留合并"
+            case .syncConflictEmptyVersion: return "（空）"
+            case .syncConflictMoreItemsFormat: return "还有 %d 条…"
+            case .syncConflictNoChoiceHint: return "此冲突已自动处理，无需选择。"
             case .syncDisconnectConfirmTitle: return "断开 Dropbox？"
             case .syncDisconnectConfirmBody: return "将停止同步。本机与 Dropbox 中已有的数据都会保留。"
             case .syncRemoteJournalFormat: return "在 Dropbox 上发现日记本「%@」，可导入本机"
@@ -517,6 +543,19 @@ public enum L10n {
             case .syncNeverSynced: return "Not synced yet"
             case .syncConflictNoticeFormat: return "%lld sync conflict(s) found — both versions were kept"
             case .syncConflictDismiss: return "Dismiss"
+            case .syncConflictDismissAll: return "Keep Merged for All"
+            case .syncConflictKindItem: return "Edited on both devices"
+            case .syncConflictKindDeleteEdit: return "Remote delete vs. local edit - edit kept"
+            case .syncConflictKindResurrect: return "Local delete overridden by remote edit - restored"
+            case .syncConflictLocalVersion: return "This Mac"
+            case .syncConflictRemoteVersion: return "Dropbox"
+            case .syncConflictMergedVersion: return "Merged (current)"
+            case .syncConflictKeepLocal: return "Keep This Mac"
+            case .syncConflictKeepRemote: return "Keep Dropbox"
+            case .syncConflictKeepMerged: return "Keep Merged"
+            case .syncConflictEmptyVersion: return "(empty)"
+            case .syncConflictMoreItemsFormat: return "%d more items…"
+            case .syncConflictNoChoiceHint: return "Already handled automatically - nothing to choose."
             case .syncDisconnectConfirmTitle: return "Disconnect Dropbox?"
             case .syncDisconnectConfirmBody: return "Syncing will stop. Data already on this Mac and in Dropbox is kept."
             case .syncRemoteJournalFormat: return "Found journal “%@” on Dropbox — it can be imported to this Mac"

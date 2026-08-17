@@ -90,7 +90,9 @@ public struct JournalTombstone: Codable, Equatable {
     }
 }
 
-/// Archived losing side of an item-level conflict (both versions kept forever).
+/// Losing side of an item-level conflict, archived remotely until the user
+/// settles the conflict (keep local/remote/merged); once settled, the next
+/// sync cycle deletes the archive - the chosen version supersedes it.
 public struct JournalConflictPayload: Codable, Equatable {
     public var dayKey: String
     public var detectedAt: Date
@@ -153,7 +155,11 @@ public struct RemoteFileRecord: Codable, Equatable {
     }
 }
 
-/// A conflict the local user has not dismissed yet.
+/// A conflict the local user has not resolved yet. Item-content conflicts
+/// carry all three day versions - pre-merge local, remote, and the merged
+/// result that was applied - so the user can inspect them and pick a winner
+/// (`resolveConflict`). Structural conflicts (delete-vs-edit and friends)
+/// have no meaningful choice and only carry the summary.
 public struct SyncConflictRecord: Codable, Equatable, Identifiable {
     public var id: UUID
     public var dayKey: String
@@ -161,13 +167,36 @@ public struct SyncConflictRecord: Codable, Equatable, Identifiable {
     public var remotePath: String
     public var summary: String
     public var detectedAt: Date
+    /// Local version before the merge (item-content conflicts only).
+    public var localEntry: JournalEntry?
+    public var remoteEntry: JournalEntry?
+    /// The merged version that was applied locally and uploaded.
+    public var mergedEntry: JournalEntry?
 
-    public init(id: UUID = UUID(), dayKey: String, remotePath: String, summary: String, detectedAt: Date) {
+    public init(
+        id: UUID = UUID(),
+        dayKey: String,
+        remotePath: String,
+        summary: String,
+        detectedAt: Date,
+        localEntry: JournalEntry? = nil,
+        remoteEntry: JournalEntry? = nil,
+        mergedEntry: JournalEntry? = nil
+    ) {
         self.id = id
         self.dayKey = dayKey
         self.remotePath = remotePath
         self.summary = summary
         self.detectedAt = detectedAt
+        self.localEntry = localEntry
+        self.remoteEntry = remoteEntry
+        self.mergedEntry = mergedEntry
+    }
+
+    /// True when the record carries both pre-merge versions and a choice
+    /// between them (and the merged result) makes sense.
+    public var offersChoice: Bool {
+        localEntry != nil && remoteEntry != nil
     }
 }
 
@@ -186,19 +215,23 @@ public struct DiscoveredJournalRecord: Codable, Equatable {
 /// Whole per-journal sync state, persisted locally as JSON.
 public struct JournalSyncState: Codable, Equatable {
     public var cursor: String?
-    /// This device's view of the remote file set (path → record), maintained
+    /// This device's view of the remote file set (path -> record), maintained
     /// from full listings + cursor deltas.
     public var remoteFiles: [String: RemoteFileRecord]
     public var days: [String: DaySyncState]
     public var pendingConflicts: [SyncConflictRecord]
+    /// Remote `conflicts/` archives whose conflict was settled - deleted on
+    /// the next cycle. Queued (not deleted inline) so offline resolutions
+    /// survive relaunches.
+    public var pendingConflictCleanups: [String]
     public var manifestRev: String?
-    /// Journal name this device last agreed on with the remote manifest — the
+    /// Journal name this device last agreed on with the remote manifest - the
     /// baseline rename detection compares `syncJournalName` against. Nil in
     /// state files written before journal names synced (seeded once from the
     /// remote manifest on the first cycle of a rename-capable build).
     public var manifestName: String?
     public var lastSyncAt: Date?
-    /// Manifests of OTHER journals found on the remote (journalID → record),
+    /// Manifests of OTHER journals found on the remote (journalID -> record),
     /// used to offer adoption on this device.
     public var discoveredJournals: [String: DiscoveredJournalRecord]
 
@@ -207,6 +240,7 @@ public struct JournalSyncState: Codable, Equatable {
         remoteFiles: [String: RemoteFileRecord] = [:],
         days: [String: DaySyncState] = [:],
         pendingConflicts: [SyncConflictRecord] = [],
+        pendingConflictCleanups: [String] = [],
         manifestRev: String? = nil,
         manifestName: String? = nil,
         lastSyncAt: Date? = nil,
@@ -216,10 +250,32 @@ public struct JournalSyncState: Codable, Equatable {
         self.remoteFiles = remoteFiles
         self.days = days
         self.pendingConflicts = pendingConflicts
+        self.pendingConflictCleanups = pendingConflictCleanups
         self.manifestRev = manifestRev
         self.manifestName = manifestName
         self.lastSyncAt = lastSyncAt
         self.discoveredJournals = discoveredJournals
+    }
+
+    public enum CodingKeys: String, CodingKey {
+        case cursor, remoteFiles, days, pendingConflicts, pendingConflictCleanups
+        case manifestRev, manifestName, lastSyncAt, discoveredJournals
+    }
+
+    /// Everything except `cursor`/`manifestRev`/`manifestName` decodes with a
+    /// default so state files written by older builds keep loading as fields
+    /// are added.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        cursor = try container.decodeIfPresent(String.self, forKey: .cursor)
+        remoteFiles = try container.decodeIfPresent([String: RemoteFileRecord].self, forKey: .remoteFiles) ?? [:]
+        days = try container.decodeIfPresent([String: DaySyncState].self, forKey: .days) ?? [:]
+        pendingConflicts = try container.decodeIfPresent([SyncConflictRecord].self, forKey: .pendingConflicts) ?? []
+        pendingConflictCleanups = try container.decodeIfPresent([String].self, forKey: .pendingConflictCleanups) ?? []
+        manifestRev = try container.decodeIfPresent(String.self, forKey: .manifestRev)
+        manifestName = try container.decodeIfPresent(String.self, forKey: .manifestName)
+        lastSyncAt = try container.decodeIfPresent(Date.self, forKey: .lastSyncAt)
+        discoveredJournals = try container.decodeIfPresent([String: DiscoveredJournalRecord].self, forKey: .discoveredJournals) ?? [:]
     }
 }
 

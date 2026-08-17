@@ -116,8 +116,76 @@ public final class JournalSyncEngine: ObservableObject {
     }
 
     public func dismissConflict(id: UUID) {
-        state.pendingConflicts.removeAll { $0.id == id }
+        guard let index = state.pendingConflicts.firstIndex(where: { $0.id == id }) else { return }
+        queueConflictArchiveCleanup(state.pendingConflicts[index])
+        state.pendingConflicts.remove(at: index)
         saveAndPublish()
+    }
+
+    /// How the user settled a recorded conflict.
+    public enum SyncConflictResolution {
+        /// Restore the pre-merge local version (discards remote-only content).
+        case local
+        /// Take the remote version as-is (discards local-only content).
+        case remote
+        /// Keep the already-applied union merge - just clears the notice.
+        case merged
+    }
+
+    /// Applies the user's choice for a recorded conflict. The chosen version
+    /// is written into the local store right away; the day's sync state still
+    /// records the merged hash, so the next cycle sees the local content
+    /// change and pushes the resolution to the remote (and from there to the
+    /// other devices). `.merged` changes nothing - the merge is already in
+    /// place locally and remotely.
+    public func resolveConflict(id: UUID, resolution: SyncConflictResolution) {
+        guard let index = state.pendingConflicts.firstIndex(where: { $0.id == id }) else { return }
+        let record = state.pendingConflicts[index]
+
+        let chosen: JournalEntry?
+        switch resolution {
+        case .local: chosen = record.localEntry
+        case .remote: chosen = record.remoteEntry
+        case .merged: chosen = nil
+        }
+
+        if let chosen {
+            guard let journalID = stateJournalID,
+                  localSource.syncJournalID == journalID,
+                  localSource.syncIsWritable
+            else { return }
+            localSource.applySyncedEntry(chosen)
+            // The store now differs from the merged hash the day state
+            // remembers; the regular edit-driven cycle re-uploads it.
+        }
+
+        queueConflictArchiveCleanup(record)
+        state.pendingConflicts.remove(at: index)
+        saveAndPublish()
+    }
+
+    /// Once the user has settled on one version, the archived losing side is
+    /// dead weight - queue its remote deletion (flushed next cycle so an
+    /// offline resolution survives relaunches).
+    private func queueConflictArchiveCleanup(_ record: SyncConflictRecord) {
+        guard !record.remotePath.isEmpty,
+              !state.pendingConflictCleanups.contains(record.remotePath)
+        else { return }
+        state.pendingConflictCleanups.append(record.remotePath)
+    }
+
+    private func flushConflictArchiveCleanups() async {
+        guard !state.pendingConflictCleanups.isEmpty else { return }
+        var remaining: [String] = []
+        for path in state.pendingConflictCleanups {
+            do {
+                try await backend.delete(path: path)
+                state.remoteFiles.removeValue(forKey: path)
+            } catch {
+                remaining.append(path)
+            }
+        }
+        state.pendingConflictCleanups = remaining
     }
 
     /// Resets a journal's sync baseline. Required before (re-)importing a
@@ -185,6 +253,9 @@ public final class JournalSyncEngine: ObservableObject {
     }
 
     private func syncCycleBody(journalID: UUID) async throws {
+        // 0. Housekeeping: settled conflicts delete their remote archive.
+        await flushConflictArchiveCleanups()
+
         // 1. Pull remote deltas into the local remote-view.
         let (metas, newCursor) = try await backend.listChanges(since: state.cursor)
         if state.cursor == nil {
@@ -433,7 +504,15 @@ public final class JournalSyncEngine: ObservableObject {
 
         // Archive the losing side before overwriting anything.
         if !result.losingItems.isEmpty || result.losingTitle != nil {
-            try await archiveConflict(result: result, dayKey: dayKey, journalID: journalID)
+            let archivePath = try await archiveConflict(result: result, dayKey: dayKey, journalID: journalID)
+            recordConflict(
+                dayKey: dayKey,
+                summary: "item-content-conflict",
+                remotePath: archivePath,
+                local: local.entry,
+                remote: remoteEntry,
+                merged: result.merged
+            )
         }
 
         if mergedHash != remoteHash {
@@ -460,11 +539,12 @@ public final class JournalSyncEngine: ObservableObject {
         }
     }
 
+    /// Uploads the losing side to `conflicts/`; returns the archive path.
     private func archiveConflict(
         result: JournalDayMergeResult,
         dayKey: String,
         journalID: UUID
-    ) async throws {
+    ) async throws -> String {
         let now = Date()
         let payload = JournalConflictPayload(
             dayKey: dayKey,
@@ -477,16 +557,26 @@ public final class JournalSyncEngine: ObservableObject {
         let data = try JournalSyncEncoding.encoder.encode(payload)
         let path = JournalSyncLayout.conflictPath(for: journalID, dayKey: dayKey, stamp: now)
         _ = try await backend.upload(path: path, data: data, ifRev: nil)
-        recordConflict(dayKey: dayKey, summary: "item-content-conflict", remotePath: path)
+        return path
     }
 
-    private func recordConflict(dayKey: String, summary: String, remotePath: String) {
+    private func recordConflict(
+        dayKey: String,
+        summary: String,
+        remotePath: String,
+        local: JournalEntry? = nil,
+        remote: JournalEntry? = nil,
+        merged: JournalEntry? = nil
+    ) {
         state.pendingConflicts.append(
             SyncConflictRecord(
                 dayKey: dayKey,
                 remotePath: remotePath,
                 summary: summary,
-                detectedAt: Date()
+                detectedAt: Date(),
+                localEntry: local,
+                remoteEntry: remote,
+                mergedEntry: merged
             )
         )
     }
