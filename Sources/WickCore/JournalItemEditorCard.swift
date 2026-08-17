@@ -114,27 +114,8 @@ struct JournalItemEditorCard: View {
 
             JournalExchangePositions(entryDayKey: entryDayKey, tag: item.tag)
 
-            if !noteText.isEmpty || item.review != nil || reviewEligible {
-                HStack(alignment: .bottom, spacing: 8) {
-                    if !noteText.isEmpty {
-                        // The seal says the verdict, this marked line carries
-                        // the annotation. (Italic is a no-op for CJK, so the
-                        // marker + secondary color do the distinguishing.)
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Image(systemName: "pencil.line")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(palette.textTertiary.color)
-                            Text(noteText)
-                                .font(.system(size: 13))
-                                .foregroundStyle(palette.textSecondary.color)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    Spacer(minLength: 0)
-
-                    reviewSlot
-                }
+            if !noteText.isEmpty {
+                noteRow
             }
         }
         .padding(16)
@@ -146,8 +127,16 @@ struct JournalItemEditorCard: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(palette.cardStroke.scaledAlpha(0.5).color, lineWidth: 1)
         }
+        // The review mark floats over the card's bottom-trailing corner -
+        // positions, images, or body text alike - instead of claiming its
+        // own row. Semi-transparent ink keeps the content under it readable.
+        .overlay(alignment: .bottomTrailing) {
+            reviewSlot
+                .padding(.trailing, 10)
+                .padding(.bottom, 4)
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { _ in
-            // The journal window object is reused across open/close — reset
+            // The journal window object is reused across open/close - reset
             // the popover state so it cannot re-present on the next open.
             showReviewPopover = false
         }
@@ -162,9 +151,28 @@ struct JournalItemEditorCard: View {
         item.review?.note.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
-    /// Bottom-right "stamp corner": the 复盘 button while unreviewed, the
-    /// enlarged decorative seal once a verdict exists. Both open the same
-    /// review popover.
+    /// Ink opacity for the floating verdict seal: enough to read the content
+    /// (figures, text) underneath it.
+    private static let sealOpacity = 0.82
+
+    /// The seal says the verdict, this marked line carries the annotation.
+    /// (Italic is a no-op for CJK, so the marker + secondary color do the
+    /// distinguishing.)
+    private var noteRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "pencil.line")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(palette.textTertiary.color)
+            Text(noteText)
+                .font(.system(size: 13))
+                .foregroundStyle(palette.textSecondary.color)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Floating bottom-right "stamp corner": the 复盘 button while unreviewed,
+    /// the enlarged seal once a verdict exists. Both hover over whatever the
+    /// card's trailing bottom holds and open the same review popover.
     @ViewBuilder
     private var reviewSlot: some View {
         if let review = item.review {
@@ -172,6 +180,7 @@ struct JournalItemEditorCard: View {
                 showReviewPopover = true
             } label: {
                 JournalReviewBadge(verdict: review.verdict, style: .seal, size: 56)
+                    .opacity(Self.sealOpacity)
             }
             .buttonStyle(.plain)
             .help(L10n.string(.journalReviewHelp, language: settings.language))
@@ -188,6 +197,12 @@ struct JournalItemEditorCard: View {
                     .foregroundStyle(palette.accentText.color)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
+                    // Soft backdrop: the capsule floats over body text and
+                    // position figures, so it needs a legible base of its own.
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(palette.cardTop.scaledAlpha(0.8).color)
+                    )
                     .background(
                         Capsule(style: .continuous)
                             .strokeBorder(palette.controlBorder.color, lineWidth: 1)
