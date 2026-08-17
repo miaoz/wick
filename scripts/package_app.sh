@@ -8,8 +8,8 @@ BUNDLE_ID="com.miaoz.wick"
 MIN_SYSTEM_VERSION="13.0"
 # Optional overrides for CI / tagged releases:
 #   VERSION=1.4.0 BUILD=42 ./scripts/package_app.sh
-VERSION="${VERSION:-1.9.1}"
-BUILD="${BUILD:-32}"
+VERSION="${VERSION:-1.9.2}"
+BUILD="${BUILD:-33}"
 DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/$APP_NAME.app"
 LEGACY_APP_DIR="$DIST_DIR/$LEGACY_APP_NAME.app"
