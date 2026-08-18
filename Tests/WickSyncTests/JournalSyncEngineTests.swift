@@ -1,10 +1,32 @@
+import CryptoKit
 import XCTest
 @testable import WickSync
 
 // MARK: - Fakes
 
+/// Dropbox's documented `content_hash` algorithm: SHA-256 per 4 MB block, the
+/// raw digests concatenated, SHA-256 of the result. Deliberately DIFFERENT
+/// from Wick's canonical plain SHA-256 - the engine must never depend on the
+/// two conventions being comparable (the exact regression this fake guards:
+/// locally computed hashes compared against backend metadata hashes).
+func DropboxStyleContentHash(_ data: Data) -> String {
+    let blockSize = 4 * 1024 * 1024
+    var digests = Data()
+    var offset = 0
+    while offset < data.count {
+        let end = min(offset + blockSize, data.count)
+        digests.append(Data(SHA256.hash(data: data[offset..<end])))
+        offset = end
+    }
+    if digests.isEmpty {
+        digests.append(Data(SHA256.hash(data: data)))
+    }
+    return SHA256.hash(data: digests).map { String(format: "%02x", $0) }.joined()
+}
+
 /// In-memory Dropbox stand-in. One instance shared between engines simulates
-/// the server two devices talk to.
+/// the server two devices talk to - including the delta echo of the device's
+/// own uploads, which the real backend also reports back.
 @MainActor
 final class FakeSyncBackend: JournalSyncBackend {
     private struct StoredFile {
@@ -40,7 +62,7 @@ final class FakeSyncBackend: JournalSyncBackend {
             return (metas, "v\(version)")
         }
         let metas = files.map { path, file in
-            RemoteFileMeta(path: path, rev: file.rev, contentHash: JournalSyncEncoding.contentHash(of: file.data))
+            RemoteFileMeta(path: path, rev: file.rev, contentHash: DropboxStyleContentHash(file.data))
         }
         return (metas, "v\(version)")
     }
@@ -65,7 +87,7 @@ final class FakeSyncBackend: JournalSyncBackend {
         revCounter += 1
         let rev = "r\(revCounter)"
         files[key] = StoredFile(data: data, rev: rev)
-        log(path: key, meta: RemoteFileMeta(path: key, rev: rev, contentHash: JournalSyncEncoding.contentHash(of: data)))
+        log(path: key, meta: RemoteFileMeta(path: key, rev: rev, contentHash: DropboxStyleContentHash(data)))
         return rev
     }
 
@@ -87,7 +109,7 @@ final class FakeSyncBackend: JournalSyncBackend {
         let rev = "r\(revCounter)"
         let key = path.lowercased()
         files[key] = StoredFile(data: data, rev: rev)
-        log(path: key, meta: RemoteFileMeta(path: key, rev: rev, contentHash: JournalSyncEncoding.contentHash(of: data)))
+        log(path: key, meta: RemoteFileMeta(path: key, rev: rev, contentHash: DropboxStyleContentHash(data)))
     }
 
     private func log(path: String, meta: RemoteFileMeta) {
@@ -104,6 +126,13 @@ final class FakeLocalSource: JournalLocalSource {
     var days: [String: JournalEntry] = [:]
     var images: [String: Data] = [:]
     var removedDayKeys: [String] = []
+    /// Fires on the engine's freshness re-check - the even-numbered
+    /// `syncDaySnapshots()` call (each cycle takes one decision snapshot at
+    /// start, then at most one freshness check before applying). Simulates a
+    /// user edit landing mid-cycle, after the decision snapshot but before
+    /// remote content applies.
+    var mutateOnFreshnessCheck: ((inout [String: JournalEntry]) -> Void)?
+    private var snapshotCount = 0
 
     init(journalID: UUID, name: String = "Test Journal") {
         self.journalID = journalID
@@ -114,7 +143,14 @@ final class FakeLocalSource: JournalLocalSource {
     var syncJournalName: String { journalName }
     var syncIsWritable: Bool { writable }
 
-    func syncDaySnapshots() -> [String: JournalEntry] { days }
+    func syncDaySnapshots() -> [String: JournalEntry] {
+        snapshotCount += 1
+        if snapshotCount.isMultiple(of: 2), let mutate = mutateOnFreshnessCheck {
+            mutateOnFreshnessCheck = nil
+            mutate(&days)
+        }
+        return days
+    }
     func applySyncedEntry(_ entry: JournalEntry) { days[entry.dayKey] = entry }
     func removeSyncedDay(dayKey: String) {
         days.removeValue(forKey: dayKey)
@@ -338,6 +374,142 @@ final class JournalSyncEngineTests: XCTestCase {
         let payloadData = try XCTUnwrap(backend.fileData(conflictPath))
         let payload = try JournalSyncEncoding.decoder.decode(JournalConflictPayload.self, from: payloadData)
         XCTAssertEqual(payload.losingItems.first?.body, "B edit")
+    }
+
+    // MARK: single-writer seamlessness (echo / hash-convention regressions)
+
+    /// The reported bug: the operator types on one machine while the others
+    /// stay idle. The delta echo of the device's own previous upload (whose
+    /// backend content_hash can never match a locally computed one) must
+    /// never read as a remote change - no self-merge, no conflict records,
+    /// just the next version pushed.
+    func testOwnUploadEchoWhileEditingNeverConflicts() async throws {
+        let a = makeSource()
+        a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "v1")
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        // Keep editing across several cycles; every cycle's delta contains
+        // the echo of the previous own push.
+        for version in 2...4 {
+            var edited = a.days["2026-08-01"]!
+            edited.items[0].body = "v\(version)"
+            edited.updatedAt = t0.addingTimeInterval(Double(version) * 100)
+            a.days["2026-08-01"] = edited
+            await engineA.performSyncCycle()
+        }
+
+        XCTAssertEqual(engineA.pendingConflicts.count, 0, "own-upload echo must never conflict")
+        XCTAssertEqual(try decodeRemoteDay("2026-08-01").items.first?.body, "v4")
+        XCTAssertEqual(a.days["2026-08-01"]?.items.first?.body, "v4")
+
+        // And the day settles: further idle cycles do nothing at all.
+        let uploads = backend.uploadCount
+        let downloads = backend.downloadCount
+        await engineA.performSyncCycle()
+        XCTAssertEqual(backend.uploadCount, uploads)
+        XCTAssertEqual(backend.downloadCount, downloads)
+    }
+
+    /// A device that pulls a day lands on a fixed point: the applied content
+    /// re-hashes to the recorded baseline, so an online-but-idle peer never
+    /// re-pushes (or otherwise churns) content it just pulled.
+    func testPulledDayIsFixedPointIdlePeerNeverPushesBack() async {
+        let a = makeSource()
+        a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "v1")
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+        XCTAssertEqual(b.days["2026-08-01"]?.items.first?.body, "v1")
+
+        let uploads = backend.uploadCount
+        let downloads = backend.downloadCount
+        await engineB.performSyncCycle()
+        await engineA.performSyncCycle()
+        await engineB.performSyncCycle()
+        XCTAssertEqual(backend.uploadCount, uploads, "idle peer must never re-push pulled content")
+        XCTAssertEqual(backend.downloadCount, downloads)
+    }
+
+    /// A peer relaying this device's own pushed content back verbatim (e.g.
+    /// an old build re-uploading identical bytes under a fresh rev) is not a
+    /// conflict: the self-merge guard recognizes the content as our own and
+    /// converges by re-pushing local.
+    func testOwnContentRelayedBackByPeerDoesNotConflict() async throws {
+        let a = makeSource()
+        a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "v1")
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        // A keeps editing...
+        var edited = a.days["2026-08-01"]!
+        edited.items[0].body = "v2"
+        edited.updatedAt = t0.addingTimeInterval(100)
+        a.days["2026-08-01"] = edited
+
+        // ...while a peer relays A's exact v1 bytes under a fresh rev.
+        var original = edited
+        original.items[0].body = "v1"
+        original.updatedAt = t0
+        backend.seedFile(dayPath("2026-08-01"), data: try JournalSyncEncoding.canonicalData(for: original))
+
+        await engineA.performSyncCycle()
+
+        XCTAssertEqual(engineA.pendingConflicts.count, 0, "own content returning must not conflict")
+        XCTAssertEqual(try decodeRemoteDay("2026-08-01").items.first?.body, "v2")
+    }
+
+    /// Remote applies are freshness-guarded: a day the user edited after the
+    /// cycle's snapshot must not be overwritten by a pull - the pull aborts,
+    /// and the next cycle merges the fresher local content properly.
+    func testPullSkipsDayChangedAfterCycleSnapshot() async throws {
+        let a = makeSource()
+        a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "from A")
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle() // B at baseline
+
+        // B commits a local edit mid-cycle - after the engine took its
+        // snapshot, before the pull applies.
+        b.mutateOnFreshnessCheck = { days in
+            var mid = days["2026-08-01"]!
+            mid.items.append(JournalItem(body: "B mid-cycle"))
+            mid.updatedAt = self.t0.addingTimeInterval(100)
+            days["2026-08-01"] = mid
+        }
+        // A pushed something new, so B has a remote change to pull.
+        var edited = a.days["2026-08-01"]!
+        edited.items.append(JournalItem(body: "A new"))
+        edited.updatedAt = t0.addingTimeInterval(50)
+        a.days["2026-08-01"] = edited
+        await engineA.performSyncCycle()
+
+        await engineB.performSyncCycle()
+
+        // The mid-cycle edit survived the pull (no clobber, no conflict).
+        XCTAssertEqual(
+            Set(b.days["2026-08-01"]?.items.map(\.body) ?? []),
+            ["from A", "B mid-cycle"],
+            "mid-cycle edit must not be clobbered by the pull"
+        )
+        XCTAssertEqual(engineB.pendingConflicts.count, 0)
+
+        // The next cycle converges both sides as a clean union.
+        await engineB.performSyncCycle()
+        XCTAssertEqual(
+            Set(try decodeRemoteDay("2026-08-01").items.map(\.body)),
+            ["from A", "A new", "B mid-cycle"]
+        )
+        XCTAssertEqual(
+            Set(b.days["2026-08-01"]?.items.map(\.body) ?? []),
+            ["from A", "A new", "B mid-cycle"]
+        )
     }
 
     // MARK: conflict resolution (keep local / remote / merged)

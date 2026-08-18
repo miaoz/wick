@@ -69,10 +69,50 @@ final class JournalSyncModelTests: XCTestCase {
     }
 
     func testContentHashMatchesSHA256KnownVector() {
-        // SHA-256 of the empty input (also the Dropbox content_hash of an empty file).
+        // Plain SHA-256 of empty input - Wick's canonical convention.
         XCTAssertEqual(
             JournalSyncEncoding.contentHash(of: Data()),
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         )
+    }
+
+    func testBackendContentHashConventionNeverMatchesCanonicalHash() {
+        // Dropbox's content_hash hashes the concatenated per-block SHA-256
+        // digests (hash-of-hashes) and therefore NEVER equals the plain
+        // SHA-256 of the same bytes - for empty input the two vectors differ.
+        // The sync engine must never cross-compare the conventions; remote
+        // change detection uses file revs (see JournalSyncEngineTests).
+        XCTAssertEqual(
+            DropboxStyleContentHash(Data()),
+            "5df6e0e2761359d30a8275058e299fcc0381534545f55cf43e41983f5d4c9456"
+        )
+        XCTAssertNotEqual(DropboxStyleContentHash(Data()), JournalSyncEncoding.contentHash(of: Data()))
+    }
+
+    // MARK: - Sync state (legacy migration)
+
+    func testLegacyDaySyncStateDecodesIntoSettlementEnum() throws {
+        let pushSettled = try decoder.decode(
+            DaySyncState.self,
+            from: Data(#"{"localHash":"h1","remoteRev":"r1","settledPushHash":"chosen"}"#.utf8)
+        )
+        XCTAssertEqual(pushSettled.settlement, .pushSettled("chosen"))
+        XCTAssertEqual(pushSettled.pushedHashes, [])
+
+        let adopter = try decoder.decode(
+            DaySyncState.self,
+            from: Data(#"{"localHash":"h1","settleAdoptRemote":true}"#.utf8)
+        )
+        XCTAssertEqual(adopter.settlement, .adoptRemote)
+
+        let marker = try decoder.decode(
+            DaySyncState.self,
+            from: Data(#"{"localHash":"h1","settleMarkHash":"hm"}"#.utf8)
+        )
+        XCTAssertEqual(marker.settlement, .markSettled("hm"))
+
+        // Round-trip drops the legacy keys and keeps the migrated settlement.
+        let decoded = try decoder.decode(DaySyncState.self, from: try encoder.encode(pushSettled))
+        XCTAssertEqual(decoded, pushSettled)
     }
 }

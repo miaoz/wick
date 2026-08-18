@@ -24,11 +24,13 @@ public enum JournalSyncEncoding {
         try encoder.encode(entry)
     }
 
-    /// Lowercase hex SHA-256 of the payload.
+    /// Lowercase hex SHA-256 of the payload. This is Wick's own canonical
+    /// convention for local change detection and settlement markers.
     ///
-    /// Dropbox computes `content_hash` as plain SHA-256 hex for files up to 4 MB
-    /// (all journal payloads qualify), so a locally computed hash compares
-    /// directly against remote metadata without a download.
+    /// NOT comparable with Dropbox's `content_hash` metadata: Dropbox hashes
+    /// the concatenation of per-4MB-block SHA-256 digests (hash-of-hashes),
+    /// which never equals the plain SHA-256 of the same bytes. Remote change
+    /// detection therefore uses file revs, never hash cross-comparisons.
     public static func contentHash(of data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }

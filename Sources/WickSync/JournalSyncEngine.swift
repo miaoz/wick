@@ -13,16 +13,32 @@ public enum JournalSyncError: Error, Equatable {
 ///
 /// Reconciliation matrix per day key (local vs remote, compared against the
 /// per-device `JournalSyncState` snapshot):
-/// - only local changed → conditional upload (rev-guarded)
-/// - only remote changed → download + apply
-/// - both changed → item-union merge; same-item conflicts keep the newer side
+/// - only local changed -> conditional upload (rev-guarded)
+/// - only remote changed -> download + apply
+/// - both changed -> item-union merge; same-item conflicts keep the newer side
 ///   and archive the loser under `conflicts/` (nothing is ever silently dropped)
-/// - local deleted → write tombstone, then delete the remote day file
-/// - remote tombstone → delete locally (unless locally edited: edit wins)
-/// - remote file missing without a tombstone → accident; re-upload, never mirror
+/// - local deleted -> write tombstone, then delete the remote day file
+/// - remote tombstone -> delete locally (unless locally edited: edit wins)
+/// - remote file missing without a tombstone -> accident; re-upload, never mirror
 ///
-/// The single-writer assumption makes conflicts rare; every conflict path still
-/// preserves both sides.
+/// Single-writer seamlessness rests on three invariants:
+/// 1. **Echo suppression by rev.** Remote change detection compares revs only.
+///    The device's own uploads record the rev the server returned, so the
+///    delta echo of a self-write carries the same rev and reads as "unchanged".
+///    Locally computed canonical hashes are never compared against backend
+///    `content_hash` metadata (different algorithms - they can never match).
+/// 2. **Pull is a fixed point.** Applying remote content and re-hashing it
+///    locally yields the recorded baseline, so an adopting device never
+///    re-pushes what it just pulled.
+/// 3. **A device never conflicts with itself.** If the "remote" side of a
+///    merge is a version this device previously pushed (a stale echo racing
+///    newer local edits, or a peer relaying our content back), the day
+///    converges by re-pushing local - no archive, no user-facing conflict.
+///    Conflicts surface only on genuine cross-device divergence.
+///
+/// Applies are also freshness-guarded: remote content is never written over a
+/// day that changed locally after the cycle's snapshot (the next cycle
+/// re-decides with fresh data), so mid-cycle typing can never be clobbered.
 ///
 /// Journal renames ride the manifest: a local rename pushes a rev-guarded
 /// rewrite, a remote rewrite is adopted locally, and a double rename resolves
@@ -60,6 +76,9 @@ public final class JournalSyncEngine: ObservableObject {
 
     public static let periodicInterval: TimeInterval = 60
     public static let debounceInterval: TimeInterval = 15
+    /// How many recent own-push hashes to remember per day for the self-merge
+    /// guard (a stale echo can trail the newest push by a cycle or two).
+    public static let pushedHashHistoryLimit = 5
 
     public init(
         backend: any JournalSyncBackend,
@@ -118,16 +137,16 @@ public final class JournalSyncEngine: ObservableObject {
     public func dismissConflict(id: UUID) {
         guard let index = state.pendingConflicts.firstIndex(where: { $0.id == id }) else { return }
         let record = state.pendingConflicts[index]
-        // Dismissing means "keep what is already applied" — the merge is on the
-        // remote, so let peers drop their stale reminder for the day too.
-        if let merged = record.mergedEntry {
-            var dayState = state.days[record.dayKey] ?? DaySyncState()
-            dayState.settleMarkHash = try? JournalSyncEncoding.contentHash(for: merged)
-            state.days[record.dayKey] = dayState
+        // Dismissing means "keep what is already applied" - upload a marker so
+        // peers drop their stale reminder for the day too.
+        if let merged = record.mergedEntry,
+           let hash = try? JournalSyncEncoding.contentHash(for: merged) {
+            state.days[record.dayKey, default: DaySyncState()].settlement = .markSettled(hash)
         }
         queueConflictArchiveCleanup(state.pendingConflicts[index])
         state.pendingConflicts.remove(at: index)
         saveAndPublish()
+        requestSync()
     }
 
     /// How the user settled a recorded conflict.
@@ -140,15 +159,15 @@ public final class JournalSyncEngine: ObservableObject {
         case merged
     }
 
-    /// Applies the user's choice for a recorded conflict. The chosen version is
-    /// written into the local store right away and the day is marked *settled*
-    /// so the next cycle propagates the choice authoritatively instead of
-    /// re-running the divergence matrix (which would re-record the conflict):
-    /// - `.local`  → push that exact version even if the remote moved meanwhile;
-    /// - `.remote` → adopt the *live* remote (the recorded snapshot may be
+    /// Applies the user's choice for a recorded conflict. The choice is
+    /// recorded as a one-shot `DaySettlement` the next cycle executes
+    /// authoritatively (bypassing the divergence matrix, so it can never
+    /// re-record the conflict it resolves):
+    /// - `.local`  -> apply now, push that exact content next cycle;
+    /// - `.remote` -> adopt the *live* remote (the recorded snapshot may be
     ///   stale), so "keep Dropbox" follows what is actually on Dropbox;
-    /// - `.merged` → the merge is already in place locally and remotely, so the
-    ///   notice is simply cleared.
+    /// - `.merged` -> the merge is already in place locally and remotely, so
+    ///   the cycle just uploads a settlement marker for peers.
     public func resolveConflict(id: UUID, resolution: SyncConflictResolution) {
         guard let index = state.pendingConflicts.firstIndex(where: { $0.id == id }) else { return }
         let record = state.pendingConflicts[index]
@@ -160,27 +179,26 @@ public final class JournalSyncEngine: ObservableObject {
         var dayState = state.days[record.dayKey] ?? DaySyncState()
         switch resolution {
         case .local:
-            // Keep this device's version: write it now and push that exact
-            // content on the next cycle (push priority, no re-merge). Only the
-            // store write needs a writable source; a read-only store keeps the
-            // record so the conflict stays visible.
+            // Keep this device's version: write it now; the next cycle pushes
+            // that exact content authoritatively. Only the store write needs a
+            // writable source; a read-only store keeps the record so the
+            // conflict stays visible.
             guard let chosen = record.localEntry, writable else { return }
             localSource.applySyncedEntry(chosen)
-            dayState.settledPushHash = try? JournalSyncEncoding.contentHash(for: chosen)
-            dayState.settleAdoptRemote = false
+            if let hash = try? JournalSyncEncoding.contentHash(for: chosen) {
+                dayState.settlement = .pushSettled(hash)
+            }
         case .remote:
             // Keep what is on Dropbox: the recorded snapshot may be stale, so
-            // do not resurrect it locally — the next cycle adopts the live
+            // do not resurrect it locally - the next cycle adopts the live
             // remote, which converges on every device without re-merging.
-            dayState.settleAdoptRemote = true
-            dayState.settledPushHash = nil
+            dayState.settlement = .adoptRemote
         case .merged:
-            dayState.settledPushHash = nil
-            dayState.settleAdoptRemote = false
-            // The merge is already applied and on the remote — just mark it so
+            // The merge is already applied and on the remote - mark it so
             // peers drop their stale reminders for the day.
-            if let merged = record.mergedEntry {
-                dayState.settleMarkHash = try? JournalSyncEncoding.contentHash(for: merged)
+            if let merged = record.mergedEntry,
+               let hash = try? JournalSyncEncoding.contentHash(for: merged) {
+                dayState.settlement = .markSettled(hash)
             }
         }
         state.days[record.dayKey] = dayState
@@ -188,6 +206,7 @@ public final class JournalSyncEngine: ObservableObject {
         queueConflictArchiveCleanup(record)
         state.pendingConflicts.remove(at: index)
         saveAndPublish()
+        requestSync()
     }
 
     /// Once the user has settled on one version, the archived losing side is
@@ -363,59 +382,37 @@ public final class JournalSyncEngine: ObservableObject {
         let remoteFile = state.remoteFiles[dayPath]
         let remoteTomb = state.remoteFiles[tombPath]
 
-        // A peer that settled this day left a settlement marker; once the live
-        // remote matches it, our stale reminder for the day is moot — drop it
-        // without manual action.
-        if state.pendingConflicts.contains(where: { $0.dayKey == dayKey }),
-           let remoteFile,
-           let remoteHash = remoteFile.contentHash,
-           let marker = try? await peerSettlementMarker(for: dayKey, journalID: journalID),
-           marker.settledHash == remoteHash {
-            removeConflicts(for: dayKey)
-        }
-
-        // A user-settled conflict propagates authoritatively instead of
-        // re-running the divergence matrix (which would re-record the conflict
-        // on the next cycle and make the count grow every time it is resolved).
-        if prev?.settleAdoptRemote == true {
-            state.days[dayKey]?.settleAdoptRemote = false
-            removeConflicts(for: dayKey)
-            guard let remoteFile else { return }
-            try await pullDay(remoteFile: remoteFile, dayPath: dayPath, dayKey: dayKey, journalID: journalID)
-            if let hash = state.remoteFiles[dayPath]?.contentHash {
-                await uploadSettlementMarker(dayKey: dayKey, settledHash: hash, journalID: journalID)
-            }
-            return
-        }
-        if let settledHash = prev?.settledPushHash {
-            if let local, local.hash == settledHash {
-                state.days[dayKey]?.settledPushHash = nil
-                removeConflicts(for: dayKey)
-                try await pushDay(local, journalID: journalID, currentRemoteRev: remoteFile?.rev)
-                await uploadSettlementMarker(dayKey: dayKey, settledHash: settledHash, journalID: journalID)
+        // A user-settled conflict executes authoritatively - the decision
+        // bypasses the divergence matrix, which is exactly what would
+        // re-record the conflict it is meant to resolve.
+        var settlementSuperseded = false
+        if let settlement = prev?.settlement {
+            switch await executeSettlement(
+                settlement,
+                dayKey: dayKey,
+                journalID: journalID,
+                localDays: localDays,
+                remoteFile: remoteFile
+            ) {
+            case .executed:
                 return
+            case .continueMatrix:
+                break
+            case .superseded:
+                // The store moved past the chosen version (the user kept
+                // typing); the matrix converges the day, and a marker goes up
+                // afterwards so peers still drop their stale reminders.
+                settlementSuperseded = true
             }
-            // Local moved on after the settlement — drop the marker and
-            // reconcile normally from here.
-            state.days[dayKey]?.settledPushHash = nil
-        }
-        if let markHash = prev?.settleMarkHash {
-            state.days[dayKey]?.settleMarkHash = nil
-            await uploadSettlementMarker(dayKey: dayKey, settledHash: markHash, journalID: journalID)
-            // Fall through to the normal divergence matrix: the merge is
-            // already applied and uploaded, so the day just continues syncing
-            // (pulling any newer remote) rather than short-circuiting.
         }
 
         let localChanged = local != nil && local!.hash != prev?.localHash
         let localDeleted = local == nil && prev?.localHash != nil
-        let remoteChanged: Bool = {
-            guard let remoteFile else { return false }
-            if let hash = remoteFile.contentHash {
-                return hash != prev?.remoteContentHash
-            }
-            return remoteFile.rev != prev?.remoteRev
-        }()
+        // Rev-only: our own uploads record the server-returned rev, so the
+        // delta echo of a self-write reads as unchanged. Backend content
+        // hashes are never compared here - they use a different algorithm
+        // than our canonical hashes and could never match.
+        let remoteChanged: Bool = remoteFile?.rev != prev?.remoteRev
         let hasNewTombstone = remoteTomb != nil && remoteTomb?.rev != prev?.tombstoneRev
 
         // Remote tombstone: the only authoritative delete signal.
@@ -434,7 +431,7 @@ public final class JournalSyncEngine: ObservableObject {
                 )
                 return
             }
-            if local != nil {
+            if local != nil, localDayMatchesSnapshot(dayKey, snapshot: localDays[dayKey]) {
                 try requireJournal(journalID)
                 localSource.removeSyncedDay(dayKey: dayKey)
             }
@@ -470,7 +467,13 @@ public final class JournalSyncEngine: ObservableObject {
 
         // Delete vs remote edit: remote wins, the day resurrects locally.
         if localDeleted, remoteChanged, let remoteFile {
-            try await pullDay(remoteFile: remoteFile, dayPath: dayPath, dayKey: dayKey, journalID: journalID)
+            try await pullDay(
+                remoteFile: remoteFile,
+                dayPath: dayPath,
+                dayKey: dayKey,
+                journalID: journalID,
+                expectedLocal: localDays[dayKey]
+            )
             recordConflict(
                 dayKey: dayKey,
                 summary: "deletion overridden by remote edit",
@@ -479,7 +482,7 @@ public final class JournalSyncEngine: ObservableObject {
             return
         }
 
-        // Remote day vanished without a tombstone: accident — heal by re-upload.
+        // Remote day vanished without a tombstone: accident - heal by re-upload.
         if remoteFile == nil, prev?.remoteRev != nil, let local {
             try await pushDay(local, journalID: journalID, currentRemoteRev: nil)
             return
@@ -488,25 +491,146 @@ public final class JournalSyncEngine: ObservableObject {
         // Both changed: item-union merge.
         if let local, localChanged, remoteChanged {
             try await mergeDay(local: local, dayKey: dayKey, journalID: journalID, dayPath: dayPath)
-            return
-        }
-
-        // Only remote changed (incl. brand-new remote day): pull.
-        if let remoteFile, remoteChanged, !localChanged {
-            try await pullDay(remoteFile: remoteFile, dayPath: dayPath, dayKey: dayKey, journalID: journalID)
-            return
-        }
-
-        // Only local changed (incl. brand-new local day): push.
-        if let local, localChanged {
+        } else if let remoteFile, remoteChanged, !localChanged {
+            // Only remote changed (incl. brand-new remote day): pull.
+            try await pullDay(
+                remoteFile: remoteFile,
+                dayPath: dayPath,
+                dayKey: dayKey,
+                journalID: journalID,
+                expectedLocal: localDays[dayKey]
+            )
+        } else if let local, localChanged {
+            // Only local changed (incl. brand-new local day): push.
             try await pushDay(local, journalID: journalID, currentRemoteRev: remoteFile?.rev)
-            return
-        }
-
-        // Nothing left anywhere: prune stale bookkeeping.
-        if local == nil, remoteFile == nil, prev?.tombstoneRev == nil {
+        } else if local == nil, remoteFile == nil, prev?.tombstoneRev == nil {
+            // Nothing left anywhere: prune stale bookkeeping.
             state.days.removeValue(forKey: dayKey)
         }
+
+        // A superseded settlement still owes peers a marker - now that the
+        // matrix has converged the day, mark whatever landed on the remote.
+        if settlementSuperseded, let hash = state.days[dayKey]?.remoteContentHash {
+            await uploadSettlementMarker(dayKey: dayKey, settledHash: hash, journalID: journalID)
+        }
+
+        // A peer that settled this day left a settlement marker; once the
+        // remote content we know of hashes (canonically) to the settled
+        // version, our stale reminder for the day is moot - drop it without
+        // manual action. Runs after the matrix so this cycle's pull already
+        // refreshed `remoteContentHash`.
+        if state.pendingConflicts.contains(where: { $0.dayKey == dayKey }),
+           let settled = try? await peerSettlementMarker(for: dayKey, journalID: journalID),
+           settled.settledHash == state.days[dayKey]?.remoteContentHash {
+            removeConflicts(for: dayKey)
+        }
+    }
+
+    // MARK: - Settlement execution
+
+    private enum SettlementOutcome {
+        /// The settlement converged the day - skip the divergence matrix.
+        case executed
+        /// The day still needs the regular matrix (mark-only settlement, or
+        /// the local store moved past the chosen version).
+        case continueMatrix
+        /// The user's newer edits superseded the decision; the matrix runs and
+        /// a settlement marker follows whatever it lands on the remote.
+        case superseded
+    }
+
+    /// Executes a pending user decision for a day.
+    private func executeSettlement(
+        _ settlement: DaySettlement,
+        dayKey: String,
+        journalID: UUID,
+        localDays: [String: (entry: JournalEntry, hash: String)],
+        remoteFile: RemoteFileRecord?
+    ) async -> SettlementOutcome {
+        state.days[dayKey]?.settlement = nil
+
+        switch settlement {
+        case .pushSettled(let settledHash):
+            // The user edited past the chosen version - their newer content
+            // supersedes the decision; sync it the regular way.
+            guard let local = localDays[dayKey], local.hash == settledHash else { return .superseded }
+            await authoritativePush(local, dayKey: dayKey, journalID: journalID, remoteFile: remoteFile)
+            await uploadSettlementMarker(dayKey: dayKey, settledHash: settledHash, journalID: journalID)
+            return .executed
+
+        case .adoptRemote:
+            // Adopt whatever is live on the remote right now.
+            guard let remoteFile else { return .superseded }
+            do {
+                let applied = try await pullDay(
+                    remoteFile: remoteFile,
+                    dayPath: JournalSyncLayout.dayPath(for: journalID, dayKey: dayKey),
+                    dayKey: dayKey,
+                    journalID: journalID,
+                    expectedLocal: localDays[dayKey]
+                )
+                guard applied else { return .superseded }
+                if let hash = state.days[dayKey]?.remoteContentHash {
+                    await uploadSettlementMarker(dayKey: dayKey, settledHash: hash, journalID: journalID)
+                }
+                return .executed
+            } catch {
+                // Offline or raced: retry the settlement next cycle.
+                state.days[dayKey]?.settlement = .adoptRemote
+                return .executed
+            }
+
+        case .markSettled(let settledHash):
+            // Nothing to move - signal peers so they drop stale reminders,
+            // then let the matrix converge this device too.
+            await uploadSettlementMarker(dayKey: dayKey, settledHash: settledHash, journalID: journalID)
+            return .continueMatrix
+        }
+    }
+
+    /// Pushes local content as the decided winner: rev-guarded against the
+    /// current remote, and on a lost race re-targets the winner's rev instead
+    /// of merging (the user's choice outranks convergence by merge).
+    private func authoritativePush(
+        _ local: (entry: JournalEntry, hash: String),
+        dayKey: String,
+        journalID: UUID,
+        remoteFile: RemoteFileRecord?
+    ) async {
+        let dayPath = JournalSyncLayout.dayPath(for: journalID, dayKey: dayKey)
+        let data = try? JournalSyncEncoding.canonicalData(for: local.entry)
+        guard let data else { return }
+        do {
+            let rev = try await backend.upload(path: dayPath, data: data, ifRev: remoteFile?.rev)
+            recordPushedDay(local, dayKey: dayKey, dayPath: dayPath, rev: rev)
+            return
+        } catch SyncBackendError.writeConflict {
+            // The remote moved after the listing: fetch its rev and overwrite.
+            if let (_, freshRev) = try? await backend.download(path: dayPath) {
+                if let rev = try? await backend.upload(path: dayPath, data: data, ifRev: freshRev) {
+                    recordPushedDay(local, dayKey: dayKey, dayPath: dayPath, rev: rev)
+                }
+            }
+        } catch {
+            NSLog("Wick sync: settlement push failed for \(dayKey): \(error.localizedDescription)")
+        }
+    }
+
+    /// Records a successful push as the day's new baseline (canonical hashes
+    /// on both sides).
+    private func recordPushedDay(
+        _ local: (entry: JournalEntry, hash: String),
+        dayKey: String,
+        dayPath: String,
+        rev: String
+    ) {
+        state.remoteFiles[dayPath] = RemoteFileRecord(rev: rev, contentHash: local.hash)
+        var dayState = state.days[dayKey] ?? DaySyncState()
+        dayState.localHash = local.hash
+        dayState.remoteRev = rev
+        dayState.remoteContentHash = local.hash
+        dayState.pushedHashes.appendUniqueHash(local.hash, limit: Self.pushedHashHistoryLimit)
+        state.days[dayKey] = dayState
     }
 
     // MARK: - Day operations
@@ -521,30 +645,46 @@ public final class JournalSyncEngine: ObservableObject {
         let data = try JournalSyncEncoding.canonicalData(for: local.entry)
         do {
             let rev = try await backend.upload(path: dayPath, data: data, ifRev: currentRemoteRev)
-            state.remoteFiles[dayPath] = RemoteFileRecord(rev: rev, contentHash: local.hash)
-            state.days[dayKey] = DaySyncState(
-                localHash: local.hash,
-                remoteRev: rev,
-                remoteContentHash: local.hash
-            )
+            recordPushedDay(local, dayKey: dayKey, dayPath: dayPath, rev: rev)
         } catch SyncBackendError.writeConflict {
             // Lost the race against another device: merge with the winner.
             try await mergeDay(local: local, dayKey: dayKey, journalID: journalID, dayPath: dayPath)
         }
     }
 
+    /// Downloads and applies the remote day. Returns false when the local day
+    /// changed after the cycle's snapshot (nothing applied - the next cycle
+    /// re-decides with the fresher local content).
+    @discardableResult
     private func pullDay(
         remoteFile: RemoteFileRecord,
         dayPath: String,
         dayKey: String,
-        journalID: UUID
-    ) async throws {
-        let (data, rev) = try await backend.download(path: dayPath)
+        journalID: UUID,
+        expectedLocal snapshot: (entry: JournalEntry, hash: String)?
+    ) async throws -> Bool {
+        let (data, downloadedRev) = try await backend.download(path: dayPath)
         let entry = try JournalSyncEncoding.decoder.decode(JournalEntry.self, from: data)
+
+        // Freshness guard: never apply remote content over a day that changed
+        // locally after the cycle's snapshot - the next cycle re-decides with
+        // the fresher local content (which then merges instead of clobbering).
+        guard localDayMatchesSnapshot(dayKey, snapshot: snapshot) else { return false }
+
         try requireJournal(journalID)
         localSource.applySyncedEntry(entry)
-        let hash = remoteFile.contentHash ?? JournalSyncEncoding.contentHash(of: data)
-        state.days[dayKey] = DaySyncState(localHash: hash, remoteRev: rev, remoteContentHash: hash)
+
+        // Baselines use the canonical hash of the downloaded bytes - never the
+        // backend's metadata hash - so re-hashing the applied content
+        // reproduces this baseline and a pull never turns into a push.
+        let canonical = JournalSyncEncoding.contentHash(of: data)
+        let rev = downloadedRev.isEmpty ? remoteFile.rev : downloadedRev
+        var dayState = state.days[dayKey] ?? DaySyncState()
+        dayState.localHash = canonical
+        dayState.remoteRev = rev
+        dayState.remoteContentHash = canonical
+        state.days[dayKey] = dayState
+        return true
     }
 
     private func mergeDay(
@@ -557,20 +697,43 @@ public final class JournalSyncEngine: ObservableObject {
         let remoteEntry = try JournalSyncEncoding.decoder.decode(JournalEntry.self, from: remoteData)
         let remoteHash = JournalSyncEncoding.contentHash(of: remoteData)
 
+        // Self-merge guard: the "remote" side is one of this device's own
+        // pushed versions - a stale echo of our upload racing newer local
+        // edits, or a peer relaying our content back. Not a conflict: the day
+        // converges by re-pushing local, with no archive and no user-facing
+        // conflict record.
+        if remoteHash != local.hash,
+           let pushedHashes = state.days[dayKey]?.pushedHashes,
+           pushedHashes.contains(remoteHash) {
+            let data = try JournalSyncEncoding.canonicalData(for: local.entry)
+            if let rev = try? await backend.upload(path: dayPath, data: data, ifRev: remoteRev) {
+                recordPushedDay(local, dayKey: dayKey, dayPath: dayPath, rev: rev)
+            }
+            // A writeConflict here means the remote moved again under us - the
+            // next cycle re-runs the day with the fresh inputs.
+            return
+        }
+
         let result = JournalDayMerge.merge(local: local.entry, remote: remoteEntry)
         let mergedData = try JournalSyncEncoding.canonicalData(for: result.merged)
         let mergedHash = JournalSyncEncoding.contentHash(of: mergedData)
 
         if mergedHash == local.hash, mergedHash == remoteHash {
-            // Identical already (bookkeeping drifted) — align state only.
+            // Identical already (bookkeeping drifted) - align state only.
             state.remoteFiles[dayPath] = RemoteFileRecord(rev: remoteRev, contentHash: remoteHash)
-            state.days[dayKey] = DaySyncState(
-                localHash: local.hash,
-                remoteRev: remoteRev,
-                remoteContentHash: remoteHash
-            )
+            var dayState = state.days[dayKey] ?? DaySyncState()
+            dayState.localHash = local.hash
+            dayState.remoteRev = remoteRev
+            dayState.remoteContentHash = remoteHash
+            state.days[dayKey] = dayState
             return
         }
+
+        // Freshness guard before any write: the merge was computed from the
+        // cycle's snapshot, so a day that changed locally since would make
+        // both the upload and the apply stale. Abort untouched - the next
+        // cycle re-merges with the fresh local content.
+        guard localDayMatchesSnapshot(dayKey, snapshot: local) else { return }
 
         // Archive the losing side before overwriting anything.
         if !result.losingItems.isEmpty || result.losingTitle != nil {
@@ -587,26 +750,41 @@ public final class JournalSyncEngine: ObservableObject {
 
         if mergedHash != remoteHash {
             let newRev = try await backend.upload(path: dayPath, data: mergedData, ifRev: remoteRev)
+            var dayState = state.days[dayKey] ?? DaySyncState()
+            dayState.localHash = mergedHash
+            dayState.remoteRev = newRev
+            dayState.remoteContentHash = mergedHash
+            dayState.pushedHashes.appendUniqueHash(mergedHash, limit: Self.pushedHashHistoryLimit)
+            state.days[dayKey] = dayState
             state.remoteFiles[dayPath] = RemoteFileRecord(rev: newRev, contentHash: mergedHash)
-            state.days[dayKey] = DaySyncState(
-                localHash: mergedHash,
-                remoteRev: newRev,
-                remoteContentHash: mergedHash
-            )
         } else {
             // Remote already holds the merged result.
+            var dayState = state.days[dayKey] ?? DaySyncState()
+            dayState.localHash = mergedHash
+            dayState.remoteRev = remoteRev
+            dayState.remoteContentHash = mergedHash
+            state.days[dayKey] = dayState
             state.remoteFiles[dayPath] = RemoteFileRecord(rev: remoteRev, contentHash: mergedHash)
-            state.days[dayKey] = DaySyncState(
-                localHash: mergedHash,
-                remoteRev: remoteRev,
-                remoteContentHash: mergedHash
-            )
         }
 
         if mergedHash != local.hash {
             try requireJournal(journalID)
             localSource.applySyncedEntry(result.merged)
         }
+    }
+
+    /// True when the day in the store still hashes (canonically) to `snapshot`
+    /// - nothing changed locally since the cycle's snapshot was taken. Applied
+    /// remote content must never clobber mid-cycle local edits.
+    private func localDayMatchesSnapshot(
+        _ dayKey: String,
+        snapshot: (entry: JournalEntry, hash: String)?
+    ) -> Bool {
+        guard let fresh = localSource.syncDaySnapshots()[dayKey] else {
+            return snapshot == nil
+        }
+        guard let hash = try? JournalSyncEncoding.contentHash(for: fresh) else { return false }
+        return hash == snapshot?.hash
     }
 
     /// Uploads the losing side to `conflicts/`; returns the archive path, or an
@@ -980,5 +1158,14 @@ public final class JournalSyncEngine: ObservableObject {
         guard let stateJournalID else { return }
         stateStore.save(state, for: stateJournalID)
         publishFromState()
+    }
+}
+
+extension Array where Element == String {
+    /// Appends `hash` to the push history unless it is already the newest
+    /// entry; trims the oldest beyond `limit`.
+    mutating func appendUniqueHash(_ hash: String, limit: Int) {
+        if last != hash { append(hash) }
+        if count > limit { removeFirst(count - limit) }
     }
 }
