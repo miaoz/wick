@@ -114,8 +114,20 @@ struct JournalItemEditorCard: View {
 
             JournalExchangePositions(entryDayKey: entryDayKey, tag: item.tag)
 
-            if !noteText.isEmpty {
-                noteRow
+            // The unreviewed call-to-action (and the note) keep a row of
+            // their own - only the picked seal gets to float over content.
+            if !noteText.isEmpty || (reviewEligible && item.review == nil) {
+                HStack(alignment: .bottom, spacing: 8) {
+                    if !noteText.isEmpty {
+                        noteRow
+                    }
+
+                    Spacer(minLength: 0)
+
+                    if item.review == nil {
+                        reviewButton
+                    }
+                }
             }
         }
         .padding(16)
@@ -127,13 +139,16 @@ struct JournalItemEditorCard: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(palette.cardStroke.scaledAlpha(0.5).color, lineWidth: 1)
         }
-        // The review mark floats over the card's bottom-trailing corner -
-        // positions, images, or body text alike - instead of claiming its
-        // own row. Semi-transparent ink keeps the content under it readable.
+        // Once a verdict is picked, its seal floats over the card's bottom-
+        // trailing corner - covering the button's former spot and whatever
+        // sits beneath it (positions, photos, body text) at reduced ink
+        // opacity so the content underneath stays readable.
         .overlay(alignment: .bottomTrailing) {
-            reviewSlot
-                .padding(.trailing, 10)
-                .padding(.bottom, 4)
+            if let review = item.review {
+                floatingReviewSeal(review)
+                    .padding(.trailing, 10)
+                    .padding(.bottom, 4)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { _ in
             // The journal window object is reused across open/close - reset
@@ -170,50 +185,47 @@ struct JournalItemEditorCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Floating bottom-right "stamp corner": the 复盘 button while unreviewed,
-    /// the enlarged seal once a verdict exists. Both hover over whatever the
-    /// card's trailing bottom holds and open the same review popover.
-    @ViewBuilder
-    private var reviewSlot: some View {
-        if let review = item.review {
-            Button {
-                showReviewPopover = true
-            } label: {
-                JournalReviewBadge(verdict: review.verdict, style: .seal, size: 56)
-                    .opacity(Self.sealOpacity)
-            }
-            .buttonStyle(.plain)
-            .help(L10n.string(.journalReviewHelp, language: settings.language))
-            .accessibilityLabel(Text(verdictName(review.verdict)))
-            .popover(isPresented: $showReviewPopover, arrowEdge: .top) {
-                reviewPopoverContent
-            }
-        } else if reviewEligible {
-            Button {
-                showReviewPopover = true
-            } label: {
-                Text(L10n.string(.journalReview, language: settings.language))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(palette.accentText.color)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    // Soft backdrop: the capsule floats over body text and
-                    // position figures, so it needs a legible base of its own.
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(palette.cardTop.scaledAlpha(0.8).color)
-                    )
-                    .background(
-                        Capsule(style: .continuous)
-                            .strokeBorder(palette.controlBorder.color, lineWidth: 1)
-                    )
-            }
-            .buttonStyle(.plain)
-            .help(L10n.string(.journalReviewHelp, language: settings.language))
-            .accessibilityLabel(Text(L10n.string(.journalReviewHelp, language: settings.language)))
-            .popover(isPresented: $showReviewPopover, arrowEdge: .top) {
-                reviewPopoverContent
-            }
+    /// In-row "复盘" call-to-action while unreviewed. It owns a normal row
+    /// and never overlaps content - floating over records/photos is a
+    /// privilege of the picked seal, not the button.
+    private var reviewButton: some View {
+        Button {
+            showReviewPopover = true
+        } label: {
+            Text(L10n.string(.journalReview, language: settings.language))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(palette.accentText.color)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule(style: .continuous)
+                        .strokeBorder(palette.controlBorder.color, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(L10n.string(.journalReviewHelp, language: settings.language))
+        .accessibilityLabel(Text(L10n.string(.journalReviewHelp, language: settings.language)))
+        .popover(isPresented: $showReviewPopover, arrowEdge: .top) {
+            reviewPopoverContent
+        }
+    }
+
+    /// The picked verdict, stamped over the card's bottom-trailing corner:
+    /// big enough to cover the button's former spot plus the content beneath
+    /// (positions, photos, body), semi-transparent so it reads as ink on
+    /// paper. Tapping reopens the review popover.
+    private func floatingReviewSeal(_ review: JournalReview) -> some View {
+        Button {
+            showReviewPopover = true
+        } label: {
+            JournalReviewBadge(verdict: review.verdict, style: .seal, size: 56)
+                .opacity(Self.sealOpacity)
+        }
+        .buttonStyle(.plain)
+        .help(L10n.string(.journalReviewHelp, language: settings.language))
+        .accessibilityLabel(Text(verdictName(review.verdict)))
+        .popover(isPresented: $showReviewPopover, arrowEdge: .top) {
+            reviewPopoverContent
         }
     }
 
