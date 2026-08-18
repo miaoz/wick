@@ -93,8 +93,14 @@ final class FakeSyncBackend: JournalSyncBackend {
 
     func delete(path: String) async throws {
         let key = path.lowercased()
-        files.removeValue(forKey: key)
-        log(path: key, meta: RemoteFileMeta(path: key, rev: nil, contentHash: nil, isDeleted: true))
+        // Dropbox deletes folders recursively; mirror that (used for journal
+        // roots) alongside plain file deletion.
+        let doomed = files.keys.filter { $0 == key || $0.hasPrefix(key + "/") }
+        guard !doomed.isEmpty else { return }
+        for existing in doomed {
+            files.removeValue(forKey: existing)
+            log(path: existing, meta: RemoteFileMeta(path: existing, rev: nil, contentHash: nil, isDeleted: true))
+        }
     }
 
     // Test helpers
@@ -1124,6 +1130,139 @@ final class JournalSyncEngineTests: XCTestCase {
         try await backend.delete(path: manifestPath)
         await engine.performSyncCycle()
         XCTAssertTrue(engine.discoveredJournals.isEmpty)
+    }
+
+    // MARK: journal deletion propagation
+
+    func testLocalJournalDeletionUploadsTombstoneAndCleansFolder() async {
+        let doomedID = UUID()
+        let a = FakeLocalSource(journalID: doomedID, name: "Doomed")
+        a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "legacy")
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+        XCTAssertTrue(backend.hasFile(JournalSyncLayout.manifestPath(for: doomedID)))
+
+        // The user deletes the journal (the store switches the active one
+        // first); the deletion must propagate to the remote.
+        a.journalID = journalID
+        a.days = [:]
+        engineA.queueJournalDeletion(doomedID)
+        await engineA.performSyncCycle()
+
+        XCTAssertFalse(backend.hasFile(JournalSyncLayout.manifestPath(for: doomedID)))
+        XCTAssertFalse(backend.hasFile(JournalSyncLayout.dayPath(for: doomedID, dayKey: "2026-08-01")))
+        XCTAssertTrue(backend.hasFile(JournalSyncLayout.journalTombstonePath(for: doomedID)))
+    }
+
+    func testPeerAppliesRemoteJournalTombstoneAndDropsDiscovery() async {
+        let doomedID = UUID()
+        let a = FakeLocalSource(journalID: doomedID, name: "Doomed")
+        a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "legacy")
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        // B (on its own journal) discovers the doomed journal's manifest.
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+        XCTAssertEqual(engineB.discoveredJournals.map(\.journalID), [doomedID])
+
+        // A deletes the journal; the tombstone reaches B on its next cycle.
+        a.journalID = journalID
+        a.days = [:]
+        engineA.queueJournalDeletion(doomedID)
+        await engineA.performSyncCycle()
+
+        await engineB.performSyncCycle()
+        XCTAssertTrue(engineB.discoveredJournals.isEmpty, "tombstoned journal must vanish from discovery")
+        XCTAssertEqual(engineB.remoteJournalDeletions, [doomedID])
+
+        engineB.acknowledgeRemoteJournalDeletion(doomedID)
+        XCTAssertEqual(engineB.remoteJournalDeletions, [])
+
+        // And it stays gone - nothing resurfaces on later cycles.
+        await engineB.performSyncCycle()
+        XCTAssertTrue(engineB.discoveredJournals.isEmpty)
+    }
+
+    func testFreshDeviceSkipsTombstonedJournalInDiscovery() async throws {
+        let deadID = UUID()
+        let manifest = JournalSyncManifest(
+            formatVersion: 1,
+            journalID: deadID,
+            journalName: "Deleted",
+            createdAt: t0,
+            deviceID: "X"
+        )
+        backend.seedFile(
+            JournalSyncLayout.manifestPath(for: deadID),
+            data: try JournalSyncEncoding.encoder.encode(manifest)
+        )
+        backend.seedFile(
+            JournalSyncLayout.journalTombstonePath(for: deadID),
+            data: try JournalSyncEncoding.encoder.encode(
+                JournalDeletionTombstone(journalID: deadID, deletedAt: Date(), deviceID: "X")
+            )
+        )
+
+        let source = makeSource()
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        await engine.performSyncCycle()
+
+        XCTAssertTrue(engine.discoveredJournals.isEmpty, "a tombstoned journal is deleted, not adoptable")
+        XCTAssertEqual(engine.remoteJournalDeletions, [deadID])
+    }
+
+    func testDeletionQueueIgnoresJournalsWithoutRemotePresence() async {
+        let source = makeSource()
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        engine.queueJournalDeletion(UUID())
+        await engine.performSyncCycle()
+
+        XCTAssertFalse(
+            backend.allPaths().contains { $0.hasPrefix("/journal-tombstones/") },
+            "never-synced journals must not leave remote tombstones"
+        )
+    }
+
+    func testJournalTombstoneGarbageCollectedAfterRetention() async throws {
+        let deadID = UUID()
+        let stale = JournalDeletionTombstone(
+            journalID: deadID,
+            deletedAt: Date().addingTimeInterval(-(JournalSyncLayout.tombstoneRetention + 24 * 3600)),
+            deviceID: "X"
+        )
+        backend.seedFile(
+            JournalSyncLayout.journalTombstonePath(for: deadID),
+            data: try JournalSyncEncoding.encoder.encode(stale)
+        )
+
+        let source = makeSource()
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        await engine.performSyncCycle()
+
+        XCTAssertFalse(backend.hasFile(JournalSyncLayout.journalTombstonePath(for: deadID)))
+    }
+
+    func testResurrectedFolderOfTombstonedJournalIsCleanedAgain() async throws {
+        let deadID = UUID()
+        backend.seedFile(
+            JournalSyncLayout.journalTombstonePath(for: deadID),
+            data: try JournalSyncEncoding.encoder.encode(
+                JournalDeletionTombstone(journalID: deadID, deletedAt: Date(), deviceID: "X")
+            )
+        )
+        let source = makeSource()
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        await engine.performSyncCycle() // tombstone detected (published, unacked)
+
+        // A racing push re-creates a file under the deleted journal's folder.
+        let strayPath = JournalSyncLayout.manifestPath(for: deadID)
+        backend.seedFile(strayPath, data: Data("{}".utf8))
+
+        await engine.performSyncCycle()
+        XCTAssertFalse(backend.hasFile(strayPath), "tombstoned folders must not linger")
+        XCTAssertTrue(backend.hasFile(JournalSyncLayout.journalTombstonePath(for: deadID)))
     }
 
     // MARK: re-import baseline reset

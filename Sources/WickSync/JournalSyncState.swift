@@ -10,6 +10,10 @@ import Foundation
 ///     images/<uuid>.png|jpg|...   content-addressed, immutable
 ///     tombstones/<dayKey>.json    deletion marker (GC'd after retention)
 ///     conflicts/<dayKey>-<ts>.json  losing side of an item-level conflict
+///     settlements/<dayKey>-….json  conflict-settlement marker for peers
+///   /journal-tombstones/<uuid>.json  journal-level deletion marker - lives
+///                                 OUTSIDE the journal folder so deleting the
+///                                 folder cannot take the marker with it
 public enum JournalSyncLayout {
     public static let formatVersion = 1
     public static let tombstoneRetention: TimeInterval = 30 * 24 * 3600
@@ -32,6 +36,19 @@ public enum JournalSyncLayout {
 
     public static func tombstonePath(for journalID: UUID, dayKey: String) -> String {
         "\(journalRoot(for: journalID))/tombstones/\(dayKey).json"
+    }
+
+    /// Deletion marker for a whole journal: `/journal-tombstones/<uuid>.json`.
+    public static func journalTombstonePath(for journalID: UUID) -> String {
+        "/journal-tombstones/\(journalID.uuidString.lowercased()).json"
+    }
+
+    /// Extracts the journal id from a `/journal-tombstones/<uuid>.json` path,
+    /// nil for anything else.
+    public static func journalTombstoneID(from path: String) -> UUID? {
+        guard path.hasPrefix("/journal-tombstones/"), path.hasSuffix(".json") else { return nil }
+        let middle = path.dropFirst("/journal-tombstones/".count).dropLast(".json".count)
+        return UUID(uuidString: String(middle))
     }
 
     /// A settlement marker file for a day: `settlements/<dayKey>-<stamp>-<uuid>.json`.
@@ -115,6 +132,26 @@ public struct JournalTombstone: Codable, Equatable {
     public init(dayKey: String, deletedAt: Date, deviceID: String) {
         self.schemaVersion = 1
         self.dayKey = dayKey
+        self.deletedAt = deletedAt
+        self.deviceID = deviceID
+    }
+}
+
+/// Deletion marker for a whole journal - the journal-level analogue of
+/// `JournalTombstone`. Deleting a journal locally propagates by uploading this
+/// marker (outside the journal folder) and then deleting the folder; peers
+/// that see the marker remove their local copy and never re-discover or
+/// re-import the journal. A missing folder without a marker is an accident
+/// and healed by re-upload, exactly like a missing day file.
+public struct JournalDeletionTombstone: Codable, Equatable {
+    public var schemaVersion: Int
+    public var journalID: UUID
+    public var deletedAt: Date
+    public var deviceID: String
+
+    public init(journalID: UUID, deletedAt: Date, deviceID: String) {
+        self.schemaVersion = 1
+        self.journalID = journalID
         self.deletedAt = deletedAt
         self.deviceID = deviceID
     }
@@ -413,6 +450,54 @@ public struct JournalSyncState: Codable, Equatable {
     }
 }
 
+/// Device-scoped sync state shared by ALL journals of this device, persisted
+/// as `device.json` next to the per-journal state files. Owns journal-level
+/// deletion propagation: a journal deleted locally has its per-journal state
+/// cleared, so the pending remote deletion must live somewhere that survives it.
+public struct JournalDeviceSyncState: Codable, Equatable {
+    /// Locally deleted journals awaiting their remote tombstone + folder
+    /// cleanup (flushed by the next cycle; survives offline deletions and
+    /// relaunches).
+    public var pendingJournalDeletions: [JournalDeletionTombstone]
+    /// Peer tombstones detected and published to the app (`remoteJournalDeletions`)
+    /// but not yet acknowledged - republished after a restart so a crash
+    /// between detection and the local removal cannot drop the deletion.
+    public var unackedRemoteDeletions: [UUID]
+    /// Journal tombstones this device has fully processed (its own deletions
+    /// plus acknowledged peer deletions). Suppresses rediscovery/reimport.
+    public var processedJournalTombstones: [UUID]
+
+    public init(
+        pendingJournalDeletions: [JournalDeletionTombstone] = [],
+        unackedRemoteDeletions: [UUID] = [],
+        processedJournalTombstones: [UUID] = []
+    ) {
+        self.pendingJournalDeletions = pendingJournalDeletions
+        self.unackedRemoteDeletions = unackedRemoteDeletions
+        self.processedJournalTombstones = processedJournalTombstones
+    }
+
+    public enum CodingKeys: String, CodingKey {
+        case pendingJournalDeletions, unackedRemoteDeletions, processedJournalTombstones
+    }
+
+    /// Fields decode with defaults so files written by older builds keep loading.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        pendingJournalDeletions = try container.decodeIfPresent([JournalDeletionTombstone].self, forKey: .pendingJournalDeletions) ?? []
+        unackedRemoteDeletions = try container.decodeIfPresent([UUID].self, forKey: .unackedRemoteDeletions) ?? []
+        processedJournalTombstones = try container.decodeIfPresent([UUID].self, forKey: .processedJournalTombstones) ?? []
+    }
+
+    /// True when a journal's deletion must not surface anywhere on this device
+    /// (discovery, auto-import, active syncing).
+    public func isTombstoned(_ journalID: UUID) -> Bool {
+        processedJournalTombstones.contains(journalID)
+            || unackedRemoteDeletions.contains(journalID)
+            || pendingJournalDeletions.contains { $0.journalID == journalID }
+    }
+}
+
 /// Loads/saves per-journal state files inside a device-local directory.
 public struct JournalSyncStateStore {
     private let directory: URL
@@ -423,6 +508,12 @@ public struct JournalSyncStateStore {
 
     public func stateURL(for journalID: UUID) -> URL {
         directory.appendingPathComponent("\(journalID.uuidString.lowercased()).json")
+    }
+
+    /// True when this device has ever synced the journal - the signal that a
+    /// local deletion of it must propagate to the remote.
+    public func stateExists(for journalID: UUID) -> Bool {
+        FileManager.default.fileExists(atPath: stateURL(for: journalID).path)
     }
 
     public func load(for journalID: UUID) -> JournalSyncState {
@@ -450,5 +541,30 @@ public struct JournalSyncStateStore {
     /// as "deleted everywhere" and tombstone the remote content).
     public func clear(for journalID: UUID) {
         try? FileManager.default.removeItem(at: stateURL(for: journalID))
+    }
+
+    // MARK: Device-scoped state (journal deletion propagation)
+
+    private var deviceStateURL: URL {
+        directory.appendingPathComponent("device.json")
+    }
+
+    public func loadDeviceState() -> JournalDeviceSyncState {
+        guard let data = try? Data(contentsOf: deviceStateURL),
+              let state = try? JournalSyncEncoding.decoder.decode(JournalDeviceSyncState.self, from: data)
+        else {
+            return JournalDeviceSyncState()
+        }
+        return state
+    }
+
+    public func saveDeviceState(_ state: JournalDeviceSyncState) {
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let data = try JournalSyncEncoding.encoder.encode(state)
+            try data.write(to: deviceStateURL, options: .atomic)
+        } catch {
+            NSLog("Wick sync device state save failed: \(error.localizedDescription)")
+        }
     }
 }

@@ -21,9 +21,14 @@ final class PhoneSyncCoordinator: ObservableObject {
     private static let emailKey = "wick.sync.accountEmail"
     private static let deviceIDKey = "wick.deviceID"
     private static let ignoredJournalsKey = "wick.sync.ignoredRemoteJournals"
+    private static let remotelyDeletedJournalsKey = "wick.sync.remotelyDeletedJournals"
 
     private let deviceID: String
+    private let stateStore: JournalSyncStateStore
     private var ignoredRemoteJournalIDs: Set<UUID>
+    /// Journals whose remote deletion (peer tombstone) this device applied -
+    /// keeps remote deletions from being re-queued as local ones.
+    private var remotelyDeletedJournalIDs: Set<UUID>
     private var knownLocalJournalIDs: Set<UUID>
     private var cancellables = Set<AnyCancellable>()
 
@@ -41,6 +46,9 @@ final class PhoneSyncCoordinator: ObservableObject {
         ignoredRemoteJournalIDs = Set(
             (defaults.stringArray(forKey: Self.ignoredJournalsKey) ?? []).compactMap(UUID.init)
         )
+        remotelyDeletedJournalIDs = Set(
+            (defaults.stringArray(forKey: Self.remotelyDeletedJournalsKey) ?? []).compactMap(UUID.init)
+        )
         knownLocalJournalIDs = Set(PhoneJournalStore.shared.journals.map(\.id))
 
         let backend = DropboxSyncBackend()
@@ -48,11 +56,13 @@ final class PhoneSyncCoordinator: ObservableObject {
             try await PhoneAuthSession.open(url: url, callbackScheme: scheme)
         }
         self.backend = backend
+        let stateStore = JournalSyncStateStore(directory: Self.stateDirectory())
+        self.stateStore = stateStore
         engine = JournalSyncEngine(
             backend: backend,
             localSource: PhoneJournalStore.shared,
             deviceID: deviceID,
-            stateStore: JournalSyncStateStore(directory: Self.stateDirectory())
+            stateStore: stateStore
         )
 
         engine.objectWillChange
@@ -69,6 +79,12 @@ final class PhoneSyncCoordinator: ObservableObject {
             .sink { [weak self] in self?.autoImportRemoteJournals($0) }
             .store(in: &cancellables)
 
+        // Journals deleted on another device (tombstone on the remote): drop
+        // the local copy and acknowledge.
+        engine.$remoteJournalDeletions
+            .sink { [weak self] in self?.applyRemoteJournalDeletions($0) }
+            .store(in: &cancellables)
+
         // Journal switches re-point the engine (it syncs the active journal).
         PhoneJournalStore.shared.$activeJournalID
             .dropFirst()
@@ -82,6 +98,8 @@ final class PhoneSyncCoordinator: ObservableObject {
                 self?.engine.requestSync()
             }
             .store(in: &cancellables)
+
+        queueLegacyLocalDeletions()
 
         if syncEnabled {
             engine.start()
@@ -117,6 +135,7 @@ final class PhoneSyncCoordinator: ObservableObject {
     }
 
     func adoptRemoteJournal(_ manifest: JournalSyncManifest) {
+        guard !engine.isJournalTombstoned(manifest.journalID) else { return }
         ignoredRemoteJournalIDs.remove(manifest.journalID)
         persistIgnoredJournals()
         engine.resetSyncState(for: manifest.journalID)
@@ -147,8 +166,47 @@ final class PhoneSyncCoordinator: ObservableObject {
         if !removed.isEmpty {
             ignoredRemoteJournalIDs.formUnion(removed)
             persistIgnoredJournals()
+            // Local deletions propagate to the remote - except journals
+            // removed BECAUSE a peer tombstoned them.
+            if syncEnabled, backend.isAuthorized {
+                for id in removed where !remotelyDeletedJournalIDs.contains(id) {
+                    engine.queueJournalDeletion(id)
+                }
+            }
         }
         knownLocalJournalIDs = current
+    }
+
+    /// Applies journal deletions made on another device: record the UUID,
+    /// drop the local copy (if any), and acknowledge.
+    private func applyRemoteJournalDeletions(_ journalIDs: [UUID]) {
+        var applied = false
+        for id in journalIDs where !remotelyDeletedJournalIDs.contains(id) {
+            remotelyDeletedJournalIDs.insert(id)
+            ignoredRemoteJournalIDs.insert(id)
+            applied = true
+            if PhoneJournalStore.shared.journals.contains(where: { $0.id == id }) {
+                PhoneJournalStore.shared.deleteJournal(id: id)
+            }
+        }
+        if applied {
+            persistIgnoredJournals()
+            UserDefaults.standard.set(
+                remotelyDeletedJournalIDs.map(\.uuidString),
+                forKey: Self.remotelyDeletedJournalsKey
+            )
+        }
+        for id in journalIDs { engine.acknowledgeRemoteJournalDeletion(id) }
+    }
+
+    /// Journals deleted locally before deletion propagation existed keep
+    /// resurfacing as "discovered"; queue the ones with sync-state remnants.
+    private func queueLegacyLocalDeletions() {
+        guard syncEnabled, backend.isAuthorized else { return }
+        for id in ignoredRemoteJournalIDs
+        where !remotelyDeletedJournalIDs.contains(id) && stateStore.stateExists(for: id) {
+            engine.queueJournalDeletion(id)
+        }
     }
 
     private func persistIgnoredJournals() {

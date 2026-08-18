@@ -58,8 +58,13 @@ public final class JournalSyncEngine: ObservableObject {
     @Published public private(set) var lastSyncAt: Date?
     @Published public private(set) var pendingConflicts: [SyncConflictRecord] = []
     /// Manifests of journals found on the remote that are not the active
-    /// journal — candidates for adoption on this device.
+    /// journal - candidates for adoption on this device.
     @Published public private(set) var discoveredJournals: [JournalSyncManifest] = []
+    /// Journals deleted by a peer (tombstone seen on the remote) that this
+    /// device has not applied yet - the app removes them locally and calls
+    /// `acknowledgeRemoteJournalDeletion`. Re-published after restarts until
+    /// acknowledged, so a crash cannot drop a deletion.
+    @Published public private(set) var remoteJournalDeletions: [UUID] = []
 
     private let backend: any JournalSyncBackend
     private let localSource: any JournalLocalSource
@@ -68,6 +73,9 @@ public final class JournalSyncEngine: ObservableObject {
 
     private var state = JournalSyncState()
     private var stateJournalID: UUID?
+    /// Device-scoped state (journal deletion propagation), shared by all
+    /// journals of this device and persisted outside per-journal files.
+    private var deviceState = JournalDeviceSyncState()
 
     private var isSyncing = false
     private var pendingSync = false
@@ -90,6 +98,7 @@ public final class JournalSyncEngine: ObservableObject {
         self.localSource = localSource
         self.deviceID = deviceID
         self.stateStore = stateStore
+        self.deviceState = stateStore.loadDeviceState()
     }
 
     // MARK: - Triggers
@@ -244,6 +253,113 @@ public final class JournalSyncEngine: ObservableObject {
         stateStore.clear(for: journalID)
     }
 
+    // MARK: - Journal deletion propagation
+
+    /// Queues a journal deleted on this device for remote propagation: the
+    /// next cycle uploads a journal tombstone (outside the journal folder)
+    /// and then deletes the remote folder, mirroring day-deletion semantics.
+    /// Journals without remote presence (never synced, manifest unknown) are
+    /// ignored - there is nothing on the remote to delete.
+    public func queueJournalDeletion(_ journalID: UUID) {
+        guard !deviceState.isTombstoned(journalID) else { return }
+        let knownRemotely = stateStore.stateExists(for: journalID)
+            || state.remoteFiles[JournalSyncLayout.manifestPath(for: journalID)] != nil
+        guard knownRemotely else { return }
+        deviceState.pendingJournalDeletions.append(
+            JournalDeletionTombstone(journalID: journalID, deletedAt: Date(), deviceID: deviceID)
+        )
+        saveDeviceStateAndPublish()
+        requestSync()
+    }
+
+    /// Confirms that a peer-deleted journal has been applied locally (removed
+    /// from the store / ignored); the tombstone will not be re-published.
+    public func acknowledgeRemoteJournalDeletion(_ journalID: UUID) {
+        deviceState.unackedRemoteDeletions.removeAll { $0 == journalID }
+        if !deviceState.processedJournalTombstones.contains(journalID) {
+            deviceState.processedJournalTombstones.append(journalID)
+        }
+        saveDeviceStateAndPublish()
+    }
+
+    /// Flushes locally-queued journal deletions: tombstone first, then the
+    /// folder - the same ordering as day deletions. Runs before any other
+    /// cycle work so a deleted journal cannot be resurrected by this cycle.
+    private func flushPendingJournalDeletions() async {
+        var failedDeletions: [JournalDeletionTombstone] = []
+        for marker in deviceState.pendingJournalDeletions {
+            do {
+                let tombPath = JournalSyncLayout.journalTombstonePath(for: marker.journalID)
+                if state.remoteFiles[tombPath] == nil {
+                    let data = try JournalSyncEncoding.encoder.encode(marker)
+                    do {
+                        let rev = try await backend.upload(path: tombPath, data: data, ifRev: nil)
+                        state.remoteFiles[tombPath] = RemoteFileRecord(rev: rev, contentHash: nil)
+                    } catch SyncBackendError.writeConflict {
+                        // Another device tombstoned the same journal first -
+                        // the marker being present is all that matters.
+                    }
+                }
+                // Folder delete always runs; a missing folder is success.
+                try await backend.delete(path: JournalSyncLayout.journalRoot(for: marker.journalID))
+                pruneRemoteFiles(under: JournalSyncLayout.journalRoot(for: marker.journalID))
+                state.discoveredJournals.removeValue(forKey: marker.journalID.uuidString.lowercased())
+                stateStore.clear(for: marker.journalID)
+                deviceState.unackedRemoteDeletions.removeAll { $0 == marker.journalID }
+                if !deviceState.processedJournalTombstones.contains(marker.journalID) {
+                    deviceState.processedJournalTombstones.append(marker.journalID)
+                }
+            } catch {
+                // Offline/transient - retry next cycle.
+                failedDeletions.append(marker)
+            }
+        }
+        deviceState.pendingJournalDeletions = failedDeletions
+        saveDeviceStateAndPublish()
+    }
+
+    /// Surfaces peer tombstones this device has not processed yet (published
+    /// via `remoteJournalDeletions` until the app acknowledges), and cleans
+    /// up any journal folder a racing push resurrected after its deletion.
+    /// Runs right after the delta listing so it sees this cycle's fresh view.
+    private func detectPeerJournalTombstones() async {
+        for path in state.remoteFiles.keys {
+            guard let id = JournalSyncLayout.journalTombstoneID(from: path),
+                  !deviceState.isTombstoned(id)
+            else { continue }
+            deviceState.unackedRemoteDeletions.append(id)
+            state.discoveredJournals.removeValue(forKey: id.uuidString.lowercased())
+        }
+
+        // Anti-resurrection: a tombstoned journal's folder must not linger
+        // (a racing push could have recreated files after the delete).
+        for id in deviceState.processedJournalTombstones + deviceState.unackedRemoteDeletions {
+            let root = JournalSyncLayout.journalRoot(for: id)
+            guard state.remoteFiles.keys.contains(where: { $0.hasPrefix(root + "/") }) else { continue }
+            try? await backend.delete(path: root)
+            pruneRemoteFiles(under: root)
+        }
+
+        saveDeviceStateAndPublish()
+    }
+
+    /// True when the journal must not be synced, discovered, or imported on
+    /// this device (its deletion is pending, published, or processed).
+    public func isJournalTombstoned(_ journalID: UUID) -> Bool {
+        deviceState.isTombstoned(journalID)
+    }
+
+    private func pruneRemoteFiles(under root: String) {
+        for path in state.remoteFiles.keys where path.hasPrefix(root + "/") {
+            state.remoteFiles.removeValue(forKey: path)
+        }
+    }
+
+    private func saveDeviceStateAndPublish() {
+        stateStore.saveDeviceState(deviceState)
+        publishFromState()
+    }
+
     // MARK: - Sync cycle
 
     func performSyncCycle() async {
@@ -298,8 +414,16 @@ public final class JournalSyncEngine: ObservableObject {
     }
 
     private func syncCycleBody(journalID: UUID) async throws {
-        // 0. Housekeeping: settled conflicts delete their remote archive.
-        await flushConflictArchiveCleanups()
+        // 0. Journal deletion propagation (own queue) runs BEFORE any
+        // active-journal work, so a deleted journal can never be resurrected
+        // by this cycle's manifest/day syncing.
+        await flushPendingJournalDeletions()
+        if deviceState.isTombstoned(journalID) {
+            // The active journal was deleted somewhere (tombstone seen or
+            // queued): syncing it would recreate its manifest and days. The
+            // app side removes it locally via `remoteJournalDeletions`.
+            return
+        }
 
         // 1. Pull remote deltas into the local remote-view.
         let (metas, newCursor) = try await backend.listChanges(since: state.cursor)
@@ -314,6 +438,15 @@ public final class JournalSyncEngine: ObservableObject {
             }
         }
         state.cursor = newCursor
+
+        // 1b. Peer tombstone detection + anti-resurrection, on the fresh view.
+        await detectPeerJournalTombstones()
+        if deviceState.isTombstoned(journalID) {
+            return
+        }
+
+        // 0b. Housekeeping: settled conflicts delete their remote archive.
+        await flushConflictArchiveCleanups()
 
         // 2. Manifest format gate — refuses to touch newer-format remotes.
         try await ensureManifest(journalID: journalID)
@@ -1032,6 +1165,10 @@ public final class JournalSyncEngine: ObservableObject {
         for path in state.remoteFiles.keys.sorted() {
             guard let manifestJournalID = Self.manifestJournalID(from: path),
                   manifestJournalID != currentJournalID,
+                  // Deleted journals (own queue or peer tombstone) never
+                  // resurface as adoptable - that is the whole point of the
+                  // journal tombstone.
+                  !deviceState.isTombstoned(manifestJournalID),
                   let meta = state.remoteFiles[path]
             else { continue }
 
@@ -1107,6 +1244,20 @@ public final class JournalSyncEngine: ObservableObject {
             try? await backend.delete(path: path)
             state.remoteFiles.removeValue(forKey: path)
         }
+
+        // Journal tombstones age out the same way once every peer has had a
+        // retention window to see them. Devices keep the UUID in their local
+        // ignore lists, so a GC'd marker cannot lead to re-import.
+        for path in state.remoteFiles.keys
+        where JournalSyncLayout.journalTombstoneID(from: path) != nil {
+            guard let (data, _) = try? await backend.download(path: path),
+                  let marker = try? JournalSyncEncoding.decoder.decode(JournalDeletionTombstone.self, from: data),
+                  now.timeIntervalSince(marker.deletedAt) > JournalSyncLayout.tombstoneRetention
+            else { continue }
+            try? await backend.delete(path: path)
+            state.remoteFiles.removeValue(forKey: path)
+            deviceState.processedJournalTombstones.removeAll { $0 == marker.journalID }
+        }
     }
 
     // MARK: - Housekeeping
@@ -1148,6 +1299,7 @@ public final class JournalSyncEngine: ObservableObject {
     private func publishFromState() {
         lastSyncAt = state.lastSyncAt
         pendingConflicts = state.pendingConflicts
+        remoteJournalDeletions = deviceState.unackedRemoteDeletions
         discoveredJournals = state.discoveredJournals.values
             .map(\.manifest)
             .filter { $0.journalID != stateJournalID }

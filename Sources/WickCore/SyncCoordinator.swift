@@ -21,10 +21,17 @@ final class SyncCoordinator: ObservableObject {
     @Published private(set) var lastAuthError: String?
 
     private static let ignoredJournalsKey = "wick.sync.ignoredRemoteJournals"
+    private static let remotelyDeletedJournalsKey = "wick.sync.remotelyDeletedJournals"
 
-    /// Remote journals the user deleted locally — never auto-import these again
+    private let stateStore: JournalSyncStateStore
+
+    /// Remote journals the user deleted locally - never auto-import these again
     /// (the manual import row in settings remains as the escape hatch).
     private var ignoredRemoteJournalIDs: Set<UUID>
+    /// Journals whose remote deletion (peer tombstone) this device has already
+    /// applied - distinguishes "a remote deletion arrived" from "the user
+    /// deleted a journal locally, propagate it to the remote".
+    private var remotelyDeletedJournalIDs: Set<UUID>
     /// Previous local catalog, used to detect deletions.
     private var knownLocalJournalIDs: Set<UUID>
 
@@ -36,15 +43,21 @@ final class SyncCoordinator: ObservableObject {
             try await DropboxAuthSession.open(url: url, callbackScheme: scheme)
         }
         self.backend = backend
+        let stateStore = JournalSyncStateStore(directory: Self.stateDirectory())
+        self.stateStore = stateStore
         engine = JournalSyncEngine(
             backend: backend,
             localSource: JournalStore.shared,
             deviceID: AppSettings.shared.deviceID,
-            stateStore: JournalSyncStateStore(directory: Self.stateDirectory())
+            stateStore: stateStore
         )
 
         ignoredRemoteJournalIDs = Set(
             (UserDefaults.standard.stringArray(forKey: Self.ignoredJournalsKey) ?? [])
+                .compactMap(UUID.init)
+        )
+        remotelyDeletedJournalIDs = Set(
+            (UserDefaults.standard.stringArray(forKey: Self.remotelyDeletedJournalsKey) ?? [])
                 .compactMap(UUID.init)
         )
         knownLocalJournalIDs = Set(JournalStore.shared.journals.map(\.id))
@@ -56,12 +69,19 @@ final class SyncCoordinator: ObservableObject {
 
         // Auto-import journals discovered on the remote (e.g. created on
         // another device): register them locally under the same id without
-        // switching — their content pulls down when the user opens them.
+        // switching - their content pulls down when the user opens them.
         engine.$discoveredJournals
             .sink { [weak self] in self?.autoImportRemoteJournals($0) }
             .store(in: &cancellables)
 
-        // Locally deleting a journal must not bring it back via auto-import.
+        // Journals deleted on another device (tombstone on the remote): drop
+        // the local copy and acknowledge, so the deletion converges here too.
+        engine.$remoteJournalDeletions
+            .sink { [weak self] in self?.applyRemoteJournalDeletions($0) }
+            .store(in: &cancellables)
+
+        // Locally deleting a journal must not bring it back via auto-import;
+        // it must also propagate to the remote (tombstone + folder cleanup).
         JournalStore.shared.$journals
             .sink { [weak self] in self?.trackLocalJournalDeletions($0) }
             .store(in: &cancellables)
@@ -89,6 +109,13 @@ final class SyncCoordinator: ObservableObject {
             Task { @MainActor in self?.engine.requestSync() }
         }
 
+        // Remediation for journals deleted before deletion propagation
+        // existed: their folders still sit on Dropbox and every device keeps
+        // prompting "discovered journal". Queue the ones this device deleted
+        // (they have sync-state remnants); the tombstone then clears the
+        // prompt everywhere. Idempotent - cleared entries never re-queue.
+        queueLegacyLocalDeletions()
+
         if AppSettings.shared.syncEnabled {
             startIfPossible()
         }
@@ -99,6 +126,7 @@ final class SyncCoordinator: ObservableObject {
     func startIfPossible() {
         guard AppSettings.shared.syncEnabled, !isRunning else { return }
         engine.start()
+        queueLegacyLocalDeletions()
         isRunning = true
     }
 
@@ -133,8 +161,10 @@ final class SyncCoordinator: ObservableObject {
     }
 
     /// Adopts a journal discovered on the remote (registering it locally under
-    /// the same id) and immediately pulls its contents.
+    /// the same id) and immediately pulls its contents. Tombstoned journals
+    /// are deleted and must never come back this way.
     func adoptRemoteJournal(_ manifest: JournalSyncManifest) {
+        guard !engine.isJournalTombstoned(manifest.journalID) else { return }
         ignoredRemoteJournalIDs.remove(manifest.journalID)
         persistIgnoredJournals()
         engine.resetSyncState(for: manifest.journalID)
@@ -167,8 +197,55 @@ final class SyncCoordinator: ObservableObject {
         if !removed.isEmpty {
             ignoredRemoteJournalIDs.formUnion(removed)
             persistIgnoredJournals()
+            // The deletion propagates to the remote (tombstone + folder
+            // cleanup) - except journals removed BECAUSE a peer tombstoned
+            // them; those are already gone remotely.
+            if AppSettings.shared.syncEnabled, backend.isAuthorized {
+                for id in removed where !remotelyDeletedJournalIDs.contains(id) {
+                    engine.queueJournalDeletion(id)
+                }
+            }
         }
         knownLocalJournalIDs = current
+    }
+
+    /// Applies journal deletions made on another device: record the UUID,
+    /// drop the local copy (if any), and acknowledge so the engine stops
+    /// re-publishing the tombstone.
+    private func applyRemoteJournalDeletions(_ journalIDs: [UUID]) {
+        var applied = false
+        for id in journalIDs where !remotelyDeletedJournalIDs.contains(id) {
+            remotelyDeletedJournalIDs.insert(id)
+            ignoredRemoteJournalIDs.insert(id)
+            applied = true
+            if JournalStore.shared.journals.contains(where: { $0.id == id }) {
+                JournalStore.shared.deleteJournal(id: id)
+            }
+        }
+        guard applied else {
+            // Still ack unapplied entries (e.g. the journal was never here) -
+            // the tombstone has been noted either way.
+            for id in journalIDs { engine.acknowledgeRemoteJournalDeletion(id) }
+            return
+        }
+        persistIgnoredJournals()
+        UserDefaults.standard.set(
+            remotelyDeletedJournalIDs.map(\.uuidString),
+            forKey: Self.remotelyDeletedJournalsKey
+        )
+        for id in journalIDs { engine.acknowledgeRemoteJournalDeletion(id) }
+    }
+
+    /// Journals deleted locally before deletion propagation existed have no
+    /// tombstone on the remote, so they resurface as "discovered" forever.
+    /// Queue the ones this device has sync-state remnants of; the engine
+    /// ignores journals that never had remote presence.
+    private func queueLegacyLocalDeletions() {
+        guard AppSettings.shared.syncEnabled, backend.isAuthorized else { return }
+        for id in ignoredRemoteJournalIDs
+        where !remotelyDeletedJournalIDs.contains(id) && stateStore.stateExists(for: id) {
+            engine.queueJournalDeletion(id)
+        }
     }
 
     private func persistIgnoredJournals() {
