@@ -13,7 +13,7 @@
 - 内置 **交易日历**：进度面板书签按钮左侧的日历按钮打开「交易日历」窗口——himekuri（https://github.com/pluk-inc/himekuri）「黄历」主题的撕页日历（绿墨×米白纸、双线描边、大号日期、竖排星期填色列、装订/纸堆/撕痕），**无边框透明穿透窗口**（贴桌对象，pad 区外点击穿透），撕下时碎页在单独叠加窗里从 pad 飘落到**屏幕外**并伴**程序合成撕纸音效**；每一页显示该日全球宏观事件，由 akshare `macro_info_ws` 背后的（无密钥）华尔街见闻 REST 接口直连取数（Swift `URLSession`，非 WebSocket、不打包 Python）。
 - **平台**：macOS 13+，Apple Silicon 与 Intel（正式打包产出 Universal 二进制）。
 - **技术栈**：Swift 6.1+（`Package.swift` 声明 `swift-tools-version: 6.1`；主开发环境为 Xcode 26 / Swift 6.3）、SwiftUI + AppKit、Swift Package Manager。**无任何第三方依赖**（无 `Package.resolved`）。
-- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.9.5 (36)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
+- Bundle ID：`com.miaoz.wick`；当前版本默认 `1.9.6 (37)`（见 `scripts/package_app.sh` 中的 `VERSION`/`BUILD` 默认值）。
 
 ## 仓库结构与模块划分
 
