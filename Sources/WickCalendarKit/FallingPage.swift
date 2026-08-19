@@ -6,9 +6,13 @@ public struct FallingPage: Identifiable {
     public let id = UUID()
     public let date: Date
     public let events: [MacroCalendarEvent]
+    /// The earnings tab's entries for the same day.
+    public let earnings: [EarningsReport]
     public let language: AppLanguage
     /// The events page the sheet was flipped to when it came off.
     public let eventsPage: Int
+    /// The pane tab the sheet was showing when it came off.
+    public let tab: MacroCalendarTab
     public let seed: UInt64
     public let start: CGSize
     public let grabX: CGFloat
@@ -22,8 +26,10 @@ public struct FallingPage: Identifiable {
     public init(
         date: Date,
         events: [MacroCalendarEvent],
+        earnings: [EarningsReport] = [],
         language: AppLanguage,
         eventsPage: Int,
+        tab: MacroCalendarTab = .macro,
         seed: UInt64,
         start: CGSize,
         grabX: CGFloat,
@@ -33,8 +39,10 @@ public struct FallingPage: Identifiable {
     ) {
         self.date = date
         self.events = events
+        self.earnings = earnings
         self.language = language
         self.eventsPage = eventsPage
+        self.tab = tab
         self.seed = seed
         self.start = start
         self.grabX = grabX
@@ -90,10 +98,12 @@ public struct FallingPageView: View {
         return MacroDayPageView(
             date: page.date,
             events: page.events,
+            earnings: page.earnings,
             isLoading: false,
             errorText: nil,
             language: page.language,
             eventsPage: page.eventsPage,
+            tab: page.tab,
             layout: page.layout
         )
         .clipShape(TornPieceShape(seed: page.seed, base: page.layout.tearY))

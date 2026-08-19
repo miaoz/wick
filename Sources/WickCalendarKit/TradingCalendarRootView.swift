@@ -45,6 +45,7 @@ public struct TradingCalendarRootView: View {
     @State private var lastTickLevel = 0
     @State private var tornCount = 0
     @State private var eventsPage = 0
+    @State private var activeTab: MacroCalendarTab = .macro
 
     public init(
         language: AppLanguage,
@@ -85,12 +86,24 @@ public struct TradingCalendarRootView: View {
         .onChange(of: currentEvents) { _ in
             refreshPageTexture()
         }
+        .onChange(of: currentEarnings) { _ in
+            refreshPageTexture()
+        }
         .onChange(of: eventsPage) { _ in
             refreshPageTexture()
         }
+        .onChange(of: activeTab) { _ in
+            refreshPageTexture()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .wickCalendarFlipEventsPage)) { note in
-            guard let direction = note.userInfo?["direction"] as? Int else { return }
-            flipEventsPage(by: direction)
+            // `direction` flips a page within the active tab; `tabSwitch`
+            // toggles between the macro and earnings compartments.
+            if let direction = note.userInfo?["direction"] as? Int {
+                flipEventsPage(by: direction)
+            }
+            if note.userInfo?["tabSwitch"] != nil {
+                switchTab()
+            }
         }
         #if os(macOS)
         .onExitCommand {
@@ -101,8 +114,15 @@ public struct TradingCalendarRootView: View {
 
     private var currentEvents: [MacroCalendarEvent] { store.events(for: currentDate) }
 
+    private var currentEarnings: [EarningsReport] { store.earnings(for: currentDate) }
+
+    /// The active tab's row count drives paging and the overflow line.
+    private var activeCount: Int {
+        activeTab == .macro ? currentEvents.count : currentEarnings.count
+    }
+
     private var currentEventPageCount: Int {
-        MacroEventPaging.pageCount(for: currentEvents.count, layout: layout)
+        MacroEventPaging.pageCount(for: activeCount, layout: layout)
     }
 
     /// Advances the events page with wrap-around; a no-op on quiet days.
@@ -112,6 +132,19 @@ public struct TradingCalendarRootView: View {
         guard count > 1 else { return }
         eventsPage = (eventsPage + delta + count) % count
         Haptics.tick()
+    }
+
+    /// Switches the pane between macro events and the earnings calendar;
+    /// paging resets since the lists don't share a page geometry.
+    private func switchTab() {
+        activeTab = activeTab == .macro ? .earnings : .macro
+        eventsPage = 0
+        Haptics.tick()
+    }
+
+    /// The active tab's error text for a day (the two feeds fail independently).
+    private func errorText(for date: Date) -> String? {
+        activeTab == .macro ? store.errorText(for: date) : store.earningsErrorText(for: date)
     }
 
     private var nextDate: Date {
@@ -147,10 +180,12 @@ public struct TradingCalendarRootView: View {
             MacroDayPageView(
                 date: nextDate,
                 events: nextEvents,
+                earnings: store.earnings(for: nextDate),
                 isLoading: store.isLoading(for: nextDate),
-                errorText: store.errorText(for: nextDate),
+                errorText: errorText(for: nextDate),
                 language: language,
                 eventsPage: 0,
+                tab: activeTab,
                 layout: layout
             )
             .overlay(nextPageShading)
@@ -313,13 +348,19 @@ public struct TradingCalendarRootView: View {
                     tornMidDrag = false
                     return
                 }
-                // A tap on the events pane flips through event pages instead of
-                // tearing; it falls through to the settle path (pulled ≈ 0,
-                // so the sheet just springs back) after cycling the page.
-                if abs(value.translation.width) < 8, abs(value.translation.height) < 8,
-                   value.startLocation.y + layout.pageH * (1 - layout.tearZone)
-                       >= layout.eventsPaneTopY {
-                    flipEventsPage(by: 1)
+                // A tap inside the events pane never tears: taps on the tab
+                // strip (the pane's header row) switch tabs, taps on the rows
+                // below flip pages. Either way the gesture falls through to
+                // the settle path (pulled ≈ 0), so the sheet just springs back.
+                if abs(value.translation.width) < 8, abs(value.translation.height) < 8 {
+                    let pageY = value.startLocation.y + layout.pageH * (1 - layout.tearZone)
+                    if pageY >= layout.eventsPaneTopY {
+                        if pageY < layout.eventsPaneTopY + 30 * layout.contentScale {
+                            switchTab()
+                        } else {
+                            flipEventsPage(by: 1)
+                        }
+                    }
                 }
                 // Velocity flicks feel right with a mouse but would let a
                 // careless phone swipe skip a day with no tearing at all -
@@ -373,10 +414,12 @@ public struct TradingCalendarRootView: View {
         let page = MacroDayPageView(
             date: currentDate,
             events: currentEvents,
+            earnings: currentEarnings,
             isLoading: store.isLoading(for: currentDate),
-            errorText: store.errorText(for: currentDate),
+            errorText: errorText(for: currentDate),
             language: language,
             eventsPage: eventsPage,
+            tab: activeTab,
             layout: layout
         )
         if let cg = CalendarSnapshot.cgImage(of: page, scale: 2) {
@@ -390,9 +433,11 @@ public struct TradingCalendarRootView: View {
         let upward = drag.height < 0 || lastVelocity.height < -200
         let piece = FallingPage(
             date: currentDate,
-            events: store.events(for: currentDate),
+            events: currentEvents,
+            earnings: currentEarnings,
             language: language,
             eventsPage: eventsPage,
+            tab: activeTab,
             seed: tearSeed(for: tornCount),
             start: CGSize(
                 width: drag.width * 0.3,

@@ -25,8 +25,10 @@ public final class MacroCalendarStore: ObservableObject {
 
     private struct DayState {
         var events: [MacroCalendarEvent] = []
+        var earnings: [EarningsReport] = []
         var isLoading = false
         var error: String?
+        var earningsError: String?
     }
 
     private var days: [String: DayState] = [:]
@@ -44,6 +46,10 @@ public final class MacroCalendarStore: ObservableObject {
         days[dayKey(for: date)]?.events ?? []
     }
 
+    public func earnings(for date: Date) -> [EarningsReport] {
+        days[dayKey(for: date)]?.earnings ?? []
+    }
+
     public func isLoading(for date: Date) -> Bool {
         days[dayKey(for: date)]?.isLoading ?? false
     }
@@ -52,17 +58,23 @@ public final class MacroCalendarStore: ObservableObject {
         days[dayKey(for: date)]?.error
     }
 
-    /// Loads a day's events if they are not already cached in memory. Cached disk
-    /// data is shown immediately and a background network refresh tops it up.
+    public func earningsErrorText(for date: Date) -> String? {
+        days[dayKey(for: date)]?.earningsError
+    }
+
+    /// Loads a day's events and earnings if they are not already cached in
+    /// memory. Cached disk data is shown immediately and a background network
+    /// refresh tops it up.
     public func loadIfNeeded(for date: Date) {
         let key = dayKey(for: date)
         guard days[key] == nil else { return }
 
-        var state: DayState
+        var state = DayState(isLoading: true)
         if let cached = readCache(key: key), !cached.isEmpty {
-            state = DayState(events: cached, isLoading: true)
-        } else {
-            state = DayState(isLoading: true)
+            state.events = cached
+        }
+        if let cachedEarnings = readEarningsCache(key: key), !cachedEarnings.isEmpty {
+            state.earnings = cachedEarnings
         }
         days[key] = state
 
@@ -72,12 +84,16 @@ public final class MacroCalendarStore: ObservableObject {
         objectWillChange.send()
     }
 
+    /// The two feeds are independent: one may fail (or be empty) without
+    /// affecting the other, and `isLoading` clears only when both settle.
     private func fetch(key: String, for date: Date) async {
+        async let macroFetch = MacroCalendarClient.events(for: date, calendar: .current)
+        async let earningsFetch = EarningsCalendarClient.reports(for: date, calendar: .current)
+
         do {
-            let result = try await MacroCalendarClient.events(for: date, calendar: .current)
+            let result = try await macroFetch
             if var state = days[key] {
                 state.events = result
-                state.isLoading = false
                 state.error = nil
                 days[key] = state
                 writeCache(result, key: key)
@@ -85,11 +101,29 @@ public final class MacroCalendarStore: ObservableObject {
         } catch {
             if var state = days[key] {
                 // Keep already-cached data; only surface the error when there's nothing to show.
-                let hadData = !state.events.isEmpty
-                state.isLoading = false
-                state.error = hadData ? nil : error.localizedDescription
+                state.error = state.events.isEmpty ? error.localizedDescription : nil
                 days[key] = state
             }
+        }
+
+        do {
+            let result = try await earningsFetch
+            if var state = days[key] {
+                state.earnings = result
+                state.earningsError = nil
+                days[key] = state
+                writeEarningsCache(result, key: key)
+            }
+        } catch {
+            if var state = days[key] {
+                state.earningsError = state.earnings.isEmpty ? error.localizedDescription : nil
+                days[key] = state
+            }
+        }
+
+        if var state = days[key] {
+            state.isLoading = false
+            days[key] = state
         }
         objectWillChange.send()
     }
@@ -100,6 +134,10 @@ public final class MacroCalendarStore: ObservableObject {
 
     private func cacheURL(for key: String) -> URL {
         cacheDirectory.appendingPathComponent("\(key).json", isDirectory: false)
+    }
+
+    private func earningsCacheURL(for key: String) -> URL {
+        cacheDirectory.appendingPathComponent("\(key).earnings.json", isDirectory: false)
     }
 
     private func readCache(key: String) -> [MacroCalendarEvent]? {
@@ -128,5 +166,16 @@ public final class MacroCalendarStore: ObservableObject {
     private func writeCache(_ events: [MacroCalendarEvent], key: String) {
         guard let data = try? JSONEncoder().encode(events) else { return }
         try? data.write(to: cacheURL(for: key), options: .atomic)
+    }
+
+    private func readEarningsCache(key: String) -> [EarningsReport]? {
+        let url = earningsCacheURL(for: key)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode([EarningsReport].self, from: data)
+    }
+
+    private func writeEarningsCache(_ reports: [EarningsReport], key: String) {
+        guard let data = try? JSONEncoder().encode(reports) else { return }
+        try? data.write(to: earningsCacheURL(for: key), options: .atomic)
     }
 }

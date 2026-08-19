@@ -133,3 +133,102 @@ enum MacroCalendarPayloadDecoder {
         return Double(cleaned)
     }
 }
+
+// MARK: - Earnings calendar (DDC service)
+
+/// When in the (local) trading day the report drops.
+public enum EarningsCallTime: String, Codable {
+    case beforeOpen = "BMO"   // 盘前
+    case afterClose = "AMC"   // 盘后
+    /// TNS / TAS / unknown — the feed has more codes than it documents.
+    case unspecified
+}
+
+/// A single earnings-calendar entry from the WallStreetCN DDC service.
+public struct EarningsReport: Identifiable, Codable, Equatable {
+    public let id: String
+    /// Day-granularity: the feed stamps every report at 00:00.
+    public let date: Date
+    /// Ticker with market suffix, e.g. `603259.SH` / `PLTR.US`.
+    public let code: String
+    public let companyName: String
+    public let country: String
+    /// The feed encodes "no estimate" as 0 — normalized to nil at decode.
+    public let epsEstimate: Double?
+    /// 0 until the actual is out — normalized to nil at decode.
+    public let reportedEps: Double?
+    public let callTime: EarningsCallTime
+
+    public init(
+        id: String,
+        date: Date,
+        code: String,
+        companyName: String,
+        country: String,
+        epsEstimate: Double?,
+        reportedEps: Double?,
+        callTime: EarningsCallTime
+    ) {
+        self.id = id
+        self.date = date
+        self.code = code
+        self.companyName = companyName
+        self.country = country
+        self.epsEstimate = epsEstimate
+        self.reportedEps = reportedEps
+        self.callTime = callTime
+    }
+}
+
+/// Decodes the DDC earnings payload, which is *columnar*: `data.fields` holds
+/// the column names and every entry in `data.items` is a positional row array.
+enum EarningsPayloadDecoder {
+    static func decode(_ data: Data) throws -> [EarningsReport] {
+        let object: Any
+        do {
+            object = try JSONSerialization.jsonObject(with: data)
+        } catch {
+            throw MacroCalendarError.badPayload("malformed_json")
+        }
+        guard let root = object as? [String: Any],
+              let payload = root["data"] as? [String: Any],
+              let fields = payload["fields"] as? [String],
+              let items = payload["items"] as? [[Any]]
+        else {
+            throw MacroCalendarError.badPayload("missing_fields")
+        }
+
+        return items.compactMap { row in
+            guard row.count == fields.count else { return nil }
+            var column: [String: Any] = [:]
+            column.reserveCapacity(fields.count)
+            for (index, field) in fields.enumerated() {
+                column[field] = row[index]
+            }
+            guard let timestamp = (column["public_date"] as? NSNumber)?.doubleValue,
+                  let code = column["code"] as? String, !code.isEmpty,
+                  let name = column["company_name"] as? String, !name.isEmpty
+            else { return nil }
+
+            return EarningsReport(
+                id: (column["id"] as? NSNumber)?.stringValue
+                    ?? "\(Int(timestamp))-\(code)",
+                date: Date(timeIntervalSince1970: timestamp),
+                code: code,
+                companyName: name,
+                country: (column["country"] as? String) ?? "",
+                epsEstimate: Self.nonzero(column["eps_estimate"]),
+                reportedEps: Self.nonzero(column["reported_eps"]),
+                callTime: EarningsCallTime(
+                    rawValue: (column["earnings_call_time"] as? String) ?? ""
+                ) ?? .unspecified
+            )
+        }
+    }
+
+    /// The feed writes 0 for "no data"; a real EPS of exactly 0 is a fair loss.
+    private static func nonzero(_ value: Any?) -> Double? {
+        guard let number = (value as? NSNumber)?.doubleValue, number != 0 else { return nil }
+        return number
+    }
+}

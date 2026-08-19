@@ -173,19 +173,21 @@ final class TradingCalendarWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - Event-page input
 
-    /// Arrow keys (→ ↓ next / ← ↑ previous) and the scroll wheel flip the events
-    /// page. `event.window` does all the scoping: keys only reach us while the
-    /// calendar is key, scrolls only while the pointer is over the pad
-    /// (everything outside it is click-through). The handlers stay non-isolated
-    /// (NotificationCenter is thread-safe) because `NSEvent` is non-Sendable.
+    /// Arrow keys (↑ ↓ flip a page; ← → switch the macro/earnings tab) and the
+    /// scroll wheel drive the events pane. `event.window` does all the scoping:
+    /// keys only reach us while the calendar is key, scrolls only while the
+    /// pointer is over the pad (everything outside it is click-through). The
+    /// handlers stay non-isolated (NotificationCenter is thread-safe) because
+    /// `NSEvent` is non-Sendable.
     private func installInputMonitors() {
         guard let window else { return }
         if keyMonitor == nil {
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak window] event in
                 guard event.window === window else { return event }
                 switch event.keyCode {
-                case 124, 125: Self.postEventsPageFlip(1, object: event.window)   // → ↓
-                case 123, 126: Self.postEventsPageFlip(-1, object: event.window)  // ← ↑
+                case 125: Self.postEventsPageCommand(userInfo: ["direction": 1], object: event.window)   // ↓
+                case 126: Self.postEventsPageCommand(userInfo: ["direction": -1], object: event.window)  // ↑
+                case 123, 124: Self.postEventsPageCommand(userInfo: ["tabSwitch": true], object: event.window) // ← →
                 default: return event
                 }
                 return nil
@@ -215,10 +217,14 @@ final class TradingCalendarWindowController: NSObject, NSWindowDelegate {
     }
 
     private nonisolated static func postEventsPageFlip(_ direction: Int, object: Any?) {
+        postEventsPageCommand(userInfo: ["direction": direction], object: object)
+    }
+
+    private nonisolated static func postEventsPageCommand(userInfo: [AnyHashable: Any], object: Any?) {
         NotificationCenter.default.post(
             name: .wickCalendarFlipEventsPage,
             object: object,
-            userInfo: ["direction": direction]
+            userInfo: userInfo
         )
     }
 }

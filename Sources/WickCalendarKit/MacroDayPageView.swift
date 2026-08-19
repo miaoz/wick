@@ -17,6 +17,14 @@ enum MacroEventPaging {
     }
 }
 
+/// The events pane's two compartments: macro data releases and the earnings
+/// calendar. Tabs are printed into the page texture, so switching them is a
+/// pad-level input (tap on the strip / arrow keys), never a direct hit.
+public enum MacroCalendarTab {
+    case macro
+    case earnings
+}
+
 /// The "printed page" for a single trading-calendar day, drawn in himekuri's「黄历」
 /// style (green ink on cream paper, double rule, big day numeral, filled weekday column).
 /// This view is snapshotted to a texture and warped by the paper physics in `PaperScene`.
@@ -28,11 +36,16 @@ enum MacroEventPaging {
 struct MacroDayPageView: View {
     let date: Date
     let events: [MacroCalendarEvent]
+    /// The earnings tab's entries for the same day.
+    let earnings: [EarningsReport]
     let isLoading: Bool
+    /// The active tab's error text (the root view picks per tab).
     let errorText: String?
     let language: AppLanguage
     /// Which events page a busy day is flipped to (0-based; taps cycle pages).
     let eventsPage: Int
+    /// Which compartment the pane shows.
+    let tab: MacroCalendarTab
     let layout: PaperLayout
 
     private let calendar = Calendar.current
@@ -245,46 +258,65 @@ struct MacroDayPageView: View {
             eventsHeader
                 .padding(.top, 5 * s)
 
-            if isLoading, events.isEmpty {
+            if isLoading, activeCount == 0 {
                 panePlaceholder { loadingMark }
-            } else if let errorText, events.isEmpty {
+            } else if let errorText, activeCount == 0 {
                 panePlaceholder {
                     Text(errorText)
                         .font(TradingCalendarTheme.mincho(8.5 * s))
                         .foregroundStyle(TradingCalendarTheme.red)
                 }
-            } else if events.isEmpty {
+            } else if activeCount == 0 {
                 panePlaceholder { quietSeal }
-            } else {
+            } else if tab == .macro {
                 eventList
+            } else {
+                earningsList
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .clipped()
     }
 
+    private var activeCount: Int {
+        tab == .macro ? events.count : earnings.count
+    }
+
     private var eventsHeader: some View {
         HStack(spacing: 6 * s) {
-            Text(L10n.string(.macroEventsSection, language: language))
-                .font(TradingCalendarTheme.kanji(9 * s))
-                .foregroundStyle(TradingCalendarTheme.paper)
-                .padding(.horizontal, 5 * s)
-                .padding(.vertical, 2 * s)
-                .background(Rectangle().fill(TradingCalendarTheme.ink))
-            if !events.isEmpty {
+            tabChip(.macro, title: L10n.string(.macroEventsSection, language: language))
+            tabChip(.earnings, title: L10n.string(.earningsSection, language: language))
+            if activeCount > 0 {
                 // Kept as a separate mincho text: HiraginoSans-W7 mis-renders
                 // a middle dot inside the chip's CJK run.
-                Text("· \(events.count)")
+                Text("· \(activeCount)")
                     .font(TradingCalendarTheme.mincho(8.5 * s))
                     .foregroundStyle(TradingCalendarTheme.dimInk)
             }
             Spacer()
-            if isLoading, !events.isEmpty {
+            if isLoading, activeCount > 0 {
                 Text(L10n.string(.macroLoading, language: language))
                     .font(TradingCalendarTheme.mincho(7 * s))
                     .foregroundStyle(TradingCalendarTheme.dimInk)
             }
         }
+    }
+
+    /// A pane tab chip: solid ink when active, an outlined ghost when not.
+    private func tabChip(_ chip: MacroCalendarTab, title: String) -> some View {
+        let active = tab == chip
+        return Text(title)
+            .font(TradingCalendarTheme.kanji(9 * s))
+            .foregroundStyle(active ? TradingCalendarTheme.paper : TradingCalendarTheme.dimInk)
+            .padding(.horizontal, 5 * s)
+            .padding(.vertical, 2 * s)
+            .background(Rectangle().fill(active ? TradingCalendarTheme.ink : .clear))
+            .overlay {
+                if !active {
+                    Rectangle()
+                        .strokeBorder(TradingCalendarTheme.ink.opacity(0.45), lineWidth: 0.7 * s)
+                }
+            }
     }
 
     /// Centers an empty/loading/error state within the pane's remaining space.
@@ -304,88 +336,111 @@ struct MacroDayPageView: View {
         }
     }
 
-    /// A printed page has no scrolling - busy days are split into uniform
-    /// pages (taps on the pane flip them) instead of clipping mid-row.
-    ///
-    /// Full-bleed pages set the type from the band height: print that fills
-    /// its row like real printed matter (meta / title / values, values always
-    /// shown) with normal leading, the block centered in the pane - a busy day
-    /// reads as a ruled table, a quiet one as a few large centered lines.
-    private var eventList: some View {
-        let ranked = rankedEvents
-        let pageCount = MacroEventPaging.pageCount(for: ranked.count, layout: layout)
+    /// Slice one page out of a pane list, keeping every page's geometry
+    /// identical (one row is always reserved for the overflow / return line).
+    private func pageSlice<Item>(
+        _ items: [Item]
+    ) -> (rows: ArraySlice<Item>, remaining: Int, page: Int, pageCount: Int) {
+        let pageCount = MacroEventPaging.pageCount(for: items.count, layout: layout)
         let page = min(max(eventsPage, 0), pageCount - 1)
-        let rows: [MacroCalendarEvent]
-        if pageCount > 1 {
-            let start = page * layout.rowsPerPage
-            rows = Array(ranked[start..<min(start + layout.rowsPerPage, ranked.count)])
-        } else {
-            rows = ranked
-        }
-        let remaining = ranked.count - page * layout.rowsPerPage - rows.count
-        let density: EventDensity
-        let leadingGap: CGFloat?
-        var listTopPadding: CGFloat = 4 * s
+        guard pageCount > 1 else { return (items[...], 0, page, pageCount) }
+        let start = page * layout.rowsPerPage
+        let rows = items[start..<min(start + layout.rowsPerPage, items.count)]
+        return (rows, items.count - start - rows.count, page, pageCount)
+    }
+
+    /// Print metrics for the pane's rows. Full-bleed pages set the type from
+    /// the nominal band (the pane split into its rows-per-page, capped so quiet
+    /// days don't blow up to poster type) with a uniform leading - the pane
+    /// reads as one ruled table; the desktop page adapts the type to the day's
+    /// item count (few items get large print, many get dense print).
+    private func paneMetrics(
+        totalCount: Int
+    ) -> (density: EventDensity, leadingGap: CGFloat?, topPadding: CGFloat) {
         if layout.isFullBleed {
-            // Print sizes from the nominal band (the pane split into its
-            // rows-per-page, capped so quiet days don't blow up to poster
-            // type); rows are then set at their natural height with a uniform
-            // leading - the way a real table prints, ragged rows and all.
             let band = min(
                 layout.eventPaneHeight / CGFloat(max(layout.rowsPerPage, 1)),
                 50 * layout.contentScale
             )
-            leadingGap = 0.33 * band
-            listTopPadding = 0.25 * band
-            density = EventDensity(
-                metaFont: 0.175 * band,
-                titleFont: 0.215 * band,
-                titleLines: 1,
-                valueFont: 0.155 * band,
-                rowGap: 0
+            return (
+                EventDensity(
+                    metaFont: 0.175 * band,
+                    titleFont: 0.215 * band,
+                    titleLines: 1,
+                    valueFont: 0.155 * band,
+                    rowGap: 0
+                ),
+                0.33 * band,
+                0.25 * band
             )
-        } else {
-            leadingGap = nil
-            density = EventDensity.forCount(ranked.count, scale: s)
         }
+        return (EventDensity.forCount(totalCount, scale: s), nil, 4 * s)
+    }
+
+    /// A printed page has no scrolling - busy days are split into uniform
+    /// pages (taps on the pane flip them) instead of clipping mid-row.
+    private var eventList: some View {
+        let ranked = rankedEvents
+        let slice = pageSlice(ranked)
+        let metrics = paneMetrics(totalCount: ranked.count)
         return VStack(alignment: .leading, spacing: 0) {
-            ForEach(rows) { event in
-                eventRow(event, density: density, leadingGap: leadingGap)
+            ForEach(slice.rows) { event in
+                eventRow(event, density: metrics.density, leadingGap: metrics.leadingGap)
             }
-            if pageCount > 1 {
-                VStack(spacing: 3 * s) {
-                    HStack(spacing: 6 * s) {
-                        hairline
-                        Text(overflowText(remaining: remaining))
-                            .font(TradingCalendarTheme.mincho(7.5 * s))
-                            .foregroundStyle(TradingCalendarTheme.faintInk)
-                            .fixedSize()
-                        hairline
-                    }
-                    // The flip affordance is invisible otherwise - annotate it
-                    // on the first page (where the overflow first appears).
-                    // The full-bleed pad is touch-driven: no wheel or arrows.
-                    if page == 0 {
-                        Text(L10n.string(
-                            layout.isFullBleed ? .macroEventsFlipHintTouch : .macroEventsFlipHint,
-                            language: language
-                        ))
-                            .font(TradingCalendarTheme.mincho(6.5 * s))
-                            .tracking(0.5 * s)
-                            .foregroundStyle(TradingCalendarTheme.faintInk.opacity(0.75))
-                    }
-                }
-                .padding(.top, layout.isFullBleed ? 10 * s : 5 * s)
+            if slice.pageCount > 1 {
+                overflowFooter(remaining: slice.remaining, page: slice.page)
             }
         }
-        .padding(.top, listTopPadding)
+        .padding(.top, metrics.topPadding)
         // Top-aligned under the section header - leftover space stays at the
         // pane's bottom (like the desktop page), never between the header and
         // the first row.
         .frame(maxHeight: layout.isFullBleed ? .infinity : nil, alignment: .top)
     }
 
+    /// The earnings tab's list - same paging and print rhythm as macro events.
+    private var earningsList: some View {
+        let slice = pageSlice(earnings)
+        let metrics = paneMetrics(totalCount: earnings.count)
+        return VStack(alignment: .leading, spacing: 0) {
+            ForEach(slice.rows) { report in
+                earningsRow(report, density: metrics.density, leadingGap: metrics.leadingGap)
+            }
+            if slice.pageCount > 1 {
+                overflowFooter(remaining: slice.remaining, page: slice.page)
+            }
+        }
+        .padding(.top, metrics.topPadding)
+        .frame(maxHeight: layout.isFullBleed ? .infinity : nil, alignment: .top)
+    }
+
     /// The pane's footer line: overflow count with a "next page" chevron, or
+    /// the return affordance once the last page is reached. The flip hint
+    /// prints on the first page only (the full-bleed pad is touch-driven).
+    private func overflowFooter(remaining: Int, page: Int) -> some View {
+        VStack(spacing: 3 * s) {
+            HStack(spacing: 6 * s) {
+                hairline
+                Text(overflowText(remaining: remaining))
+                    .font(TradingCalendarTheme.mincho(7.5 * s))
+                    .foregroundStyle(TradingCalendarTheme.faintInk)
+                    .fixedSize()
+                hairline
+            }
+            if page == 0 {
+                Text(L10n.string(
+                    layout.isFullBleed ? .macroEventsFlipHintTouch : .macroEventsFlipHint,
+                    language: language
+                ))
+                    .font(TradingCalendarTheme.mincho(6.5 * s))
+                    .tracking(0.5 * s)
+                    .foregroundStyle(TradingCalendarTheme.faintInk.opacity(0.75))
+            }
+        }
+        .padding(.top, layout.isFullBleed ? 10 * s : 5 * s)
+    }
+
+    /// The pane's footer text: overflow count with a "next page" chevron, or
     /// the return affordance once the last page is reached.
     private func overflowText(remaining: Int) -> String {
         if remaining > 0 {
@@ -398,34 +453,89 @@ struct MacroDayPageView: View {
         Rectangle().fill(TradingCalendarTheme.ink.opacity(0.18)).frame(height: 0.5 * s)
     }
 
-    @ViewBuilder
     private func eventRow(
         _ event: MacroCalendarEvent,
         density: EventDensity,
         leadingGap: CGFloat?
     ) -> some View {
-        let content = VStack(alignment: .leading, spacing: 1.5 * s) {
-            HStack(spacing: 5 * s) {
-                Text(MacroCalendarFormat.eventTime(event.time))
-                    .font(TradingCalendarTheme.mincho(density.metaFont))
-                    .foregroundStyle(TradingCalendarTheme.red)
-                    .monospacedDigit()
-                Text(event.country)
-                    .font(TradingCalendarTheme.kanji(density.metaFont))
-                    .foregroundStyle(TradingCalendarTheme.dimInk)
-                    .lineLimit(1)
-                Spacer(minLength: 4 * s)
-                importanceStars(event.importance, size: density.metaFont - 0.5)
-            }
-            Text(event.title)
-                .font(TradingCalendarTheme.mincho(density.titleFont))
-                .foregroundStyle(TradingCalendarTheme.ink)
-                .lineLimit(density.titleLines)
-                .lineSpacing(0.5 * s)
-            if let valueFont = density.valueFont {
-                valuesRow(event, fontSize: valueFont)
-            }
-        }
+        rowChrome(
+            VStack(alignment: .leading, spacing: 1.5 * s) {
+                HStack(spacing: 5 * s) {
+                    Text(MacroCalendarFormat.eventTime(event.time))
+                        .font(TradingCalendarTheme.mincho(density.metaFont))
+                        .foregroundStyle(TradingCalendarTheme.red)
+                        .monospacedDigit()
+                    Text(event.country)
+                        .font(TradingCalendarTheme.kanji(density.metaFont))
+                        .foregroundStyle(TradingCalendarTheme.dimInk)
+                        .lineLimit(1)
+                    Spacer(minLength: 4 * s)
+                    importanceStars(event.importance, size: density.metaFont - 0.5)
+                }
+                Text(event.title)
+                    .font(TradingCalendarTheme.mincho(density.titleFont))
+                    .foregroundStyle(TradingCalendarTheme.ink)
+                    .lineLimit(density.titleLines)
+                    .lineSpacing(0.5 * s)
+                if let valueFont = density.valueFont {
+                    valuesRow(event, fontSize: valueFont)
+                }
+            },
+            density: density,
+            leadingGap: leadingGap
+        )
+    }
+
+    /// An earnings row mirrors an event row: the call-time label sits where the
+    /// clock would (red when known, dim when not), the company name is the
+    /// title, EPS estimate/actual are the values line. No importance stars.
+    private func earningsRow(
+        _ report: EarningsReport,
+        density: EventDensity,
+        leadingGap: CGFloat?
+    ) -> some View {
+        rowChrome(
+            VStack(alignment: .leading, spacing: 1.5 * s) {
+                HStack(spacing: 5 * s) {
+                    Text(callTimeText(report.callTime))
+                        .font(TradingCalendarTheme.mincho(density.metaFont))
+                        .foregroundStyle(
+                            report.callTime == .unspecified
+                                ? TradingCalendarTheme.dimInk
+                                : TradingCalendarTheme.red
+                        )
+                    Text(report.country)
+                        .font(TradingCalendarTheme.kanji(density.metaFont))
+                        .foregroundStyle(TradingCalendarTheme.dimInk)
+                        .lineLimit(1)
+                    Text(report.code)
+                        .font(TradingCalendarTheme.mincho(density.metaFont - 0.5))
+                        .foregroundStyle(TradingCalendarTheme.faintInk)
+                        .lineLimit(1)
+                    Spacer(minLength: 4 * s)
+                }
+                Text(report.companyName)
+                    .font(TradingCalendarTheme.mincho(density.titleFont))
+                    .foregroundStyle(TradingCalendarTheme.ink)
+                    .lineLimit(density.titleLines)
+                    .lineSpacing(0.5 * s)
+                if let valueFont = density.valueFont {
+                    earningsValuesRow(report, fontSize: valueFont)
+                }
+            },
+            density: density,
+            leadingGap: leadingGap
+        )
+    }
+
+    /// Row chrome shared by event and earnings rows: the hairline under each
+    /// row, plus the uniform leading that rules a full-bleed pane like a table.
+    @ViewBuilder
+    private func rowChrome<Content: View>(
+        _ content: Content,
+        density: EventDensity,
+        leadingGap: CGFloat?
+    ) -> some View {
         if let leadingGap {
             // A full-bleed row is set at its natural height; the uniform
             // leading and the hairline under the text make the pane read as
@@ -460,6 +570,26 @@ struct MacroDayPageView: View {
             }
             .font(TradingCalendarTheme.mincho(fontSize))
             .foregroundStyle(TradingCalendarTheme.dimInk)
+        }
+    }
+
+    @ViewBuilder
+    private func earningsValuesRow(_ report: EarningsReport, fontSize: CGFloat) -> some View {
+        if report.epsEstimate != nil || report.reportedEps != nil {
+            HStack(spacing: 8 * s) {
+                valueChip(L10n.string(.macroForecast, language: language), report.epsEstimate)
+                valueChip(L10n.string(.macroActual, language: language), report.reportedEps)
+            }
+            .font(TradingCalendarTheme.mincho(fontSize))
+            .foregroundStyle(TradingCalendarTheme.dimInk)
+        }
+    }
+
+    private func callTimeText(_ callTime: EarningsCallTime) -> String {
+        switch callTime {
+        case .beforeOpen: return L10n.string(.earningsBeforeOpen, language: language)
+        case .afterClose: return L10n.string(.earningsAfterClose, language: language)
+        case .unspecified: return L10n.string(.earningsTimeTbd, language: language)
         }
     }
 

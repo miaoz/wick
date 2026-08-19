@@ -45,3 +45,36 @@ enum MacroCalendarClient {
         }
     }
 }
+
+/// The earnings calendar, from WallStreetCN's *other* host: the DDC data
+/// service (`api-ddc-wscn.awtmt.com`, note the missing `/apiv1` prefix).
+/// Replies are columnar (`fields` + positional `items`) and capped at 20 rows
+/// per day — plenty for a printed page, but a hard ceiling to know about.
+enum EarningsCalendarClient {
+    static let endpoint = URL(string: "https://api-ddc-wscn.awtmt.com/finance/report/list")!
+
+    static func reports(for date: Date, calendar: Calendar = .current) async throws -> [EarningsReport] {
+        let range = MacroCalendarClient.dayUnixRange(for: date, calendar: calendar)
+
+        var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "start", value: String(range.start)),
+            URLQueryItem(name: "end", value: String(range.end)),
+            // Same market set the site passes for its earnings tab.
+            URLQueryItem(name: "country", value: "US,HK,CN")
+        ]
+
+        var request = URLRequest(url: components.url!)
+        request.setValue("Wick/MacroCalendar (macOS)", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 15
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw MacroCalendarError.http(http.statusCode)
+        }
+        return try EarningsPayloadDecoder.decode(data).filter { report in
+            let t = Int(report.date.timeIntervalSince1970)
+            return t >= range.start && t < range.end
+        }
+    }
+}
