@@ -390,9 +390,7 @@ struct ExchangeSettingsContent: View {
                 .font(.caption)
                 .foregroundStyle(theme.secondaryText)
         } else if let error = coordinator.lastError {
-            Text(error.text(language: language))
-                .font(.caption)
-                .foregroundStyle(theme.secondaryText)
+            CopyableErrorNotice(message: error.text(language: language), language: language)
         } else if let id = targetJournal?.id,
                   let fetchedAt = coordinator.lastFetchedAt(for: id) {
             HStack {

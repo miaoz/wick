@@ -225,3 +225,79 @@ struct InkIconButton: View {
         .animation(.easeOut(duration: 0.12), value: isOn)
     }
 }
+
+/// 点击可复制的错误/告警条目：融入纸面的朱砂/暖渍容器，常态截断，点击一键写入剪贴板并反馈「已复制」。
+struct CopyableErrorNotice: View {
+    @Environment(\.wickPalette) private var palette
+    let message: String
+    let language: AppLanguage
+    var rawMessage: String? = nil
+
+    @State private var isCopied = false
+    @State private var isHovered = false
+
+    var body: some View {
+        Button {
+            let textToCopy = rawMessage ?? message
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(textToCopy, forType: .string)
+
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isCopied = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isCopied = false
+                }
+            }
+        } label: {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: isCopied ? "checkmark.circle.fill" : "exclamationmark.circle")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(isCopied ? palette.accent.color : palette.pnlUp.color)
+                    .padding(.top, 1)
+
+                Text(message)
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundStyle(palette.textPrimary.color)
+                    .lineLimit(isHovered ? nil : 3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+
+                Spacer(minLength: 4)
+
+                if isCopied {
+                    Text(L10n.string(.copied, language: language))
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(palette.accent.color)
+                        .padding(.top, 1)
+                } else {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(palette.textTertiary.color.opacity(isHovered ? 0.9 : 0.45))
+                        .padding(.top, 2)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(palette.controlBackground.color.opacity(0.4))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(
+                        isCopied ? palette.accent.color.opacity(0.6)
+                            : (isHovered ? palette.pnlUp.color.opacity(0.4) : palette.divider.color.opacity(0.7)),
+                        lineWidth: 0.8
+                    )
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help(L10n.string(.copyErrorHint, language: language))
+    }
+}

@@ -232,6 +232,8 @@ public enum L10n {
         case exchangePositionShort
         case exchangePositionOpen
         case exchangePositionClosed
+        case copyErrorHint
+        case copied
 
         // Trading calendar
         case tradingCalendar
@@ -474,6 +476,8 @@ public enum L10n {
             case .exchangePositionShort: return "空"
             case .exchangePositionOpen: return "持仓中"
             case .exchangePositionClosed: return "已平仓"
+            case .copyErrorHint: return "点击复制错误信息"
+            case .copied: return "已复制"
 
             case .tradingCalendar: return "交易日历"
             case .macroEventsSection: return "宏观事件"
@@ -716,6 +720,8 @@ public enum L10n {
             case .exchangePositionShort: return "Short"
             case .exchangePositionOpen: return "Open"
             case .exchangePositionClosed: return "Closed"
+            case .copyErrorHint: return "Click to copy error"
+            case .copied: return "Copied"
 
             case .tradingCalendar: return "Trading Calendar"
             case .macroEventsSection: return "Macro Events"

@@ -542,9 +542,7 @@ struct SettingsContentView: View {
                                 .foregroundStyle(theme.secondaryText)
                         }
                         if let authError = syncCoordinator.lastAuthError {
-                            Text(authError)
-                                .font(.caption2)
-                                .foregroundStyle(theme.tertiaryText)
+                            CopyableErrorNotice(message: authError, language: language)
                         }
                     }
 
@@ -804,13 +802,10 @@ struct SettingsContentView: View {
                 .font(.caption)
                 .foregroundStyle(theme.secondaryText)
         case .error(let message):
-            Text(
-                message.contains("remote format")
-                    ? L10n.string(.syncRemoteTooNew, language: language)
-                    : message
-            )
-            .font(.caption)
-            .foregroundStyle(theme.secondaryText)
+            let display = message.contains("remote format")
+                ? L10n.string(.syncRemoteTooNew, language: language)
+                : message
+            CopyableErrorNotice(message: display, language: language, rawMessage: message)
         case .idle:
             HStack {
                 Text(L10n.string(.syncLastSync, language: language))
