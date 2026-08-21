@@ -259,8 +259,7 @@ struct JournalDayListColumn: View {
                                         showsPositionStats: positionCoordinator.snapshot != nil
                                     )
                                 }
-                                .buttonStyle(.plain)
-                                .contentShape(Rectangle())
+                                .buttonStyle(JournalListRowButtonStyle())
                                 .tag(entry.id)
                                 .listRowBackground(selectionRowBackground(isSelected: isDaySelected(entry.id)))
                                 .contextMenu {
@@ -299,8 +298,7 @@ struct JournalDayListColumn: View {
                                 } label: {
                                     JournalItemTimelineRow(row: row)
                                 }
-                                .buttonStyle(.plain)
-                                .contentShape(Rectangle())
+                                .buttonStyle(JournalListRowButtonStyle())
                                 .tag(row.id)
                                 .listRowBackground(selectionRowBackground(isSelected: isItemSelected(row.id)))
                                 .contextMenu {
@@ -486,6 +484,17 @@ struct JournalDayListColumn: View {
     }
 }
 
+/// Expands a list-row `Button` to the full cell so blank padding is tappable,
+/// not just the glyphs. `.plain` alone hit-tests only the text.
+private struct JournalListRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+            .contentShape(Rectangle())
+            .opacity(configuration.isPressed ? 0.72 : 1)
+    }
+}
+
 // MARK: - 列表行
 
 /// 日期行(秉烛 v4 day-row):「8月20日 周四 / 4 条 · 2 笔已平仓」,
@@ -535,6 +544,8 @@ struct JournalDayTimelineRow: View {
             }
         }
         .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .overlay(alignment: .bottom) {
             // 行下发丝分隔线(印刷栏线)。
             Rectangle()
@@ -621,6 +632,8 @@ struct JournalItemTimelineRow: View {
             }
         }
         .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private var tagTitle: String {
