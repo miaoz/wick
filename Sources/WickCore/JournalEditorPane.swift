@@ -191,9 +191,15 @@ struct JournalEditorPane: View {
         return calendar.startOfDay(for: date) < calendar.startOfDay(for: Date()) ? 1 : 0
     }
 
+    static let timelineTopScrollID = "timeline-top"
+
     private var timelineChrome: some View {
         ScrollViewReader { proxy in
             ScrollView {
+                Color.clear
+                    .frame(height: 0)
+                    .id(Self.timelineTopScrollID)
+
                 LazyVStack(alignment: .leading, spacing: 30) {
                     if isItemScoped {
                         itemScopedSections
@@ -641,8 +647,21 @@ struct JournalEditorPane: View {
     private func scrollID(for selection: JournalSelection?) -> String? {
         switch selection {
         case .day(let id):
+            if id == store.filteredEntries.first?.id {
+                return Self.timelineTopScrollID
+            }
             return Self.dayScrollID(id)
         case .item(let ref):
+            if isItemScoped {
+                if let firstGroup = itemDayGroups.first,
+                   let firstItem = firstGroup.items.first,
+                   firstItem.ref == ref
+                {
+                    return Self.timelineTopScrollID
+                }
+            } else if ref.entryID == store.filteredEntries.first?.id && ref.itemID == store.filteredEntries.first?.items.first?.id {
+                return Self.timelineTopScrollID
+            }
             return Self.itemScrollID(ref)
         case nil:
             return nil
