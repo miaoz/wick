@@ -18,11 +18,9 @@ struct ProgressPanelView: View {
 
     var body: some View {
         let language = settings.language
+        let theme = PanelTheme.resolve(at: Self.minuteDate(), scheme: colorScheme)
         Group {
             if showsSettings {
-                // Settings must not sit inside TimelineView: the form is large
-                // and does not depend on the clock (P4).
-                let theme = PanelTheme.resolve(at: Self.minuteDate(), scheme: colorScheme)
                 panelChrome(theme: theme) {
                     settingsHeader(theme: theme, language: language)
                     settingsDivider(theme: theme)
@@ -31,36 +29,42 @@ struct ProgressPanelView: View {
                     }
                     .frame(maxHeight: 520)
                 }
-            } else if isPanelVisible {
-                // Clock and remaining-% only change at minute granularity.
-                TimelineView(.periodic(from: .now, by: 60)) { context in
-                    progressPanel(date: context.date, language: language)
-                }
             } else {
-                progressPanel(date: Date(), language: language)
+                // Header buttons stay outside TimelineView: macOS 26 MenuBarExtra
+                // windows drop clicks on controls nested in a periodic timeline.
+                panelChrome(theme: theme) {
+                    progressHeader(theme: theme, language: language)
+                    settingsDivider(theme: theme)
+                    if isPanelVisible {
+                        TimelineView(.periodic(from: .now, by: 60)) { context in
+                            slipContent(
+                                date: Self.minuteTruncated(context.date),
+                                theme: theme,
+                                language: language
+                            )
+                        }
+                    } else {
+                        slipContent(date: Self.minuteDate(), theme: theme, language: language)
+                    }
+                }
             }
         }
         .background {
             WindowVisibilityProbe(isVisible: $isPanelVisible)
                 .frame(width: 0, height: 0)
                 .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
     }
 
     @ViewBuilder
-    private func progressPanel(date: Date, language: AppLanguage) -> some View {
-        let tickDate = Self.minuteTruncated(date)
-        let theme = PanelTheme.resolve(at: tickDate, scheme: colorScheme)
-        panelChrome(theme: theme) {
-            progressHeader(date: tickDate, theme: theme, language: language)
-            settingsDivider(theme: theme)
-            let items = TimeProgressCalculator.allProgress(
-                at: tickDate,
-                language: language,
-                calendar: settings.progressCalendar
-            )
-            ProgressSlipContent(items: items, date: tickDate, theme: theme, language: language)
-        }
+    private func slipContent(date: Date, theme: PanelTheme, language: AppLanguage) -> some View {
+        let items = TimeProgressCalculator.allProgress(
+            at: date,
+            language: language,
+            calendar: settings.progressCalendar
+        )
+        ProgressSlipContent(items: items, date: date, theme: theme, language: language)
     }
 
     /// Paper slip shell. Kept outside the ticking content so settings can reuse
@@ -123,7 +127,7 @@ struct ProgressPanelView: View {
     }
 
     @ViewBuilder
-    private func progressHeader(date: Date, theme: PanelTheme, language: AppLanguage) -> some View {
+    private func progressHeader(theme: PanelTheme, language: AppLanguage) -> some View {
         HStack(alignment: .center, spacing: 12) {
             CandleTileView(size: 34)
 
@@ -132,20 +136,22 @@ struct ProgressPanelView: View {
                     .font(.system(size: 17, weight: .bold, design: .serif))
                     .foregroundStyle(theme.primaryText)
 
-                Text(
-                    date.formatted(
-                        .dateTime
-                        .year()
-                        .month()
-                        .day()
-                        .weekday(.abbreviated)
-                        .hour()
-                        .minute()
-                        .locale(language.locale)
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    Text(
+                        Self.minuteTruncated(context.date).formatted(
+                            .dateTime
+                            .year()
+                            .month()
+                            .day()
+                            .weekday(.abbreviated)
+                            .hour()
+                            .minute()
+                            .locale(language.locale)
+                        )
                     )
-                )
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundStyle(theme.tertiaryText)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(theme.tertiaryText)
+                }
             }
 
             Spacer(minLength: 8)
@@ -1063,10 +1069,16 @@ private struct WindowVisibilityProbe: NSViewRepresentable {
         nsView.onChange = { isVisible = $0 }
     }
 
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: ProbeView, context: Context) -> CGSize? {
+        .zero
+    }
+
     final class ProbeView: NSView {
         var onChange: ((Bool) -> Void)?
         private var observation: NSKeyValueObservation?
         private var lastReported: Bool?
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()

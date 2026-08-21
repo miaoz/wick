@@ -245,22 +245,22 @@ struct JournalDayListColumn: View {
             if store.filteredEntries.isEmpty {
                 emptyState
             } else {
-                List(selection: Binding(
-                    get: {
-                        if case .day(let id) = store.selection { return id }
-                        return nil
-                    },
-                    set: { store.selectDay($0) }
-                )) {
+                List {
                     ForEach(daySections) { section in
                         Section {
                             ForEach(section.entries) { entry in
-                                JournalDayTimelineRow(
-                                    entry: entry,
-                                    dayPnL: pnlByDay[Calendar.current.startOfDay(for: entry.date)],
-                                    closedPositions: closedPositionsByDayKey[entry.dayKey],
-                                    showsPositionStats: positionCoordinator.snapshot != nil
-                                )
+                                Button {
+                                    store.selectDay(entry.id)
+                                } label: {
+                                    JournalDayTimelineRow(
+                                        entry: entry,
+                                        dayPnL: pnlByDay[Calendar.current.startOfDay(for: entry.date)],
+                                        closedPositions: closedPositionsByDayKey[entry.dayKey],
+                                        showsPositionStats: positionCoordinator.snapshot != nil
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .contentShape(Rectangle())
                                 .tag(entry.id)
                                 .listRowBackground(selectionRowBackground(isSelected: isDaySelected(entry.id)))
                                 .contextMenu {
@@ -290,41 +290,33 @@ struct JournalDayListColumn: View {
             if store.filteredTimelineItems.isEmpty {
                 emptyFilterState
             } else {
-                List(selection: Binding(
-                    get: {
-                        if case .item(let ref) = store.selection { return ref.id }
-                        return nil
-                    },
-                    set: { newID in
-                        guard let newID,
-                              let row = store.filteredTimelineItems.first(where: { $0.id == newID })
-                        else {
-                            store.selectItem(nil)
-                            return
-                        }
-                        store.selectItem(row.ref)
-                    }
-                )) {
+                List {
                     ForEach(itemSections, id: \.title) { section in
                         Section(section.title) {
                             ForEach(section.items) { row in
-                                JournalItemTimelineRow(row: row)
-                                    .tag(row.id)
-                                    .listRowBackground(selectionRowBackground(isSelected: isItemSelected(row.id)))
-                                    .contextMenu {
-                                        Button(role: .destructive) {
-                                            store.deleteItem(itemID: row.ref.itemID, from: row.ref.entryID)
-                                        } label: {
-                                            Text(L10n.string(.journalDeleteItem, language: settings.language))
-                                        }
-                                        Button {
-                                            store.selectedTagFilter = nil
-                                            store.searchText = ""
-                                            store.selectDay(row.ref.entryID)
-                                        } label: {
-                                            Text(L10n.string(.journalOpenFullDay, language: settings.language))
-                                        }
+                                Button {
+                                    store.selectItem(row.ref)
+                                } label: {
+                                    JournalItemTimelineRow(row: row)
+                                }
+                                .buttonStyle(.plain)
+                                .contentShape(Rectangle())
+                                .tag(row.id)
+                                .listRowBackground(selectionRowBackground(isSelected: isItemSelected(row.id)))
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        store.deleteItem(itemID: row.ref.itemID, from: row.ref.entryID)
+                                    } label: {
+                                        Text(L10n.string(.journalDeleteItem, language: settings.language))
                                     }
+                                    Button {
+                                        store.selectedTagFilter = nil
+                                        store.searchText = ""
+                                        store.selectDay(row.ref.entryID)
+                                    } label: {
+                                        Text(L10n.string(.journalOpenFullDay, language: settings.language))
+                                    }
+                                }
                             }
                         }
                     }

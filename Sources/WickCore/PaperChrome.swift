@@ -202,6 +202,7 @@ struct InkIconButton: View {
                         : (isHovered ? palette.accent.color : palette.textSecondary.color)
                 )
                 .frame(width: size, height: size)
+                .contentShape(Rectangle())
                 .background(
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(isOn ? palette.accent.color : (isHovered ? palette.accentSoft.color : .clear))
@@ -216,6 +217,8 @@ struct InkIconButton: View {
                 .shadow(color: (isHovered || isOn) ? palette.glow.color : .clear, radius: 5)
         }
         .buttonStyle(.plain)
+        .frame(width: size, height: size)
+        .contentShape(Rectangle())
         .help(help)
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
