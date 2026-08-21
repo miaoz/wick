@@ -1,0 +1,254 @@
+/* ==========================================================================
+   Wick 设计语言 2.1 ·「秉烛 By Candlelight」 Design Tokens
+   --------------------------------------------------------------------------
+   一切界面都是同一叠正在被烛火烧掉的纸。
+
+   时间 = 烛光照过的暖渍(--stain / --ember 烛苗)
+   记录 = 纸上的墨迹(宋体)
+   数据 = 贴上去的交易所单据(物理纸,暗色下不反色)
+   定稿 = 朱砂方章(白文篆刻,永远红色,靠字表意)
+   盈亏 = 红盈 / 黛亏(A 股习惯)
+   暗色 = 夜里的纸:唯一光源是烛火,火苗色恒定,纸温随弧光变化
+
+   切换:<html data-scheme="light|dark" data-phase="dawn|day|dusk|night">
+   ========================================================================== */
+
+/* ---------- 基准:light · day ---------- */
+:root {
+  --desk: #E7DCC6;              /* 纸下的桌面 */
+  --paper: #FBF4E6;             /* 纸页 */
+  --paper-hi: #FFFCF2;          /* 最上层纸 */
+  --paper-edge: #D6C8AC;        /* 纸叠侧面 */
+  --ink-1: #2B2014;
+  --ink-2: #6B5942;
+  --ink-3: #9A886B;
+  --rule: rgba(43, 32, 20, 0.16);
+  --ember: #E8791C;             /* 火苗 / 行动 / 此刻 */
+  --ember-hi: #FFB25E;
+  --glow: rgba(232, 121, 28, 0.32);
+  --cinnabar: #C03A22;          /* 朱砂:印章、签条、盈 */
+  --cinnabar-press: #A8321E;
+  --cinnabar-soft: rgba(192, 58, 34, 0.1);
+  --dai: #3E5C50;               /* 黛青:亏 */
+  --dai-soft: rgba(62, 92, 80, 0.12);
+  --char-1: #191008;            /* 烛印方砖(火苗衬底) */
+  --stain-1: #F0DFB6;           /* 烛痕:已逝时间的暖渍(浅端) */
+  --stain-2: #E2C282;           /* 烛痕(靠火线一端,烘得更暖) */
+  --ash: rgba(74, 42, 16, 0.28);
+  --tape: rgba(238, 210, 150, 0.5);
+  --receipt: #FFFDF4;           /* 单据物理纸(恒定) */
+  --receipt-ink: #33291A;
+  --wall: #241A12;              /* 黄历的墙 */
+  --sh-page: 0 1px 2px rgba(43, 32, 20, 0.1), 0 10px 26px rgba(43, 32, 20, 0.14);
+  --sh-lift: 0 2px 6px rgba(43, 32, 20, 0.12), 0 22px 50px rgba(43, 32, 20, 0.22);
+  --f-print: "Songti SC", "STSong", "HiraMinProN-W6", "Noto Serif SC", serif;
+  --f-disp: ui-serif, "New York", "Songti SC", serif;
+  --f-ui: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+  --f-mono: ui-monospace, "SF Mono", "Menlo", monospace;
+  --grain-opacity: 0.06;
+}
+
+/* ---------- light · 弧光变奏:火苗恒定,纸温变化 ---------- */
+[data-phase="dawn"]:not([data-scheme="dark"]) {
+  --desk: #EBDACB; --paper: #FBF0E4; --paper-hi: #FFFAF1; --paper-edge: #DBC4B2;
+  --ink-1: #33231C; --ink-2: #715850; --ink-3: #9C7F71;
+  --ember: #E06A38; --glow: rgba(224, 106, 56, 0.3);
+}
+[data-phase="dusk"]:not([data-scheme="dark"]) {
+  --desk: #E5D2B0; --paper: #FAEEDA; --paper-hi: #FFF9EA; --paper-edge: #D3BE98;
+  --ink-1: #2E2112; --ink-2: #6B5136; --ink-3: #94764F;
+  --ember: #E07412; --glow: rgba(224, 116, 18, 0.34);
+}
+[data-phase="night"]:not([data-scheme="dark"]) {
+  --desk: #D9D3C4; --paper: #EDE8DB; --paper-hi: #F5F1E6; --paper-edge: #C0B8A4;
+  --ink-1: #29241B; --ink-2: #5E5747; --ink-3: #8A8171;
+  --ember: #E8862B; --glow: rgba(232, 134, 43, 0.3);
+}
+
+/* ---------- dark:夜里的纸,烛火是唯一光源 ---------- */
+[data-scheme="dark"] {
+  --desk: #191209;
+  --paper: #2C2214;
+  --paper-hi: #362A18;
+  --paper-edge: #4A3A22;
+  --ink-1: #F0E3C6;
+  --ink-2: rgba(240, 227, 198, 0.64);
+  --ink-3: rgba(240, 227, 198, 0.42);
+  --rule: rgba(240, 227, 198, 0.14);
+  --ember: #F59A3C;
+  --ember-hi: #FFC882;
+  --glow: rgba(245, 154, 60, 0.42);
+  --cinnabar: #E06A4C;
+  --cinnabar-press: #C0502F;
+  --cinnabar-soft: rgba(224, 106, 76, 0.14);
+  --dai: #8FAE9E;
+  --dai-soft: rgba(143, 174, 158, 0.14);
+  --char-1: #0C0703;
+  --stain-1: #4A3820;           /* 夜里:烛照过的纸反而更暖亮 */
+  --stain-2: #6B5226;
+  --ash: rgba(51, 32, 14, 0.5);
+  --tape: rgba(220, 190, 130, 0.28);
+  --receipt: #F5EEDC;           /* 单据是物理纸,夜里仍是纸 */
+  --receipt-ink: #33291A;
+  --wall: #100B07;
+  --sh-page: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 30px rgba(0, 0, 0, 0.5);
+  --sh-lift: 0 2px 8px rgba(0, 0, 0, 0.5), 0 26px 60px rgba(0, 0, 0, 0.6);
+  --grain-opacity: 0.09;
+}
+[data-scheme="dark"][data-phase="dawn"] { --paper: #2B2118; --paper-hi: #35291C; --desk: #181110; --ember: #F0A368; }
+[data-scheme="dark"][data-phase="dusk"] { --paper: #2E2010; --paper-hi: #382712; --desk: #1B1208; --ember: #F08A2B; }
+[data-scheme="dark"][data-phase="night"] { --paper: #241C10; --paper-hi: #2C2214; --desk: #120D07; --ember: #F5A83C; --glow: rgba(245, 168, 60, 0.5); }
+
+/* ==========================================================================
+   共享基元
+   ========================================================================== */
+
+.grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+}
+
+/* ---- 烛痕条:已逝 = 烛光烘暖的渍,分界 = 一粒烛苗,未来 = 干净刻度纸 ---- */
+.burnstrip {
+  position: relative;
+  overflow: hidden;
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(90deg, var(--rule) 0 1px, transparent 1px calc(100% / var(--ticks, 24)));
+  background-color: var(--paper-hi);
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+.burnstrip .char {
+  position: absolute; top: 0; bottom: 0; left: 0;
+  width: var(--p);
+  background:
+    radial-gradient(120% 220% at 100% 50%, rgba(255, 190, 110, 0.5), transparent 50%),
+    linear-gradient(90deg, var(--stain-1) 55%, var(--stain-2));
+  filter: url(#f-char);
+}
+.burnstrip .emberline {
+  position: absolute; top: -1px; bottom: -1px;
+  left: calc(var(--p) - 1px);
+  width: 3px;
+  background: linear-gradient(90deg, transparent, #FFB25E 45%, #FFE0A8);
+  filter: blur(0.6px);
+  box-shadow: 0 0 8px 1.5px var(--glow);
+  animation: ember-flicker 2.2s ease-in-out infinite;
+}
+.burnstrip .flame {
+  position: absolute; top: 50%;
+  left: var(--p);
+  width: 8px; height: 8px;
+  border-radius: 50% 50% 50% 0;
+  transform: translate(-50%, -62%) rotate(-45deg);
+  background: radial-gradient(circle at 35% 35%, #FFF0C8, #FFB25E 60%, #E8791C);
+  box-shadow: 0 0 10px 2.5px var(--glow);
+  animation: ember-flicker 1.7s ease-in-out infinite;
+}
+@keyframes ember-flicker {
+  0%, 100% { opacity: 1; }
+  42% { opacity: 0.72; }
+  58% { opacity: 0.92; }
+}
+
+/* ---- 朱砂方章:白文篆刻,永远红色,靠字表意 ----
+   印泥质感三层:残边(f-seal 置换,只作用于印泥本体)+ 蘸印不匀的深浅 + 纸纹透出颗粒;
+   字形保持锐利可读。落印动效:.chop.stamped 重放 0.3s 盖章 */
+.chop {
+  position: relative;
+  display: inline-grid; place-items: center;
+  color: #F7E7D2;
+  font-family: var(--f-print);
+  font-weight: 700;
+  transform: rotate(-6deg);
+  user-select: none;
+}
+.chop::before {   /* 印泥本体 */
+  content: ""; position: absolute; inset: 0; z-index: 0;
+  background:
+    radial-gradient(130% 130% at 28% 20%, rgba(247, 231, 210, 0.3), transparent 44%),
+    radial-gradient(150% 150% at 50% 55%, transparent 50%, rgba(96, 14, 4, 0.42)),
+    var(--cinnabar);
+  border-radius: 8%;
+  box-shadow: inset 0 0 0 2px rgba(247, 231, 210, 0.38), 0 1px 2px rgba(43, 32, 20, 0.3);
+  filter: url(#f-seal);
+}
+.chop::after {   /* 纸纹从印泥里透出 */
+  content: ""; position: absolute; inset: 0; z-index: 0;
+  border-radius: 8%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='90' height='90' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 90px 90px;
+  mix-blend-mode: soft-light;
+  opacity: 0.55;
+  filter: url(#f-seal);
+}
+.chop > span { position: relative; z-index: 1; }
+.chop.stamped { animation: chop-slam 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.15); }
+@keyframes chop-slam {
+  0% { transform: rotate(-14deg) scale(1.7); opacity: 0; }
+  60% { transform: rotate(-5deg) scale(0.96); opacity: 1; }
+  100% { transform: rotate(-6deg) scale(1); }
+}
+
+/* ---- 标签签条 ---- */
+.ptag {
+  display: inline-flex; align-items: center;
+  font-family: var(--f-print); font-size: 11px;
+  color: var(--cinnabar);
+  border: 1px solid var(--cinnabar);
+  border-radius: 2px;
+  padding: 1px 7px;
+  background: transparent;
+}
+.ptag.on { background: var(--cinnabar); color: #FBEADB; }
+
+/* ---- 交易所单据:撕边物理纸 + 胶带,暗色下不反色 ----
+   撕边形变只作用于 ::before 的纸页剪影,文字保持锐利(凭证数字必须可读) */
+.receipt {
+  position: relative;
+  color: var(--receipt-ink);
+  font-family: var(--f-mono);
+  padding: 12px 14px 10px;
+  margin: 10px 6px 4px;
+  transform: rotate(-0.4deg);
+}
+.receipt::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: var(--receipt);
+  box-shadow: 0 2px 8px rgba(43, 32, 20, 0.18);
+  filter: url(#f-torn);
+}
+.receipt > * { position: relative; }
+.receipt .r-head::before, .receipt .r-head::after {   /* 胶带 */
+  content: "";
+  position: absolute; top: -9px;
+  width: 56px; height: 16px;
+  background: var(--tape);
+  box-shadow: 0 1px 2px rgba(43, 32, 20, 0.12);
+}
+.receipt .r-head::before { left: 14px; transform: rotate(-4deg); }
+.receipt .r-head::after { right: 14px; transform: rotate(3deg); }
+.receipt .r-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; row-gap: 2px; column-gap: 8px; font-size: 11px; letter-spacing: 0.04em;
+  border-bottom: 1px dashed rgba(51, 41, 26, 0.35); padding-bottom: 5px; }
+.receipt .r-head b { font-size: 12.5px; }
+.receipt .r-row { display: flex; justify-content: space-between; flex-wrap: wrap; row-gap: 1px; font-size: 11.5px; padding: 3.5px 0; font-variant-numeric: tabular-nums; }
+.receipt .r-row > span:last-child { margin-left: auto; }
+.receipt .r-row span:first-child { opacity: 0.66; }
+.receipt .r-total { border-top: 1px dashed rgba(51, 41, 26, 0.35); margin-top: 4px; padding-top: 6px; font-weight: 700; font-size: 13px; }
+.receipt .up { color: #B0341E; }       /* 红盈(单据恒为纸,用印刷朱砂) */
+.receipt .down { color: #3E5C50; }      /* 黛亏 */
+
+/* ---- 功能按钮:刻印小方钮 ---- */
+.inkbtn {
+  width: 28px; height: 28px;
+  display: inline-grid; place-items: center;
+  background: transparent;
+  border: 1px solid var(--ink-3);
+  border-radius: 4px;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.inkbtn:hover { border-color: var(--ember); color: var(--ember); box-shadow: 0 0 8px var(--glow); }
+.inkbtn svg { width: 13px; height: 13px; }

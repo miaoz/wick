@@ -183,14 +183,14 @@ public struct PaperLayout: Sendable, Equatable, Hashable {
     }
 }
 
-/// Palette + typography for the trading calendar, modelled on himekuri's「黄历」
-/// theme: green ink on cream paper, red used only for rules/seals/labels.
+/// Palette + typography for the trading calendar. 秉烛 v1.0:烟墨 + 朱砂双色
+/// 印刷(真老黄历本就黑红),米色纸 —— 不再临摹 himekuri 的绿墨。
 public enum TradingCalendarTheme {
-    public static let paper = Color(red: 0.985, green: 0.982, blue: 0.972)   // #FBFBF8
-    public static let ink = Color(red: 0.086, green: 0.514, blue: 0.286)     // #168349 green
-    public static let red = Color(red: 0.82, green: 0.22, blue: 0.13)        // #D13821
+    public static let paper = Color(red: 0.984, green: 0.973, blue: 0.949)   // #FBF8F2 warm rice paper
+    public static let ink = Color(red: 0.165, green: 0.129, blue: 0.094)     // #2A2118 smoke ink
+    public static let red = Color(red: 0.753, green: 0.227, blue: 0.133)     // #C03A22 cinnabar
     public static let grain = Color(red: 0.45, green: 0.38, blue: 0.28)      // #736147 (fibre tint)
-    public static let paperEdge = Color(red: 0.82, green: 0.80, blue: 0.72)  // stacked-sheet edge tint
+    public static let paperEdge = Color(red: 0.82, green: 0.79, blue: 0.71)  // stacked-sheet edge tint
     public static let dimInk = ink.opacity(0.75)
     public static let faintInk = ink.opacity(0.5)
 

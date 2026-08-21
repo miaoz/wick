@@ -94,6 +94,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyAppearance(AppSettings.shared.appearance)
         AppSettings.shared.applyLaunchAtLoginPreference()
 
+        #if DEBUG
+        // `-wick-open-journal` fronts the journal window at launch (UI checks).
+        if ProcessInfo.processInfo.arguments.contains("-wick-open-journal") {
+            Task { @MainActor in
+                JournalWindowController.shared.openJournal()
+            }
+        }
+        // `-wick-screenshot-journal <path>` opens the journal and writes a PNG
+        // snapshot (including window chrome) after it settles, for headless UI
+        // checks. Capturing one's own window needs no Screen Recording consent.
+        // Sync is skipped so a fresh build never blocks on a Keychain prompt.
+        let screenshotPath: String? = {
+            guard let flagIndex = ProcessInfo.processInfo.arguments.firstIndex(of: "-wick-screenshot-journal"),
+                  ProcessInfo.processInfo.arguments.indices.contains(flagIndex + 1)
+            else { return nil }
+            ExchangePositionCoordinator.skipKeychainAccess = true
+            return ProcessInfo.processInfo.arguments[flagIndex + 1]
+        }()
+        if let screenshotPath {
+            Task { @MainActor in
+                JournalWindowController.shared.openJournal()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    JournalWindowController.shared.snapshotWindowToPNG(path: screenshotPath)
+                }
+            }
+        }
+        #endif
+
         appearanceObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
             object: UserDefaults.standard,
@@ -106,8 +134,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Task { @MainActor in
             // Constructing the coordinator starts the sync engine when enabled.
-            _ = SyncCoordinator.shared
-            ExchangePositionCoordinator.shared.start()
+            // Screenshot mode stays fully offline (and Keychain-free).
+            #if DEBUG
+            let screenshotMode = ExchangePositionCoordinator.skipKeychainAccess
+            #else
+            let screenshotMode = false
+            #endif
+            if !screenshotMode {
+                _ = SyncCoordinator.shared
+                ExchangePositionCoordinator.shared.start()
+            }
             JournalReminderScheduler.shared.configure()
             if AppSettings.shared.checkForUpdatesOnLaunch {
                 await UpdateCheckerPresenter.shared.checkInBackgroundIfNeeded()

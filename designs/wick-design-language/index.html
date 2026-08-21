@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="zh" data-scheme="light" data-phase="day">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wick 设计语言 · 一烛之光</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--font-ui);
+    color: var(--ink-1);
+    background:
+      radial-gradient(600px 400px at 12% -4%, var(--glow), transparent 70%),
+      linear-gradient(160deg, var(--paper-top), var(--paper-bottom));
+    min-height: 100vh;
+    transition: background 0.4s ease;
+    text-wrap: pretty;
+  }
+  .grain-layer {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    opacity: var(--grain-opacity);
+  }
+  .page { position: relative; z-index: 1; max-width: 1060px; margin: 0 auto; padding: 56px 40px 120px; }
+
+  /* ---------- 顶栏主题开关 ---------- */
+  .theme-bar {
+    position: fixed; top: 14px; right: 16px; z-index: 50;
+    display: flex; gap: 8px; align-items: center;
+    padding: 6px;
+    border-radius: 999px;
+    background: var(--card-top);
+    border: 1px solid var(--card-stroke);
+    box-shadow: var(--shadow-card);
+  }
+  .theme-bar .grp { display: flex; gap: 2px; }
+  .theme-bar button {
+    font-family: var(--font-ui); font-size: 12px; font-weight: 600;
+    color: var(--ink-2); background: transparent; border: none; cursor: pointer;
+    padding: 6px 10px; border-radius: 999px; transition: all 0.18s ease;
+  }
+  .theme-bar button:hover { color: var(--ink-1); }
+  .theme-bar button.is-on { background: var(--ember); color: #FFF6E8; }
+  .theme-bar .sep { width: 1px; height: 18px; background: var(--divider); }
+
+  /* ---------- 刊头 ---------- */
+  .masthead { display: flex; align-items: flex-end; gap: 24px; padding: 24px 0 36px; border-bottom: 1px solid var(--divider); }
+  .candle-mark { width: 72px; height: 72px; border-radius: 20px; display: grid; place-items: center;
+    background: radial-gradient(circle at 50% 30%, #7A5638, #3E2A1C 78%);
+    box-shadow: 0 0 32px var(--glow), var(--shadow-card); flex: none; }
+  .masthead h1 { font-size: 40px; font-weight: 800; letter-spacing: 0.02em; }
+  .masthead .sub { margin-top: 6px; font-size: 15px; color: var(--ink-2); }
+  .masthead .meta { margin-left: auto; text-align: right; font-size: 12px; color: var(--ink-3); line-height: 1.8; }
+  .masthead .meta b { color: var(--ember-text); font-weight: 700; }
+
+  /* ---------- 章节骨架 ---------- */
+  section { margin-top: 72px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .sec-num { font-family: var(--font-numeral); font-weight: 900; font-size: 15px; color: var(--ember); }
+  .sec-head h2 { font-size: 26px; font-weight: 800; }
+  .sec-head .en { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
+  .sec-lead { color: var(--ink-2); font-size: 15px; line-height: 1.8; max-width: 720px; margin-bottom: 28px; }
+  .sec-lead b { color: var(--ink-1); }
+
+  /* ---------- 现状诊断 ---------- */
+  .inv-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .inv-card {
+    background: linear-gradient(180deg, var(--card-top), var(--card-bottom));
+    border: 1px solid var(--card-stroke); border-radius: var(--r-l);
+    padding: 18px; box-shadow: var(--shadow-card);
+  }
+  .inv-card h3 { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .inv-card .plat { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+  .inv-card ul { margin-top: 12px; list-style: none; display: flex; flex-direction: column; gap: 7px; }
+  .inv-card li { font-size: 12.5px; color: var(--ink-2); line-height: 1.6; padding-left: 14px; position: relative; }
+  .inv-card li::before { content: ""; position: absolute; left: 0; top: 8px; width: 6px; height: 6px; border-radius: 2px; background: var(--ember); opacity: 0.55; }
+  .rift {
+    margin-top: 20px; border-radius: var(--r-l); padding: 18px 22px;
+    border: 1px dashed var(--cinnabar); background: var(--cinnabar-soft);
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 28px;
+  }
+  .rift p { font-size: 13px; line-height: 1.7; color: var(--ink-2); }
+  .rift p b { color: var(--cinnabar); font-weight: 700; }
+
+  /* ---------- 原则 ---------- */
+  .principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .principle { display: flex; gap: 16px; padding: 20px; border-radius: var(--r-l);
+    background: linear-gradient(180deg, var(--card-top), var(--card-bottom));
+    border: 1px solid var(--card-stroke); }
+  .principle .no { font-family: var(--font-numeral); font-size: 30px; font-weight: 900; color: var(--ember); line-height: 1; opacity: 0.85; }
+  .principle h3 { font-size: 15px; font-weight: 800; margin-bottom: 5px; }
+  .principle p { font-size: 13px; color: var(--ink-2); line-height: 1.7; }
+
+  /* ---------- 色彩 ---------- */
+  .pigments { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  .pigment { border-radius: var(--r-l); overflow: hidden; border: 1px solid var(--card-stroke); box-shadow: var(--shadow-card); background: var(--card-top); }
+  .pigment .sw { height: 88px; position: relative; }
+  .pigment .sw .chip-name { position: absolute; left: 10px; bottom: 8px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,0.75); color: #333; }
+  .pigment .sw.dark-chip .chip-name { background: rgba(0,0,0,0.4); color: #fff; }
+  .pigment .body { padding: 12px 14px 14px; }
+  .pigment h4 { font-size: 14px; font-weight: 800; }
+  .pigment .role { font-size: 11.5px; color: var(--ink-2); line-height: 1.65; margin-top: 4px; }
+  .pigment .hex { font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; margin-top: 6px; }
+
+  .arc-demo { margin-top: 28px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .anchor-card { border-radius: var(--r-l); overflow: hidden; border: 1px solid var(--card-stroke); cursor: pointer; box-shadow: var(--shadow-card); transition: transform 0.18s ease; padding: 0; text-align: left; font-family: var(--font-ui); }
+  .anchor-card:hover { transform: translateY(-2px); }
+  .anchor-card .sky { height: 52px; }
+  .anchor-card .info { padding: 10px 12px 12px; }
+  .anchor-card .info b { font-size: 13px; display: block; }
+  .anchor-card .info span { font-size: 11px; opacity: 0.75; font-variant-numeric: tabular-nums; }
+  .anchor-note { margin-top: 12px; font-size: 12.5px; color: var(--ink-3); line-height: 1.7; }
+
+  /* ---------- 字体 ---------- */
+  .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .type-card { border-radius: var(--r-l); border: 1px solid var(--card-stroke); background: linear-gradient(180deg, var(--card-top), var(--card-bottom)); padding: 26px 28px; box-shadow: var(--shadow-card); }
+  .type-card .tag { font-size: 11px; letter-spacing: 0.12em; color: var(--ink-3); text-transform: uppercase; }
+  .type-card h3 { font-size: 15px; font-weight: 800; margin: 4px 0 18px; }
+  .spec-live { font-size: 44px; font-weight: 700; letter-spacing: 0.01em; }
+  .spec-live small { font-size: 15px; color: var(--ink-2); font-weight: 500; display: block; margin-top: 10px; line-height: 1.8; }
+  .spec-print { font-family: var(--font-print); font-size: 40px; font-weight: 700; }
+  .spec-print small { font-family: var(--font-print); font-size: 15px; color: var(--ink-2); display: block; margin-top: 10px; line-height: 2.0; }
+  .type-scale { margin-top: 16px; border-radius: var(--r-l); border: 1px solid var(--card-stroke); overflow: hidden; }
+  .type-scale table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .type-scale th, .type-scale td { padding: 10px 18px; text-align: left; border-bottom: 1px solid var(--card-stroke); }
+  .type-scale th { font-size: 11px; color: var(--ink-3); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; background: var(--paper-side); }
+  .type-scale tr:last-child td { border-bottom: none; }
+  .type-scale td.num { color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ---------- 形状·质感·印记 ---------- */
+  .material-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .material-card { border-radius: var(--r-l); border: 1px solid var(--card-stroke); background: linear-gradient(180deg, var(--card-top), var(--card-bottom)); padding: 20px; box-shadow: var(--shadow-card); }
+  .material-card h4 { font-size: 14px; font-weight: 800; margin-bottom: 4px; }
+  .material-card .note { font-size: 12px; color: var(--ink-2); line-height: 1.7; margin-bottom: 16px; }
+  .radii { display: flex; gap: 12px; align-items: flex-end; }
+  .radii .r { background: var(--ember-soft); border: 1.5px solid var(--ember); width: 44px; height: 44px; display: grid; place-items: end start; }
+  .radii .r span { font-size: 10px; color: var(--ember-text); padding: 2px 4px; font-variant-numeric: tabular-nums; }
+  .seal-row { display: flex; gap: 22px; align-items: center; }
+  .double-rule { border: 1px solid var(--pine); outline: 2.5px solid var(--pine); outline-offset: 3px; height: 56px; display: grid; place-items: center; font-family: var(--font-print); color: var(--pine); font-size: 13px; letter-spacing: 0.3em; }
+  .arc-wrap { padding: 6px 2px 2px; }
+  .arc-legend { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--ink-3); margin-top: 8px; font-variant-numeric: tabular-nums; }
+
+  /* ---------- 组件 ---------- */
+  .comp-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .comp-card { border-radius: var(--r-l); border: 1px solid var(--card-stroke); background: linear-gradient(180deg, var(--card-top), var(--card-bottom)); padding: 20px; box-shadow: var(--shadow-card); }
+  .comp-card > h4 { font-size: 13px; font-weight: 800; color: var(--ink-2); margin-bottom: 14px; }
+  .comp-card > h4 span { color: var(--ink-3); font-weight: 500; margin-left: 6px; font-size: 11px; }
+
+  .icon-btn { width: 28px; height: 28px; border-radius: 50%; display: inline-grid; place-items: center;
+    background: var(--control-bg); border: 1px solid var(--control-border); color: var(--ink-1); opacity: 0.85; cursor: pointer; transition: all 0.18s ease; font-size: 13px; }
+  .icon-btn:hover { background: var(--ember-soft); border-color: var(--ember); opacity: 1; }
+  .icon-btn svg { width: 13px; height: 13px; }
+
+  .chip { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    background: var(--control-bg); border: 1px solid var(--control-border); color: var(--ink-2); cursor: pointer; transition: all 0.18s ease; }
+  .chip:hover { color: var(--ink-1); }
+  .chip.on { background: var(--ember); border-color: var(--ember); color: #FFF6E8; }
+
+  .metric-card { border-radius: var(--r-m); padding: 12px 14px; border: 1px solid var(--card-stroke);
+    background: linear-gradient(180deg, var(--card-top), var(--card-bottom)); position: relative; overflow: hidden; }
+  .metric-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--mc); border-radius: 3px 0 0 3px; opacity: 0.9; }
+  .metric-card .m-head { display: flex; align-items: baseline; justify-content: space-between; }
+  .metric-card .m-label { font-size: 12px; font-weight: 700; color: var(--ink-2); }
+  .metric-card .m-pct { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--mc); }
+  .metric-card .m-pct small { font-size: 12px; font-weight: 600; margin-left: 1px; }
+  .metric-card .m-track { margin-top: 8px; height: 6px; border-radius: 3px; background: rgba(127, 110, 90, 0.14); position: relative; }
+  .metric-card .m-fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: linear-gradient(90deg, var(--mc), var(--mc2)); }
+  .metric-card .m-fill::after { content: ""; position: absolute; right: -2px; top: 50%; transform: translateY(-50%); width: 8px; height: 8px; border-radius: 50%; background: #FFF9EE; box-shadow: 0 0 5px var(--mc2); }
+  .metric-card .m-foot { margin-top: 7px; font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; display: flex; justify-content: space-between; }
+  .metric-stack { display: flex; flex-direction: column; gap: 10px; }
+
+  .slip { font-variant-numeric: tabular-nums; border-radius: var(--r-s); border: 1px solid var(--card-stroke); background: var(--card-top); padding: 12px 14px; position: relative; }
+  .slip::before { content: "仓"; position: absolute; top: 10px; right: 12px; width: 20px; height: 20px; border: 1.5px solid var(--cinnabar); color: var(--cinnabar); border-radius: 4px; font-family: var(--font-print); font-size: 11px; display: grid; place-items: center; transform: rotate(6deg); opacity: 0.8; }
+  .slip .s-title { font-size: 13px; font-weight: 800; display: flex; gap: 8px; align-items: center; }
+  .slip .lane { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 4px; }
+  .slip .lane.long { background: var(--pine-soft); color: var(--pine); }
+  .slip .lane.short { background: var(--cinnabar-soft); color: var(--cinnabar); }
+  .slip .s-rows { margin-top: 9px; display: flex; flex-direction: column; gap: 5px; }
+  .slip .s-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-2); border-bottom: 1px dotted var(--card-stroke); padding-bottom: 4px; }
+  .slip .s-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .slip .s-row b { color: var(--ink-1); font-weight: 700; }
+  .slip .pnl-up { color: var(--pine); font-weight: 800; }
+  .slip .pnl-down { color: var(--cinnabar); font-weight: 800; }
+
+  /* ---------- 导航 ---------- */
+  .nav-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .nav-card { display: block; text-decoration: none; color: inherit; border-radius: var(--r-xl); overflow: hidden;
+    border: 1px solid var(--card-stroke); box-shadow: var(--shadow-card); transition: transform 0.18s ease, box-shadow 0.18s ease; background: linear-gradient(160deg, var(--card-top), var(--card-bottom)); }
+  .nav-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-pop); }
+  .nav-card .thumb { height: 190px; display: grid; place-items: center; position: relative; overflow: hidden; }
+  .nav-card .thumb.dark-room { background: radial-gradient(420px 260px at 50% 20%, #3A2E22, #1C1410 80%); }
+  .nav-card .thumb.ios-room { background: radial-gradient(420px 260px at 50% 30%, #2A3244, #10141F 80%); }
+  .nav-card .body { padding: 18px 22px 20px; border-top: 1px solid var(--card-stroke); }
+  .nav-card h3 { font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+  .nav-card h3 .arrow { margin-left: auto; color: var(--ember); font-weight: 700; }
+  .nav-card p { margin-top: 6px; font-size: 12.5px; color: var(--ink-2); line-height: 1.7; }
+
+  footer { margin-top: 96px; padding-top: 24px; border-top: 1px solid var(--divider); display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+<div class="grain-layer grain"></div>
+
+<!-- 弧光引擎演示开关:切换整页色板 -->
+<div class="theme-bar">
+  <div class="grp" title="时段(弧光引擎锚点)">
+    <button data-set-phase="dawn">拂晓</button>
+    <button data-set-phase="day">正午</button>
+    <button data-set-phase="dusk">黄昏</button>
+    <button data-set-phase="night">子夜</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp" title="外观">
+    <button data-set-scheme="light">亮</button>
+    <button data-set-scheme="dark">暗</button>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- ==================== 刊头 ==================== -->
+  <header class="masthead">
+    <div style="position: absolute; top: 12px; left: 40px; font-size: 12px;">
+      <a href="final.html" style="color: var(--cinnabar); text-decoration: none; font-weight: 700;">⚠ v1 已废弃 · 定稿见「秉烛」Final Spec →</a>
+    </div>
+    <div class="candle-mark">
+      <svg width="34" height="34" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+        <path d="M9 1.4 C7.6 3.1 6.6 4.6 6.6 6.1 C6.6 7.8 7.7 9 9 9 C10.3 9 11.4 7.8 11.4 6.1 C11.4 4.6 10.4 3.1 9 1.4 Z" fill="#F7B261"/>
+        <rect x="8.5" y="9.2" width="1" height="2" fill="#F7E9D7"/>
+        <path d="M5.6 11.2 L12.4 11.2 L12.8 15.6 Q12.85 16.6 11.6 16.6 L6.4 16.6 Q5.15 16.6 5.2 15.6 Z" fill="#F7E9D7"/>
+      </svg>
+    </div>
+    <div>
+      <h1>Wick 设计语言</h1>
+      <div class="sub">「一烛之光」 · 纸墨系统 — 一套语言,三个模块,两个平台</div>
+    </div>
+    <div class="meta">
+      v1.0 · 2026-08<br>
+      当前演示色板:<b id="cur-theme-label">正午 · 亮</b><br>
+      <span data-clock></span>
+    </div>
+  </header>
+
+  <!-- ==================== 0 现状诊断 ==================== -->
+  <section data-screen-label="诊断">
+    <div class="sec-head"><span class="sec-num">00</span><h2>现状诊断</h2><span class="en">What exists &amp; why it tears</span></div>
+    <p class="sec-lead">Wick 在迭代中长出三个各自成立的模块,但它们<b>各自发明了一套视觉语言</b>:面板是暖烛光玻璃卡,黄历是绿墨红印的纸质印刷品,日记夹在两者之间。颜色、字体、材质、印记语言四套规则互不相认 —— 这是「撕裂感」的来源。</p>
+    <div class="inv-grid">
+      <div class="inv-card">
+        <h3>菜单栏面板</h3>
+        <div class="plat">macOS · MenuBarExtra · 360pt</div>
+        <ul>
+          <li>日/周/月/年剩余百分比 + 结束时间,每秒刷新</li>
+          <li>四张指标卡各用一组色相(琥珀/蓝/紫/青)</li>
+          <li>「一日弧光」引擎:4 时段 × 亮暗,共 8 组锚点色板</li>
+          <li>玻璃渐变卡 + 圆体数字 + emoji 时段图标</li>
+        </ul>
+      </div>
+      <div class="inv-card">
+        <h3>交易日记与复盘</h3>
+        <div class="plat">macOS · 独立窗口 · 双栏</div>
+        <ul>
+          <li>一天一篇、多条目(标签+正文+图片)、复盘印章</li>
+          <li>Binance 真实仓位卡片挂进条目(开/平仓、VWAP、盈亏)</li>
+          <li>侧栏盈亏月历四态着色 + 标签芯片 + 检索</li>
+          <li>沿用面板色板,但组件样式(芯片/印章/仓位块)各自生长</li>
+        </ul>
+      </div>
+      <div class="inv-card">
+        <h3>交易日历(黄历)</h3>
+        <div class="plat">macOS 贴桌窗 + iOS 满屏 · 300×400 页</div>
+        <ul>
+          <li>撕页物理 + 合成纸声,宏观/财报双栏目</li>
+          <li>绿墨 #168349 + 朱红 #D13821 + 米色纸 #FBFBF8</li>
+          <li>Hiragino 哥特 / 明朝体 / 粗衬线大日期数字</li>
+          <li>与前两模块完全不同的印刷物美学</li>
+        </ul>
+      </div>
+    </div>
+    <div class="rift">
+      <p><b>色彩撕裂 —</b> 烛光暖橙、指标卡四色、黄历绿墨红印,三套色板没有共同的「色料」概念。</p>
+      <p><b>字体撕裂 —</b> 圆体标题、系统正文、哥特/明朝印刷体并存,何时用哪种没有规则。</p>
+      <p><b>材质撕裂 —</b> 玻璃渐变卡、纸页、无边框贴桌物,阴影与描边语言互不通用。</p>
+      <p><b>印记撕裂 —</b> 复盘印章与黄历闲日印章形似而神不同(环宽、倾角、用色各自硬编码)。</p>
+    </div>
+  </section>
+
+  <!-- ==================== 1 设计原则 ==================== -->
+  <section data-screen-label="原则">
+    <div class="sec-head"><span class="sec-num">01</span><h2>设计原则</h2><span class="en">Principles</span></div>
+    <p class="sec-lead">不消灭三个模块的个性,而是给它们一个共同的来源:<b>一切都是烛光下的纸</b>。面板是烛光仪表,日记是烛光书页,黄历是挂在墙上被烛光照着的印刷品 —— 光是同一盏,纸是同一种纸。</p>
+    <div class="principles">
+      <div class="principle"><div class="no">一</div><div><h3>一纸烛光</h3><p>弧光引擎是唯一的光源。所有表面共享同一组时段锚点;黄历的纸不随深浅模式翻转,只被环境光照亮或压暗 —— 物理纸页理应如此。</p></div></div>
+      <div class="principle"><div class="no">二</div><div><h3>三色颜料,各司其职</h3><p>烛火金 = 行动与当前;松烟绿 = 印刷、正确、盈利;朱砂红 = 印记、错误、亏损。全系统禁止第四种彩色出现(时间四象色相除外,且只用于进度件)。</p></div></div>
+      <div class="principle"><div class="no">三</div><div><h3>两种字态</h3><p>活数据(百分比、时刻、盈亏数字)用圆体;印刷物(日期、农历、黄历正文、印章)用宋体。字态即信息性质,不再凭感觉选字。</p></div></div>
+      <div class="principle"><div class="no">四</div><div><h3>印章即确认</h3><p>复盘判定、休市标记、同步完成…… 一切「已定稿」的状态统一用双环印章:1.6pt 外环 + 1pt 内环、-8° 微倾。它是系统的签名。</p></div></div>
+      <div class="principle"><div class="no">五</div><div><h3>物理优先的动效</h3><p>纸的撕落与飘落、火焰的呼吸用物理模拟;一切界面反馈(悬停、选中、展开)统一 180ms ease。除此之外没有第三种动效。</p></div></div>
+      <div class="principle"><div class="no">六</div><div><h3>密度即诚意</h3><p>交易工具的信息密度是美德:数字用等宽表格数字对齐,行距给中文 1.7 倍,但不堆砌无用装饰与凑数统计。</p></div></div>
+    </div>
+  </section>
+
+  <!-- ==================== 2 色彩 ==================== -->
+  <section data-screen-label="色彩">
+    <div class="sec-head"><span class="sec-num">02</span><h2>色彩系统</h2><span class="en">Pigments &amp; the Day-Arc Engine</span></div>
+    <p class="sec-lead">把现有色板收敛为<b>五种颜料</b>:它们不是随意挑选的色值,而是文房案头的真实材料 —— 宣纸、墨、烛火、松烟绿墨、朱砂印泥。黄历的绿与红因此获得系统身份(印刷色),复盘的绿勾红叉、盈亏的红涨绿跌都复用同一对颜料。</p>
+
+    <div class="pigments">
+      <div class="pigment">
+        <div class="sw" style="background: linear-gradient(160deg, #FFF8F0, #F3E6D5);"><span class="chip-name">paper</span></div>
+        <div class="body"><h4>宣纸</h4><div class="role">一切表面的基底。随弧光调色温,亮暗两套;黄历印刷纸例外(恒为 #FBFBF8)。</div><div class="hex">#FFF8F0 → #F3E6D5</div></div>
+      </div>
+      <div class="pigment">
+        <div class="sw dark-chip" style="background: linear-gradient(160deg, #4A3B2E, #2F241B);"><span class="chip-name">ink</span></div>
+        <div class="body"><h4>墨</h4><div class="role">三级文字:标题 / 正文 / 辅助。暖棕黑,不用纯黑;暗色模式反白为三档透明度。</div><div class="hex">#2F241B · #6D5A49 · #917C67</div></div>
+      </div>
+      <div class="pigment">
+        <div class="sw" style="background: linear-gradient(160deg, #F7B261, #D9822B);"><span class="chip-name">ember</span></div>
+        <div class="body"><h4>烛火</h4><div class="role">唯一强调色:行动、选中、当前时刻、链接。色相随弧光在琥珀与靛蓝间流转。</div><div class="hex">#D9822B(正午锚点)</div></div>
+      </div>
+      <div class="pigment">
+        <div class="sw" style="background: linear-gradient(160deg, #2E9E64, #1E7A48);"><span class="chip-name">pine</span></div>
+        <div class="body"><h4>松烟</h4><div class="role">印刷绿墨:黄历正文油墨、复盘「对」、盈利、多头仓位。跨时段色相稳定。</div><div class="hex">#1E7A48(亮)/ #7FBF8E(暗)</div></div>
+      </div>
+      <div class="pigment">
+        <div class="sw" style="background: linear-gradient(160deg, #E05B47, #C43E2E);"><span class="chip-name">cinnabar</span></div>
+        <div class="body"><h4>朱砂</h4><div class="role">印泥红:印章与签条、黄历界线、复盘「错」、亏损、空头仓位。色相稳定。</div><div class="hex">#C43E2E(亮)/ #E08A7E(暗)</div></div>
+      </div>
+    </div>
+
+    <h3 style="font-size: 15px; font-weight: 800; margin: 36px 0 14px;">弧光引擎 · 八组锚点色板</h3>
+    <div class="arc-demo">
+      <button class="anchor-card" data-set-phase="dawn" data-set-scheme="light">
+        <div class="sky" style="background: linear-gradient(160deg, #FDF1E8, #F5DFD3);"></div>
+        <div class="info" style="background:#FDF1E8; color:#33251F;"><b>拂晓 · 亮</b><span>06:30 · 玫瑰金晨雾 · ember #D96C42</span></div>
+      </button>
+      <button class="anchor-card" data-set-phase="day" data-set-scheme="light">
+        <div class="sky" style="background: linear-gradient(160deg, #FFF8F0, #F3E6D5);"></div>
+        <div class="info" style="background:#FFF8F0; color:#2F241B;"><b>正午 · 亮</b><span>12:00 · 烛光基线 · ember #D9822B</span></div>
+      </button>
+      <button class="anchor-card" data-set-phase="dusk" data-set-scheme="light">
+        <div class="sky" style="background: linear-gradient(160deg, #FBEAD2, #F0D6B8);"></div>
+        <div class="info" style="background:#FBEAD2; color:#2E2013;"><b>黄昏 · 亮</b><span>18:00 · 蜜铜 · ember #C2611F</span></div>
+      </button>
+      <button class="anchor-card" data-set-phase="night" data-set-scheme="light">
+        <div class="sky" style="background: linear-gradient(160deg, #E6E5EC, #D2D1DC);"></div>
+        <div class="info" style="background:#E6E5EC; color:#26252E;"><b>子夜 · 亮</b><span>22:30 · 月夜灰蓝 · ember #7A86C8</span></div>
+      </button>
+      <button class="anchor-card" data-set-phase="dawn" data-set-scheme="dark">
+        <div class="sky" style="background: linear-gradient(160deg, #181A2E, #100F1C);"></div>
+        <div class="info" style="background:#181A2E; color:#fff;"><b>拂晓 · 暗</b><span style="opacity:.66;">06:30 · 靛蓝余烬 · ember #F0A368</span></div>
+      </button>
+      <button class="anchor-card" data-set-phase="day" data-set-scheme="dark">
+        <div class="sky" style="background: linear-gradient(160deg, #1C2434, #141A28);"></div>
+        <div class="info" style="background:#1C2434; color:#fff;"><b>正午 · 暗</b><span style="opacity:.66;">12:00 · 石板 · ember #F5B85C</span></div>
+      </button>
+      <button class="anchor-card" data-set-phase="dusk" data-set-scheme="dark">
+        <div class="sky" style="background: linear-gradient(160deg, #1E1722, #130F16);"></div>
+        <div class="info" style="background:#1E1722; color:#fff;"><b>黄昏 · 暗</b><span style="opacity:.66;">18:00 · 焦琥珀 · ember #F08A4B</span></div>
+      </button>
+      <button class="anchor-card" data-set-phase="night" data-set-scheme="dark">
+        <div class="sky" style="background: linear-gradient(160deg, #101527, #0C1019);"></div>
+        <div class="info" style="background:#101527; color:#fff;"><b>子夜 · 暗</b><span style="opacity:.66;">22:30 · 深蓝海 · ember #9BB6FF</span></div>
+      </button>
+    </div>
+    <p class="anchor-note">点击任意锚点卡可切换整页(以及所有模块稿)的色板 —— 即 App 内「一日弧光」引擎的行为:相邻锚点间连续插值,松烟/朱砂两色跨时段保持色相稳定。亮/暗外观在右上角随时切换。</p>
+  </section>
+
+  <!-- ==================== 3 字体 ==================== -->
+  <section data-screen-label="字体">
+    <div class="sec-head"><span class="sec-num">03</span><h2>字体系统</h2><span class="en">Two voices</span></div>
+    <p class="sec-lead"><b>字态即信息性质。</b>正在流逝的、会变的数字与界面文字用圆体,温润、当下;印在纸上的、已定格的内容用宋体,庄重、存档。大日期数字用粗衬线 —— 它属于印刷世界。</p>
+    <div class="type-grid">
+      <div class="type-card">
+        <span class="tag">Live · 圆体</span>
+        <h3>SF Pro Rounded / PingFang SC — 活数据与界面</h3>
+        <div class="spec-live">63.4<small>今日剩余 63.4% · 收盘倒计时 02:14:09<br>标题、按钮、标签、百分比、倒计时,一律使用圆体。</small></div>
+      </div>
+      <div class="type-card">
+        <span class="tag">Print · 宋体</span>
+        <h3>Songti SC / HiraMinProN — 印刷与存档</h3>
+        <div class="spec-print">七月廿三<small>乙巳年 · 甲申月 · 宏观数据与财报印于纸上<br>黄历正文、农历、印章、复盘批注,一律使用宋体。</small></div>
+      </div>
+    </div>
+    <div class="type-scale">
+      <table>
+        <tr><th>层级</th><th>字态 / 字重</th><th>字号</th><th>用途</th></tr>
+        <tr><td>大数字</td><td>ui-serif Black</td><td class="num">82 / 44</td><td>黄历日期字、关键数字展示</td></tr>
+        <tr><td>标题</td><td>圆体 Bold / Semibold</td><td class="num">20 / 15</td><td>面板标题、卡片标题</td></tr>
+        <tr><td>正文</td><td>圆体 Regular</td><td class="num">13</td><td>日记正文、设置项、列表行</td></tr>
+        <tr><td>辅助</td><td>圆体 Medium</td><td class="num">11–12</td><td>说明文字、元信息(等宽数字)</td></tr>
+        <tr><td>印刷正文</td><td>宋体 Regular/Semibold</td><td class="num">12–13</td><td>黄历事件行、农历行</td></tr>
+        <tr><td>印章</td><td>圆体 Heavy / 宋体 Bold</td><td class="num">随印面</td><td>复盘判定、闲日章</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- ==================== 4 形状·质感·印记 ==================== -->
+  <section data-screen-label="质感">
+    <div class="sec-head"><span class="sec-num">04</span><h2>形状 · 质感 · 印记</h2><span class="en">Shape, texture, seals</span></div>
+    <div class="material-grid">
+      <div class="material-card">
+        <h4>圆角阶梯</h4>
+        <div class="note">连续圆角;同一个 8/12/16/24 阶梯贯穿面板、日记与黄历窗口。</div>
+        <div class="radii">
+          <div class="r" style="border-radius: 8px;"><span>8</span></div>
+          <div class="r" style="border-radius: 12px; width:52px; height:52px;"><span>12</span></div>
+          <div class="r" style="border-radius: 16px; width:60px; height:60px;"><span>16</span></div>
+          <div class="r" style="border-radius: 24px; width:68px; height:68px;"><span>24</span></div>
+        </div>
+      </div>
+      <div class="material-card">
+        <h4>双线界框</h4>
+        <div class="note">印刷世界的框线:1pt + 2.5pt 双线,松烟绿,页边 7pt —— 黄历页与仓位交割单共用。</div>
+        <div class="double-rule">印 刷 界 框</div>
+      </div>
+      <div class="material-card">
+        <h4>印章 · 已定稿</h4>
+        <div class="note">双环 + -8° 微倾。复盘判定、闲日章、交割单「仓」字角章,同一构造。</div>
+        <div class="seal-row">
+          <span class="seal seal-pine" style="width:44px; height:44px; font-size:19px;"><span>✓</span></span>
+          <span class="seal seal-cinnabar" style="width:44px; height:44px; font-size:17px;"><span>✗</span></span>
+          <span class="seal seal-cinnabar" style="width:54px; height:54px; font-size:13px; font-family:var(--font-print); border-radius:8px;"><span>休市</span></span>
+        </div>
+      </div>
+      <div class="material-card" style="grid-column: 1 / -1;">
+        <h4>弧光条 · 一天的色温轨迹</h4>
+        <div class="note">日记编辑器顶部的签名元素:一条从拂晓到子夜的渐带,光点标记此刻。三个模块共用,是本页右上角演示开关的图形化。</div>
+        <div class="arc-wrap"><div class="arc-strip"><div class="now"></div></div></div>
+        <div class="arc-legend"><span>拂晓 06:30</span><span>正午 12:00</span><span>黄昏 18:00</span><span>子夜 22:30</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 5 组件 ==================== -->
+  <section data-screen-label="组件">
+    <div class="sec-head"><span class="sec-num">05</span><h2>核心组件</h2><span class="en">Components</span></div>
+    <p class="sec-lead">组件全部只吃 token,不持有自己的颜色。下列组件在本页实时渲染 —— 切换右上角的主题,它们与模块稿同步变化。</p>
+    <div class="comp-grid">
+      <div class="comp-card">
+        <h4>圆形图标按钮 <span>面板头部 / 日记 header 行共用 · hover 染烛火</span></h4>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button class="icon-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1.5" y="2.5" width="13" height="12" rx="2.5"/><path d="M1.5 6h13M5 1v3M11 1v3"/></svg></button>
+          <button class="icon-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 13V5.5A2.5 2.5 0 0 1 5.5 3h7v10h-7A2.5 2.5 0 0 0 3 13ZM5.5 13V3"/></svg></button>
+          <button class="icon-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/></svg></button>
+          <span style="font-size: 11.5px; color: var(--ink-3);">28×28 · 描边 1pt · 12ms 悬停反馈</span>
+        </div>
+      </div>
+      <div class="comp-card">
+        <h4>标签芯片 <span>日记标签 / 黄历栏目 tab 共用同一构造</span></h4>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <span class="chip on">#趋势跟踪</span>
+          <span class="chip">#震荡</span>
+          <span class="chip">#突破</span>
+          <span class="chip">#复盘</span>
+          <span class="chip">#数据面</span>
+        </div>
+      </div>
+      <div class="comp-card" style="grid-column: 1 / -1;">
+        <h4>时间四象卡 <span>日/周/月/年 · 全系统唯一保留的多色件,色相只出现在进度件上</span></h4>
+        <div class="metric-stack">
+          <div class="metric-card" style="--mc: var(--m1); --mc2: var(--m1-2);">
+            <div class="m-head"><span class="m-label">今日剩余</span><span class="m-pct">63.4<small>%</small></span></div>
+            <div class="m-track"><div class="m-fill" style="width: 36.6%;"></div></div>
+            <div class="m-foot"><span>08:31:22 后开始新一天</span><span>今日 24:00 结束</span></div>
+          </div>
+          <div class="metric-card" style="--mc: var(--m2); --mc2: var(--m2-2);">
+            <div class="m-head"><span class="m-label">本周剩余</span><span class="m-pct">41.2<small>%</small></span></div>
+            <div class="m-track"><div class="m-fill" style="width: 58.8%;"></div></div>
+            <div class="m-foot"><span>第 34 周</span><span>周日 24:00 结束</span></div>
+          </div>
+          <div class="metric-card" style="--mc: var(--m3); --mc2: var(--m3-2);">
+            <div class="m-head"><span class="m-label">本月剩余</span><span class="m-pct">35.5<small>%</small></span></div>
+            <div class="m-track"><div class="m-fill" style="width: 64.5%;"></div></div>
+            <div class="m-foot"><span>8 月 · 共 31 天</span><span>8月31日 24:00 结束</span></div>
+          </div>
+          <div class="metric-card" style="--mc: var(--m4); --mc2: var(--m4-2);">
+            <div class="m-head"><span class="m-label">今年剩余</span><span class="m-pct">36.7<small>%</small></span></div>
+            <div class="m-track"><div class="m-fill" style="width: 63.3%;"></div></div>
+            <div class="m-foot"><span>2026 · 第 232 天</span><span>12月31日 24:00 结束</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="comp-card" style="grid-column: 1 / -1;">
+        <h4>仓位交割单 <span>印刷字态 + 双线界框 + 角章 —— 把交易所数据当作「印在纸上的凭证」</span></h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="slip">
+            <div class="s-title">BTCUSDT 永续 <span class="lane long">做多</span></div>
+            <div class="s-rows">
+              <div class="s-row"><span>开仓均价(VWAP)</span><b>112,480.5</b></div>
+              <div class="s-row"><span>平仓均价</span><b>114,206.0</b></div>
+              <div class="s-row"><span>数量</span><b>0.250 BTC</b></div>
+              <div class="s-row"><span>已实现盈亏</span><span class="pnl-up">+431.38 USDT</span></div>
+            </div>
+          </div>
+          <div class="slip">
+            <div class="s-title">ETHUSDT 永续 <span class="lane short">做空</span></div>
+            <div class="s-rows">
+              <div class="s-row"><span>开仓均价(VWAP)</span><b>4,218.40</b></div>
+              <div class="s-row"><span>平仓均价</span><b>4,322.15</b></div>
+              <div class="s-row"><span>数量</span><b>3.00 ETH</b></div>
+              <div class="s-row"><span>已实现盈亏</span><span class="pnl-down">−311.25 USDT</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 6 模块稿导航 ==================== -->
+  <section data-screen-label="模块稿">
+    <div class="sec-head"><span class="sec-num">06</span><h2>模块高保真稿</h2><span class="en">Module mockups</span></div>
+    <p class="sec-lead">同一套 token 在三块真实尺寸的界面上落地。所有页面共享右上角的主题状态(存在本地,跨页面保持)。</p>
+    <div class="nav-grid">
+      <a class="nav-card" href="macos.html">
+        <div class="thumb dark-room">
+          <svg width="300" height="150" viewBox="0 0 300 150" fill="none" aria-hidden="true">
+            <rect x="10" y="14" width="120" height="122" rx="14" fill="#FFF8F0"/>
+            <rect x="24" y="30" width="60" height="8" rx="4" fill="#E3C9A8"/>
+            <rect x="24" y="48" width="92" height="18" rx="6" fill="#FBEBD4"/>
+            <rect x="24" y="72" width="92" height="18" rx="6" fill="#EAF0FC"/>
+            <rect x="24" y="96" width="92" height="18" rx="6" fill="#F1EAFB"/>
+            <rect x="150" y="14" width="140" height="122" rx="14" fill="#FFF8F0"/>
+            <rect x="164" y="30" width="70" height="9" rx="4" fill="#D9B98F"/>
+            <rect x="164" y="50" width="112" height="7" rx="3.5" fill="#EAD9BF"/>
+            <rect x="164" y="64" width="112" height="7" rx="3.5" fill="#EAD9BF"/>
+            <rect x="164" y="78" width="80" height="7" rx="3.5" fill="#EAD9BF"/>
+            <circle cx="262" cy="112" r="15" fill="none" stroke="#C43E2E" stroke-width="2"/>
+          </svg>
+        </div>
+        <div class="body">
+          <h3>macOS 三件套 <span class="arrow">→</span></h3>
+          <p>菜单栏面板(360pt)· 日记窗口(1080×680)· 黄历贴桌窗(480×690),真实尺寸同屏对照。</p>
+        </div>
+      </a>
+      <a class="nav-card" href="ios.html">
+        <div class="thumb ios-room">
+          <svg width="190" height="150" viewBox="0 0 190 150" fill="none" aria-hidden="true">
+            <rect x="55" y="2" width="80" height="164" rx="18" fill="#FBFBF8"/>
+            <rect x="63" y="14" width="64" height="5" rx="2.5" fill="#168349" opacity="0.35"/>
+            <rect x="82" y="28" width="26" height="30" rx="4" fill="#168349" opacity="0.16"/>
+            <rect x="63" y="66" width="64" height="4" rx="2" fill="#168349" opacity="0.28"/>
+            <rect x="63" y="78" width="64" height="4" rx="2" fill="#168349" opacity="0.28"/>
+            <rect x="63" y="90" width="48" height="4" rx="2" fill="#168349" opacity="0.28"/>
+            <rect x="63" y="110" width="64" height="22" rx="4" fill="none" stroke="#D13821" stroke-width="1.4" opacity="0.7"/>
+          </svg>
+        </div>
+        <div class="body">
+          <h3>iOS 客户端 <span class="arrow">→</span></h3>
+          <p>黄历满屏撕页(390×844)与日记页概念稿 —— 纸即屏幕,token 与桌面完全一致。</p>
+        </div>
+      </a>
+    </div>
+  </section>
+
+  <footer>
+    <span>Wick 设计语言 v1.0 · token 源:<code>tokens.css</code>(与 <code>WickTheme.swift</code> 锚点一一对应)</span>
+    <span>烛火金 · 松烟绿 · 朱砂红 · 宣纸 · 墨</span>
+  </footer>
+</div>
+
+<script src="theme.js"></script>
+<script>
+  /* 刊头当前色板标注 */
+  (function () {
+    var label = document.getElementById("cur-theme-label");
+    var names = { dawn: "拂晓", day: "正午", dusk: "黄昏", night: "子夜" };
+    function refresh() {
+      var p = document.documentElement.getAttribute("data-phase");
+      var s = document.documentElement.getAttribute("data-scheme");
+      label.textContent = names[p] + " · " + (s === "dark" ? "暗" : "亮");
+    }
+    new MutationObserver(refresh).observe(document.documentElement, { attributes: true, attributeFilter: ["data-phase", "data-scheme"] });
+    refresh();
+  })();
+</script>
+</body>
+</html>

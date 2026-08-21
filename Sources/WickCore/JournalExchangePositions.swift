@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Exchange positions matched to a journal item, shown inside the item card:
-/// positions whose open day equals the entry's day and whose symbol loosely
-/// matches the item's tag. Hidden entirely when nothing matches.
+/// Exchange positions matched to a journal item, shown inside the item card as
+/// pasted exchange receipts (撕边小票 + 胶带). Receipt paper is physical: it
+/// stays cream in dark mode, and its inks are print constants. Hidden entirely
+/// when nothing matches.
 struct JournalExchangePositions: View {
     @EnvironmentObject private var settings: AppSettings
     @ObservedObject private var coordinator = ExchangePositionCoordinator.shared
@@ -24,95 +25,150 @@ struct JournalExchangePositions: View {
                     .textCase(.uppercase)
                     .tracking(0.4)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(matched) { position in
-                        positionRow(position)
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(matched.enumerated()), id: \.element.id) { index, position in
+                        ReceiptView(position: position, tilt: index.isMultiple(of: 2) ? -0.4 : 0.5)
                     }
                 }
             }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(palette.cardTop.scaledAlpha(0.4).color)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(palette.cardStroke.scaledAlpha(0.4).color, lineWidth: 1)
-            }
         }
     }
+}
 
-    private func positionRow(_ position: TradingPosition) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .center, spacing: 8) {
-                Text(position.symbol)
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(palette.textPrimary.color)
+// MARK: - Receipt · 交易所单据
 
-                sideBadge(position.side)
+/// One position as a torn receipt pasted on the page. Layout: symbol + lane +
+/// date range on top, dashed rules, tabular figures, realized PnL as the
+/// total. 红盈黛亏 — print constants on physical paper (theme-exempt).
+private struct ReceiptView: View {
+    @EnvironmentObject private var settings: AppSettings
+    @Environment(\.wickPalette) private var palette
 
-                Spacer(minLength: 8)
+    let position: TradingPosition
+    let tilt: Double
 
-                Text(
-                    L10n.string(
-                        position.isClosed ? .exchangePositionClosed : .exchangePositionOpen,
-                        language: settings.language
-                    )
-                )
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(palette.textTertiary.color)
-            }
+    /// Print inks on receipt paper (constant across schemes — the paper is).
+    private let printUp = Color(red: 0.69, green: 0.20, blue: 0.12)   // #B0341E
+    private let printDown = Color(red: 0.24, green: 0.36, blue: 0.31) // #3E5C50
 
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header: symbol + lane + date range
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(sizeAndPriceText(position))
-                Spacer(minLength: 8)
-                Text(pnlText(position))
-                    .foregroundStyle(pnlColor(position))
+                Text(headerTitle)
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(palette.receiptInk.color)
+                laneBadge
+                Spacer(minLength: 6)
+                Text(dateRange)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(palette.receiptInk.color.opacity(0.6))
             }
-            .font(.system(size: 11, design: .rounded).monospacedDigit())
-            .foregroundStyle(palette.textSecondary.color)
+            .padding(.bottom, 5)
+            .overlay(alignment: .bottom) {
+                DashedRule()
+            }
+
+            row(label: priceLabel, value: priceText)
+                .padding(.top, 5)
+            row(label: sizeLabel, value: sizeText)
+            totalRow
         }
+        .padding(.horizontal, 12)
+        .padding(.top, 11)
+        .padding(.bottom, 9)
+        .background(ReceiptShape().fill(palette.receipt.color))
+        .overlay(alignment: .top) {
+            // Two tape strips half over the top edge
+            HStack {
+                TapeStrip().frame(width: 46, height: 13).rotationEffect(.degrees(-4)).offset(y: -6)
+                Spacer()
+                TapeStrip().frame(width: 46, height: 13).rotationEffect(.degrees(3)).offset(y: -6)
+            }
+            .padding(.horizontal, 14)
+            .allowsHitTesting(false)
+        }
+        .rotationEffect(.degrees(tilt))
+        .shadow(color: palette.textPrimary.color.opacity(0.14), radius: 3, y: 1)
         .accessibilityElement(children: .combine)
     }
 
-    private func sideBadge(_ side: TradingPositionSide) -> some View {
-        let isLong = side == .long
-        let text = L10n.string(
-            isLong ? .exchangePositionLong : .exchangePositionShort,
-            language: settings.language
-        )
-        return HStack(spacing: 2) {
-            Image(systemName: isLong ? "arrow.up.forward" : "arrow.down.forward")
-                .font(.system(size: 8, weight: .bold))
-            Text(text)
-                .font(.system(size: 11, weight: .semibold))
+    // MARK: Rows
+
+    private func row(label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+            Spacer(minLength: 8)
+            Text(value)
         }
-        .foregroundStyle(isLong ? palette.accentText.color : palette.textSecondary.color)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .background(
-            Capsule(style: .continuous)
-                .fill(isLong ? palette.accentSoft.color : palette.controlBackground.color)
-        )
-        .overlay {
-            Capsule(style: .continuous)
-                .strokeBorder(palette.controlBorder.color, lineWidth: 1)
+        .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+        .foregroundStyle(palette.receiptInk.color.opacity(0.78))
+        .padding(.vertical, 2.5)
+        .overlay(alignment: .bottom) {
+            DashedRule().opacity(0.6)
         }
     }
 
-    // MARK: - Formatting
+    private var totalRow: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(L10n.string(.exchangePositionRealizedPnl, language: settings.language))
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(palette.receiptInk.color.opacity(0.78))
+            Spacer(minLength: 8)
+            Text(pnlText)
+                .font(.system(size: 12.5, weight: .bold, design: .monospaced))
+                .foregroundStyle(position.realizedPnl >= 0 ? printUp : printDown)
+        }
+        .padding(.top, 5)
+    }
 
-    private func sizeAndPriceText(_ position: TradingPosition) -> String {
-        var text = "\(Self.format(quantity: position.peakSize)) @ \(Self.format(price: position.entryPrice))"
+    private var laneBadge: some View {
+        let isLong = position.side == .long
+        return Text(L10n.string(isLong ? .exchangePositionLong : .exchangePositionShort, language: settings.language))
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(isLong ? printUp : printDown)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background((isLong ? printUp : printDown).opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 2.5, style: .continuous))
+    }
+
+    // MARK: Text
+
+    private var headerTitle: String {
+        position.symbol
+    }
+
+    private var dateRange: String {
+        let open = Self.dateFormatter.string(from: position.openTime)
+        if let close = position.closeTime {
+            return "\(open) → \(Self.dateFormatter.string(from: close))"
+        }
+        return open
+    }
+
+    private var priceLabel: String {
+        L10n.string(.exchangePositionVwap, language: settings.language)
+    }
+
+    private var priceText: String {
+        var text = Self.format(price: position.entryPrice)
         if let exitPrice = position.exitPrice {
-            text += " -> \(Self.format(price: exitPrice))"
+            text += " → \(Self.format(price: exitPrice))"
         }
         return text
     }
 
-    private func pnlText(_ position: TradingPosition) -> String {
-        var text = position.realizedPnl >= 0 ? "+" : "-"
+    private var sizeLabel: String {
+        L10n.string(.exchangePositionSize, language: settings.language)
+    }
+
+    private var sizeText: String {
+        Self.format(quantity: position.peakSize)
+    }
+
+    private var pnlText: String {
+        var text = position.realizedPnl >= 0 ? "+" : "−"
         text += Self.format(pnl: position.realizedPnl.magnitude)
         if let quote = position.quoteAsset {
             text += " \(quote)"
@@ -120,11 +176,13 @@ struct JournalExchangePositions: View {
         return text
     }
 
-    private func pnlColor(_ position: TradingPosition) -> Color {
-        position.realizedPnl >= 0
-            ? palette.reviewCorrect.color
-            : palette.reviewWrong.color
-    }
+    // MARK: Formatters
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM-dd HH:mm"
+        return formatter
+    }()
 
     private static let priceFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
@@ -153,5 +211,19 @@ struct JournalExchangePositions: View {
 
     private static func format(pnl value: Double) -> String {
         pnlFormatter.string(from: NSNumber(value: value)) ?? String(value)
+    }
+}
+
+/// 1pt dashed rule, receipt style.
+private struct DashedRule: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.clear)
+            .frame(height: 1)
+            .overlay {
+                Rectangle()
+                    .stroke(style: StrokeStyle(lineWidth: 0.7, dash: [3, 2.5]))
+                    .foregroundStyle(Color(red: 0.2, green: 0.16, blue: 0.1).opacity(0.35))
+            }
     }
 }

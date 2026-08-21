@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh" data-scheme="light" data-phase="day">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>秉烛 By Candlelight · Wick 设计语言 2.1</title>
+<link rel="stylesheet" href="tokens-v2.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--f-ui); color: var(--ink-1); background: var(--desk); min-height: 100vh; text-wrap: pretty; transition: background 0.4s ease; }
+  .grain-layer { position: fixed; inset: 0; pointer-events: none; opacity: var(--grain-opacity); z-index: 0; }
+  .page { position: relative; z-index: 1; max-width: 1020px; margin: 0 auto; padding: 60px 40px 120px; }
+
+  .theme-bar { position: fixed; top: 14px; right: 16px; z-index: 50; display: flex; gap: 8px; align-items: center;
+    padding: 5px 6px; background: var(--paper-hi); border: 1px solid var(--rule); box-shadow: var(--sh-page); }
+  .theme-bar .grp { display: flex; gap: 2px; }
+  .theme-bar button { font-family: var(--f-ui); font-size: 12px; font-weight: 600; color: var(--ink-2);
+    background: transparent; border: none; cursor: pointer; padding: 6px 10px; transition: all 0.18s ease; }
+  .theme-bar button:hover { color: var(--ink-1); }
+  .theme-bar button.is-on { background: var(--ember); color: #FFF3E0; }
+  .theme-bar .sep { width: 1px; height: 18px; background: var(--rule); }
+
+  /* 刊头 */
+  .masthead { padding: 30px 0 42px; border-bottom: 2px solid var(--ink-1); display: flex; align-items: flex-end; gap: 26px; }
+  .masthead .flame-mark { width: 58px; height: 58px; display: grid; place-items: center; background: var(--char-1); border-radius: 6px;
+    box-shadow: 0 0 34px var(--glow); flex: none; }
+  .masthead h1 { font-family: var(--f-print); font-size: 46px; font-weight: 900; letter-spacing: 0.04em; line-height: 1.05; }
+  .masthead h1 small { font-family: var(--f-ui); font-size: 13px; font-weight: 600; letter-spacing: 0.28em; color: var(--ink-3); display: block; margin-bottom: 8px; }
+  .masthead .meta { margin-left: auto; text-align: right; font-family: var(--f-mono); font-size: 11.5px; color: var(--ink-3); line-height: 1.9; }
+  .masthead .meta b { color: var(--cinnabar); }
+
+  section { margin-top: 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
+  .sec-head .no { font-family: var(--f-mono); font-size: 13px; color: var(--cinnabar); font-weight: 700; }
+  .sec-head h2 { font-family: var(--f-print); font-size: 26px; font-weight: 900; }
+  .sec-head .en { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+  .lead { color: var(--ink-2); font-size: 14.5px; line-height: 1.9; max-width: 740px; margin-bottom: 26px; }
+  .lead b { color: var(--ink-1); }
+
+  .sheet { background: var(--paper); box-shadow: var(--sh-page); padding: 30px 34px; position: relative; }
+  .sheet + .sheet-edge { height: 5px; margin: 0 6px; background: var(--paper-edge); box-shadow: var(--sh-page); }
+  .sheet + .sheet-edge + .sheet-edge2 { height: 4px; margin: 0 12px; background: var(--paper-edge); opacity: 0.6; }
+
+  /* 概念对照 */
+  .vs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .vs th, .vs td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--rule); vertical-align: top; line-height: 1.7; }
+  .vs th { font-size: 11px; letter-spacing: 0.1em; color: var(--ink-3); text-transform: uppercase; }
+  .vs td:first-child { color: var(--ink-2); white-space: nowrap; }
+  .vs td.old { color: var(--ink-3); }
+  .vs td.new b { color: var(--cinnabar); }
+
+  /* 烛痕演示 */
+  .burn-hero { padding: 34px 34px 26px; background: var(--paper); box-shadow: var(--sh-page); }
+  .burn-hero .big-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+  .burn-hero .big-row .lbl { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; color: var(--ink-2); }
+  .burn-hero .big-row .pct { font-family: var(--f-disp); font-size: 54px; font-weight: 900; font-variant-numeric: tabular-nums; }
+  .burn-hero .big-row .pct small { font-size: 20px; }
+  .burn-hero .burnstrip { height: 44px; }
+  .burn-hero .sub { display: flex; justify-content: space-between; margin-top: 10px; font-family: var(--f-mono); font-size: 11px; color: var(--ink-3); }
+  .anatomy { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: 26px; border-top: 1px solid var(--rule); }
+  .anatomy div { padding: 14px 18px 4px; font-size: 12.5px; color: var(--ink-2); line-height: 1.75; border-left: 1px solid var(--rule); }
+  .anatomy div:first-child { border-left: none; padding-left: 0; }
+  .anatomy b { display: block; color: var(--ink-1); font-size: 13px; margin-bottom: 3px; }
+  .anatomy .sw-e { color: var(--ember); } .anatomy .sw-c { color: var(--char-2); }
+
+  /* 颜料 */
+  .inks { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  .ink-card { background: var(--paper); box-shadow: var(--sh-page); }
+  .ink-card .sw { height: 74px; }
+  .ink-card .b { padding: 10px 13px 12px; }
+  .ink-card h4 { font-family: var(--f-print); font-size: 15px; font-weight: 900; }
+  .ink-card .r { font-size: 11px; color: var(--ink-2); line-height: 1.65; margin-top: 3px; }
+  .ink-card .h { font-family: var(--f-mono); font-size: 10.5px; color: var(--ink-3); margin-top: 5px; }
+
+  /* 字态 */
+  .voices { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .voice { background: var(--paper); box-shadow: var(--sh-page); padding: 24px 28px; }
+  .voice .tag { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.14em; color: var(--cinnabar); text-transform: uppercase; }
+  .voice h3 { font-size: 14px; margin: 5px 0 16px; color: var(--ink-2); font-weight: 600; }
+  .v-print { font-family: var(--f-print); font-size: 30px; font-weight: 700; line-height: 1.5; }
+  .v-print small { display: block; font-size: 13.5px; color: var(--ink-2); font-weight: 400; margin-top: 8px; line-height: 2.0; }
+  .v-disp { font-family: var(--f-disp); font-size: 52px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+  .v-disp small { display: block; font-family: var(--f-mono); font-size: 13px; color: var(--ink-2); margin-top: 12px; font-weight: 400; }
+  .v-ui { font-size: 13px; letter-spacing: 0.12em; font-weight: 700; }
+  .v-ui small { display: block; letter-spacing: normal; font-weight: 400; color: var(--ink-2); margin-top: 12px; line-height: 1.9; }
+  .v-mono { font-family: var(--f-mono); font-size: 17px; font-variant-numeric: tabular-nums; }
+  .v-mono small { display: block; font-size: 12px; color: var(--ink-2); margin-top: 12px; line-height: 1.9; }
+
+  /* 组件陈列 */
+  .comps { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .comp { background: var(--paper); box-shadow: var(--sh-page); padding: 22px 26px; }
+  .comp > h4 { font-size: 12px; color: var(--ink-3); letter-spacing: 0.08em; margin-bottom: 16px; font-weight: 700; text-transform: uppercase; }
+  .comp.wide { grid-column: 1 / -1; }
+  .chop-row { display: flex; gap: 26px; align-items: center; }
+  .chop-note { font-size: 12px; color: var(--ink-2); line-height: 1.8; }
+  .mini-strips { display: flex; flex-direction: column; gap: 14px; }
+  .mini-strips .row { display: flex; align-items: center; gap: 14px; }
+  .mini-strips .lbl { width: 66px; font-size: 12px; font-weight: 700; color: var(--ink-2); flex: none; }
+  .mini-strips .burnstrip { height: 16px; flex: 1; }
+  .mini-strips .val { width: 130px; text-align: right; font-family: var(--f-mono); font-size: 11.5px; color: var(--ink-2); flex: none; }
+  .yiji { display: flex; gap: 18px; align-items: baseline; font-family: var(--f-print); font-size: 14px; }
+  .yiji b { color: #FBEADB; background: var(--cinnabar); padding: 1px 7px; border-radius: 2px; font-size: 12px; margin-right: 8px; }
+  .yiji .j b { background: var(--dai); }
+
+  /* 模块导航 */
+  .mods { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .mod { display: block; text-decoration: none; color: inherit; background: var(--paper); box-shadow: var(--sh-page); transition: transform 0.18s ease, box-shadow 0.18s ease; }
+  .mod:hover { transform: translateY(-3px); box-shadow: var(--sh-lift); }
+  .mod .body { padding: 20px 24px 22px; }
+  .mod h3 { font-family: var(--f-print); font-size: 19px; font-weight: 900; display: flex; }
+  .mod h3 .go { margin-left: auto; color: var(--cinnabar); font-family: var(--f-ui); font-size: 14px; }
+  .mod p { margin-top: 7px; font-size: 12.5px; color: var(--ink-2); line-height: 1.75; }
+
+  footer { margin-top: 80px; padding-top: 20px; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-3); }
+  footer a { color: var(--cinnabar); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="grain-layer grain"></div>
+
+<!-- SVG 形变滤镜:烛痕边缘 / 撕边 -->
+<svg width="0" height="0" style="position: absolute;" aria-hidden="true">
+  <filter id="f-char" x="-5%" y="-30%" width="110%" height="160%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.012 0.35" numOctaves="3" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="f-torn" x="-5%" y="-12%" width="110%" height="124%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.035 0.28" numOctaves="3" seed="11" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="f-seal" x="-8%" y="-8%" width="116%" height="116%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="2" seed="9" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="2.4"/>
+  </filter>
+</svg>
+
+<div class="theme-bar">
+  <div class="grp">
+    <button data-set-phase="dawn">拂晓</button>
+    <button data-set-phase="day">正午</button>
+    <button data-set-phase="dusk">黄昏</button>
+    <button data-set-phase="night">子夜</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button data-set-scheme="light">亮</button>
+    <button data-set-scheme="dark">暗</button>
+  </div>
+</div>
+
+<div class="page">
+
+  <header class="masthead">
+    <div class="flame-mark">
+      <svg width="30" height="30" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+        <path d="M9 1.4 C7.6 3.1 6.6 4.6 6.6 6.1 C6.6 7.8 7.7 9 9 9 C10.3 9 11.4 7.8 11.4 6.1 C11.4 4.6 10.4 3.1 9 1.4 Z" fill="#F7B261"/>
+        <rect x="8.5" y="9.2" width="1" height="2" fill="#C9B795"/>
+        <path d="M5.6 11.2 L12.4 11.2 L12.8 15.6 Q12.85 16.6 11.6 16.6 L6.4 16.6 Q5.15 16.6 5.2 15.6 Z" fill="#E8DCC0"/>
+      </svg>
+    </div>
+    <h1><small>WICK DESIGN LANGUAGE 2.1</small>秉烛</h1>
+    <div class="meta">
+      By Candlelight · 2026-08<br>
+      状态:<b>v2.1</b>(取代 v1「一烛之光」/ v2「燃日」)<br>
+      <span data-clock></span>
+    </div>
+  </header>
+
+  <!-- ==================== 01 概念 ==================== -->
+  <section data-screen-label="概念">
+    <div class="sec-head"><span class="no">01</span><h2>一个比喻,贯穿到底</h2><span class="en">The concept</span></div>
+    <p class="lead">v1 的失败在于「共享色值 ≠ 共享语言」。2.0 的做法:三个模块不再是三个被染色的界面,而是<b>同一叠纸上的三件事</b> —— 这叠纸被一根蜡烛照着。<b>烛光照过的地方留下暖暖的痕迹,那就是已经过去的时间;烛苗停在哪里,哪里就是此刻;还没照到的部分,是你的今天、本周、今年。</b>日记是你在纸上写的东西,黄历是这叠纸里印刷最讲究的那一页——撕掉它,这一天就温柔地翻过去了。</p>
+    <div class="sheet">
+      <table class="vs">
+        <tr><th></th><th>v1「一烛之光」(已废弃)</th><th>v2.1「秉烛」</th></tr>
+        <tr><td>时间</td><td class="old">四张彩色圆角卡片,日/周/月/年各占一个色相,像四个 App 的小组件拼在一起</td><td class="new"><b>烛痕条</b>:暖渍 + 一粒烛苗。时间只有一种颜色——烛光的颜色;层级靠大小,不靠色相</td></tr>
+        <tr><td>日记</td><td class="old">通用双栏 App:侧栏表格 + 圆角卡片列表,放之四海而皆准</td><td class="new"><b>账册</b>:一摞纸,书口拇指索引翻月份,条目是墨迹,窗口本身没有 App chrome</td></tr>
+        <tr><td>仓位</td><td class="old">圆角信息块,与卡片同质</td><td class="new"><b>交易所单据</b>:撕边小票 + 透明胶带贴在纸上,等宽数字,暗色下仍是物理纸</td></tr>
+        <tr><td>复盘</td><td class="old">绿勾 / 红叉圆形双环贴纸</td><td class="new"><b>朱砂方章</b>:白文篆刻「对 / 错」。真印章永远是红的,靠字表意</td></tr>
+        <tr><td>黄历</td><td class="old">临摹 himekuri:绿墨红印是借来的风格,与日记互不隶属</td><td class="new"><b>重画为自家印刷页</b>:烟墨 + 朱砂双色,朱漆装订条,加交易版「宜 / 忌」;撕页 = 温柔地翻过这一天,叙事闭环</td></tr>
+        <tr><td>暗色</td><td class="old">子夜 accent 变蓝 —— 蜡烛变成了 LED</td><td class="new"><b>夜里的纸</b>:纸变深赭、墨变浅驼,火苗色恒定;单据与黄历作为物理纸不反色</td></tr>
+        <tr><td>盈亏</td><td class="old">西式绿涨红跌,与印章红绿撞车</td><td class="new"><b>红盈 / 黛亏</b>(A 股习惯);如需保持币圈西式,改两个 token 即可</td></tr>
+      </table>
+    </div>
+    <div class="sheet-edge"></div>
+    <div class="sheet-edge2"></div>
+  </section>
+
+  <!-- ==================== 02 烛痕 ==================== -->
+  <section data-screen-label="烛痕">
+    <div class="sec-head"><span class="no">02</span><h2>烛痕 · 系统的签名组件</h2><span class="en">The candle stain</span></div>
+    <p class="lead">下面这条不是示意图——<b>它是活的</b>,按你的系统时钟每秒推进。今天已经被烧掉的部分,你现在就能看见。</p>
+    <div class="burn-hero">
+      <div class="big-row">
+        <span class="lbl">今日剩余</span>
+        <span class="pct"><span data-burn-day-label>—</span><small> %</small></span>
+      </div>
+      <div class="burnstrip" data-burn-day style="--p: 61%;">
+        <div class="char"></div>
+        <div class="emberline"></div>
+        <div class="flame"></div>
+      </div>
+      <div class="sub"><span>00:00</span><span data-clock></span><span>24:00</span></div>
+      <div class="anatomy">
+        <div><b class="sw-c">■ 烛痕 Stain</b>已经过去的时间,被烛光烘出一道暖渍。渍边由 feTurbulence 置换生成,每道痕都不同。</div>
+        <div><b class="sw-e">■ 烛苗 Flame</b>「此刻」。一粒安静的小火苗,1.7s 呼吸明灭;暗色下它是界面里唯一的光源。</div>
+        <div><b>□ 刻度纸 Unlit</b>未来。纸面印 24 等分刻线(小时),烛苗走到哪里,哪里就是现在。</div>
+      </div>
+    </div>
+    <div class="sheet-edge"></div>
+  </section>
+
+  <!-- ==================== 03 颜料 ==================== -->
+  <section data-screen-label="颜料">
+    <div class="sec-head"><span class="no">03</span><h2>五种材料</h2><span class="en">Materials</span></div>
+    <div class="inks">
+      <div class="ink-card"><div class="sw" style="background: var(--paper); border-bottom: 1px solid var(--rule);"></div><div class="b"><h4>纸</h4><div class="r">一切表面的基底。暖白,随弧光调色温;暗色 = 夜里的深赭纸。</div><div class="h">#FBF4E6</div></div></div>
+      <div class="ink-card"><div class="sw" style="background: #2B2014;"></div><div class="b"><h4>烟墨</h4><div class="r">三级文字。暖棕黑,不用纯黑;印刷与书写共用。</div><div class="h">#2B2014</div></div></div>
+      <div class="ink-card"><div class="sw" style="background: linear-gradient(140deg, #FFB25E, #E8791C);"></div><div class="b"><h4>烛火</h4><div class="r">火苗、火线、行动、此刻。色相跨时段恒定——入夜后它就是唯一的光。</div><div class="h">#E8791C</div></div></div>
+      <div class="ink-card"><div class="sw" style="background: #C03A22;"></div><div class="b"><h4>朱砂</h4><div class="r">印章、签条、印刷界线、盈。哑光颜料,永不做发光效果——与烛火分工明确。</div><div class="h">#C03A22</div></div></div>
+      <div class="ink-card"><div class="sw" style="background: #3E5C50;"></div><div class="b"><h4>黛青</h4><div class="r">亏。全系统唯一的冷色,只在亏损数字上出现,低饱和、克制。</div><div class="h">#3E5C50</div></div></div>
+    </div>
+  </section>
+
+  <!-- ==================== 04 字态 ==================== -->
+  <section data-screen-label="字态">
+    <div class="sec-head"><span class="no">04</span><h2>四种字态</h2><span class="en">Voices</span></div>
+    <div class="voices">
+      <div class="voice">
+        <span class="tag">Print · 宋体</span>
+        <h3>写在纸上的、印在纸上的 —— 日记正文、黄历、批注、签条</h3>
+        <div class="v-print">趋势未破坏前不预判顶。<small>仓位管理不是预测对错,而是错了还活着。日记正文 13pt,行高 1.8。</small></div>
+      </div>
+      <div class="voice">
+        <span class="tag">Display · 粗衬线</span>
+        <h3>大数字 —— 日期、百分比,只用衬线 Black</h3>
+        <div class="v-disp">20 / 63.4<small>黄历日字 108pt · 剩余百分比 54pt,等宽数字。</small></div>
+      </div>
+      <div class="voice">
+        <span class="tag">Label · 刻印小标签</span>
+        <h3>功能文字 —— 按钮、栏目名、表头:小字号 + 字距 + 中黑</h3>
+        <div class="v-ui">宏观事件 · 财报 · 设置<small>功能性文字退后,像印在器物上的铭牌,不抢纸面的戏。</small></div>
+      </div>
+      <div class="voice">
+        <span class="tag">Mono · 单据等宽</span>
+        <h3>交易所数字 —— 价格、数量、盈亏,全部等宽对齐</h3>
+        <div class="v-mono">112,480.5 → 114,206.0<br>+431.38 USDT<small>数字是凭证,凭证必须对齐。</small></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 05 组件 ==================== -->
+  <section data-screen-label="组件">
+    <div class="sec-head"><span class="no">05</span><h2>组件</h2><span class="en">Components</span></div>
+    <div class="comps">
+      <div class="comp wide">
+        <h4>烛痕条 · 周 / 月 / 年(次层级,细条)</h4>
+        <div class="mini-strips">
+          <div class="row"><span class="lbl">本周</span><div class="burnstrip" style="--p: 58.8%; --ticks: 7;"><div class="char"></div><div class="emberline"></div></div><span class="val">剩 41.2% · 周日终</span></div>
+          <div class="row"><span class="lbl">本月</span><div class="burnstrip" style="--p: 64.5%; --ticks: 31;"><div class="char"></div><div class="emberline"></div></div><span class="val">剩 35.5% · 31 日终</span></div>
+          <div class="row"><span class="lbl">今年</span><div class="burnstrip" style="--p: 63.3%; --ticks: 12;"><div class="char"></div><div class="emberline"></div></div><span class="val">剩 36.7% · 12月31日终</span></div>
+        </div>
+      </div>
+      <div class="comp">
+        <h4>朱砂方章 · 复盘定稿 / 闲日休市</h4>
+        <div class="chop-row">
+          <span class="chop" style="width: 52px; height: 52px; font-size: 24px;"><span>对</span></span>
+          <span class="chop" style="width: 52px; height: 52px; font-size: 24px; transform: rotate(4deg);"><span>错</span></span>
+          <span class="chop" style="width: 34px; height: 34px; font-size: 15px; transform: rotate(-3deg);"><span>对</span></span>
+          <span class="chop" style="width: 66px; height: 36px; font-size: 15px; letter-spacing: 0.2em; padding-left: 0.2em; transform: rotate(2.5deg);"><span>休市</span></span>
+          <button class="inkbtn" id="chop-demo-btn" title="盖章演示" style="width: auto; padding: 0 10px; white-space: nowrap; font-family: var(--f-print); font-size: 12px;">盖一下</button>
+          <span class="chop" id="chop-demo" style="width: 52px; height: 52px; font-size: 24px; opacity: 0;"><span>对</span></span>
+        </div>
+        <p class="chop-note" style="margin-top: 14px;">残边 + 蘸印不匀 + 纸纹透出,形变只作用于印泥本体,字形保持锐利。<br>落印动效 0.3s:从 1.7 倍大小盖下、回弹落定、角度微偏,每枚章的倾角都不同。</p>
+      </div>
+      <div class="comp">
+        <h4>签条与功能钮</h4>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px;">
+          <span class="ptag on">趋势跟踪</span><span class="ptag">震荡</span><span class="ptag">突破</span><span class="ptag">心态</span><span class="ptag">数据面</span>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button class="inkbtn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1.5" y="2.5" width="13" height="12" rx="2"/><path d="M1.5 6h13M5 1v3M11 1v3"/></svg></button>
+          <button class="inkbtn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 13V5.5A2.5 2.5 0 0 1 5.5 3h7v10h-7A2.5 2.5 0 0 0 3 13ZM5.5 13V3"/></svg></button>
+          <button class="inkbtn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg></button>
+          <button class="inkbtn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 2.5v11M2.5 8h11"/></svg></button>
+          <span style="font-size: 11.5px; color: var(--ink-3);">方钮 1pt 墨线 · hover 染烛火并起光</span>
+        </div>
+      </div>
+      <div class="comp wide">
+        <h4>交易所单据 · 胶带贴上纸面</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px;">
+          <div class="receipt">
+            <div class="r-head"><b>BTCUSDT 永续 · 多</b><span>08-18 09:41 → 08-20 14:35</span></div>
+            <div class="r-row"><span>开仓 → 平仓 VWAP</span><span>112,480.5 → 114,206.0</span></div>
+            <div class="r-row"><span>数量 · 持有</span><span>0.250 BTC · 2 天 4 小时</span></div>
+            <div class="r-row r-total"><span>已实现盈亏</span><span class="up">+431.38 USDT</span></div>
+          </div>
+          <div class="receipt" style="transform: rotate(0.5deg);">
+            <div class="r-head"><b>ETHUSDT 永续 · 空</b><span>08-20 21:01 → 21:48</span></div>
+            <div class="r-row"><span>开仓 → 平仓 VWAP</span><span>4,218.40 → 4,322.15</span></div>
+            <div class="r-row"><span>数量 · 持有</span><span>3.00 ETH · 47 分钟</span></div>
+            <div class="r-row r-total"><span>已实现盈亏</span><span class="down">−311.25 USDT</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="comp wide">
+        <h4>宜 · 忌(黄历新增,内容提案)</h4>
+        <div class="yiji"><span><b>宜</b>止盈 · 复盘 · 早睡</span><span class="j"><b>忌</b>追单 · 扛单 · 改止损</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 06 模块稿 ==================== -->
+  <section data-screen-label="模块稿">
+    <div class="sec-head"><span class="no">06</span><h2>落到模块</h2><span class="en">Applied</span></div>
+    <div class="mods">
+      <a class="mod" href="v2-macos.html">
+        <div class="body">
+          <h3>macOS 三件套 <span class="go">→</span></h3>
+          <p>菜单栏纸签(燃烧条)· 账册日记(拇指索引 + 单据 + 方章)· 重画的黄历贴桌窗。真实尺寸。</p>
+        </div>
+      </a>
+      <a class="mod" href="v2-ios.html">
+        <div class="body">
+          <h3>iOS <span class="go">→</span></h3>
+          <p>首页「今日」· 满屏黄历 · 日记纸页 · 「今日纸签」小组件提案。四屏同墙展示。</p>
+        </div>
+      </a>
+      <a class="mod" href="v3-fusion.html">
+        <div class="body">
+          <h3>v3 · 融合窗口(平行探索) <span class="go">→</span></h3>
+          <p>日记与黄历收进一个原生三栏窗口,黄历为可开关的第四栏。</p>
+        </div>
+      </a>
+      <a class="mod" href="v4-directions.html">
+        <div class="body">
+          <h3>v4 · 黄历归属对照 <span class="go">→</span></h3>
+          <p>方向 A 召唤(独立贴桌物件)vs 方向 B 入册(右栏今日事件 + 盈亏月历)。</p>
+        </div>
+      </a>
+      <a class="mod" href="final.html" style="grid-column: 1 / -1;">
+        <div class="body">
+          <h3>★ 定稿 v1.0 · 秉烛 Final Spec <span class="go">→</span></h3>
+          <p>决策记录、原则、Token、组件终稿、界面清单、设置(彩蛋开关)、状态与边界、实现注记 —— 实现蓝本以此页为准。</p>
+        </div>
+      </a>
+    </div>
+  </section>
+
+  <footer>
+    <span>秉烛 v2.1 · token 源:<code>tokens-v2.css</code></span>
+    <span><a href="index.html">查看已废弃的 v1「一烛之光」 →</a></span>
+  </footer>
+</div>
+
+<script src="theme.js"></script>
+<script>
+  /* 盖章演示:重放落印动效 */
+  (function () {
+    var btn = document.getElementById("chop-demo-btn");
+    var chop = document.getElementById("chop-demo");
+    if (!btn || !chop) return;
+    btn.addEventListener("click", function () {
+      chop.classList.remove("stamped");
+      chop.style.opacity = "1";
+      void chop.offsetWidth;
+      chop.classList.add("stamped");
+    });
+  })();
+</script>
+</body>
+</html>

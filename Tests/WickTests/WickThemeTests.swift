@@ -137,23 +137,6 @@ final class WickThemeTests: XCTestCase {
         }
     }
 
-    // MARK: Metric themes
-
-    func testMetricThemesCountAndIdentityHues() {
-        let noonThemes = DayArcEngine.metricThemes(at: date(hour: 12), scheme: .light, calendar: calendar)
-        XCTAssertEqual(noonThemes.count, 4)
-
-        // First family is the amber identity hue; time of day must not change it.
-        let midnightThemes = DayArcEngine.metricThemes(at: date(hour: 0), scheme: .light, calendar: calendar)
-        XCTAssertEqual(rgbString(noonThemes[0].primary), rgbString(midnightThemes[0].primary))
-    }
-
-    func testGlowScaleOrdering() {
-        XCTAssertLessThan(DayPhase.day.glowScale, DayPhase.dawn.glowScale)
-        XCTAssertLessThan(DayPhase.dawn.glowScale, DayPhase.dusk.glowScale)
-        XCTAssertLessThan(DayPhase.dusk.glowScale, DayPhase.night.glowScale)
-    }
-
     private func rgbString(_ color: Color) -> String {
         guard let nsColor = NSColor(color).usingColorSpace(.sRGB) else { return "?" }
         return [nsColor.redComponent, nsColor.greenComponent, nsColor.blueComponent]

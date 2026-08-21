@@ -1,0 +1,93 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "Wick 设计语言": {
+      "versions": [
+        {
+          "path": "index.html",
+          "createdAt": "2026-08-20T14:56:24.523Z",
+          "status": "needs-review"
+        },
+        {
+          "path": "macos.html",
+          "createdAt": "2026-08-20T14:56:24.560Z",
+          "status": "needs-review"
+        },
+        {
+          "path": "ios.html",
+          "createdAt": "2026-08-20T14:56:24.598Z",
+          "status": "needs-review"
+        }
+      ]
+    },
+    "Wick 设计语言 v2 燃日": {
+      "versions": [
+        {
+          "path": "v2.html",
+          "createdAt": "2026-08-20T15:38:44.525Z",
+          "status": "needs-review"
+        },
+        {
+          "path": "v2-macos.html",
+          "createdAt": "2026-08-20T15:38:44.557Z",
+          "status": "needs-review"
+        },
+        {
+          "path": "v2-ios.html",
+          "createdAt": "2026-08-20T15:38:44.585Z",
+          "status": "needs-review"
+        }
+      ]
+    },
+    "Wick 设计语言 v2.1 秉烛": {
+      "versions": [
+        {
+          "path": "v2.html",
+          "createdAt": "2026-08-20T16:16:02.510Z",
+          "status": "needs-review"
+        },
+        {
+          "path": "v2-macos.html",
+          "createdAt": "2026-08-20T16:16:02.543Z",
+          "status": "needs-review"
+        },
+        {
+          "path": "v2-ios.html",
+          "createdAt": "2026-08-20T16:16:02.567Z",
+          "status": "needs-review"
+        }
+      ]
+    },
+    "Wick 设计语言 v3 融合窗口": {
+      "versions": [
+        {
+          "path": "v3-fusion.html",
+          "createdAt": "2026-08-20T17:05:05.213Z",
+          "status": "needs-review"
+        }
+      ]
+    },
+    "Wick 设计语言 v4 黄历归属": {
+      "versions": [
+        {
+          "path": "v4-directions.html",
+          "createdAt": "2026-08-20T17:20:46.765Z",
+          "status": "needs-review"
+        }
+      ]
+    },
+    "Wick 设计语言 · 秉烛定稿": {
+      "versions": [
+        {
+          "path": "final.html",
+          "createdAt": "2026-08-20T17:39:20.467Z",
+          "status": "needs-review"
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-08-20T14:56:24.530Z",
+  "updatedAt": "2026-08-20T18:29:33.011Z"
+}

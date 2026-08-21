@@ -74,12 +74,27 @@ final class ExchangePositionCoordinator: ObservableObject {
     private let secretStore: KeychainTokenStore
     private var refreshTimer: Timer?
 
+    #if DEBUG
+    /// UI-check/screenshot mode: skip Keychain reads so a headless launch
+    /// never blocks on an access prompt. Credentials look absent, so all
+    /// network sync paths stay inert as well.
+    static var skipKeychainAccess = false
+    #endif
+
     init(
         keychainService: String = "com.miaoz.wick.binance"
     ) {
         apiKeyStore = KeychainTokenStore(service: keychainService, account: "apiKey")
         secretStore = KeychainTokenStore(service: keychainService, account: "apiSecret")
+        #if DEBUG
+        if Self.skipKeychainAccess {
+            hasCredentials = false
+        } else {
+            hasCredentials = apiKeyStore.load() != nil && secretStore.load() != nil
+        }
+        #else
         hasCredentials = apiKeyStore.load() != nil && secretStore.load() != nil
+        #endif
     }
 
     var isEnabled: Bool {

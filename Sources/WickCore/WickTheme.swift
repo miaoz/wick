@@ -107,15 +107,6 @@ enum DayPhase: CaseIterable {
         }
     }
 
-    var emoji: String {
-        switch self {
-        case .dawn: return "🌅"
-        case .day: return "☀️"
-        case .dusk: return "🌇"
-        case .night: return "🌙"
-        }
-    }
-
     func name(language: AppLanguage) -> String {
         switch self {
         case .dawn: return L10n.string(.phaseDawn, language: language)
@@ -125,20 +116,12 @@ enum DayPhase: CaseIterable {
         }
     }
 
-    /// Metric-card glow intensity at this phase's peak (interpolated like colors).
-    var glowScale: Double {
-        switch self {
-        case .dawn: return 1.0
-        case .day: return 0.55
-        case .dusk: return 1.15
-        case .night: return 1.35
-        }
-    }
 }
 
 // MARK: - Palette
 
 /// All color roles shared by the menu-bar panel and the journal window.
+/// 「秉烛」材料系统:paper/ink/ember/cinnabar/dai/stain/receipt。
 struct WickPalette: Equatable {
     var backgroundTop: WickRGB
     var backgroundBottom: WickRGB
@@ -156,12 +139,23 @@ struct WickPalette: Equatable {
     var accentText: WickRGB
     /// Soft accent tint for selected fills.
     var accentSoft: WickRGB
-    /// Review verdict glyphs: "correct" seal (green family, hue-stable across phases).
+    /// Review seals: 白文朱砂方章,永远红色,靠字表意(对/错同色)。
     var reviewCorrect: WickRGB
-    /// Review verdict glyphs: "wrong" seal (vermilion family, hue-stable across phases).
     var reviewWrong: WickRGB
     var divider: WickRGB
     var glow: WickRGB
+    /// 烛痕:烛痕条已逝部分的暖渍(浅端 → 靠烛苗一端)。
+    var stain1: WickRGB
+    var stain2: WickRGB
+    /// 盈亏:红盈(A 股习惯)。
+    var pnlUp: WickRGB
+    /// 盈亏:黛亏(全系统唯一的冷色)。
+    var pnlDown: WickRGB
+    /// 单据物理纸:恒定,不随深浅模式反色。
+    var receipt: WickRGB
+    var receiptInk: WickRGB
+    /// 烛印方砖:火苗衬底的近黑牌(品牌件,不随弧光漂移)。
+    var brandTile: WickRGB
 
     func lerped(to other: WickPalette, t: Double) -> WickPalette {
         WickPalette(
@@ -182,24 +176,40 @@ struct WickPalette: Equatable {
             reviewCorrect: reviewCorrect.lerped(to: other.reviewCorrect, t: t),
             reviewWrong: reviewWrong.lerped(to: other.reviewWrong, t: t),
             divider: divider.lerped(to: other.divider, t: t),
-            glow: glow.lerped(to: other.glow, t: t)
+            glow: glow.lerped(to: other.glow, t: t),
+            stain1: stain1.lerped(to: other.stain1, t: t),
+            stain2: stain2.lerped(to: other.stain2, t: t),
+            pnlUp: pnlUp.lerped(to: other.pnlUp, t: t),
+            pnlDown: pnlDown.lerped(to: other.pnlDown, t: t),
+            receipt: receipt.lerped(to: other.receipt, t: t),
+            receiptInk: receiptInk.lerped(to: other.receiptInk, t: t),
+            brandTile: brandTile.lerped(to: other.brandTile, t: t)
         )
     }
 }
 
-// MARK: - Metric theme
+// MARK: - Paper surface mapping(秉烛 §02:同一叠纸的层级)
 
-/// Per-metric (day/week/month/year) card styling. Hue families are stable
-/// identities; the engine only scales glow intensity with the day arc.
-struct MetricTheme {
-    let primary: Color
-    let secondary: Color
-    let glow: Color
-    let cardTop: Color
-    let cardBottom: Color
-    let trackFill: Color
-    let trackStroke: Color
-    let spark: Color
+extension WickPalette {
+    /// 栏面纸(paper):日期列表、检查器等栏位的底,介于桌底与页纸之间。
+    var columnPaper: WickRGB { cardBottom }
+    /// 编辑区画布:paper 82% + 桌底 18%,比栏面略深,让纸页浮起。
+    var editorCanvas: WickRGB { cardBottom.lerped(to: backgroundBottom, t: 0.18) }
+    /// 编辑页纸(paper-hi):整叠纸的最上层,日记内容印在这张纸上。
+    var pageSurface: WickRGB { cardTop }
+    /// 纸页投影色:近黑的烟墨,亮暗两态都成立。
+    var pageShadow: WickRGB { brandTile }
+}
+
+// MARK: - 印刷字态(字态四声部之一:宋体 = 写在纸上的内容)
+
+enum WickPrintFont {
+    /// Songti SC,可选粗体;缺字体时回退系统字体。
+    static func songti(_ size: CGFloat, bold: Bool = false) -> NSFont {
+        let base = NSFont(name: "Songti SC", size: size) ?? NSFont.systemFont(ofSize: size)
+        guard bold else { return base }
+        return NSFontManager.shared.convert(base, toHaveTrait: .boldFontMask)
+    }
 }
 
 // MARK: - Engine
@@ -251,29 +261,6 @@ enum DayArcEngine {
     /// from 22:30), so deep night still reads as night rather than pre-dawn.
     static func phase(at date: Date, calendar: Calendar = .current) -> DayPhase {
         phaseBlend(at: date, calendar: calendar).from
-    }
-
-    /// Metric card themes with glow scaled by the (interpolated) day arc.
-    static func metricThemes(
-        at date: Date,
-        scheme: ColorScheme,
-        calendar: Calendar = .current
-    ) -> [MetricTheme] {
-        let blend = phaseBlend(at: date, calendar: calendar)
-        let scale = blend.from.glowScale
-            + (blend.to.glowScale - blend.from.glowScale) * blend.t
-        return metricBase(for: scheme).map { base in
-            MetricTheme(
-                primary: base.primary.color,
-                secondary: base.secondary.color,
-                glow: base.glow.scaledAlpha(scale).color,
-                cardTop: base.cardTop.color,
-                cardBottom: base.cardBottom.color,
-                trackFill: base.trackFill.color,
-                trackStroke: base.trackStroke.color,
-                spark: base.spark.color
-            )
-        }
     }
 
     /// "Now" for theme resolution. Honors `WICK_ARC_TIME=HH:mm` in debug
@@ -335,278 +322,246 @@ enum DayArcEngine {
     }
 
     // MARK: Anchor palettes — light scheme
+    //
+    // 「秉烛」锚点:火苗色(ember)跨时段恒定,只调色温;朱砂/黛青/单据纸为颜料,不参与插值漂移。
+    // reviewCorrect/reviewWrong 同色 —— 方章靠字表意。
 
-    /// Rose-gold morning haze.
+    /// Rose-dawn paper(玫瑰晨纸)。
     private static let lightDawn = WickPalette(
-        backgroundTop: WickRGB(hex: 0xFDF1E8),
-        backgroundBottom: WickRGB(hex: 0xF5DFD3),
-        sidebarBackground: WickRGB(hex: 0xF7E6DA),
-        cardTop: WickRGB(hex: 0xFEF4EC),
-        cardBottom: WickRGB(hex: 0xF6E2D5),
-        cardStroke: WickRGB(hex: 0xE3BFA8, opacity: 0.6),
-        controlBackground: WickRGB(hex: 0xFFFFFF, opacity: 0.5),
-        controlBorder: WickRGB(hex: 0xDCB49B, opacity: 0.7),
-        textPrimary: WickRGB(hex: 0x33251F),
+        backgroundTop: WickRGB(hex: 0xF0E2D4),
+        backgroundBottom: WickRGB(hex: 0xE7D5C3),
+        sidebarBackground: WickRGB(hex: 0xF0E3D6),
+        cardTop: WickRGB(hex: 0xFFFAF1),
+        cardBottom: WickRGB(hex: 0xFBF0E4),
+        cardStroke: WickRGB(hex: 0x33231C, opacity: 0.16),
+        controlBackground: WickRGB(hex: 0x33231C, opacity: 0.055),
+        controlBorder: WickRGB(hex: 0x33231C, opacity: 0.16),
+        textPrimary: WickRGB(hex: 0x33231C),
         textSecondary: WickRGB(hex: 0x715850),
-        textTertiary: WickRGB(hex: 0x967A6E),
-        accent: WickRGB(hex: 0xD96C42),
-        accentText: WickRGB(hex: 0xB45237),
-        accentSoft: WickRGB(hex: 0xFBDCCB, opacity: 0.9),
-        reviewCorrect: WickRGB(hex: 0x3E7C4F),
-        reviewWrong: WickRGB(hex: 0xB4443C),
-        divider: WickRGB(hex: 0xD98A63, opacity: 0.5),
-        glow: WickRGB(hex: 0xF7B28A, opacity: 0.26)
+        textTertiary: WickRGB(hex: 0x8D6F5F),
+        accent: WickRGB(hex: 0xD26438),
+        accentText: WickRGB(hex: 0xA8492C),
+        accentSoft: WickRGB(hex: 0xF2DCC2, opacity: 0.9),
+        reviewCorrect: WickRGB(hex: 0xC03A22),
+        reviewWrong: WickRGB(hex: 0xC03A22),
+        divider: WickRGB(hex: 0x33231C, opacity: 0.16),
+        glow: WickRGB(hex: 0xE06A38, opacity: 0.30),
+        stain1: WickRGB(hex: 0xF2DCC2),
+        stain2: WickRGB(hex: 0xE6C49A),
+        pnlUp: WickRGB(hex: 0xC03A22),
+        pnlDown: WickRGB(hex: 0x3E5C50),
+        receipt: WickRGB(hex: 0xFFFDF4),
+        receiptInk: WickRGB(hex: 0x33291A),
+        brandTile: WickRGB(hex: 0x191008)
     )
 
-    /// Clear warm paper at noon (the candlelight baseline).
+    /// Warm cream paper at noon(正午烛光基线)。
     private static let lightDay = WickPalette(
-        backgroundTop: WickRGB(hex: 0xFFF8F0),
-        backgroundBottom: WickRGB(hex: 0xF3E6D5),
-        sidebarBackground: WickRGB(hex: 0xF6ECDD),
-        cardTop: WickRGB(hex: 0xFFF9F2),
-        cardBottom: WickRGB(hex: 0xF7E9D7),
-        cardStroke: WickRGB(hex: 0xDFC6A9, opacity: 0.65),
-        controlBackground: WickRGB(hex: 0xFFFFFF, opacity: 0.55),
-        controlBorder: WickRGB(hex: 0xD7B28A, opacity: 0.75),
-        textPrimary: WickRGB(hex: 0x2F241B),
-        textSecondary: WickRGB(hex: 0x6D5A49),
-        textTertiary: WickRGB(hex: 0x917C67),
-        accent: WickRGB(hex: 0xD9822B),
-        accentText: WickRGB(hex: 0xB05F14),
-        accentSoft: WickRGB(hex: 0xFFE8C8, opacity: 0.9),
-        reviewCorrect: WickRGB(hex: 0x3E7C4F),
-        reviewWrong: WickRGB(hex: 0xB4443C),
-        divider: WickRGB(hex: 0xD98F44, opacity: 0.55),
-        glow: WickRGB(hex: 0xFFBE66, opacity: 0.24)
+        backgroundTop: WickRGB(hex: 0xEAE0CB),
+        backgroundBottom: WickRGB(hex: 0xE3D7BE),
+        sidebarBackground: WickRGB(hex: 0xEDE3CF),
+        cardTop: WickRGB(hex: 0xFFFCF2),
+        cardBottom: WickRGB(hex: 0xFBF4E6),
+        cardStroke: WickRGB(hex: 0x2B2014, opacity: 0.16),
+        controlBackground: WickRGB(hex: 0x2B2014, opacity: 0.055),
+        controlBorder: WickRGB(hex: 0x2B2014, opacity: 0.16),
+        textPrimary: WickRGB(hex: 0x2B2014),
+        textSecondary: WickRGB(hex: 0x6B5942),
+        textTertiary: WickRGB(hex: 0x82705A),
+        accent: WickRGB(hex: 0xD96E14),
+        accentText: WickRGB(hex: 0xA85A0E),
+        accentSoft: WickRGB(hex: 0xF0DFB6, opacity: 0.9),
+        reviewCorrect: WickRGB(hex: 0xC03A22),
+        reviewWrong: WickRGB(hex: 0xC03A22),
+        divider: WickRGB(hex: 0x2B2014, opacity: 0.16),
+        glow: WickRGB(hex: 0xE8791C, opacity: 0.32),
+        stain1: WickRGB(hex: 0xF0DFB6),
+        stain2: WickRGB(hex: 0xE2C282),
+        pnlUp: WickRGB(hex: 0xC03A22),
+        pnlDown: WickRGB(hex: 0x3E5C50),
+        receipt: WickRGB(hex: 0xFFFDF4),
+        receiptInk: WickRGB(hex: 0x33291A),
+        brandTile: WickRGB(hex: 0x191008)
     )
 
-    /// Honeyed copper evening.
+    /// Honeyed dusk paper(蜜色黄昏纸)。
     private static let lightDusk = WickPalette(
-        backgroundTop: WickRGB(hex: 0xFBEAD2),
-        backgroundBottom: WickRGB(hex: 0xF0D6B8),
-        sidebarBackground: WickRGB(hex: 0xF5E0C4),
-        cardTop: WickRGB(hex: 0xFCEDDA),
-        cardBottom: WickRGB(hex: 0xF2DABE),
-        cardStroke: WickRGB(hex: 0xD9B58C, opacity: 0.65),
-        controlBackground: WickRGB(hex: 0xFFFFFF, opacity: 0.45),
-        controlBorder: WickRGB(hex: 0xCDA273, opacity: 0.75),
-        textPrimary: WickRGB(hex: 0x2E2013),
+        backgroundTop: WickRGB(hex: 0xEBDDBE),
+        backgroundBottom: WickRGB(hex: 0xE2CFA6),
+        sidebarBackground: WickRGB(hex: 0xF0E0C0),
+        cardTop: WickRGB(hex: 0xFFF9EA),
+        cardBottom: WickRGB(hex: 0xFAEEDA),
+        cardStroke: WickRGB(hex: 0x2E2112, opacity: 0.16),
+        controlBackground: WickRGB(hex: 0x2E2112, opacity: 0.055),
+        controlBorder: WickRGB(hex: 0x2E2112, opacity: 0.16),
+        textPrimary: WickRGB(hex: 0x2E2112),
         textSecondary: WickRGB(hex: 0x6B5136),
-        textTertiary: WickRGB(hex: 0x8F7350),
-        accent: WickRGB(hex: 0xC2611F),
-        accentText: WickRGB(hex: 0x9F4E17),
-        accentSoft: WickRGB(hex: 0xF6D9B4, opacity: 0.9),
-        reviewCorrect: WickRGB(hex: 0x3E7C4F),
-        reviewWrong: WickRGB(hex: 0xB4443C),
-        divider: WickRGB(hex: 0xC97E3D, opacity: 0.55),
-        glow: WickRGB(hex: 0xF0A050, opacity: 0.28)
+        textTertiary: WickRGB(hex: 0x816440),
+        accent: WickRGB(hex: 0xCC6A10),
+        accentText: WickRGB(hex: 0x9F5208),
+        accentSoft: WickRGB(hex: 0xF2DCAC, opacity: 0.9),
+        reviewCorrect: WickRGB(hex: 0xC03A22),
+        reviewWrong: WickRGB(hex: 0xC03A22),
+        divider: WickRGB(hex: 0x2E2112, opacity: 0.16),
+        glow: WickRGB(hex: 0xE07412, opacity: 0.34),
+        stain1: WickRGB(hex: 0xF2DCAC),
+        stain2: WickRGB(hex: 0xE6C688),
+        pnlUp: WickRGB(hex: 0xC03A22),
+        pnlDown: WickRGB(hex: 0x3E5C50),
+        receipt: WickRGB(hex: 0xFFFDF4),
+        receiptInk: WickRGB(hex: 0x33291A),
+        brandTile: WickRGB(hex: 0x191008)
     )
 
-    /// Moonlit cool gray-blue (light scheme after dark).
+    /// Dim warm paper under weak night light(夜里弱光下的纸)。
     private static let lightNight = WickPalette(
-        backgroundTop: WickRGB(hex: 0xE6E5EC),
-        backgroundBottom: WickRGB(hex: 0xD2D1DC),
-        sidebarBackground: WickRGB(hex: 0xDAD9E2),
-        cardTop: WickRGB(hex: 0xEBEAF1),
-        cardBottom: WickRGB(hex: 0xD8D7E2),
-        cardStroke: WickRGB(hex: 0xB5B4C4, opacity: 0.65),
-        controlBackground: WickRGB(hex: 0xFFFFFF, opacity: 0.45),
-        controlBorder: WickRGB(hex: 0xA9A8BC, opacity: 0.7),
-        textPrimary: WickRGB(hex: 0x26252E),
-        textSecondary: WickRGB(hex: 0x52505F),
-        textTertiary: WickRGB(hex: 0x74727F),
-        accent: WickRGB(hex: 0x7A86C8),
-        accentText: WickRGB(hex: 0x5560A8),
-        accentSoft: WickRGB(hex: 0xD5D8EE, opacity: 0.9),
-        reviewCorrect: WickRGB(hex: 0x3E7C4F),
-        reviewWrong: WickRGB(hex: 0xB4443C),
-        divider: WickRGB(hex: 0x8B90C0, opacity: 0.5),
-        glow: WickRGB(hex: 0x9AA4E0, opacity: 0.2)
+        backgroundTop: WickRGB(hex: 0xDFDACC),
+        backgroundBottom: WickRGB(hex: 0xD6D0C2),
+        sidebarBackground: WickRGB(hex: 0xE1DCD0),
+        cardTop: WickRGB(hex: 0xF5F1E6),
+        cardBottom: WickRGB(hex: 0xEDE8DB),
+        cardStroke: WickRGB(hex: 0x29241B, opacity: 0.16),
+        controlBackground: WickRGB(hex: 0x29241B, opacity: 0.05),
+        controlBorder: WickRGB(hex: 0x29241B, opacity: 0.16),
+        textPrimary: WickRGB(hex: 0x29241B),
+        textSecondary: WickRGB(hex: 0x5E5747),
+        textTertiary: WickRGB(hex: 0x7D7465),
+        accent: WickRGB(hex: 0xC96F1C),
+        accentText: WickRGB(hex: 0x96550F),
+        accentSoft: WickRGB(hex: 0xEBDCB8, opacity: 0.9),
+        reviewCorrect: WickRGB(hex: 0xC03A22),
+        reviewWrong: WickRGB(hex: 0xC03A22),
+        divider: WickRGB(hex: 0x29241B, opacity: 0.16),
+        glow: WickRGB(hex: 0xE8862B, opacity: 0.30),
+        stain1: WickRGB(hex: 0xEBDCB8),
+        stain2: WickRGB(hex: 0xDCC896),
+        pnlUp: WickRGB(hex: 0xC03A22),
+        pnlDown: WickRGB(hex: 0x3E5C50),
+        receipt: WickRGB(hex: 0xFFFDF4),
+        receiptInk: WickRGB(hex: 0x33291A),
+        brandTile: WickRGB(hex: 0x191008)
     )
 
     // MARK: Anchor palettes — dark scheme
+    //
+    // 夜里的纸:深赭纸 + 浅驼墨,烛火是唯一光源;单据纸保持物理纸色,不反色。
 
-    /// Indigo pre-dawn with an ember accent.
+    /// Indigo pre-dawn with an ember accent(拂晓余烬)。
     private static let darkDawn = WickPalette(
-        backgroundTop: WickRGB(hex: 0x181A2E),
-        backgroundBottom: WickRGB(hex: 0x100F1C),
-        sidebarBackground: WickRGB(hex: 0x131225),
-        cardTop: WickRGB(hex: 0x1C1E36),
-        cardBottom: WickRGB(hex: 0x141325),
-        cardStroke: WickRGB(hex: 0xFFFFFF, opacity: 0.08),
-        controlBackground: WickRGB(hex: 0xFFFFFF, opacity: 0.05),
-        controlBorder: WickRGB(hex: 0xFFFFFF, opacity: 0.11),
-        textPrimary: WickRGB(hex: 0xFFFFFF, opacity: 0.96),
-        textSecondary: WickRGB(hex: 0xFFFFFF, opacity: 0.66),
-        textTertiary: WickRGB(hex: 0xFFFFFF, opacity: 0.5),
+        backgroundTop: WickRGB(hex: 0x1B1310),
+        backgroundBottom: WickRGB(hex: 0x16100C),
+        sidebarBackground: WickRGB(hex: 0x211812),
+        cardTop: WickRGB(hex: 0x35291C),
+        cardBottom: WickRGB(hex: 0x2B2118),
+        cardStroke: WickRGB(hex: 0xF0E3C6, opacity: 0.12),
+        controlBackground: WickRGB(hex: 0xF0E3C6, opacity: 0.06),
+        controlBorder: WickRGB(hex: 0xF0E3C6, opacity: 0.14),
+        textPrimary: WickRGB(hex: 0xF0E3C6),
+        textSecondary: WickRGB(hex: 0xF0E3C6, opacity: 0.64),
+        textTertiary: WickRGB(hex: 0xF0E3C6, opacity: 0.42),
         accent: WickRGB(hex: 0xF0A368),
-        accentText: WickRGB(hex: 0xF5B27E),
-        accentSoft: WickRGB(hex: 0xF0A368, opacity: 0.16),
-        reviewCorrect: WickRGB(hex: 0x7FBF8E),
-        reviewWrong: WickRGB(hex: 0xE08A7E),
-        divider: WickRGB(hex: 0xE8A06A, opacity: 0.45),
-        glow: WickRGB(hex: 0xF0A368, opacity: 0.2)
+        accentText: WickRGB(hex: 0xF5BE8A),
+        accentSoft: WickRGB(hex: 0x4E3C24, opacity: 0.9),
+        reviewCorrect: WickRGB(hex: 0xE06A4C),
+        reviewWrong: WickRGB(hex: 0xE06A4C),
+        divider: WickRGB(hex: 0xF0E3C6, opacity: 0.14),
+        glow: WickRGB(hex: 0xF0A368, opacity: 0.42),
+        stain1: WickRGB(hex: 0x4E3C24),
+        stain2: WickRGB(hex: 0x6E562C),
+        pnlUp: WickRGB(hex: 0xE06A4C),
+        pnlDown: WickRGB(hex: 0x8FAE9E),
+        receipt: WickRGB(hex: 0xF5EEDC),
+        receiptInk: WickRGB(hex: 0x33291A),
+        brandTile: WickRGB(hex: 0x0C0703)
     )
 
-    /// Brighter slate at midday (dark scheme).
+    /// Brighter umber at midday(正午暖赭)。
     private static let darkDay = WickPalette(
-        backgroundTop: WickRGB(hex: 0x1C2434),
-        backgroundBottom: WickRGB(hex: 0x141A28),
-        sidebarBackground: WickRGB(hex: 0x171E2C),
-        cardTop: WickRGB(hex: 0x212A3E),
-        cardBottom: WickRGB(hex: 0x182032),
-        cardStroke: WickRGB(hex: 0xFFFFFF, opacity: 0.09),
-        controlBackground: WickRGB(hex: 0xFFFFFF, opacity: 0.06),
-        controlBorder: WickRGB(hex: 0xFFFFFF, opacity: 0.12),
-        textPrimary: WickRGB(hex: 0xFFFFFF, opacity: 0.96),
-        textSecondary: WickRGB(hex: 0xFFFFFF, opacity: 0.68),
-        textTertiary: WickRGB(hex: 0xFFFFFF, opacity: 0.52),
-        accent: WickRGB(hex: 0xF5B85C),
-        accentText: WickRGB(hex: 0xF7C276),
-        accentSoft: WickRGB(hex: 0xF5B85C, opacity: 0.16),
-        reviewCorrect: WickRGB(hex: 0x7FBF8E),
-        reviewWrong: WickRGB(hex: 0xE08A7E),
-        divider: WickRGB(hex: 0xE8B96E, opacity: 0.45),
-        glow: WickRGB(hex: 0xF5B85C, opacity: 0.16)
+        backgroundTop: WickRGB(hex: 0x1E150B),
+        backgroundBottom: WickRGB(hex: 0x15100A),
+        sidebarBackground: WickRGB(hex: 0x221A0F),
+        cardTop: WickRGB(hex: 0x362A18),
+        cardBottom: WickRGB(hex: 0x2C2214),
+        cardStroke: WickRGB(hex: 0xF0E3C6, opacity: 0.12),
+        controlBackground: WickRGB(hex: 0xF0E3C6, opacity: 0.06),
+        controlBorder: WickRGB(hex: 0xF0E3C6, opacity: 0.14),
+        textPrimary: WickRGB(hex: 0xF0E3C6),
+        textSecondary: WickRGB(hex: 0xF0E3C6, opacity: 0.64),
+        textTertiary: WickRGB(hex: 0xF0E3C6, opacity: 0.42),
+        accent: WickRGB(hex: 0xF5A83C),
+        accentText: WickRGB(hex: 0xFFC882),
+        accentSoft: WickRGB(hex: 0x4A3820, opacity: 0.9),
+        reviewCorrect: WickRGB(hex: 0xE06A4C),
+        reviewWrong: WickRGB(hex: 0xE06A4C),
+        divider: WickRGB(hex: 0xF0E3C6, opacity: 0.14),
+        glow: WickRGB(hex: 0xF59A3C, opacity: 0.42),
+        stain1: WickRGB(hex: 0x4A3820),
+        stain2: WickRGB(hex: 0x6B5226),
+        pnlUp: WickRGB(hex: 0xE06A4C),
+        pnlDown: WickRGB(hex: 0x8FAE9E),
+        receipt: WickRGB(hex: 0xF5EEDC),
+        receiptInk: WickRGB(hex: 0x33291A),
+        brandTile: WickRGB(hex: 0x0C0703)
     )
 
-    /// Burnt amber-brown evening.
+    /// Burnt amber evening(焦琥珀傍晚)。
     private static let darkDusk = WickPalette(
-        backgroundTop: WickRGB(hex: 0x1E1722),
-        backgroundBottom: WickRGB(hex: 0x130F16),
-        sidebarBackground: WickRGB(hex: 0x181119),
-        cardTop: WickRGB(hex: 0x241B28),
-        cardBottom: WickRGB(hex: 0x191219),
-        cardStroke: WickRGB(hex: 0xFFFFFF, opacity: 0.08),
-        controlBackground: WickRGB(hex: 0xFFFFFF, opacity: 0.05),
-        controlBorder: WickRGB(hex: 0xFFFFFF, opacity: 0.11),
-        textPrimary: WickRGB(hex: 0xFFFFFF, opacity: 0.96),
-        textSecondary: WickRGB(hex: 0xFFFFFF, opacity: 0.65),
-        textTertiary: WickRGB(hex: 0xFFFFFF, opacity: 0.5),
-        accent: WickRGB(hex: 0xF08A4B),
-        accentText: WickRGB(hex: 0xF79A63),
-        accentSoft: WickRGB(hex: 0xF08A4B, opacity: 0.16),
-        reviewCorrect: WickRGB(hex: 0x7FBF8E),
-        reviewWrong: WickRGB(hex: 0xE08A7E),
-        divider: WickRGB(hex: 0xE08A52, opacity: 0.45),
-        glow: WickRGB(hex: 0xF08A4B, opacity: 0.22)
+        backgroundTop: WickRGB(hex: 0x1E1409),
+        backgroundBottom: WickRGB(hex: 0x181006),
+        sidebarBackground: WickRGB(hex: 0x241A0E),
+        cardTop: WickRGB(hex: 0x382712),
+        cardBottom: WickRGB(hex: 0x2E2010),
+        cardStroke: WickRGB(hex: 0xF0E3C6, opacity: 0.12),
+        controlBackground: WickRGB(hex: 0xF0E3C6, opacity: 0.06),
+        controlBorder: WickRGB(hex: 0xF0E3C6, opacity: 0.14),
+        textPrimary: WickRGB(hex: 0xF0E3C6),
+        textSecondary: WickRGB(hex: 0xF0E3C6, opacity: 0.64),
+        textTertiary: WickRGB(hex: 0xF0E3C6, opacity: 0.42),
+        accent: WickRGB(hex: 0xF08A2B),
+        accentText: WickRGB(hex: 0xF7AB5E),
+        accentSoft: WickRGB(hex: 0x523F22, opacity: 0.9),
+        reviewCorrect: WickRGB(hex: 0xE06A4C),
+        reviewWrong: WickRGB(hex: 0xE06A4C),
+        divider: WickRGB(hex: 0xF0E3C6, opacity: 0.14),
+        glow: WickRGB(hex: 0xF08A2B, opacity: 0.44),
+        stain1: WickRGB(hex: 0x523F22),
+        stain2: WickRGB(hex: 0x74592C),
+        pnlUp: WickRGB(hex: 0xE06A4C),
+        pnlDown: WickRGB(hex: 0x8FAE9E),
+        receipt: WickRGB(hex: 0xF5EEDC),
+        receiptInk: WickRGB(hex: 0x33291A),
+        brandTile: WickRGB(hex: 0x0C0703)
     )
 
-    /// Deep midnight blue (the midnight baseline).
+    /// Deep umber midnight(子夜深赭,火苗最亮)。
     private static let darkNight = WickPalette(
-        backgroundTop: WickRGB(hex: 0x101527),
-        backgroundBottom: WickRGB(hex: 0x0C1019),
-        sidebarBackground: WickRGB(hex: 0x0D1220),
-        cardTop: WickRGB(hex: 0x171F33),
-        cardBottom: WickRGB(hex: 0x101727),
-        cardStroke: WickRGB(hex: 0xFFFFFF, opacity: 0.07),
-        controlBackground: WickRGB(hex: 0xFFFFFF, opacity: 0.05),
-        controlBorder: WickRGB(hex: 0xFFFFFF, opacity: 0.1),
-        textPrimary: WickRGB(hex: 0xFFFFFF, opacity: 0.96),
-        textSecondary: WickRGB(hex: 0xFFFFFF, opacity: 0.64),
-        textTertiary: WickRGB(hex: 0xFFFFFF, opacity: 0.5),
-        accent: WickRGB(hex: 0x9BB6FF),
-        accentText: WickRGB(hex: 0xAFC4FF),
-        accentSoft: WickRGB(hex: 0x9BB6FF, opacity: 0.16),
-        reviewCorrect: WickRGB(hex: 0x7FBF8E),
-        reviewWrong: WickRGB(hex: 0xE08A7E),
-        divider: WickRGB(hex: 0x8AB4FF, opacity: 0.42),
-        glow: WickRGB(hex: 0x6CA6FF, opacity: 0.18)
+        backgroundTop: WickRGB(hex: 0x150E07),
+        backgroundBottom: WickRGB(hex: 0x100B06),
+        sidebarBackground: WickRGB(hex: 0x1C140B),
+        cardTop: WickRGB(hex: 0x2C2214),
+        cardBottom: WickRGB(hex: 0x241C10),
+        cardStroke: WickRGB(hex: 0xF0E3C6, opacity: 0.12),
+        controlBackground: WickRGB(hex: 0xF0E3C6, opacity: 0.06),
+        controlBorder: WickRGB(hex: 0xF0E3C6, opacity: 0.14),
+        textPrimary: WickRGB(hex: 0xF0E3C6),
+        textSecondary: WickRGB(hex: 0xF0E3C6, opacity: 0.64),
+        textTertiary: WickRGB(hex: 0xF0E3C6, opacity: 0.42),
+        accent: WickRGB(hex: 0xF5A83C),
+        accentText: WickRGB(hex: 0xFFCE8C),
+        accentSoft: WickRGB(hex: 0x46351E, opacity: 0.9),
+        reviewCorrect: WickRGB(hex: 0xE06A4C),
+        reviewWrong: WickRGB(hex: 0xE06A4C),
+        divider: WickRGB(hex: 0xF0E3C6, opacity: 0.14),
+        glow: WickRGB(hex: 0xF5A83C, opacity: 0.50),
+        stain1: WickRGB(hex: 0x46351E),
+        stain2: WickRGB(hex: 0x665026),
+        pnlUp: WickRGB(hex: 0xE06A4C),
+        pnlDown: WickRGB(hex: 0x8FAE9E),
+        receipt: WickRGB(hex: 0xF5EEDC),
+        receiptInk: WickRGB(hex: 0x33291A),
+        brandTile: WickRGB(hex: 0x0C0703)
     )
 
-    // MARK: Metric hue families
-
-    private struct MetricBase {
-        let primary: WickRGB
-        let secondary: WickRGB
-        let glow: WickRGB
-        let cardTop: WickRGB
-        let cardBottom: WickRGB
-        let trackFill: WickRGB
-        let trackStroke: WickRGB
-        let spark: WickRGB
-    }
-
-    private static func metricBase(for scheme: ColorScheme) -> [MetricBase] {
-        switch scheme {
-        case .light:
-            return lightMetricBase
-        case .dark:
-            return darkMetricBase
-        @unknown default:
-            return darkMetricBase
-        }
-    }
-
-    private static let lightMetricBase: [MetricBase] = [
-        MetricBase(
-            primary: WickRGB(hex: 0xE2903A), secondary: WickRGB(hex: 0xF7B261),
-            glow: WickRGB(hex: 0xE2903A, opacity: 0.18),
-            cardTop: WickRGB(hex: 0xFFF8F0), cardBottom: WickRGB(hex: 0xF7E8D8),
-            trackFill: WickRGB(hex: 0x000000, opacity: 0.06),
-            trackStroke: WickRGB(hex: 0x000000, opacity: 0.05),
-            spark: WickRGB(hex: 0xFFFFFF, opacity: 0.9)
-        ),
-        MetricBase(
-            primary: WickRGB(hex: 0x4B8EF4), secondary: WickRGB(hex: 0x82B7FF),
-            glow: WickRGB(hex: 0x4B8EF4, opacity: 0.14),
-            cardTop: WickRGB(hex: 0xF4F8FF), cardBottom: WickRGB(hex: 0xE5EEF9),
-            trackFill: WickRGB(hex: 0x000000, opacity: 0.06),
-            trackStroke: WickRGB(hex: 0x000000, opacity: 0.05),
-            spark: WickRGB(hex: 0xFFFFFF, opacity: 0.92)
-        ),
-        MetricBase(
-            primary: WickRGB(hex: 0x8E6CE6), secondary: WickRGB(hex: 0xC2A6FF),
-            glow: WickRGB(hex: 0x8E6CE6, opacity: 0.14),
-            cardTop: WickRGB(hex: 0xF7F3FF), cardBottom: WickRGB(hex: 0xECE4FA),
-            trackFill: WickRGB(hex: 0x000000, opacity: 0.06),
-            trackStroke: WickRGB(hex: 0x000000, opacity: 0.05),
-            spark: WickRGB(hex: 0xFFFFFF, opacity: 0.92)
-        ),
-        MetricBase(
-            primary: WickRGB(hex: 0x2DA37C), secondary: WickRGB(hex: 0x80D8BA),
-            glow: WickRGB(hex: 0x2DA37C, opacity: 0.14),
-            cardTop: WickRGB(hex: 0xF2FCF8), cardBottom: WickRGB(hex: 0xE0F0E8),
-            trackFill: WickRGB(hex: 0x000000, opacity: 0.06),
-            trackStroke: WickRGB(hex: 0x000000, opacity: 0.05),
-            spark: WickRGB(hex: 0xFFFFFF, opacity: 0.92)
-        ),
-    ]
-
-    private static let darkMetricBase: [MetricBase] = [
-        MetricBase(
-            primary: WickRGB(hex: 0x9BB6FF), secondary: WickRGB(hex: 0x6B86F5),
-            glow: WickRGB(hex: 0x7D96FF, opacity: 0.18),
-            cardTop: WickRGB(hex: 0x171F33), cardBottom: WickRGB(hex: 0x101727),
-            trackFill: WickRGB(hex: 0xFFFFFF, opacity: 0.08),
-            trackStroke: WickRGB(hex: 0xFFFFFF, opacity: 0.05),
-            spark: WickRGB(hex: 0xFFFFFF, opacity: 0.32)
-        ),
-        MetricBase(
-            primary: WickRGB(hex: 0x79D4FF), secondary: WickRGB(hex: 0x3C9DE8),
-            glow: WickRGB(hex: 0x79D4FF, opacity: 0.16),
-            cardTop: WickRGB(hex: 0x132332), cardBottom: WickRGB(hex: 0x101A28),
-            trackFill: WickRGB(hex: 0xFFFFFF, opacity: 0.08),
-            trackStroke: WickRGB(hex: 0xFFFFFF, opacity: 0.05),
-            spark: WickRGB(hex: 0xFFFFFF, opacity: 0.32)
-        ),
-        MetricBase(
-            primary: WickRGB(hex: 0xB9A7FF), secondary: WickRGB(hex: 0x7A67E6),
-            glow: WickRGB(hex: 0xB9A7FF, opacity: 0.16),
-            cardTop: WickRGB(hex: 0x1A1E38), cardBottom: WickRGB(hex: 0x111427),
-            trackFill: WickRGB(hex: 0xFFFFFF, opacity: 0.08),
-            trackStroke: WickRGB(hex: 0xFFFFFF, opacity: 0.05),
-            spark: WickRGB(hex: 0xFFFFFF, opacity: 0.32)
-        ),
-        MetricBase(
-            primary: WickRGB(hex: 0x8AE0D0), secondary: WickRGB(hex: 0x3CB7A6),
-            glow: WickRGB(hex: 0x8AE0D0, opacity: 0.15),
-            cardTop: WickRGB(hex: 0x142627), cardBottom: WickRGB(hex: 0x10191B),
-            trackFill: WickRGB(hex: 0xFFFFFF, opacity: 0.08),
-            trackStroke: WickRGB(hex: 0xFFFFFF, opacity: 0.05),
-            spark: WickRGB(hex: 0xFFFFFF, opacity: 0.32)
-        ),
-    ]
 }
 
 // MARK: - SwiftUI environment

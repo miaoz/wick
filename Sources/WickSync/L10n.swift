@@ -43,6 +43,8 @@ public enum L10n {
 
     public enum Key {
         case motto
+        case panelWordmark
+        case panelHeroToday
         case quit
         case settings
         case back
@@ -96,6 +98,15 @@ public enum L10n {
         case journalDeleteItem
         case journalItemNumberFormat
         case journalItemCountFormat
+        case journalDayStatsFormat
+        case journalDayStatsFlatFormat
+        case journalDayElapsedFormat
+        case sidebarTodayMark
+        case inspectorYiLabel
+        case inspectorYiText
+        case inspectorJiLabel
+        case inspectorJiText
+        case inspectorMonthTotal
         case journalItemTagPlaceholder
         case journalBodyPlaceholder
         case journalImagesHint
@@ -201,6 +212,9 @@ public enum L10n {
         case exchangeErrorNetwork
         case exchangeErrorOther
         case exchangePositionsTitle
+        case exchangePositionVwap
+        case exchangePositionSize
+        case exchangePositionRealizedPnl
         case exchangePositionLong
         case exchangePositionShort
         case exchangePositionOpen
@@ -218,6 +232,17 @@ public enum L10n {
         case macroImportance
         case macroLunar
         case macroMoreEventsFormat
+        case calendarIdleWeekday
+        case calendarIdleWeekend
+        case inspectorPnlSuffix
+        case inspectorJournalsSection
+        case inspectorTagsSection
+        case journalLibraryManage
+        case journalCycleColumns
+        case inspectorToggle
+        case inspectorEntriesSection
+        case calendarEasterEggTitle
+        case calendarEasterEggNote
         case macroEventsFirstPage
         case macroEventsFlipHint
         case earningsSection
@@ -250,6 +275,8 @@ public enum L10n {
         public var chinese: String {
             switch self {
             case .motto: return "一寸光阴一寸金。"
+            case .panelWordmark: return "秉烛"
+            case .panelHeroToday: return "今日剩余"
             case .quit: return "退出"
             case .settings: return "设置"
             case .back: return "返回"
@@ -302,6 +329,15 @@ public enum L10n {
             case .journalDeleteItem: return "删除条目"
             case .journalItemNumberFormat: return "条目 %d"
             case .journalItemCountFormat: return "%d 条"
+            case .journalDayStatsFormat: return "%d 条 · %d 笔已平仓"
+            case .journalDayStatsFlatFormat: return "%d 条 · 无持仓"
+            case .journalDayElapsedFormat: return "今日已过 %d%%"
+            case .sidebarTodayMark: return "今"
+            case .inspectorYiLabel: return "宜"
+            case .inspectorYiText: return "止盈 · 复盘"
+            case .inspectorJiLabel: return "忌"
+            case .inspectorJiText: return "追单 · 扛单"
+            case .inspectorMonthTotal: return "已实现合计"
             case .journalItemTagPlaceholder: return "为此条目添加标签"
             case .journalBodyPlaceholder: return "写点什么…"
             case .journalImagesHint: return "拖入图片，或从剪贴板粘贴。"
@@ -405,6 +441,9 @@ public enum L10n {
             case .exchangeErrorNetwork: return "网络错误，稍后自动重试"
             case .exchangeErrorOther: return "同步失败"
             case .exchangePositionsTitle: return "交易所仓位"
+            case .exchangePositionVwap: return "开仓 → 平仓 VWAP"
+            case .exchangePositionSize: return "数量 · 峰值"
+            case .exchangePositionRealizedPnl: return "已实现盈亏"
             case .exchangePositionLong: return "多"
             case .exchangePositionShort: return "空"
             case .exchangePositionOpen: return "持仓中"
@@ -421,6 +460,17 @@ public enum L10n {
             case .macroImportance: return "重要性"
             case .macroLunar: return "农历"
             case .macroMoreEventsFormat: return "另有 %d 项"
+            case .calendarIdleWeekday: return "本日无事"
+            case .calendarIdleWeekend: return "休市"
+            case .inspectorPnlSuffix: return "盈亏"
+            case .inspectorJournalsSection: return "日记本"
+            case .inspectorTagsSection: return "标签"
+            case .journalLibraryManage: return "管理"
+            case .journalCycleColumns: return "切换栏位(⌃⌘S)"
+            case .inspectorToggle: return "检查器(⌥⌘0)"
+            case .inspectorEntriesSection: return "条目"
+            case .calendarEasterEggTitle: return "贴桌物理黄历"
+            case .calendarEasterEggNote: return "彩蛋,默认关闭。开启后黄历以无边框贴桌窗呈现(撕页物理完整保留),主窗检查器随之关闭,盈亏月历移至导航栏顶部。"
             case .macroEventsFirstPage: return "回到首页"
             case .macroEventsFlipHint: return "轻点 / 滚轮 / ↑↓ 翻页 · ←→ 切换栏目"
             case .earningsSection: return "财报"
@@ -454,6 +504,8 @@ public enum L10n {
         public var english: String {
             switch self {
             case .motto: return "Time is precious."
+            case .panelWordmark: return "Wick"
+            case .panelHeroToday: return "Left today"
             case .quit: return "Quit"
             case .settings: return "Settings"
             case .back: return "Back"
@@ -506,6 +558,15 @@ public enum L10n {
             case .journalDeleteItem: return "Delete Item"
             case .journalItemNumberFormat: return "Item %d"
             case .journalItemCountFormat: return "%d items"
+            case .journalDayStatsFormat: return "%d · %d closed"
+            case .journalDayStatsFlatFormat: return "%d · flat"
+            case .journalDayElapsedFormat: return "%d%% of today elapsed"
+            case .sidebarTodayMark: return "NOW"
+            case .inspectorYiLabel: return "DO"
+            case .inspectorYiText: return "Take profit · Review"
+            case .inspectorJiLabel: return "AVOID"
+            case .inspectorJiText: return "Chase · Hold losers"
+            case .inspectorMonthTotal: return "Realized total"
             case .journalItemTagPlaceholder: return "Tag for this item"
             case .journalBodyPlaceholder: return "Write something…"
             case .journalImagesHint: return "Drop images here, or paste from the clipboard."
@@ -609,6 +670,9 @@ public enum L10n {
             case .exchangeErrorNetwork: return "Network error - will retry later"
             case .exchangeErrorOther: return "Sync failed"
             case .exchangePositionsTitle: return "Exchange positions"
+            case .exchangePositionVwap: return "Open → Close VWAP"
+            case .exchangePositionSize: return "Size · Peak"
+            case .exchangePositionRealizedPnl: return "Realized PnL"
             case .exchangePositionLong: return "Long"
             case .exchangePositionShort: return "Short"
             case .exchangePositionOpen: return "Open"
@@ -625,6 +689,17 @@ public enum L10n {
             case .macroImportance: return "Importance"
             case .macroLunar: return "Lunar"
             case .macroMoreEventsFormat: return "%d more"
+            case .calendarIdleWeekday: return "Quiet day"
+            case .calendarIdleWeekend: return "Market closed"
+            case .inspectorPnlSuffix: return " PnL"
+            case .inspectorJournalsSection: return "Journals"
+            case .inspectorTagsSection: return "Tags"
+            case .journalLibraryManage: return "Manage"
+            case .journalCycleColumns: return "Cycle columns (⌃⌘S)"
+            case .inspectorToggle: return "Inspector (⌥⌘0)"
+            case .inspectorEntriesSection: return "Entries"
+            case .calendarEasterEggTitle: return "Physical desk calendar"
+            case .calendarEasterEggNote: return "Easter egg, off by default. The almanac becomes a borderless desk window with the full tear physics; the main-window inspector closes and the PnL calendar moves to the sidebar top."
             case .macroEventsFirstPage: return "First page"
             case .macroEventsFlipHint: return "Tap / scroll / ↑↓ to flip · ←→ to switch tab"
             case .earningsSection: return "Earnings"

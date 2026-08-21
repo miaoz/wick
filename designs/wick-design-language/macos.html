@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh" data-scheme="light" data-phase="day">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>macOS 模块稿 · Wick 设计语言</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--font-ui); color: var(--ink-1);
+    background: linear-gradient(160deg, var(--paper-top), var(--paper-bottom));
+    min-height: 100vh; text-wrap: pretty;
+  }
+  .grain-layer { position: fixed; inset: 0; pointer-events: none; opacity: var(--grain-opacity); }
+  .page { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 48px 32px 120px; }
+
+  .theme-bar { position: fixed; top: 14px; right: 16px; z-index: 50; display: flex; gap: 8px; align-items: center;
+    padding: 6px; border-radius: 999px; background: var(--card-top); border: 1px solid var(--card-stroke); box-shadow: var(--shadow-card); }
+  .theme-bar .grp { display: flex; gap: 2px; }
+  .theme-bar button { font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--ink-2);
+    background: transparent; border: none; cursor: pointer; padding: 6px 10px; border-radius: 999px; transition: all 0.18s ease; }
+  .theme-bar button:hover { color: var(--ink-1); }
+  .theme-bar button.is-on { background: var(--ember); color: #FFF6E8; }
+  .theme-bar .sep { width: 1px; height: 18px; background: var(--divider); }
+
+  .back { display: inline-flex; gap: 6px; align-items: center; color: var(--ink-2); text-decoration: none; font-size: 13px; font-weight: 600; }
+  .back:hover { color: var(--ember); }
+  .page-head { margin: 18px 0 8px; }
+  .page-head h1 { font-size: 30px; font-weight: 800; }
+  .page-head p { margin-top: 6px; color: var(--ink-2); font-size: 14px; line-height: 1.8; max-width: 760px; }
+
+  .surface { margin-top: 44px; }
+  .surface-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  .surface-head .no { font-family: var(--font-numeral); font-weight: 900; font-size: 14px; color: var(--ember); }
+  .surface-head h2 { font-size: 20px; font-weight: 800; }
+  .surface-head .dim { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .surface-note { font-size: 13px; color: var(--ink-2); line-height: 1.8; max-width: 860px; margin-bottom: 20px; }
+  .surface-note b { color: var(--ink-1); }
+
+  .stage { border-radius: var(--r-xl); border: 1px solid var(--card-stroke); padding: 48px; display: flex; gap: 56px;
+    justify-content: center; align-items: flex-start; flex-wrap: wrap;
+    background: radial-gradient(700px 400px at 50% 0%, rgba(255,255,255,0.35), transparent 60%), var(--paper-side); box-shadow: var(--shadow-card) inset; }
+
+  /* ==================== A · 菜单栏面板 ==================== */
+  .desktop-strip { width: 100%; max-width: 980px; }
+  .fake-menubar { height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: flex-end; gap: 18px;
+    padding: 0 14px; background: rgba(38, 30, 22, 0.82); backdrop-filter: blur(8px); color: #F5EBDD; font-size: 11.5px; }
+  .fake-menubar .mb-item { display: flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; opacity: 0.92; }
+  .fake-menubar .mb-item.active { background: rgba(255, 255, 255, 0.18); border-radius: 5px; padding: 1px 7px; }
+  .panel-float { display: flex; justify-content: flex-end; padding: 8px 26px 0 0; }
+
+  .panel { width: 360px; border-radius: 24px; padding: 12px; position: relative; overflow: hidden;
+    background: linear-gradient(155deg, var(--paper-top), var(--paper-bottom));
+    box-shadow: var(--shadow-pop); border: 1px solid var(--card-stroke); }
+  .panel::before { content: ""; position: absolute; top: -70px; left: -40px; width: 220px; height: 220px; border-radius: 50%;
+    background: radial-gradient(circle, var(--glow), transparent 70%); }
+  .panel-inner { position: relative; padding: 10px 10px 8px; }
+  .p-header { display: flex; gap: 14px; align-items: flex-start; }
+  .p-icon { width: 46px; height: 46px; border-radius: 50%; flex: none; display: grid; place-items: center;
+    background: radial-gradient(circle at 50% 32%, #7A5638, #3E2A1C 78%); box-shadow: 0 6px 14px var(--glow); }
+  .p-title { font-size: 20px; font-weight: 700; }
+  .p-motto { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+  .p-date { font-size: 11px; color: var(--ink-3); margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .p-actions { margin-left: auto; display: flex; gap: 8px; }
+  .icon-btn { width: 28px; height: 28px; border-radius: 50%; display: inline-grid; place-items: center;
+    background: var(--control-bg); border: 1px solid var(--control-border); color: var(--ink-1); opacity: 0.85; cursor: pointer; transition: all 0.18s ease; }
+  .icon-btn:hover { background: var(--ember-soft); border-color: var(--ember); opacity: 1; }
+  .icon-btn svg { width: 13px; height: 13px; }
+  .p-divider { height: 1px; margin: 14px 0; background: linear-gradient(90deg, transparent, var(--divider), transparent); }
+  .metric-stack { display: flex; flex-direction: column; gap: 12px; }
+  .metric-card { border-radius: var(--r-m); padding: 12px 14px; border: 1px solid var(--card-stroke);
+    background: linear-gradient(180deg, var(--card-top), var(--card-bottom)); position: relative; overflow: hidden; }
+  .metric-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--mc); opacity: 0.9; }
+  .metric-card .m-head { display: flex; align-items: baseline; justify-content: space-between; }
+  .metric-card .m-label { font-size: 12px; font-weight: 700; color: var(--ink-2); }
+  .metric-card .m-pct { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--mc); }
+  .metric-card .m-pct small { font-size: 12px; font-weight: 600; }
+  .metric-card .m-track { margin-top: 8px; height: 6px; border-radius: 3px; background: rgba(127, 110, 90, 0.14); position: relative; }
+  .metric-card .m-fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: linear-gradient(90deg, var(--mc), var(--mc2)); }
+  .metric-card .m-fill::after { content: ""; position: absolute; right: -2px; top: 50%; transform: translateY(-50%); width: 8px; height: 8px; border-radius: 50%; background: #FFF9EE; box-shadow: 0 0 5px var(--mc2); }
+  .metric-card .m-foot { margin-top: 7px; font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; display: flex; justify-content: space-between; }
+
+  /* ==================== B · 日记窗口 ==================== */
+  .jwindow { width: 1080px; max-width: 100%; height: 680px; border-radius: 12px; overflow: hidden; display: flex;
+    box-shadow: var(--shadow-pop); border: 1px solid var(--card-stroke);
+    background: linear-gradient(160deg, var(--paper-top), var(--paper-bottom)); }
+  .j-side { width: 264px; flex: none; background: var(--paper-side); border-right: 1px solid var(--card-stroke); display: flex; flex-direction: column; }
+  .j-side-band { height: 43px; flex: none; }
+  .j-side-body { padding: 4px 14px 14px; overflow: hidden; display: flex; flex-direction: column; gap: 14px; }
+
+  .pnl-cal { border-radius: var(--r-m); background: var(--card-top); border: 1px solid var(--card-stroke); padding: 10px 12px 12px; }
+  .pnl-cal .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .pnl-cal .cal-title { font-size: 12px; font-weight: 800; }
+  .pnl-cal .cal-title span { color: var(--ink-3); font-weight: 600; font-size: 11px; margin-left: 5px; }
+  .pnl-cal .cal-nav { display: flex; gap: 4px; }
+  .pnl-cal .cal-nav button { width: 20px; height: 20px; border-radius: 6px; border: 1px solid var(--control-border); background: var(--control-bg);
+    color: var(--ink-2); font-size: 10px; cursor: pointer; }
+  .pnl-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .pnl-grid .dow { font-size: 9px; color: var(--ink-3); text-align: center; padding-bottom: 2px; }
+  .pnl-cell { aspect-ratio: 1; border-radius: 5px; display: grid; place-items: center; font-size: 9.5px; font-variant-numeric: tabular-nums; color: var(--ink-3); }
+  .pnl-cell.up { background: var(--pine-soft); color: var(--pine); font-weight: 700; }
+  .pnl-cell.down { background: var(--cinnabar-soft); color: var(--cinnabar); font-weight: 700; }
+  .pnl-cell.note { background: var(--ember-soft); color: var(--ember-text); font-weight: 600; }
+  .pnl-cell.today { outline: 1.5px solid var(--ember); outline-offset: 0; color: var(--ink-1); font-weight: 800; }
+
+  .j-search { display: flex; align-items: center; gap: 7px; border-radius: var(--r-s); background: var(--control-bg);
+    border: 1px solid var(--control-border); padding: 6px 10px; color: var(--ink-3); font-size: 12px; }
+  .j-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600;
+    background: var(--control-bg); border: 1px solid var(--control-border); color: var(--ink-2); cursor: pointer; }
+  .chip.on { background: var(--ember); border-color: var(--ember); color: #FFF6E8; }
+
+  .j-days { display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; }
+  .j-day { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: var(--r-s); cursor: pointer; font-size: 12.5px; }
+  .j-day:hover { background: var(--control-bg); }
+  .j-day.sel { background: var(--ember-soft); }
+  .j-day .d { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink-1); }
+  .j-day .n { font-size: 10.5px; color: var(--ink-3); margin-left: auto; font-variant-numeric: tabular-nums; }
+  .j-day .mini { font-size: 11px; font-weight: 800; }
+  .j-day .mini.ok { color: var(--pine); }
+  .j-day .mini.bad { color: var(--cinnabar); }
+
+  .j-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .j-header { height: 43px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 16px 0 84px; }
+  .tl { position: absolute; display: flex; gap: 8px; }
+  .tl i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .tl i:nth-child(1) { background: #FF5F57; } .tl i:nth-child(2) { background: #FEBC2E; } .tl i:nth-child(3) { background: #28C840; }
+  .j-header .book { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 700; cursor: pointer; padding: 4px 8px; border-radius: 7px; }
+  .j-header .book:hover { background: var(--control-bg); }
+  .j-header .book svg { opacity: 0.5; }
+  .j-header .spacer { flex: 1; }
+  .j-arc { flex: none; padding: 10px 22px 4px; }
+  .j-editor { flex: 1; overflow: hidden; padding: 12px 22px 22px; display: flex; flex-direction: column; gap: 12px; }
+  .j-day-title { display: flex; align-items: baseline; gap: 12px; }
+  .j-day-title h3 { font-family: var(--font-numeral); font-size: 26px; font-weight: 900; }
+  .j-day-title .lunar { font-family: var(--font-print); color: var(--ink-3); font-size: 13px; }
+  .j-day-title .count { margin-left: auto; font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+  .j-cards { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .jcard { position: relative; border-radius: var(--r-l); border: 1px solid var(--card-stroke);
+    background: linear-gradient(180deg, var(--card-top), var(--card-bottom)); box-shadow: var(--shadow-card); padding: 14px 16px; }
+  .jcard .c-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .jcard .c-time { font-size: 12px; font-weight: 700; color: var(--ember-text); font-variant-numeric: tabular-nums; }
+  .jcard p { font-size: 13px; line-height: 1.75; color: var(--ink-1); }
+  .jcard .seal { position: absolute; right: 14px; bottom: 10px; }
+  .jcard .review-note { margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--card-stroke);
+    font-family: var(--font-print); font-size: 12.5px; color: var(--ink-2); line-height: 1.8; }
+  .jcard .review-note b { color: var(--pine); }
+  .jcard .review-note b.bad { color: var(--cinnabar); }
+  .review-cta { display: flex; margin-top: 10px; }
+  .review-cta button { font-family: var(--font-ui); font-size: 11.5px; font-weight: 700; color: var(--ember-text);
+    background: var(--ember-soft); border: 1px dashed var(--ember); border-radius: var(--r-s); padding: 6px 12px; cursor: pointer; width: 100%; }
+
+  .slip { font-variant-numeric: tabular-nums; border: 1px solid var(--pine); outline: 2px solid var(--pine); outline-offset: 2.5px;
+    border-radius: 2px; background: var(--print-paper); color: #2E4438; padding: 10px 12px; margin: 10px 4px 4px; position: relative; }
+  .slip::before { content: "仓"; position: absolute; top: -11px; right: 10px; width: 21px; height: 21px; border: 1.5px solid var(--cinnabar);
+    color: var(--cinnabar); border-radius: 4px; font-family: var(--font-print); font-size: 11px; display: grid; place-items: center;
+    transform: rotate(6deg); background: var(--print-paper); }
+  .slip .s-title { font-family: var(--font-print); font-size: 12.5px; font-weight: 700; display: flex; gap: 8px; align-items: center; }
+  .slip .lane { font-size: 10px; font-weight: 700; padding: 0 6px; border-radius: 3px; font-family: var(--font-ui); }
+  .slip .lane.long { background: var(--pine-soft); color: var(--pine); }
+  .slip .lane.short { background: var(--cinnabar-soft); color: var(--cinnabar); }
+  .slip .s-rows { margin-top: 7px; display: flex; flex-direction: column; gap: 4px; }
+  .slip .s-row { display: flex; justify-content: space-between; font-size: 11px; color: #5A6E62; border-bottom: 1px dotted rgba(30,122,72,0.25); padding-bottom: 3px; }
+  .slip .s-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .slip .s-row b { color: #24382D; }
+  .slip .pnl-up { color: var(--pine); font-weight: 800; }
+  .slip .pnl-down { color: var(--cinnabar); font-weight: 800; }
+
+  /* ==================== C · 黄历窗 ==================== */
+  .cal-stage { border-radius: var(--r-xl); border: 1px solid var(--card-stroke); padding: 44px; display: flex; justify-content: center;
+    background: radial-gradient(560px 500px at 50% 18%, #43331F, #211812 72%); box-shadow: var(--shadow-pop); }
+  .cal-window { width: 480px; height: 690px; position: relative; }
+  .pad { position: absolute; left: 50%; top: 26px; transform: translateX(-50%); width: 300px; height: 400px; }
+  .pad-shadow { position: absolute; left: 50%; top: 400px; transform: translateX(-50%); width: 270px; height: 40px;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0.5), transparent 70%); }
+  .pad-back { position: absolute; inset: 0; top: 26px; background: var(--print-edge); border-radius: 0 0 3px 3px; }
+  .pad-page { position: absolute; left: 0; right: 0; top: 26px; height: 374px; background: var(--print-paper);
+    box-shadow: 0 1px 0 rgba(0,0,0,0.06); overflow: hidden; }
+  .pad-binding { position: absolute; left: 0; right: 0; top: 0; height: 26px; background: linear-gradient(180deg, #8E2F22, #B03222 55%, #7E2A1E);
+    border-radius: 2px 2px 0 0; box-shadow: 0 2px 5px rgba(0,0,0,0.35); z-index: 3; }
+  .pad-binding::before, .pad-binding::after { content: ""; position: absolute; top: 9px; width: 26px; height: 7px; border-radius: 4px;
+    background: linear-gradient(180deg, #E8E2D4, #B7AF9C); box-shadow: 0 1px 1px rgba(0,0,0,0.4); }
+  .pad-binding::before { left: 42px; } .pad-binding::after { right: 42px; }
+  .pad-hole { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); width: 10px; height: 10px; border-radius: 50%;
+    background: #3A120C; box-shadow: inset 0 1px 2px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.15); z-index: 4; }
+  .pad-frame { position: absolute; inset: 33px 7px 7px; border: 2.5px solid var(--pine); }
+  .pad-frame::before { content: ""; position: absolute; inset: 3px; border: 1px solid var(--pine); }
+  .pad-content { position: absolute; inset: 40px 14px 12px; display: flex; flex-direction: column; color: #166B3C; }
+  .ph-mast { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid var(--cinnabar); padding-bottom: 6px; }
+  .ph-mast .pub { font-family: var(--font-print); font-size: 10px; letter-spacing: 0.22em; color: var(--pine); }
+  .ph-mast .pub b { display: block; font-size: 11px; letter-spacing: 0.3em; margin-top: 2px; }
+  .ph-mast .greg { text-align: right; font-family: var(--font-print); font-size: 10px; line-height: 1.7; color: var(--pine); }
+  .ph-hero { display: flex; align-items: stretch; margin-top: 8px; }
+  .ph-day { font-family: var(--font-numeral); font-weight: 900; font-size: 76px; line-height: 0.95; color: var(--pine); flex: 1; }
+  .ph-week { writing-mode: vertical-rl; font-family: var(--font-print); font-size: 19px; letter-spacing: 0.35em; color: var(--pine);
+    border-left: 1px solid var(--pine); padding-left: 8px; margin-left: 10px; }
+  .ph-lunar { margin-top: 6px; font-family: var(--font-print); font-size: 11px; color: var(--pine); display: flex; justify-content: space-between;
+    border-top: 1px solid rgba(22,107,60,0.35); border-bottom: 1px solid rgba(22,107,60,0.35); padding: 4px 1px; }
+  .ph-tabs { display: flex; gap: 8px; margin-top: 9px; }
+  .ph-tab { font-family: var(--font-print); font-size: 11px; padding: 2px 12px; border-radius: 3px; letter-spacing: 0.12em; }
+  .ph-tab.on { background: var(--cinnabar); color: #FBF3E4; font-weight: 700; }
+  .ph-tab.off { border: 1px solid var(--cinnabar); color: var(--cinnabar); }
+  .ph-rows { margin-top: 7px; flex: 1; display: flex; flex-direction: column; }
+  .ph-row { display: flex; align-items: baseline; gap: 7px; padding: 4.5px 0; border-bottom: 1px dotted rgba(22,107,60,0.3); font-size: 10.5px; }
+  .ph-row .t { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--pine); width: 32px; flex: none; }
+  .ph-row .c { color: var(--cinnabar); font-family: var(--font-print); font-size: 9.5px; flex: none; width: 22px; }
+  .ph-row .ttl { font-family: var(--font-print); color: #166B3C; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ph-row .v { font-variant-numeric: tabular-nums; color: rgba(22,107,60,0.75); font-size: 9.5px; flex: none; }
+  .ph-row .v b { color: #166B3C; }
+  .ph-more { margin-top: auto; padding-top: 6px; text-align: right; font-family: var(--font-print); font-size: 10px; color: var(--cinnabar); letter-spacing: 0.1em; }
+  .cal-caption { margin-top: 22px; text-align: center; color: rgba(245, 235, 221, 0.55); font-size: 11.5px; letter-spacing: 0.06em; }
+
+  footer { margin-top: 72px; padding-top: 20px; border-top: 1px solid var(--divider); font-size: 12px; color: var(--ink-3); display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+<div class="grain-layer grain"></div>
+
+<div class="theme-bar">
+  <div class="grp">
+    <button data-set-phase="dawn">拂晓</button>
+    <button data-set-phase="day">正午</button>
+    <button data-set-phase="dusk">黄昏</button>
+    <button data-set-phase="night">子夜</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button data-set-scheme="light">亮</button>
+    <button data-set-scheme="dark">暗</button>
+  </div>
+</div>
+
+<div class="page">
+  <a class="back" href="index.html">← 设计语言总览</a>
+  <div class="page-head">
+    <h1>macOS 三件套</h1>
+    <p>真实尺寸同屏对照。三块界面只吃 <code>tokens.css</code> 的变量 —— 切换右上角主题,三者同时被同一盏「弧光」照亮;黄历的纸页保持物理纸的米白,只被环境光包围。</p>
+  </div>
+
+  <!-- ============ A + C 并排 ============ -->
+  <div class="surface" data-screen-label="菜单栏面板">
+    <div class="surface-head"><span class="no">A</span><h2>菜单栏面板 · 烛光仪表</h2><span class="dim">360pt · MenuBarExtra</span></div>
+    <p class="surface-note">改动:emoji 时段图标换为<b>蜡烛火漆圆章</b>;指标卡左侧加 3pt 色相条,四象颜色只允许出现在进度件上;日期行改等宽数字。其余结构忠于现状(标题/格言/三枚圆形按钮/分隔渐线/四卡)。</p>
+    <div class="stage" style="display: block;">
+      <div class="desktop-strip">
+        <div class="fake-menubar">
+          <span class="mb-item"></span>
+          <span class="mb-item" style="opacity:0.7;">访达</span>
+          <span style="flex:1;"></span>
+          <span class="mb-item" style="opacity:0.7;">􀊫</span>
+          <span class="mb-item" style="opacity:0.7;">􀛨</span>
+          <span class="mb-item active">
+            <svg width="11" height="11" viewBox="0 0 18 18" fill="currentColor"><path d="M9 1.4 C7.6 3.1 6.6 4.6 6.6 6.1 C6.6 7.8 7.7 9 9 9 C10.3 9 11.4 7.8 11.4 6.1 C11.4 4.6 10.4 3.1 9 1.4 Z"/><rect x="8.5" y="9.2" width="1" height="2"/><path d="M5.6 11.2 L12.4 11.2 L12.8 15.6 Q12.85 16.6 11.6 16.6 L6.4 16.6 Q5.15 16.6 5.2 15.6 Z"/></svg>
+            63.4%
+          </span>
+          <span class="mb-item" style="opacity:0.7;" data-clock>8月20日 周四 14:34</span>
+        </div>
+        <div class="panel-float">
+          <div class="panel">
+            <div class="panel-inner">
+              <div class="p-header">
+                <div class="p-icon">
+                  <svg width="23" height="23" viewBox="0 0 18 18" fill="none">
+                    <path d="M9 1.4 C7.6 3.1 6.6 4.6 6.6 6.1 C6.6 7.8 7.7 9 9 9 C10.3 9 11.4 7.8 11.4 6.1 C11.4 4.6 10.4 3.1 9 1.4 Z" fill="#F7B261"/>
+                    <rect x="8.5" y="9.2" width="1" height="2" fill="#F7E9D7"/>
+                    <path d="M5.6 11.2 L12.4 11.2 L12.8 15.6 Q12.85 16.6 11.6 16.6 L6.4 16.6 Q5.15 16.6 5.2 15.6 Z" fill="#F7E9D7"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="p-title">一日弧光</div>
+                  <div class="p-motto">时间是燃烧的蜡烛,不是流逝的沙</div>
+                  <div class="p-date" data-clock>2026年8月20日 周四 14:34</div>
+                </div>
+                <div class="p-actions">
+                  <button class="icon-btn" title="交易日历"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1.5" y="2.5" width="13" height="12" rx="2.5"/><path d="M1.5 6h13M5 1v3M11 1v3"/></svg></button>
+                  <button class="icon-btn" title="日记"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 13V5.5A2.5 2.5 0 0 1 5.5 3h7v10h-7A2.5 2.5 0 0 0 3 13ZM5.5 13V3"/></svg></button>
+                  <button class="icon-btn" title="设置"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/></svg></button>
+                </div>
+              </div>
+              <div class="p-divider"></div>
+              <div class="metric-stack">
+                <div class="metric-card" style="--mc: var(--m1); --mc2: var(--m1-2);">
+                  <div class="m-head"><span class="m-label">今日剩余</span><span class="m-pct">63.4<small>%</small></span></div>
+                  <div class="m-track"><div class="m-fill" style="width: 36.6%;"></div></div>
+                  <div class="m-foot"><span>还有 8 小时 31 分</span><span>今日 24:00 结束</span></div>
+                </div>
+                <div class="metric-card" style="--mc: var(--m2); --mc2: var(--m2-2);">
+                  <div class="m-head"><span class="m-label">本周剩余</span><span class="m-pct">41.2<small>%</small></span></div>
+                  <div class="m-track"><div class="m-fill" style="width: 58.8%;"></div></div>
+                  <div class="m-foot"><span>2026 第 34 周</span><span>周日 24:00 结束</span></div>
+                </div>
+                <div class="metric-card" style="--mc: var(--m3); --mc2: var(--m3-2);">
+                  <div class="m-head"><span class="m-label">本月剩余</span><span class="m-pct">35.5<small>%</small></span></div>
+                  <div class="m-track"><div class="m-fill" style="width: 64.5%;"></div></div>
+                  <div class="m-foot"><span>8 月 · 共 31 天</span><span>8月31日 24:00 结束</span></div>
+                </div>
+                <div class="metric-card" style="--mc: var(--m4); --mc2: var(--m4-2);">
+                  <div class="m-head"><span class="m-label">今年剩余</span><span class="m-pct">36.7<small>%</small></span></div>
+                  <div class="m-track"><div class="m-fill" style="width: 63.3%;"></div></div>
+                  <div class="m-foot"><span>2026 · 第 232 天</span><span>12月31日 24:00 结束</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ B 日记窗口 ============ -->
+  <div class="surface" data-screen-label="日记窗口">
+    <div class="surface-head"><span class="no">B</span><h2>交易日记 · 烛光书页</h2><span class="dim">1080×680 · 双栏</span></div>
+    <p class="surface-note">改动:盈亏月历与标签芯片统一吃 token;仓位块重设计为<b>「交割单」</b> —— 松烟绿双线界框 + 宋体 + 右上角「仓」字角章,把交易所数据做成印在纸上的凭证;复盘印章统一为双环 -8° 构造(对=松烟,错=朱砂);编辑器顶部保留弧光条作为签名元素。</p>
+    <div class="stage" style="padding: 36px;">
+      <div class="jwindow" style="position: relative;">
+        <div class="tl" style="top: 15px; left: 16px; z-index: 5;"><i></i><i></i><i></i></div>
+
+        <!-- 侧栏 -->
+        <aside class="j-side">
+          <div class="j-side-band"></div>
+          <div class="j-side-body">
+            <div class="pnl-cal">
+              <div class="cal-head">
+                <div class="cal-title">8 月盈亏 <span>+1,204.6</span></div>
+                <div class="cal-nav"><button>‹</button><button>›</button></div>
+              </div>
+              <div class="pnl-grid">
+                <span class="dow">一</span><span class="dow">二</span><span class="dow">三</span><span class="dow">四</span><span class="dow">五</span><span class="dow">六</span><span class="dow">日</span>
+                <span class="pnl-cell"></span><span class="pnl-cell"></span><span class="pnl-cell"></span><span class="pnl-cell"></span><span class="pnl-cell"></span>
+                <span class="pnl-cell">1</span><span class="pnl-cell">2</span>
+                <span class="pnl-cell up">3</span><span class="pnl-cell note">4</span><span class="pnl-cell down">5</span><span class="pnl-cell">6</span><span class="pnl-cell up">7</span><span class="pnl-cell">8</span><span class="pnl-cell">9</span>
+                <span class="pnl-cell up">10</span><span class="pnl-cell note">11</span><span class="pnl-cell down">12</span><span class="pnl-cell">13</span><span class="pnl-cell up">14</span><span class="pnl-cell">15</span><span class="pnl-cell">16</span>
+                <span class="pnl-cell">17</span><span class="pnl-cell up">18</span><span class="pnl-cell note">19</span><span class="pnl-cell today">20</span><span class="pnl-cell">21</span><span class="pnl-cell">22</span><span class="pnl-cell">23</span>
+                <span class="pnl-cell">24</span><span class="pnl-cell">25</span><span class="pnl-cell">26</span><span class="pnl-cell">27</span><span class="pnl-cell">28</span><span class="pnl-cell">29</span><span class="pnl-cell">30</span>
+                <span class="pnl-cell">31</span>
+              </div>
+            </div>
+            <div class="j-search">
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg>
+              搜索条目、标签或币种
+            </div>
+            <div class="j-chips">
+              <span class="chip on">#趋势跟踪</span><span class="chip">#突破</span><span class="chip">#震荡</span><span class="chip">#数据面</span><span class="chip">#心态</span>
+            </div>
+            <div class="j-days">
+              <div class="j-day sel"><span class="d">8月20日 周四</span><span class="mini ok">✓</span><span class="n">4 条</span></div>
+              <div class="j-day"><span class="d">8月19日 周三</span><span class="n">2 条</span></div>
+              <div class="j-day"><span class="d">8月18日 周二</span><span class="mini bad">✗</span><span class="n">3 条</span></div>
+              <div class="j-day"><span class="d">8月17日 周一</span><span class="n">1 条</span></div>
+              <div class="j-day"><span class="d">8月14日 周五</span><span class="mini ok">✓</span><span class="n">5 条</span></div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- 编辑区 -->
+        <div class="j-main">
+          <div class="j-header">
+            <button class="icon-btn" title="侧栏"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M6 2.5v11"/></svg></button>
+            <div class="book">实盘复盘 <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3l2 2 2-2"/></svg></div>
+            <div class="spacer"></div>
+            <button class="icon-btn" title="新建条目"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 2.5v11M2.5 8h11"/></svg></button>
+          </div>
+          <div class="j-arc"><div class="arc-strip"><div class="now"></div></div></div>
+          <div class="j-editor">
+            <div class="j-day-title">
+              <h3>8月20日</h3>
+              <span class="lunar">星期四 · 农历七月初八 · 丙午年甲申月</span>
+              <span class="count">4 条 · 2 笔已平仓</span>
+            </div>
+            <div class="j-cards">
+              <div class="jcard">
+                <div class="c-head"><span class="c-time">09:12</span><span class="chip">#数据面</span><span class="chip">#计划</span></div>
+                <p>今晚 20:30 初请失业金,22:00 成屋销售。数据前不加仓。BTC 112k 支撑若破,多单纪律离场,不扛。</p>
+              </div>
+              <div class="jcard">
+                <div class="c-head"><span class="c-time">14:35</span><span class="chip">#趋势跟踪</span></div>
+                <p>BTC 多单按计划在 114.2k 附近分批止盈。突破回踩确认有效,执行没有变形。</p>
+                <div class="slip">
+                  <div class="s-title">BTCUSDT 永续 <span class="lane long">做多</span></div>
+                  <div class="s-rows">
+                    <div class="s-row"><span>开仓 → 平仓(VWAP)</span><b>112,480.5 → 114,206.0</b></div>
+                    <div class="s-row"><span>数量 · 持有</span><b>0.250 BTC · 2 天 4 小时</b></div>
+                    <div class="s-row"><span>已实现盈亏</span><span class="pnl-up">+431.38 USDT</span></div>
+                  </div>
+                </div>
+                <div class="review-note"><b>✓ 复盘 · 对</b> —— 计划内交易,止盈节奏符合系统。趋势未破坏前不预判顶。</div>
+                <span class="seal seal-pine" style="width:40px; height:40px; font-size:17px;"><span>✓</span></span>
+              </div>
+              <div class="jcard">
+                <div class="c-head"><span class="c-time">21:48</span><span class="chip">#震荡</span><span class="chip">#心态</span></div>
+                <p>ETH 空单在数据后追进去,五分钟就被扫。又是「怕错过」下单,震荡区追单的老毛病。</p>
+                <div class="slip">
+                  <div class="s-title">ETHUSDT 永续 <span class="lane short">做空</span></div>
+                  <div class="s-rows">
+                    <div class="s-row"><span>开仓 → 平仓(VWAP)</span><b>4,218.40 → 4,322.15</b></div>
+                    <div class="s-row"><span>数量 · 持有</span><b>3.00 ETH · 47 分钟</b></div>
+                    <div class="s-row"><span>已实现盈亏</span><span class="pnl-down">−311.25 USDT</span></div>
+                  </div>
+                </div>
+                <div class="review-note"><b class="bad">✗ 复盘 · 错</b> —— 违反「数据后 30 分钟不开仓」。罚:明天只能挂单,不能市价追。</div>
+                <span class="seal seal-cinnabar" style="width:40px; height:40px; font-size:15px;"><span>✗</span></span>
+              </div>
+              <div class="jcard">
+                <div class="c-head"><span class="c-time">23:05</span><span class="chip">#复盘</span></div>
+                <p>今日净 +120.1。对的单子赚 431,错的单子亏 311 —— 一笔情绪化交易吃掉大半利润。</p>
+                <div class="review-cta"><button>复盘此条目</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ C 黄历窗 ============ -->
+  <div class="surface" data-screen-label="交易日历">
+    <div class="surface-head"><span class="no">C</span><h2>交易日历 · 墙上黄历</h2><span class="dim">480×690 贴桌窗 · 页 300×400</span></div>
+    <p class="surface-note">保留最强的实物个性:装订条、挂孔、双线界框、竖排星期。变化在「户口」:纸 = 系统的<b>宣纸·印刷态</b>(恒 #FBFBF8,不随深浅翻转),绿 = <b>松烟</b>,红 = <b>朱砂</b>;它不再自带一套颜色,而是这套语言里最「印刷」的那张纸。深色环境即暗房里的烛光。</p>
+    <div class="cal-stage">
+      <div>
+        <div class="cal-window">
+          <div class="pad-shadow"></div>
+          <div class="pad">
+            <div class="pad-back"></div>
+            <div class="pad-page">
+              <div class="pad-frame"></div>
+              <div class="pad-content">
+                <div class="ph-mast">
+                  <div class="pub">宏观交易日历<b>MACRO ALMANAC</b></div>
+                  <div class="greg">公历 二〇二六年八月<br>THURSDAY · 星期四</div>
+                </div>
+                <div class="ph-hero">
+                  <div class="ph-day">20</div>
+                  <div class="ph-week">星期四</div>
+                </div>
+                <div class="ph-lunar"><span>农历七月初八</span><span>丙午年 · 甲申月</span></div>
+                <div class="ph-tabs"><span class="ph-tab on">宏观事件</span><span class="ph-tab off">财报</span></div>
+                <div class="ph-rows">
+                  <div class="ph-row"><span class="t">20:30</span><span class="c">美国</span><span class="ttl">至8月15日当周初请失业金人数(万人)</span><span class="v">预 22.5 · 前 <b>22.4</b></span></div>
+                  <div class="ph-row"><span class="t">20:30</span><span class="c">美国</span><span class="ttl">8月费城联储制造业指数</span><span class="v">预 7.0 · 前 <b>15.9</b></span></div>
+                  <div class="ph-row"><span class="t">21:45</span><span class="c">美国</span><span class="ttl">8月标普全球制造业PMI初值</span><span class="v">预 49.5 · 前 <b>49.8</b></span></div>
+                  <div class="ph-row"><span class="t">22:00</span><span class="c">美国</span><span class="ttl">7月成屋销售总数年化(万户)</span><span class="v">预 395 · 前 <b>393</b></span></div>
+                  <div class="ph-row"><span class="t">22:30</span><span class="c">美国</span><span class="ttl">至8月14日当周EIA天然气库存(亿立方英尺)</span><span class="v">前 <b>560</b></span></div>
+                </div>
+                <div class="ph-more">另有 2 项 ›</div>
+              </div>
+            </div>
+            <div class="pad-binding"></div>
+            <div class="pad-hole"></div>
+          </div>
+        </div>
+        <div class="cal-caption">↑↓ / 滚轮翻页 · ←→ 切换栏目 · 撕下的页携当日数据飘落</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <span>macOS 模块稿 · 同一 tokens.css 渲染</span>
+    <a href="ios.html" style="color: var(--ember-text); text-decoration: none; font-weight: 700;">iOS 稿 →</a>
+  </footer>
+</div>
+
+<script src="theme.js"></script>
+</body>
+</html>

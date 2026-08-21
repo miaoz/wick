@@ -19,7 +19,7 @@ struct ProgressPanelView: View {
             let language = settings.language
 
             ZStack {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                TornSlipShape()
                     .fill(
                         LinearGradient(
                             colors: theme.backgroundColors,
@@ -41,8 +41,8 @@ struct ProgressPanelView: View {
                             .offset(x: -40, y: -70)
                     }
                     .overlay {
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .strokeBorder(theme.panelStroke, lineWidth: 1)
+                        TornSlipShape()
+                            .stroke(theme.panelStroke, lineWidth: 1)
                     }
 
                 VStack(alignment: .leading, spacing: 18) {
@@ -63,16 +63,7 @@ struct ProgressPanelView: View {
                             calendar: settings.progressCalendar
                         )
 
-                        VStack(spacing: 12) {
-                            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                                MetricProgressCard(
-                                    item: item,
-                                    theme: theme.metricTheme(for: index),
-                                    panelTheme: theme,
-                                    language: language
-                                )
-                            }
-                        }
+                        ProgressSlipContent(items: items, date: context.date, theme: theme, language: language)
                     }
                 }
                 .padding(PanelViewLayout.contentPadding)
@@ -88,17 +79,13 @@ struct ProgressPanelView: View {
 
     @ViewBuilder
     private func progressHeader(date: Date, theme: PanelTheme, language: AppLanguage) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            themeIcon(theme: theme)
+        HStack(alignment: .center, spacing: 12) {
+            CandleTileView(size: 34)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(theme.title(language: language))
-                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(L10n.string(.panelWordmark, language: language))
+                    .font(.system(size: 17, weight: .bold, design: .serif))
                     .foregroundStyle(theme.primaryText)
-
-                Text(L10n.string(.motto, language: language))
-                    .font(.footnote)
-                    .foregroundStyle(theme.secondaryText)
 
                 Text(
                     date.formatted(
@@ -112,33 +99,37 @@ struct ProgressPanelView: View {
                         .locale(language.locale)
                     )
                 )
-                .font(.caption.monospacedDigit())
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundStyle(theme.tertiaryText)
             }
 
             Spacer(minLength: 8)
 
             HStack(spacing: 8) {
-                headerButton(
+                InkIconButton(
                     systemName: "calendar",
-                    help: L10n.string(.tradingCalendar, language: language),
-                    theme: theme
+                    help: L10n.string(.tradingCalendar, language: language)
                 ) {
-                    TradingCalendarWindowController.shared.openCalendar()
+                    if settings.physicalCalendarEnabled {
+                        // 彩蛋:召唤贴桌物理黄历
+                        TradingCalendarWindowController.shared.openCalendar()
+                    } else {
+                        // 默认:主窗 + 检查器
+                        settings.journalInspectorVisible = true
+                        JournalWindowController.shared.openJournal(createTodayIfNeeded: false)
+                    }
                 }
 
-                headerButton(
+                InkIconButton(
                     systemName: "book.closed",
-                    help: L10n.string(.journal, language: language),
-                    theme: theme
+                    help: L10n.string(.journal, language: language)
                 ) {
                     JournalWindowController.shared.openJournal(createTodayIfNeeded: false)
                 }
 
-                headerButton(
+                InkIconButton(
                     systemName: "gearshape",
-                    help: L10n.string(.settings, language: language),
-                    theme: theme
+                    help: L10n.string(.settings, language: language)
                 ) {
                     showsSettings = true
                 }
@@ -148,110 +139,34 @@ struct ProgressPanelView: View {
 
     @ViewBuilder
     private func settingsHeader(theme: PanelTheme, language: AppLanguage) -> some View {
-        HStack(alignment: .center, spacing: 14) {
-            themeIcon(theme: theme)
+        HStack(alignment: .center, spacing: 12) {
+            CandleTileView(size: 34)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(L10n.string(.settingsTitle, language: language))
-                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    .font(.system(size: 17, weight: .bold, design: .serif))
                     .foregroundStyle(theme.primaryText)
 
-                Text(theme.title(language: language))
+                Text(L10n.string(.panelWordmark, language: language))
                     .font(.footnote)
                     .foregroundStyle(theme.secondaryText)
             }
 
             Spacer(minLength: 8)
 
-            headerButton(
+            InkIconButton(
                 systemName: "chevron.left",
-                help: L10n.string(.back, language: language),
-                theme: theme
+                help: L10n.string(.back, language: language)
             ) {
                 showsSettings = false
             }
         }
     }
 
-    private func themeIcon(theme: PanelTheme) -> some View {
-        ZStack {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: theme.iconGradient,
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(width: 46, height: 46)
-                .shadow(color: theme.iconGlow, radius: 12, y: 4)
-
-            Text(theme.icon)
-                .font(.system(size: 23))
-        }
-    }
-
     private func settingsDivider(theme: PanelTheme) -> some View {
         Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: [Color.clear, theme.dividerAccent, Color.clear],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
+            .fill(theme.dividerAccent)
             .frame(height: 1)
-    }
-
-    private func headerButton(
-        systemName: String,
-        help: String,
-        theme: PanelTheme,
-        action: @escaping () -> Void
-    ) -> some View {
-        PanelHeaderIconButton(systemName: systemName, help: help, theme: theme, action: action)
-    }
-}
-
-/// Menu-bar panel header icon (calendar / journal / settings / back).
-/// Keeps the day-arc control chrome idle; hover adds a soft accent mask.
-private struct PanelHeaderIconButton: View {
-    let systemName: String
-    let help: String
-    let theme: PanelTheme
-    let action: () -> Void
-
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(theme.primaryText.opacity(0.76))
-                .frame(width: 28, height: 28)
-                .background(
-                    Circle()
-                        .fill(theme.controlBackground)
-                )
-                // Hover mask sits above the control fill — same idea as journal quiet icons.
-                .overlay {
-                    Circle()
-                        .fill(theme.selectionBackground.opacity(isHovered ? 1 : 0))
-                }
-                .overlay {
-                    Circle()
-                        .strokeBorder(
-                            isHovered
-                                ? theme.selectionAccent.opacity(0.35)
-                                : theme.controlBorder,
-                            lineWidth: 1
-                        )
-                }
-        }
-        .buttonStyle(.plain)
-        .help(help)
-        .onHover { isHovered = $0 }
-        .animation(.easeOut(duration: 0.12), value: isHovered)
     }
 }
 
@@ -407,6 +322,25 @@ private struct SettingsContentView: View {
 
                         reminderPermissionFooter
                     }
+                }
+            }
+
+            settingsSection(
+                title: L10n.string(.tradingCalendar, language: language)
+            ) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle(isOn: $settings.physicalCalendarEnabled) {
+                        Text(L10n.string(.calendarEasterEggTitle, language: language))
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(theme.primaryText)
+                    }
+                    .toggleStyle(.switch)
+                    .tint(theme.selectionAccent)
+
+                    Text(L10n.string(.calendarEasterEggNote, language: language))
+                        .font(.caption)
+                        .foregroundStyle(theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
@@ -944,120 +878,94 @@ private struct SettingsContentView: View {
     }
 }
 
-private struct MetricProgressCard: View {
-    let item: TimeProgress
-    let theme: MetricTheme
-    let panelTheme: PanelTheme
+/// 纸签的进度内容:今日大烛痕条 + 周/月/年三条细条,页脚印着格言。
+/// 层级来自尺寸,不再来自色相(时间四象多色体系已退役)。
+private struct ProgressSlipContent: View {
+    @Environment(\.wickPalette) private var palette
+
+    let items: [TimeProgress]
+    let date: Date
+    let theme: PanelTheme
     let language: AppLanguage
 
+    /// Tick semantics: day 24 / week 7 / month = days in month / year 12.
+    private func ticks(for index: Int) -> Int {
+        switch index {
+        case 0: return 24
+        case 1: return 7
+        case 2:
+            var calendar = Calendar.current
+            calendar.timeZone = .current
+            return calendar.range(of: .day, in: .month, for: date)?.count ?? 31
+        default: return 12
+        }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 11) {
-            HStack(alignment: .center, spacing: 10) {
-                Text(item.title)
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundStyle(theme.primary)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 6)
-                    .background(theme.primary.opacity(0.14), in: Capsule())
-                    .overlay {
-                        Capsule()
-                            .strokeBorder(theme.primary.opacity(0.18), lineWidth: 1)
+        VStack(alignment: .leading, spacing: 14) {
+            if let today = items.first {
+                // Hero:今日
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(L10n.string(.panelHeroToday, language: language))
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .tracking(1.4)
+                            .foregroundStyle(theme.secondaryText)
+                        Spacer()
+                        Text(today.percentageText)
+                            .font(.system(size: 32, weight: .black, design: .serif).monospacedDigit())
+                            .foregroundStyle(theme.primaryText)
                     }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.subtitle)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundStyle(panelTheme.primaryText)
-                    Text(item.remainingText)
-                        .font(.caption)
-                        .foregroundStyle(panelTheme.secondaryText)
+                    BurnStripView(
+                        elapsed: 1 - today.fractionRemaining,
+                        ticks: 24,
+                        showsFlame: true
+                    )
+                    .frame(height: 34)
+
+                    HStack {
+                        Text("00:00")
+                        Spacer()
+                        Text(today.endText)
+                    }
+                    .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(theme.tertiaryText)
                 }
-
-                Spacer(minLength: 8)
-
-                Text(item.percentageText)
-                    .font(.system(size: 20, weight: .semibold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(panelTheme.primaryText)
             }
 
-            WickProgressBar(value: item.fractionRemaining, theme: theme)
-                .frame(height: 12)
+            // 细条:周 / 月 / 年
+            VStack(spacing: 10) {
+                ForEach(Array(items.dropFirst().enumerated()), id: \.element.id) { offset, item in
+                    let index = offset + 1
+                    HStack(spacing: 10) {
+                        Text(item.subtitle)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(theme.secondaryText)
+                            .frame(width: 30, alignment: .leading)
+
+                        BurnStripView(elapsed: 1 - item.fractionRemaining, ticks: ticks(for: index))
+                            .frame(height: 12)
+
+                        Text(item.percentageText)
+                            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                            .foregroundStyle(theme.secondaryText)
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
+            }
+            .padding(.top, 2)
 
             HStack {
-                Text(item.endText)
+                Text(L10n.string(.motto, language: language))
+                    .font(.custom("Songti SC", size: 11))
+                    .foregroundStyle(theme.tertiaryText)
                 Spacer()
-                Text(progressLabel(for: item.fractionRemaining))
+                Text(AppInfo.shortVersion)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(theme.tertiaryText.opacity(0.7))
             }
-            .font(.caption2)
-            .foregroundStyle(panelTheme.tertiaryText)
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [theme.cardTop, theme.cardBottom],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(panelTheme.cardBorder, lineWidth: 1)
-        }
-        .shadow(color: theme.glow, radius: 10, y: 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(item.title), \(item.percentageText), \(item.remainingText)")
-    }
-
-    private func progressLabel(for value: Double) -> String {
-        if value < 0.15 {
-            return L10n.string(.progressLow, language: language)
-        }
-
-        if value < 0.4 {
-            return L10n.string(.progressBurning, language: language)
-        }
-
-        return L10n.string(.progressPlenty, language: language)
-    }
-}
-
-private struct WickProgressBar: View {
-    let value: Double
-    let theme: MetricTheme
-
-    var body: some View {
-        GeometryReader { proxy in
-            let width = max(0, min(proxy.size.width, proxy.size.width * value))
-
-            ZStack(alignment: .leading) {
-                Capsule(style: .continuous)
-                    .fill(theme.trackFill)
-                    .overlay {
-                        Capsule(style: .continuous)
-                            .strokeBorder(theme.trackStroke, lineWidth: 1)
-                    }
-
-                Capsule(style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [theme.primary, theme.secondary],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .frame(width: width)
-                    .shadow(color: theme.glow, radius: 8, y: 2)
-                    .overlay(alignment: .trailing) {
-                        Circle()
-                            .fill(theme.spark.opacity(width > 10 ? 1 : 0))
-                            .frame(width: 8, height: 8)
-                            .blur(radius: 0.4)
-                            .padding(.trailing, 2)
-                    }
-            }
+            .padding(.top, 2)
         }
     }
 }
@@ -1067,30 +975,20 @@ private struct WickProgressBar: View {
 /// (Internal so the exchange settings section in its own file can reuse it.)
 struct PanelTheme {
     let palette: WickPalette
-    let phase: DayPhase
-    let metrics: [MetricTheme]
 
     static func resolve(at date: Date, scheme: ColorScheme) -> PanelTheme {
         PanelTheme(
-            palette: DayArcEngine.palette(at: date, scheme: scheme),
-            phase: DayArcEngine.phase(at: date),
-            metrics: DayArcEngine.metricThemes(at: date, scheme: scheme)
+            palette: DayArcEngine.palette(at: date, scheme: scheme)
         )
     }
 
     var backgroundColors: [Color] {
-        [palette.backgroundTop.color, palette.backgroundBottom.color]
+        [palette.cardTop.color, palette.cardBottom.color]
     }
 
     var ambientGlow: Color { palette.glow.color }
     var panelStroke: Color { palette.cardStroke.color }
     var dividerAccent: Color { palette.divider.color }
-
-    var iconGradient: [Color] {
-        [palette.accent.lightened(by: 0.25).color, palette.accent.darkened(by: 0.15).color]
-    }
-
-    var iconGlow: Color { palette.glow.color }
 
     var primaryText: Color { palette.textPrimary.color }
     var secondaryText: Color { palette.textSecondary.color }
@@ -1106,14 +1004,4 @@ struct PanelTheme {
 
     var selectionBackground: Color { palette.accentSoft.color }
     var selectionAccent: Color { palette.accent.color }
-
-    func metricTheme(for index: Int) -> MetricTheme {
-        metrics[index % metrics.count]
-    }
-
-    func title(language: AppLanguage) -> String {
-        phase.name(language: language)
-    }
-
-    var icon: String { phase.emoji }
 }

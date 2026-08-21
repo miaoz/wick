@@ -52,6 +52,9 @@ final class AppSettings: ObservableObject {
         static let lastKnownRemoteVersion = "wick.updates.lastKnownRemoteVersion"
         static let lastKnownRemoteURL = "wick.updates.lastKnownRemoteURL"
         static let weekStartsOnMonday = "wick.calendar.weekStartsOnMonday"
+        static let physicalCalendar = "wick.calendar.physicalEasterEgg"
+        static let journalInspectorVisible = "wick.journal.inspectorVisible"
+        static let journalColumnMode = "wick.journal.columnMode"
         static let deviceID = "wick.deviceID"
         static let syncEnabled = "wick.sync.enabled"
         static let syncAccountEmail = "wick.sync.accountEmail"
@@ -141,6 +144,29 @@ final class AppSettings: ObservableObject {
     @Published var binancePositionsEnabled: Bool {
         didSet {
             UserDefaults.standard.set(binancePositionsEnabled, forKey: Keys.binancePositionsEnabled)
+        }
+    }
+
+    /// 彩蛋:贴桌物理黄历(无边框暗室窗 + 撕页物理)。默认关 —— 黄历默认
+    /// 以印刷语言住在主窗右栏检查器;开启后黄历独立贴桌,主窗退为纯三栏,
+    /// 盈亏月历移至导航栏顶部(见 final.html §00「月历归属跟着黄历走」)。
+    @Published var physicalCalendarEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(physicalCalendarEnabled, forKey: Keys.physicalCalendar)
+        }
+    }
+
+    /// 主窗右栏检查器开关(⌥⌘0)。仅彩蛋关闭时有意义。
+    @Published var journalInspectorVisible: Bool {
+        didSet {
+            UserDefaults.standard.set(journalInspectorVisible, forKey: Keys.journalInspectorVisible)
+        }
+    }
+
+    /// 主窗导航深度:0 = 全导航(三栏), 1 = 仅列表, 2 = 专注(仅编辑)。
+    @Published var journalColumnMode: Int {
+        didSet {
+            UserDefaults.standard.set(journalColumnMode, forKey: Keys.journalColumnMode)
         }
     }
 
@@ -255,6 +281,20 @@ final class AppSettings: ObservableObject {
         syncEnabled = UserDefaults.standard.bool(forKey: Keys.syncEnabled)
         syncAccountEmail = UserDefaults.standard.string(forKey: Keys.syncAccountEmail) ?? ""
         binancePositionsEnabled = UserDefaults.standard.bool(forKey: Keys.binancePositionsEnabled)
+
+        physicalCalendarEnabled = UserDefaults.standard.bool(forKey: Keys.physicalCalendar)
+
+        if UserDefaults.standard.object(forKey: Keys.journalInspectorVisible) == nil {
+            journalInspectorVisible = true
+        } else {
+            journalInspectorVisible = UserDefaults.standard.bool(forKey: Keys.journalInspectorVisible)
+        }
+
+        if UserDefaults.standard.object(forKey: Keys.journalColumnMode) == nil {
+            journalColumnMode = 0
+        } else {
+            journalColumnMode = UserDefaults.standard.integer(forKey: Keys.journalColumnMode)
+        }
 
         lastKnownRemoteVersion = UserDefaults.standard.string(forKey: Keys.lastKnownRemoteVersion) ?? ""
         lastKnownRemoteURL = UserDefaults.standard.string(forKey: Keys.lastKnownRemoteURL) ?? ""

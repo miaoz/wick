@@ -151,3 +151,14 @@ enum LunarCalendar {
         return r >= 0 ? r : r + m
     }
 }
+
+/// Public one-liner for surfaces outside the kit (journal inspector):
+/// 农历七月初八 · 丙午年. Returns nil outside 1900–2100.
+public enum LunarLine {
+    public static func string(for date: Date, calendar: Calendar = .current) -> String? {
+        guard let lunar = LunarCalendar.lunar(from: date, calendar: calendar) else { return nil }
+        let month = (lunar.isLeapMonth ? "闰" : "") + LunarCalendar.monthName(lunar.month)
+        let day = LunarCalendar.dayName(lunar.day)
+        return "农历\(month)\(day) · \(LunarCalendar.ganzhiYear(lunar.year))年"
+    }
+}

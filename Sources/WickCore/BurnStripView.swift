@@ -1,0 +1,177 @@
+import SwiftUI
+
+// MARK: - Burn strip · 烛痕条
+
+/// The signature component of the「秉烛」system: elapsed time is a warm stain
+/// left by candlelight, the frontier is a thin ember line with a small flame,
+/// the future is clean ruled paper. Tick semantics: day 24 / week 7 /
+/// month = days in month / year 12.
+struct BurnStripView: View {
+    @Environment(\.wickPalette) private var palette
+
+    /// 0...1, fraction already elapsed.
+    var elapsed: Double
+    /// Tick segment count (24 / 7 / 28...31 / 12).
+    var ticks: Int = 24
+    /// Show the flame dot (hero tier only).
+    var showsFlame: Bool = false
+
+    private var fraction: Double { min(1, max(0, elapsed)) }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            let frontier = size.width * fraction
+            ZStack(alignment: .leading) {
+                // Unburnt ruled paper
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(palette.cardTop.color)
+                TickMarksShape(ticks: ticks)
+                    .stroke(palette.textPrimary.color.opacity(0.16), lineWidth: 0.5)
+                    .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+
+                // Candle stain (elapsed) with an irregular edge
+                StainShape(fraction: fraction)
+                    .fill(
+                        LinearGradient(
+                            colors: [palette.stain1.color, palette.stain2.color],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                // Warm halo hugging the frontier
+                Ellipse()
+                    .fill(
+                        RadialGradient(
+                            colors: [palette.accent.color.opacity(0.4), .clear],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: size.height * 1.4
+                        )
+                    )
+                    .frame(width: size.height * 2.8, height: size.height * 2.8)
+                    .position(x: frontier, y: size.height / 2)
+                    .opacity(fraction > 0.002 ? 1 : 0)
+
+                // Ember line at the frontier
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [palette.accent.color.opacity(0.25), palette.accent.color, palette.accentText.color],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: 2.5, height: size.height + 2)
+                    .position(x: frontier, y: size.height / 2)
+                    .shadow(color: palette.glow.color, radius: 4)
+                    .opacity(fraction > 0.002 ? 1 : 0)
+
+                if showsFlame, fraction > 0.002 {
+                    FlameDot()
+                        .frame(width: 8, height: 8)
+                        .position(x: frontier, y: size.height / 2)
+                        .shadow(color: palette.glow.color, radius: 5)
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+    }
+}
+
+/// Vertical hairlines dividing the strip into `ticks` segments.
+private struct TickMarksShape: Shape {
+    var ticks: Int
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let count = max(1, ticks)
+        for index in 1..<count {
+            let x = rect.width * CGFloat(index) / CGFloat(count)
+            path.move(to: CGPoint(x: x, y: 0))
+            path.addLine(to: CGPoint(x: x, y: rect.height))
+        }
+        return path
+    }
+}
+
+/// The elapsed area; its right (frontier) edge wobbles with a deterministic
+/// sum-of-sines so every strip has a hand-torn, candle-warmed edge. The noise
+/// is silhouette-only — content never gets displaced (design rule).
+private struct StainShape: Shape {
+    var fraction: Double
+    var seed: Double = 7
+
+    func path(in rect: CGRect) -> Path {
+        let fx = rect.width * min(1, max(0, fraction))
+        guard fx > 0.5 else { return Path() }
+
+        func wobble(_ t: CGFloat) -> CGFloat {
+            // t in 0...1 along the edge; ~±1.8pt irregular burn
+            sin(t * 9 + seed) * 1.05 + sin(t * 23 + seed * 3.1) * 0.65 + sin(t * 41 + seed * 1.7) * 0.35
+        }
+
+        var path = Path()
+        let steps = 24
+        path.move(to: CGPoint(x: 0, y: 0))
+        path.addLine(to: CGPoint(x: fx + wobble(0), y: 0))
+        for step in 1...steps {
+            let t = CGFloat(step) / CGFloat(steps)
+            path.addLine(to: CGPoint(x: fx + wobble(t), y: rect.height * t))
+        }
+        path.addLine(to: CGPoint(x: 0, y: rect.height))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// The small flame at the burn frontier. Breathes on its own 1.2s loop; the
+/// panel only lives while open, so a lightweight opacity animation is fine
+/// (the no-Timer rule applies to the MenuBarExtra label, not panel content).
+private struct FlameDot: View {
+    @Environment(\.wickPalette) private var palette
+    @State private var breathing = false
+
+    var body: some View {
+        TeardropShape()
+            .fill(
+                RadialGradient(
+                    colors: [
+                        Color(red: 1.0, green: 0.94, blue: 0.78),
+                        palette.accent.lightened(by: 0.25).color,
+                        palette.accent.color,
+                    ],
+                    center: .init(x: 0.5, y: 0.35),
+                    startRadius: 0,
+                    endRadius: 6
+                )
+            )
+            .opacity(breathing ? 0.72 : 1)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                    breathing = true
+                }
+            }
+    }
+}
+
+/// Upright flame teardrop, normalized to its bounding box.
+private struct TeardropShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width, h = rect.height
+        path.move(to: CGPoint(x: w * 0.5, y: 0))
+        path.addCurve(
+            to: CGPoint(x: w * 0.5, y: h),
+            control1: CGPoint(x: w * -0.05, y: h * 0.42),
+            control2: CGPoint(x: w * 0.12, y: h * 0.8)
+        )
+        path.addCurve(
+            to: CGPoint(x: w * 0.5, y: 0),
+            control1: CGPoint(x: w * 0.88, y: h * 0.8),
+            control2: CGPoint(x: w * 1.05, y: h * 0.42)
+        )
+        path.closeSubpath()
+        return path
+    }
+}

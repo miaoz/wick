@@ -1,0 +1,194 @@
+/* ==========================================================================
+   Wick 设计语言 ·「一烛之光」 Design Tokens  v1.0
+   --------------------------------------------------------------------------
+   一套 token,三个模块,两个平台。
+   色彩全部由「弧光引擎」驱动:4 个时段锚点 × 亮/暗两套,时段之间连续插值。
+   本文件把 Sources/WickCore/WickTheme.swift 的 8 组锚点色板转写为 CSS 变量,
+   并把散落在各模块的颜色收敛为五种「颜料」:
+
+     宣纸 paper    —— 一切表面的基底(暖白,随弧光调色温)
+     墨  ink      —— 文字三级(暖棕黑)
+     烛火 ember    —— 唯一强调色,行动与当前时刻
+     松烟 pine     —— 印刷墨绿:黄历油墨 / 复盘「对」/ 盈利
+     朱砂 cinnabar —— 印记红:印章 / 复盘「错」/ 亏损 / 黄历界线和签条
+
+   切换方式:<html data-scheme="light|dark" data-phase="dawn|day|dusk|night">
+   ========================================================================== */
+
+/* ---------- 基准:light · day(正午,烛光基线) ---------- */
+:root {
+  /* 纸 */
+  --paper-top: #FFF8F0;
+  --paper-bottom: #F3E6D5;
+  --paper-side: #F6ECDD;
+  --card-top: #FFF9F2;
+  --card-bottom: #F7E9D7;
+  --card-stroke: rgba(223, 198, 169, 0.65);
+  --control-bg: rgba(255, 255, 255, 0.55);
+  --control-border: rgba(215, 178, 138, 0.75);
+  /* 墨 */
+  --ink-1: #2F241B;
+  --ink-2: #6D5A49;
+  --ink-3: #917C67;
+  /* 烛火 */
+  --ember: #D9822B;
+  --ember-text: #B05F14;
+  --ember-soft: rgba(255, 232, 200, 0.9);
+  /* 松烟 / 朱砂(跨时段色相稳定) */
+  --pine: #1E7A48;
+  --pine-soft: rgba(30, 122, 72, 0.12);
+  --cinnabar: #C43E2E;
+  --cinnabar-soft: rgba(196, 62, 46, 0.12);
+  /* 界线与光晕 */
+  --divider: rgba(217, 143, 68, 0.55);
+  --glow: rgba(255, 190, 102, 0.24);
+  /* 印刷黄历(物理纸张,不随深浅模式翻转,只随弧光微调) */
+  --print-paper: #FBFBF8;
+  --print-edge: #D1CCB8;
+  --print-grain: #736147;
+  /* 时间四象色相(日/周/月/年) */
+  --m1: #E2903A;  --m1-2: #F7B261;
+  --m2: #4B8EF4;  --m2-2: #82B7FF;
+  --m3: #8E6CE6;  --m3-2: #C2A6FF;
+  --m4: #2DA37C;  --m4-2: #80D8BA;
+  /* 字体:两种字态 —— 活数据用圆体,印刷物用宋体 */
+  --font-ui: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+  --font-print: "Songti SC", "STSong", "HiraMinProN-W6", "Noto Serif SC", serif;
+  --font-numeral: ui-serif, "New York", "Songti SC", serif;
+  /* 形状 */
+  --r-s: 8px;
+  --r-m: 12px;
+  --r-l: 16px;
+  --r-xl: 24px;
+  --hairline: 1px;
+  /* 暖色阴影 */
+  --shadow-card: 0 1px 2px rgba(47, 36, 27, 0.05), 0 6px 18px rgba(47, 36, 27, 0.08);
+  --shadow-pop: 0 2px 6px rgba(47, 36, 27, 0.08), 0 18px 44px rgba(47, 36, 27, 0.16);
+  --grain-opacity: 0.05;
+}
+
+/* ---------- light · dawn(玫瑰金晨雾) ---------- */
+[data-phase="dawn"]:not([data-scheme="dark"]) {
+  --paper-top: #FDF1E8; --paper-bottom: #F5DFD3; --paper-side: #F7E6DA;
+  --card-top: #FEF4EC; --card-bottom: #F6E2D5; --card-stroke: rgba(227, 191, 168, 0.6);
+  --control-bg: rgba(255, 255, 255, 0.5); --control-border: rgba(220, 180, 155, 0.7);
+  --ink-1: #33251F; --ink-2: #715850; --ink-3: #967A6E;
+  --ember: #D96C42; --ember-text: #B45237; --ember-soft: rgba(251, 220, 203, 0.9);
+  --divider: rgba(217, 138, 99, 0.5); --glow: rgba(247, 178, 138, 0.26);
+}
+
+/* ---------- light · dusk(蜜铜黄昏) ---------- */
+[data-phase="dusk"]:not([data-scheme="dark"]) {
+  --paper-top: #FBEAD2; --paper-bottom: #F0D6B8; --paper-side: #F5E0C4;
+  --card-top: #FCEDDA; --card-bottom: #F2DABE; --card-stroke: rgba(217, 181, 140, 0.65);
+  --control-bg: rgba(255, 255, 255, 0.45); --control-border: rgba(205, 162, 115, 0.75);
+  --ink-1: #2E2013; --ink-2: #6B5136; --ink-3: #8F7350;
+  --ember: #C2611F; --ember-text: #9F4E17; --ember-soft: rgba(246, 217, 180, 0.9);
+  --divider: rgba(201, 126, 61, 0.55); --glow: rgba(240, 160, 80, 0.28);
+}
+
+/* ---------- light · night(月夜灰蓝) ---------- */
+[data-phase="night"]:not([data-scheme="dark"]) {
+  --paper-top: #E6E5EC; --paper-bottom: #D2D1DC; --paper-side: #DAD9E2;
+  --card-top: #EBEAF1; --card-bottom: #D8D7E2; --card-stroke: rgba(181, 180, 196, 0.65);
+  --control-bg: rgba(255, 255, 255, 0.45); --control-border: rgba(169, 168, 188, 0.7);
+  --ink-1: #26252E; --ink-2: #52505F; --ink-3: #74727F;
+  --ember: #7A86C8; --ember-text: #5560A8; --ember-soft: rgba(213, 216, 238, 0.9);
+  --divider: rgba(139, 144, 192, 0.5); --glow: rgba(154, 164, 224, 0.2);
+}
+
+/* ---------- dark · day(正午石板) ---------- */
+[data-scheme="dark"] {
+  --paper-top: #1C2434; --paper-bottom: #141A28; --paper-side: #171E2C;
+  --card-top: #212A3E; --card-bottom: #182032; --card-stroke: rgba(255, 255, 255, 0.09);
+  --control-bg: rgba(255, 255, 255, 0.06); --control-border: rgba(255, 255, 255, 0.12);
+  --ink-1: rgba(255, 255, 255, 0.96); --ink-2: rgba(255, 255, 255, 0.68); --ink-3: rgba(255, 255, 255, 0.52);
+  --ember: #F5B85C; --ember-text: #F7C276; --ember-soft: rgba(245, 184, 92, 0.16);
+  --pine: #7FBF8E; --pine-soft: rgba(127, 191, 142, 0.16);
+  --cinnabar: #E08A7E; --cinnabar-soft: rgba(224, 138, 126, 0.16);
+  --divider: rgba(232, 185, 110, 0.45); --glow: rgba(245, 184, 92, 0.16);
+  --print-edge: #B9B4A2; --print-grain: #8A7B62;
+  --m1: #9BB6FF; --m1-2: #6B86F5;
+  --m2: #79D4FF; --m2-2: #3C9DE8;
+  --m3: #B9A7FF; --m3-2: #7A67E6;
+  --m4: #8AE0D0; --m4-2: #3CB7A6;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 22px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 2px 8px rgba(0, 0, 0, 0.4), 0 20px 48px rgba(0, 0, 0, 0.5);
+  --grain-opacity: 0.08;
+}
+
+/* ---------- dark · dawn(拂晓靛蓝,余烬强调) ---------- */
+[data-scheme="dark"][data-phase="dawn"] {
+  --paper-top: #181A2E; --paper-bottom: #100F1C; --paper-side: #131225;
+  --card-top: #1C1E36; --card-bottom: #141325; --card-stroke: rgba(255, 255, 255, 0.08);
+  --control-bg: rgba(255, 255, 255, 0.05); --control-border: rgba(255, 255, 255, 0.11);
+  --ink-2: rgba(255, 255, 255, 0.66); --ink-3: rgba(255, 255, 255, 0.5);
+  --ember: #F0A368; --ember-text: #F5B27E; --ember-soft: rgba(240, 163, 104, 0.16);
+  --divider: rgba(232, 160, 106, 0.45); --glow: rgba(240, 163, 104, 0.2);
+}
+
+/* ---------- dark · dusk(焦琥珀傍晚) ---------- */
+[data-scheme="dark"][data-phase="dusk"] {
+  --paper-top: #1E1722; --paper-bottom: #130F16; --paper-side: #181119;
+  --card-top: #241B28; --card-bottom: #191219; --card-stroke: rgba(255, 255, 255, 0.08);
+  --control-bg: rgba(255, 255, 255, 0.05); --control-border: rgba(255, 255, 255, 0.11);
+  --ink-2: rgba(255, 255, 255, 0.65); --ink-3: rgba(255, 255, 255, 0.5);
+  --ember: #F08A4B; --ember-text: #F79A63; --ember-soft: rgba(240, 138, 75, 0.16);
+  --divider: rgba(224, 138, 82, 0.45); --glow: rgba(240, 138, 75, 0.22);
+}
+
+/* ---------- dark · night(子夜深蓝) ---------- */
+[data-scheme="dark"][data-phase="night"] {
+  --paper-top: #101527; --paper-bottom: #0C1019; --paper-side: #0D1220;
+  --card-top: #171F33; --card-bottom: #101727; --card-stroke: rgba(255, 255, 255, 0.07);
+  --control-bg: rgba(255, 255, 255, 0.05); --control-border: rgba(255, 255, 255, 0.1);
+  --ink-2: rgba(255, 255, 255, 0.64); --ink-3: rgba(255, 255, 255, 0.5);
+  --ember: #9BB6FF; --ember-text: #AFC4FF; --ember-soft: rgba(155, 182, 255, 0.16);
+  --divider: rgba(138, 180, 255, 0.42); --glow: rgba(108, 166, 255, 0.18);
+}
+
+/* ==========================================================================
+   共享组件基元
+   ========================================================================== */
+
+/* 纸面颗粒(极轻,只在近看时可见) */
+.grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+}
+
+/* 印章:双环、-8° 微倾 —— 全系统统一的「已定稿」语言 */
+.seal {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  transform: rotate(-8deg);
+  font-weight: 800;
+  line-height: 1;
+}
+.seal::before, .seal::after { content: ""; grid-area: 1 / 1; border-radius: 50%; }
+.seal::before { width: 100%; height: 100%; border: 1.6px solid currentColor; opacity: 0.85; }
+.seal::after { width: 80%; height: 80%; border: 1px solid currentColor; opacity: 0.45; }
+.seal > span { grid-area: 1 / 1; }
+.seal-pine { color: var(--pine); }
+.seal-cinnabar { color: var(--cinnabar); }
+
+/* 弧光条:一天的色温轨迹 + 当前时刻光点 */
+.arc-strip {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg,
+    #F2A65E 0%, #FFD9A0 14%, #FFE9C4 30%, #F7C86B 50%,
+    #E8935A 66%, #9B8FD4 82%, #4A5680 92%, #F2A65E 100%);
+}
+.arc-strip .now {
+  position: absolute;
+  top: 50%;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #FFF6E8;
+  border: 2px solid var(--ember);
+  box-shadow: 0 0 8px var(--glow), 0 0 2px rgba(0,0,0,0.2);
+  transform: translate(-50%, -50%);
+}

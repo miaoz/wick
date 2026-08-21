@@ -7,9 +7,19 @@ extension View {
     /// Makes this view a handle that moves the containing window (ported from himekuri).
     /// On macOS we always use the overlaid AppKit view — `WindowDragGesture` is 15+.
     /// On iOS there is no movable window, so it's a no-op.
-    func windowDragHandle() -> some View {
+    public func windowDragHandle() -> some View {
         #if os(macOS)
         modifier(WindowDragHandleModifier())
+        #else
+        self
+        #endif
+    }
+
+    /// Same drag handle, but layered BELOW the content: SwiftUI controls on
+    /// top keep their clicks, only the empty gaps fall through to dragging.
+    public func windowDragBackground() -> some View {
+        #if os(macOS)
+        background(LegacyWindowDragHandle())
         #else
         self
         #endif

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh" data-scheme="light" data-phase="day">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iOS 模块稿 · Wick 设计语言</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--font-ui); color: var(--ink-1);
+    background: linear-gradient(160deg, var(--paper-top), var(--paper-bottom));
+    min-height: 100vh; text-wrap: pretty;
+  }
+  .grain-layer { position: fixed; inset: 0; pointer-events: none; opacity: var(--grain-opacity); }
+  .page { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 48px 32px 120px; }
+
+  .theme-bar { position: fixed; top: 14px; right: 16px; z-index: 50; display: flex; gap: 8px; align-items: center;
+    padding: 6px; border-radius: 999px; background: var(--card-top); border: 1px solid var(--card-stroke); box-shadow: var(--shadow-card); }
+  .theme-bar .grp { display: flex; gap: 2px; }
+  .theme-bar button { font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--ink-2);
+    background: transparent; border: none; cursor: pointer; padding: 6px 10px; border-radius: 999px; transition: all 0.18s ease; }
+  .theme-bar button:hover { color: var(--ink-1); }
+  .theme-bar button.is-on { background: var(--ember); color: #FFF6E8; }
+  .theme-bar .sep { width: 1px; height: 18px; background: var(--divider); }
+
+  .back { display: inline-flex; gap: 6px; align-items: center; color: var(--ink-2); text-decoration: none; font-size: 13px; font-weight: 600; }
+  .back:hover { color: var(--ember); }
+  .page-head { margin: 18px 0 8px; }
+  .page-head h1 { font-size: 30px; font-weight: 800; }
+  .page-head p { margin-top: 6px; color: var(--ink-2); font-size: 14px; line-height: 1.8; max-width: 780px; }
+
+  .stage { margin-top: 36px; border-radius: var(--r-xl); border: 1px solid var(--card-stroke); padding: 56px 40px;
+    display: flex; gap: 72px; justify-content: center; align-items: flex-start; flex-wrap: wrap;
+    background: radial-gradient(800px 500px at 50% 8%, #2E2418, #191310 75%); box-shadow: var(--shadow-pop); }
+  .phone-col { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .phone-col .cap { color: rgba(245, 235, 221, 0.6); font-size: 12px; line-height: 1.7; text-align: center; max-width: 360px; }
+  .phone-col .cap b { color: #F5EBDD; }
+
+  .phone { width: 390px; height: 844px; border-radius: 46px; overflow: hidden; position: relative;
+    box-shadow: 0 0 0 10px #161310, 0 0 0 12px #3A332C, 0 40px 90px rgba(0,0,0,0.6); }
+
+  /* ============ 黄历满屏页 ============ */
+  .fs-page { position: absolute; inset: 0; background: var(--print-paper); color: #166B3C; display: flex; flex-direction: column; }
+  .fs-binding { height: 66px; flex: none; background: linear-gradient(180deg, #8E2F22, #B03222 60%, #7E2A1E); position: relative; }
+  .fs-binding::before, .fs-binding::after { content: ""; position: absolute; bottom: 12px; width: 34px; height: 9px; border-radius: 5px;
+    background: linear-gradient(180deg, #E8E2D4, #B7AF9C); box-shadow: 0 1px 1px rgba(0,0,0,0.4); }
+  .fs-binding::before { left: 60px; } .fs-binding::after { right: 60px; }
+  .fs-frame { position: absolute; inset: 78px 16px 26px; border: 3px solid var(--pine); pointer-events: none; }
+  .fs-frame::before { content: ""; position: absolute; inset: 4px; border: 1.2px solid var(--pine); }
+  .fs-content { flex: 1; display: flex; flex-direction: column; padding: 26px 32px 44px; position: relative; }
+  .fs-mast { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2.5px solid var(--cinnabar); padding-bottom: 8px; }
+  .fs-mast .pub { font-family: var(--font-print); font-size: 13px; letter-spacing: 0.24em; color: var(--pine); }
+  .fs-mast .pub b { display: block; font-size: 14px; letter-spacing: 0.34em; margin-top: 3px; }
+  .fs-mast .greg { text-align: right; font-family: var(--font-print); font-size: 12.5px; line-height: 1.8; color: var(--pine); }
+  .fs-hero { display: flex; align-items: stretch; margin-top: 16px; }
+  .fs-day { font-family: var(--font-numeral); font-weight: 900; font-size: 108px; line-height: 0.92; color: var(--pine); flex: 1; }
+  .fs-week { writing-mode: vertical-rl; font-family: var(--font-print); font-size: 25px; letter-spacing: 0.35em; color: var(--pine);
+    border-left: 1.2px solid var(--pine); padding-left: 12px; margin-left: 14px; }
+  .fs-lunar { margin-top: 12px; font-family: var(--font-print); font-size: 14px; color: var(--pine); display: flex; justify-content: space-between;
+    border-top: 1px solid rgba(22,107,60,0.35); border-bottom: 1px solid rgba(22,107,60,0.35); padding: 7px 2px; }
+  .fs-tabs { display: flex; gap: 10px; margin-top: 14px; }
+  .fs-tab { font-family: var(--font-print); font-size: 14px; padding: 4px 16px; border-radius: 4px; letter-spacing: 0.12em; }
+  .fs-tab.on { background: var(--cinnabar); color: #FBF3E4; font-weight: 700; }
+  .fs-tab.off { border: 1.2px solid var(--cinnabar); color: var(--cinnabar); }
+  .fs-rows { margin-top: 10px; flex: 1; display: flex; flex-direction: column; }
+  .fs-row { display: flex; align-items: baseline; gap: 10px; padding: 8.5px 0; border-bottom: 1px dotted rgba(22,107,60,0.3); font-size: 13.5px; }
+  .fs-row .t { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--pine); width: 44px; flex: none; }
+  .fs-row .c { color: var(--cinnabar); font-family: var(--font-print); font-size: 12px; flex: none; width: 28px; }
+  .fs-row .ttl { font-family: var(--font-print); color: #166B3C; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fs-row .v { font-variant-numeric: tabular-nums; color: rgba(22,107,60,0.75); font-size: 12px; flex: none; }
+  .fs-row .v b { color: #166B3C; }
+  .fs-more { margin-top: auto; padding-top: 10px; text-align: right; font-family: var(--font-print); font-size: 12.5px; color: var(--cinnabar); letter-spacing: 0.1em; }
+  .fs-tear-hint { position: absolute; left: 0; right: 0; bottom: 0; height: 30px; display: grid; place-items: center;
+    font-family: var(--font-print); font-size: 11px; letter-spacing: 0.4em; color: rgba(22,107,60,0.4); }
+
+  /* ============ 日记页(iOS 概念) ============ */
+  .ij { position: absolute; inset: 0; display: flex; flex-direction: column;
+    background: linear-gradient(170deg, var(--paper-top), var(--paper-bottom)); color: var(--ink-1); }
+  .ij-head { flex: none; padding: 66px 20px 10px; }
+  .ij-head .top-row { display: flex; align-items: center; }
+  .ij-head h2 { font-family: var(--font-numeral); font-size: 30px; font-weight: 900; }
+  .ij-head .lunar { font-family: var(--font-print); color: var(--ink-3); font-size: 12.5px; margin-top: 3px; }
+  .ij-arc { padding: 12px 20px 2px; flex: none; }
+  .ij-arc .arc-strip { height: 5px; }
+  .ij-list { flex: 1; padding: 12px 16px 30px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .ij-pnl { display: flex; align-items: center; justify-content: space-between; border-radius: var(--r-m);
+    background: var(--card-top); border: 1px solid var(--card-stroke); padding: 10px 14px; font-size: 12px; color: var(--ink-2); }
+  .ij-pnl b { font-size: 16px; font-variant-numeric: tabular-nums; }
+  .ij-pnl .up { color: var(--pine); }
+  .ijcard { position: relative; border-radius: var(--r-l); border: 1px solid var(--card-stroke);
+    background: linear-gradient(180deg, var(--card-top), var(--card-bottom)); box-shadow: var(--shadow-card); padding: 13px 15px; }
+  .ijcard .c-head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .ijcard .c-time { font-size: 12px; font-weight: 700; color: var(--ember-text); font-variant-numeric: tabular-nums; }
+  .ijcard p { font-size: 13px; line-height: 1.75; }
+  .ijcard .seal { position: absolute; right: 12px; bottom: 10px; }
+  .chip { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600;
+    background: var(--control-bg); border: 1px solid var(--control-border); color: var(--ink-2); }
+  .chip.on { background: var(--ember); border-color: var(--ember); color: #FFF6E8; }
+
+  .slip { font-variant-numeric: tabular-nums; border: 1px solid var(--pine); outline: 2px solid var(--pine); outline-offset: 2.5px;
+    border-radius: 2px; background: var(--print-paper); color: #2E4438; padding: 9px 12px; margin: 10px 4px 2px; position: relative; }
+  .slip::before { content: "仓"; position: absolute; top: -11px; right: 10px; width: 21px; height: 21px; border: 1.5px solid var(--cinnabar);
+    color: var(--cinnabar); border-radius: 4px; font-family: var(--font-print); font-size: 11px; display: grid; place-items: center;
+    transform: rotate(6deg); background: var(--print-paper); }
+  .slip .s-title { font-family: var(--font-print); font-size: 12.5px; font-weight: 700; display: flex; gap: 8px; align-items: center; }
+  .slip .lane { font-size: 10px; font-weight: 700; padding: 0 6px; border-radius: 3px; font-family: var(--font-ui); }
+  .slip .lane.long { background: rgba(30,122,72,0.12); color: #1E7A48; }
+  .slip .lane.short { background: rgba(196,62,46,0.12); color: #C43E2E; }
+  .slip .s-rows { margin-top: 7px; display: flex; flex-direction: column; gap: 4px; }
+  .slip .s-row { display: flex; justify-content: space-between; font-size: 11px; color: #5A6E62; border-bottom: 1px dotted rgba(30,122,72,0.25); padding-bottom: 3px; }
+  .slip .s-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .slip .s-row b { color: #24382D; }
+  .slip .pnl-up { color: #1E7A48; font-weight: 800; }
+  .slip .pnl-down { color: #C43E2E; font-weight: 800; }
+
+  .ij-fab { position: absolute; right: 18px; bottom: 26px; width: 52px; height: 52px; border-radius: 50%; border: none; cursor: pointer;
+    background: radial-gradient(circle at 50% 30%, #F7B261, var(--ember) 75%); box-shadow: 0 8px 20px var(--glow), var(--shadow-card);
+    display: grid; place-items: center; color: #FFF6E8; }
+
+  footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--divider); font-size: 12px; color: var(--ink-3); display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+<div class="grain-layer grain"></div>
+
+<div class="theme-bar">
+  <div class="grp">
+    <button data-set-phase="dawn">拂晓</button>
+    <button data-set-phase="day">正午</button>
+    <button data-set-phase="dusk">黄昏</button>
+    <button data-set-phase="night">子夜</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button data-set-scheme="light">亮</button>
+    <button data-set-scheme="dark">暗</button>
+  </div>
+</div>
+
+<div class="page">
+  <a class="back" href="index.html">← 设计语言总览</a>
+  <div class="page-head">
+    <h1>iOS 客户端</h1>
+    <p>纸即屏幕:满屏黄历的装订条直接「钉」在灵动岛下沿,双线界框避让圆角与 Home 指示条。右屏为日记页概念稿(当前 iOS 客户端仅含黄历,日记为规划项)—— 验证同一套 token 在触屏端的成色:44pt 触控目标、圆体活数据、交割单与印章原样落地。</p>
+  </div>
+
+  <div class="stage">
+    <!-- 黄历满屏 -->
+    <div class="phone-col" data-screen-label="iOS 黄历">
+      <div class="phone">
+        <div class="fs-page">
+          <div class="fs-binding"></div>
+          <div class="fs-frame"></div>
+          <div class="fs-content">
+            <div class="fs-mast">
+              <div class="pub">宏观交易日历<b>MACRO ALMANAC</b></div>
+              <div class="greg">公历 二〇二六年八月<br>THURSDAY · 星期四</div>
+            </div>
+            <div class="fs-hero">
+              <div class="fs-day">20</div>
+              <div class="fs-week">星期四</div>
+            </div>
+            <div class="fs-lunar"><span>农历七月初八</span><span>丙午年 · 甲申月</span></div>
+            <div class="fs-tabs"><span class="fs-tab on">宏观事件</span><span class="fs-tab off">财报</span></div>
+            <div class="fs-rows">
+              <div class="fs-row"><span class="t">20:30</span><span class="c">美国</span><span class="ttl">至8月15日当周初请失业金人数(万人)</span><span class="v">预 22.5 · 前 <b>22.4</b></span></div>
+              <div class="fs-row"><span class="t">20:30</span><span class="c">美国</span><span class="ttl">8月费城联储制造业指数</span><span class="v">预 7.0 · 前 <b>15.9</b></span></div>
+              <div class="fs-row"><span class="t">21:45</span><span class="c">美国</span><span class="ttl">8月标普全球制造业PMI初值</span><span class="v">预 49.5 · 前 <b>49.8</b></span></div>
+              <div class="fs-row"><span class="t">22:00</span><span class="c">美国</span><span class="ttl">7月成屋销售总数年化(万户)</span><span class="v">预 395 · 前 <b>393</b></span></div>
+              <div class="fs-row"><span class="t">22:00</span><span class="c">美国</span><span class="ttl">7月谘商会领先指标月率</span><span class="v">预 −0.1% · 前 <b>−0.3%</b></span></div>
+              <div class="fs-row"><span class="t">22:30</span><span class="c">美国</span><span class="ttl">至8月14日当周EIA天然气库存(亿立方英尺)</span><span class="v">前 <b>560</b></span></div>
+            </div>
+            <div class="fs-more">另有 2 项 ›</div>
+          </div>
+          <div class="fs-tear-hint">下 拉 撕 页</div>
+        </div>
+      </div>
+      <div class="cap"><b>满屏黄历</b> — 页即屏幕;装订条容纳刘海行,字号随屏宽缩放,每页行数由窗高反推。纸恒为宣纸 #FBFBF8。</div>
+    </div>
+
+    <!-- 日记概念 -->
+    <div class="phone-col" data-screen-label="iOS 日记">
+      <div class="phone">
+        <div class="ij">
+          <div class="ij-head">
+            <div class="top-row">
+              <div>
+                <h2>8月20日</h2>
+                <div class="lunar">星期四 · 农历七月初八 · 实盘复盘</div>
+              </div>
+              <div style="flex:1;"></div>
+              <span class="chip on">#趋势跟踪</span>
+            </div>
+          </div>
+          <div class="ij-arc"><div class="arc-strip"><div class="now"></div></div></div>
+          <div class="ij-list">
+            <div class="ij-pnl"><span>今日已实现盈亏</span><b class="up">+120.13 USDT</b></div>
+            <div class="ijcard">
+              <div class="c-head"><span class="c-time">09:12</span><span class="chip">#数据面</span><span class="chip">#计划</span></div>
+              <p>今晚 20:30 初请失业金,22:00 成屋销售。数据前不加仓。</p>
+            </div>
+            <div class="ijcard">
+              <div class="c-head"><span class="c-time">14:35</span><span class="chip">#趋势跟踪</span></div>
+              <p>BTC 多单按计划分批止盈,执行没有变形。</p>
+              <div class="slip">
+                <div class="s-title">BTCUSDT 永续 <span class="lane long">做多</span></div>
+                <div class="s-rows">
+                  <div class="s-row"><span>开仓 → 平仓</span><b>112,480.5 → 114,206.0</b></div>
+                  <div class="s-row"><span>已实现盈亏</span><span class="pnl-up">+431.38 USDT</span></div>
+                </div>
+              </div>
+              <span class="seal seal-pine" style="width:36px; height:36px; font-size:15px;"><span>✓</span></span>
+            </div>
+            <div class="ijcard">
+              <div class="c-head"><span class="c-time">21:48</span><span class="chip">#震荡</span><span class="chip">#心态</span></div>
+              <p>ETH 空单数据后追进,五分钟被扫。「怕错过」老毛病。</p>
+              <div class="slip">
+                <div class="s-title">ETHUSDT 永续 <span class="lane short">做空</span></div>
+                <div class="s-rows">
+                  <div class="s-row"><span>开仓 → 平仓</span><b>4,218.40 → 4,322.15</b></div>
+                  <div class="s-row"><span>已实现盈亏</span><span class="pnl-down">−311.25 USDT</span></div>
+                </div>
+              </div>
+              <span class="seal seal-cinnabar" style="width:36px; height:36px; font-size:13px;"><span>✗</span></span>
+            </div>
+          </div>
+          <button class="ij-fab" title="新建条目">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 2.5v11M2.5 8h11"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="cap"><b>日记页(概念)</b> — 弧光条压顶,交割单与印章原样落地;右下烛火 FAB 新建条目。此页为规划演示,非现有功能。</div>
+    </div>
+  </div>
+
+  <footer>
+    <span>iOS 模块稿 · 同一 tokens.css 渲染</span>
+    <a href="macos.html" style="color: var(--ember-text); text-decoration: none; font-weight: 700;">← macOS 稿</a>
+  </footer>
+</div>
+
+<script src="theme.js"></script>
+</body>
+</html>

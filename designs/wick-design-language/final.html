@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh" data-scheme="light" data-phase="day">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>秉烛 · 设计定稿 v1.0 — Wick</title>
+<link rel="stylesheet" href="tokens-v2.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--f-ui); color: var(--ink-1); background: var(--desk); min-height: 100vh; text-wrap: pretty; }
+  .grain-layer { position: fixed; inset: 0; pointer-events: none; opacity: var(--grain-opacity); }
+  .page { position: relative; z-index: 1; max-width: 1060px; margin: 0 auto; padding: 56px 40px 120px; }
+
+  .theme-bar { position: fixed; top: 14px; right: 16px; z-index: 50; display: flex; gap: 8px; align-items: center;
+    padding: 5px 6px; background: var(--paper-hi); border: 1px solid var(--rule); box-shadow: var(--sh-page); }
+  .theme-bar .grp { display: flex; gap: 2px; }
+  .theme-bar button { font-family: var(--f-ui); font-size: 12px; font-weight: 600; color: var(--ink-2); background: transparent; border: none; cursor: pointer; padding: 6px 10px; transition: all 0.18s ease; }
+  .theme-bar button:hover { color: var(--ink-1); }
+  .theme-bar button.is-on { background: var(--ember); color: #FFF3E0; }
+  .theme-bar .sep { width: 1px; height: 18px; background: var(--rule); }
+
+  .masthead { padding: 26px 0 38px; border-bottom: 2px solid var(--ink-1); display: flex; align-items: flex-end; gap: 24px; }
+  .flame-mark { width: 56px; height: 56px; display: grid; place-items: center; background: var(--char-1); border-radius: 6px; box-shadow: 0 0 30px var(--glow); flex: none; }
+  .masthead h1 { font-family: var(--f-print); font-size: 44px; font-weight: 900; line-height: 1.05; }
+  .masthead h1 small { font-family: var(--f-ui); font-size: 12px; font-weight: 600; letter-spacing: 0.26em; color: var(--ink-3); display: block; margin-bottom: 7px; }
+  .masthead .meta { margin-left: auto; text-align: right; font-family: var(--f-mono); font-size: 11.5px; color: var(--ink-3); line-height: 1.9; }
+  .masthead .meta b { color: var(--cinnabar); }
+
+  section { margin-top: 60px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
+  .sec-head .no { font-family: var(--f-mono); font-size: 13px; color: var(--cinnabar); font-weight: 700; }
+  .sec-head h2 { font-family: var(--f-print); font-size: 25px; font-weight: 900; }
+  .sec-head .en { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+  .lead { color: var(--ink-2); font-size: 14px; line-height: 1.9; max-width: 760px; margin-bottom: 24px; }
+  .lead b { color: var(--ink-1); }
+
+  .sheet { background: var(--paper); box-shadow: var(--sh-page); padding: 26px 30px; }
+  .sheet-edge { height: 5px; margin: 0 6px; background: var(--paper-edge); box-shadow: var(--sh-page); }
+
+  table.spec { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.spec th, table.spec td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--rule); vertical-align: top; line-height: 1.7; }
+  table.spec th { font-size: 10.5px; letter-spacing: 0.1em; color: var(--ink-3); text-transform: uppercase; }
+  table.spec tr:last-child td { border-bottom: none; }
+  table.spec td:first-child { white-space: nowrap; font-weight: 700; }
+  table.spec td .mono { font-family: var(--f-mono); font-size: 11.5px; }
+  table.spec td.dim { color: var(--ink-2); }
+
+  /* 决策记录 */
+  .decisions { display: flex; flex-direction: column; }
+  .dec { display: flex; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--rule); }
+  .dec:last-child { border-bottom: none; }
+  .dec .dv { flex: none; width: 62px; font-family: var(--f-mono); font-size: 11px; color: var(--ink-3); padding-top: 2px; }
+  .dec .dt { flex: 1; font-size: 13px; line-height: 1.8; color: var(--ink-2); }
+  .dec .dt b { color: var(--ink-1); }
+  .dec .dt .kept { color: var(--cinnabar); font-weight: 700; }
+
+  /* 组件陈列 */
+  .comps { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .comp { background: var(--paper); box-shadow: var(--sh-page); padding: 20px 24px; }
+  .comp > h4 { font-size: 11px; color: var(--ink-3); letter-spacing: 0.08em; margin-bottom: 14px; font-weight: 700; text-transform: uppercase; }
+  .comp.wide { grid-column: 1 / -1; }
+  .mini-strips { display: flex; flex-direction: column; gap: 14px; }
+  .mini-strips .row { display: flex; align-items: center; gap: 14px; }
+  .mini-strips .lbl { width: 66px; font-size: 12px; font-weight: 700; color: var(--ink-2); flex: none; }
+  .mini-strips .burnstrip { height: 16px; flex: 1; }
+  .mini-strips .val { width: 130px; text-align: right; font-family: var(--f-mono); font-size: 11px; color: var(--ink-2); flex: none; }
+  .chop-row { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+
+  /* IA 界面清单 */
+  .ia { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .ia-card { background: var(--paper); box-shadow: var(--sh-page); padding: 20px 24px; display: flex; flex-direction: column; gap: 8px; }
+  .ia-card .ia-tag { font-family: var(--f-mono); font-size: 10px; color: var(--cinnabar); letter-spacing: 0.1em; }
+  .ia-card h3 { font-family: var(--f-print); font-size: 17px; font-weight: 900; }
+  .ia-card p { font-size: 12.5px; color: var(--ink-2); line-height: 1.75; }
+  .ia-card a { color: var(--cinnabar); text-decoration: none; font-size: 12px; font-weight: 700; margin-top: auto; }
+
+  /* 设置纸签 mock */
+  .set-wrap { display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap; }
+  .set-slip { width: 340px; background: var(--paper); box-shadow: var(--sh-lift); border-radius: 0 0 6px 6px; padding: 16px 18px 14px; position: relative; }
+  .set-slip::before { content: ""; position: absolute; inset: 0; border-radius: 0 0 6px 6px; filter: url(#f-torn-top); pointer-events: none; }
+  .set-slip > * { position: relative; }
+  .set-h { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--rule); }
+  .set-h .t { font-size: 15px; font-weight: 800; }
+  .set-h .back-b { margin-left: auto; }
+  .set-sec { padding: 10px 0; border-bottom: 1px solid var(--rule); }
+  .set-sec:last-child { border-bottom: none; }
+  .set-sec .sh { font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; color: var(--ink-3); margin-bottom: 8px; }
+  .set-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 0; color: var(--ink-1); }
+  .set-row small { color: var(--ink-3); font-size: 10.5px; line-height: 1.6; }
+  .toggle { margin-left: auto; width: 34px; height: 20px; border-radius: 10px; background: var(--rule); position: relative; flex: none; }
+  .toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--paper-hi); box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+  .toggle.on { background: var(--ember); }
+  .toggle.on::after { left: 16px; }
+  .easter { background: var(--cinnabar-soft); border: 1px dashed var(--cinnabar); border-radius: 6px; padding: 9px 12px; margin-top: 8px; }
+  .easter .set-row { font-weight: 700; }
+  .easter small { color: var(--ink-2); }
+  .set-note { max-width: 380px; font-size: 13px; color: var(--ink-2); line-height: 1.9; }
+  .set-note b { color: var(--ink-1); }
+
+  /* 栏位切换示意 */
+  .sketches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
+  .sk { background: var(--paper); box-shadow: var(--sh-page); padding: 14px 14px 12px; }
+  .sk .sk-win { height: 132px; border: 1px solid var(--rule); border-radius: 7px; overflow: hidden; display: flex; flex-direction: column; background: var(--paper); }
+  .sk .sk-tb { height: 22px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 30px; border-bottom: 1px solid var(--rule);
+    background: linear-gradient(180deg, var(--paper-hi), var(--paper)); position: relative; }
+  .sk .sk-tb::before { content: ""; position: absolute; left: 8px; top: 50%; transform: translateY(-50%); width: 20px; height: 6px;
+    background:
+      radial-gradient(circle 2.6px at 3px 50%, #FF5F57 98%, transparent),
+      radial-gradient(circle 2.6px at 10px 50%, #FEBC2E 98%, transparent),
+      radial-gradient(circle 2.6px at 17px 50%, #28C840 98%, transparent);
+    background-repeat: no-repeat; }
+  .sk .sk-tb .sk-btn { width: 15px; height: 12px; border-radius: 3px; border: 1px solid var(--ink-3); display: grid; place-items: center; color: var(--ink-2); font-size: 7px; }
+  .sk .sk-tb .sk-btn.on { background: var(--ember); border-color: var(--ember); color: #FFF3E0; }
+  .sk .sk-tb .sk-sp { flex: 1; }
+  .sk .sk-cols { flex: 1; display: flex; }
+  .sk .sk-col { border-right: 1px solid var(--rule); display: grid; place-items: center; font-size: 9px; color: var(--ink-3);
+    writing-mode: vertical-rl; letter-spacing: 0.2em; position: relative; }
+  .sk .sk-col:last-child { border-right: none; }
+  .sk .sk-col.nav { width: 44px; background: color-mix(in srgb, var(--paper) 55%, var(--desk) 45%); }
+  .sk .sk-col.list { width: 62px; }
+  .sk .sk-col.edit { flex: 1; background: var(--paper-hi); color: var(--ink-2); }
+  .sk .sk-col.insp { width: 40px; background: var(--paper); }
+  .sk .sk-col.insp::after { content: ""; position: absolute; top: 6px; left: 8px; right: 8px; height: 4px; background: var(--cinnabar); border-radius: 2px; }
+  .sk .sk-cap { margin-top: 10px; font-size: 11.5px; color: var(--ink-2); line-height: 1.7; }
+  .sk .sk-cap b { color: var(--ink-1); display: block; font-size: 12.5px; }
+  .sk .sk-cap kbd { font-family: var(--f-mono); font-size: 10px; background: var(--paper-hi); border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+
+  footer { margin-top: 80px; padding-top: 20px; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-3); }
+  footer a { color: var(--cinnabar); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="grain-layer grain"></div>
+
+<svg width="0" height="0" style="position: absolute;" aria-hidden="true">
+  <filter id="f-char" x="-5%" y="-30%" width="110%" height="160%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.012 0.35" numOctaves="3" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="f-torn" x="-5%" y="-12%" width="110%" height="124%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.035 0.28" numOctaves="3" seed="11" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="f-seal" x="-8%" y="-8%" width="116%" height="116%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="2" seed="9" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="2.4"/>
+  </filter>
+  <filter id="f-torn-top" x="-5%" y="-30%" width="110%" height="130%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.05 0.09" numOctaves="2" seed="4" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="3.5"/>
+  </filter>
+</svg>
+
+<div class="theme-bar">
+  <div class="grp">
+    <button data-set-phase="dawn">拂晓</button>
+    <button data-set-phase="day">正午</button>
+    <button data-set-phase="dusk">黄昏</button>
+    <button data-set-phase="night">子夜</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button data-set-scheme="light">亮</button>
+    <button data-set-scheme="dark">暗</button>
+  </div>
+</div>
+
+<div class="page">
+
+  <header class="masthead">
+    <div class="flame-mark">
+      <svg width="28" height="28" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+        <path d="M9 1.4 C7.6 3.1 6.6 4.6 6.6 6.1 C6.6 7.8 7.7 9 9 9 C10.3 9 11.4 7.8 11.4 6.1 C11.4 4.6 10.4 3.1 9 1.4 Z" fill="#F7B261"/>
+        <rect x="8.5" y="9.2" width="1" height="2" fill="#C9B795"/>
+        <path d="M5.6 11.2 L12.4 11.2 L12.8 15.6 Q12.85 16.6 11.6 16.6 L6.4 16.6 Q5.15 16.6 5.2 15.6 Z" fill="#E8DCC0"/>
+      </svg>
+    </div>
+    <h1><small>WICK · FINAL SPEC</small>秉烛 · 定稿</h1>
+    <div class="meta">
+      v1.0 · 2026-08-21<br>
+      状态:<b>定稿,可作为实现蓝本</b><br>
+      <span data-clock></span>
+    </div>
+  </header>
+
+  <!-- ==================== 00 决策记录 ==================== -->
+  <section data-screen-label="决策记录">
+    <div class="sec-head"><span class="no">00</span><h2>决策记录</h2><span class="en">How we got here</span></div>
+    <div class="sheet">
+      <div class="decisions">
+        <div class="dec"><div class="dv">v1</div><div class="dt"><b>「一烛之光」— 废弃。</b>把现有三个界面归纳共享色值,但共享色值 ≠ 共享语言:黄历与日记依旧割裂,日记与面板本身设计平庸。教训:先立概念,再谈 token。</div></div>
+        <div class="dec"><div class="dv">v2</div><div class="dt"><b>「燃日」— 概念成立,表达过重。</b>确立「同一叠纸」的物质系统(纸/烟墨/烛火/朱砂/黛青)与账册、单据、方章;但黑色焦炭意象太狠。</div></div>
+        <div class="dec"><div class="dv">v2.1</div><div class="dt"><b>「秉烛」— 柔化定调。</b>焦炭改为<span class="kept">烛痕暖渍</span>,火只留火线上一粒烛苗;命名「秉烛」;定稿字态四声部(宋体印刷 / 粗衬线大数字 / 刻印小标签 / 单据等宽)。</div></div>
+        <div class="dec"><div class="dv">v3</div><div class="dt"><b>原生骨架回归。</b>日记从悬浮账册改为标准三栏 macOS 窗口(导航/日期/编辑),红绿灯回工具栏原生位;黄历尝试入栏 —— 结论是暗室墙与纸面栏不搭。</div></div>
+        <div class="dec"><div class="dv">v4</div><div class="dt"><b>混合模式 — 选定。</b>黄历默认<span class="kept">入册</span>(右栏检查器:今日事件 + 盈亏月历,放弃物理);<span class="kept">贴桌物理黄历降级为设置中自行开启的彩蛋</span>,完整保留撕页物理与暗室。</div></div>
+        <div class="dec"><div class="dv">修订</div><div class="dt"><b>月历归属跟着黄历走。</b>默认(B,黄历在栏内):盈亏热力图在检查器下半栏;彩蛋开启(A,黄历独立贴桌):主窗退为纯三栏、无检查器,月历移至导航栏顶部紧凑格(同旧版位置)。</div></div>
+        <div class="dec"><div class="dv">终审</div><div class="dt"><b>三处修正。</b>① 烛痕条刻度参数化:日 24 / 周 7 / 月 31 / 年 12,此前一律 24 等分是错的;② 形变滤镜永远只作用于纸的剪影层,不碰内容(单据与纸签曾因此糊字);③ 方章三层结构(残边/蘸印深浅/纸纹透出)+ 落印动效,章字恒锐利。</div></div>
+      </div>
+    </div>
+    <div class="sheet-edge"></div>
+  </section>
+
+  <!-- ==================== 01 概念与原则 ==================== -->
+  <section data-screen-label="概念">
+    <div class="sec-head"><span class="no">01</span><h2>概念与原则</h2><span class="en">Concept</span></div>
+    <p class="lead">Wick 的一切界面是<b>同一叠被烛光映照的纸</b>:烛光照过的地方留下暖渍(已逝),烛苗停在的地方是此刻,还没照到的是今天、本周、今年。日记是纸上的墨迹,仓位是胶带贴上去的交易所单据,复盘是盖下去的朱砂方章,黄历是这叠纸里印刷最讲究的那一页。</p>
+    <div class="sheet">
+      <table class="spec">
+        <tr><th>原则</th><th>规则</th></tr>
+        <tr><td>一纸烛光</td><td class="dim">弧光引擎是唯一光源:4 时段 × 亮暗共 8 组锚点,纸温随之变化;火苗色恒定,入夜后它是唯一的光。</td></tr>
+        <tr><td>五种材料</td><td class="dim">宣纸 / 烟墨 / 烛火 / 朱砂 / 黛青。除此之外没有第六种颜色;时间四象不再用四色区分,层级靠尺寸。</td></tr>
+        <tr><td>字态四声部</td><td class="dim">宋体 = 写在纸上的内容;粗衬线 = 大数字;刻印小标签 = 功能文字;等宽 = 单据数字。字态即信息性质。</td></tr>
+        <tr><td>印章即定稿</td><td class="dim">白文朱砂方章,靠字表意(对/错/休市/账),永远红色;盖下有 0.3s 落印动效,倾角每枚不同。</td></tr>
+        <tr><td>剪影形变</td><td class="dim">撕边/残边滤镜只作用于纸的剪影层,内容与数字永远锐利。</td></tr>
+        <tr><td>原生骨架</td><td class="dim">macOS 窗口遵循平台 convention:真红绿灯、工具栏、SplitView 三栏;纸墨语言只负责纸面,不发明窗口行为。</td></tr>
+      </table>
+    </div>
+    <div class="sheet-edge"></div>
+  </section>
+
+  <!-- ==================== 02 材料与 Token ==================== -->
+  <section data-screen-label="材料">
+    <div class="sec-head"><span class="no">02</span><h2>材料与 Token</h2><span class="en">Materials</span></div>
+    <p class="lead">实现源:<code>tokens-v2.css</code>,与 Swift 侧的对应关系见 §08。亮/暗与四时段可用右上角开关现场验证(全站联动)。</p>
+    <div class="sheet">
+      <table class="spec">
+        <tr><th>材料</th><th>Token</th><th>亮 · 正午</th><th>暗 · 夜纸</th><th>职责</th></tr>
+        <tr><td>宣纸</td><td class="mono">--paper / --paper-hi / --paper-edge</td><td class="mono">#FBF4E6 / #FFFCF2 / #D6C8AC</td><td class="mono">#2C2214 / #362A18 / #4A3A22</td><td class="dim">一切表面;物理印刷物(单据、黄历页)例外,恒为纸色</td></tr>
+        <tr><td>烟墨</td><td class="mono">--ink-1/2/3</td><td class="mono">#2B2014 / #6B5942 / #9A886B</td><td class="mono">#F0E3C6 / 64% / 42%</td><td class="dim">三级文字与线框,不用纯黑</td></tr>
+        <tr><td>烛火</td><td class="mono">--ember / --ember-hi / --glow</td><td class="mono">#E8791C / #FFB25E / 32%</td><td class="mono">#F59A3C / #FFC882 / 42%</td><td class="dim">烛苗、选中、行动、此刻;唯一允许发光的颜料</td></tr>
+        <tr><td>朱砂</td><td class="mono">--cinnabar / --cinnabar-soft</td><td class="mono">#C03A22 / 10%</td><td class="mono">#E06A4C / 14%</td><td class="dim">印章、签条、印刷界线、盈利数字;哑光,永不发光</td></tr>
+        <tr><td>黛青</td><td class="mono">--dai / --dai-soft</td><td class="mono">#3E5C50 / 12%</td><td class="mono">#8FAE9E / 14%</td><td class="dim">亏损数字专用;全系统唯一的冷色</td></tr>
+        <tr><td>烛痕</td><td class="mono">--stain-1 / --stain-2</td><td class="mono">#F0DFB6 → #E2C282</td><td class="mono">#4A3820 → #6B5226</td><td class="dim">烛痕条已逝部分;夜里反向更暖亮(被照过的地方)</td></tr>
+        <tr><td>单据纸</td><td class="mono">--receipt / --receipt-ink</td><td class="mono" colspan="2">#FFFDF4 / #33291A(恒定)</td><td class="dim">物理纸,不随深浅模式反色</td></tr>
+      </table>
+    </div>
+    <div class="sheet-edge"></div>
+  </section>
+
+  <!-- ==================== 03 组件终稿 ==================== -->
+  <section data-screen-label="组件">
+    <div class="sec-head"><span class="no">03</span><h2>组件终稿</h2><span class="en">Components, final</span></div>
+    <div class="comps">
+      <div class="comp wide">
+        <h4>烛痕条 · 日 24 刻 / 周 7 / 月 31 / 年 12(终审修正)</h4>
+        <div class="mini-strips">
+          <div class="row"><span class="lbl">今日</span><div class="burnstrip" data-burn-day style="--p: 61%;"><div class="char"></div><div class="emberline"></div><div class="flame"></div></div><span class="val">剩 <span data-burn-day-label>39</span>%</span></div>
+          <div class="row"><span class="lbl">本周</span><div class="burnstrip" style="--p: 58.8%; --ticks: 7;"><div class="char"></div><div class="emberline"></div></div><span class="val">剩 41.2% · 周日终</span></div>
+          <div class="row"><span class="lbl">本月</span><div class="burnstrip" style="--p: 64.5%; --ticks: 31;"><div class="char"></div><div class="emberline"></div></div><span class="val">剩 35.5% · 31 日终</span></div>
+          <div class="row"><span class="lbl">今年</span><div class="burnstrip" style="--p: 63.3%; --ticks: 12;"><div class="char"></div><div class="emberline"></div></div><span class="val">剩 36.7% · 12月31日终</span></div>
+        </div>
+      </div>
+      <div class="comp">
+        <h4>朱砂方章 · 对 / 错 / 闲日</h4>
+        <div class="chop-row">
+          <span class="chop" style="width: 52px; height: 52px; font-size: 24px;"><span>对</span></span>
+          <span class="chop" style="width: 52px; height: 52px; font-size: 24px; transform: rotate(4deg);"><span>错</span></span>
+          <span class="chop" style="width: 66px; height: 36px; font-size: 15px; letter-spacing: 0.2em; padding-left: 0.2em; transform: rotate(2.5deg);"><span>休市</span></span>
+          <span class="chop" style="width: 20px; height: 20px; font-size: 10px;"><span>对</span></span>
+        </div>
+      </div>
+      <div class="comp">
+        <h4>签条 · 功能钮</h4>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+          <span class="ptag on">趋势跟踪</span><span class="ptag">震荡</span><span class="ptag">突破</span><span class="ptag">心态</span>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button class="inkbtn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg></button>
+          <button class="inkbtn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 2.5v11M2.5 8h11"/></svg></button>
+          <button class="inkbtn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M10 2.5v11"/></svg></button>
+        </div>
+      </div>
+      <div class="comp wide">
+        <h4>交易所单据 · 胶带贴上纸面(窄栏数值落行右对齐)</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px;">
+          <div class="receipt">
+            <div class="r-head"><b>BTCUSDT 永续 · 多</b><span>08-18 09:41 → 08-20 14:35</span></div>
+            <div class="r-row"><span>开仓 → 平仓 VWAP</span><span>112,480.5 → 114,206.0</span></div>
+            <div class="r-row"><span>数量 · 持有</span><span>0.250 BTC · 2 天 4 小时</span></div>
+            <div class="r-row r-total"><span>已实现盈亏</span><span class="up">+431.38 USDT</span></div>
+          </div>
+          <div class="receipt" style="transform: rotate(0.5deg);">
+            <div class="r-head"><b>ETHUSDT 永续 · 空</b><span>08-20 21:01 → 21:48</span></div>
+            <div class="r-row"><span>开仓 → 平仓 VWAP</span><span>4,218.40 → 4,322.15</span></div>
+            <div class="r-row"><span>数量 · 持有</span><span>3.00 ETH · 47 分钟</span></div>
+            <div class="r-row r-total"><span>已实现盈亏</span><span class="down">−311.25 USDT</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 04 界面清单 ==================== -->
+  <section data-screen-label="界面清单">
+    <div class="sec-head"><span class="no">04</span><h2>界面清单</h2><span class="en">Surfaces, final</span></div>
+    <div class="ia">
+      <div class="ia-card">
+        <span class="ia-tag">macOS · 常驻</span>
+        <h3>菜单栏纸签</h3>
+        <p>360pt 撕边纸签:今日大烛痕条 + 周/月/年细条,菜单栏蜡烛 + 「剩 N%」。设置态共用此纸签(见 §06)。</p>
+        <a href="v2-macos.html">查看稿 A →</a>
+      </div>
+      <div class="ia-card">
+        <span class="ia-tag">macOS · 主窗</span>
+        <h3>秉烛主窗(三栏 + 检查器)</h3>
+        <p>原生工具栏 + 导航(日记本·标签)/ 日期列表(复盘小章 + 盈亏)/ 账册编辑页;右栏检查器 = 今日事件 + 盈亏月历(下半栏),整栏可开关(⌥⌘0)。</p>
+        <a href="v4-directions.html">查看方向 B 稿 →</a>
+      </div>
+      <div class="ia-card">
+        <span class="ia-tag">macOS · 彩蛋(默认关)</span>
+        <h3>贴桌物理黄历</h3>
+        <p>设置 →「交易日历」开启。无边框暗室贴桌窗,朱漆装订条 + 撕页物理 + 合成纸声,完整保留;经主窗工具栏日历按钮或菜单栏纸签召唤。<b>此模式下主窗无检查器,盈亏月历移至导航栏顶部。</b></p>
+        <a href="v4-directions.html">查看方向 A 稿 →</a>
+      </div>
+      <div class="ia-card">
+        <span class="ia-tag">iOS</span>
+        <h3>四屏</h3>
+        <p>首页「今日」(报头 + 烛痕 + 三事 + 邻页)/ 满屏黄历(撕页物理保留,iOS 端它仍是主角)/ 日记纸页(概念)/「今日纸签」小组件(提案)。</p>
+        <a href="v2-ios.html">查看稿 →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 05 栏位切换 ==================== -->
+  <section data-screen-label="栏位切换">
+    <div class="sec-head"><span class="no">05</span><h2>栏位切换</h2><span class="en">Column behavior</span></div>
+    <p class="lead"><b>两个开关,各管一段,互不循环。</b>左侧按钮管「导航深度」(栏一 + 栏二三态循环),右侧按钮管「检查器」(栏四,独立开关)。编辑栏永远在场——它是纸,纸不消失。</p>
+    <div class="sketches">
+      <div class="sk">
+        <div class="sk-win">
+          <div class="sk-tb"><span class="sk-btn on">☰</span><span class="sk-sp"></span><span class="sk-btn">▤</span></div>
+          <div class="sk-cols"><div class="sk-col nav">导航</div><div class="sk-col list">日期</div><div class="sk-col edit">账册页</div></div>
+        </div>
+        <div class="sk-cap"><b>全导航(默认)</b>导航 + 日期 + 编辑。图标:侧栏实心。<kbd>⌃⌘S</kbd> 下一态:仅列表</div>
+      </div>
+      <div class="sk">
+        <div class="sk-win">
+          <div class="sk-tb"><span class="sk-btn on">☷</span><span class="sk-sp"></span><span class="sk-btn">▤</span></div>
+          <div class="sk-cols"><div class="sk-col list">日期</div><div class="sk-col edit">账册页</div></div>
+        </div>
+        <div class="sk-cap"><b>仅列表</b>收起导航,保留日期 + 编辑。图标:列表。<kbd>⌃⌘S</kbd> 下一态:专注写作</div>
+      </div>
+      <div class="sk">
+        <div class="sk-win">
+          <div class="sk-tb"><span class="sk-btn on">□</span><span class="sk-sp"></span><span class="sk-btn">▤</span></div>
+          <div class="sk-cols"><div class="sk-col edit">账册页</div></div>
+        </div>
+        <div class="sk-cap"><b>专注写作</b>只剩账册页,页眉给换日箭头。图标:单页。<kbd>⌃⌘S</kbd> 回到全导航</div>
+      </div>
+    </div>
+    <div class="sheet">
+      <table class="spec">
+        <tr><th>规则</th><th>行为</th></tr>
+        <tr><td>左钮 · 三态</td><td class="dim">循环 全导航 → 仅列表 → 专注 → 回到全导航。<b>图标随当前态变化、tooltip 预告下一态</b>、栏宽 180ms 动画——永远不盲按。</td></tr>
+        <tr><td>右钮 · 检查器 / 召唤</td><td class="dim">默认:开关栏四(今日事件 + 盈亏月历下半栏),<kbd>⌥⌘0</kbd>,与左侧三态正交,总组合 3 × 2。彩蛋开启:主窗无栏四,右钮变为召唤/收起贴桌黄历。</td></tr>
+        <tr><td>编辑栏</td><td class="dim">不可关闭。专注态下页眉出现「‹ 8月20日 ›」换日箭头,新建/搜索仍在工具栏。</td></tr>
+        <tr><td>逃生口</td><td class="dim">惯例保留:分隔条可拖拽调宽,<b>双击分隔条单独收起/恢复该栏</b>;拖拽到边缘 = 收起。</td></tr>
+        <tr><td>最小窗宽</td><td class="dim">全导航 1080 · 仅列表 760 · 专注 480;检查器开启再 +284,不足时先挤编辑栏,到限即禁用开启并提示。</td></tr>
+        <tr><td>记忆</td><td class="dim">栏位状态与各栏宽度写 UserDefaults,重启恢复。</td></tr>
+      </table>
+    </div>
+    <div class="sheet-edge"></div>
+  </section>
+
+  <!-- ==================== 06 设置与彩蛋 ==================== -->
+  <section data-screen-label="设置">
+    <div class="sec-head"><span class="no">06</span><h2>设置 · 彩蛋的住所</h2><span class="en">Settings</span></div>
+    <div class="set-wrap">
+      <div class="set-slip">
+        <div class="set-h">
+          <div class="t">设置</div>
+          <button class="inkbtn back-b"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3L5 8l5 5"/></svg></button>
+        </div>
+        <div class="set-sec">
+          <div class="sh">外观</div>
+          <div class="set-row">跟随系统 · 亮 / 暗<span style="margin-left:auto;" class="ptag on">跟随系统</span></div>
+        </div>
+        <div class="set-sec">
+          <div class="sh">通用</div>
+          <div class="set-row">菜单栏显示剩余百分比<span class="toggle on"></span></div>
+          <div class="set-row">登录时启动<span class="toggle on"></span></div>
+        </div>
+        <div class="set-sec">
+          <div class="sh">同步与交易所</div>
+          <div class="set-row">Dropbox<small>已连接 · 2 分钟前</small><span class="toggle on"></span></div>
+          <div class="set-row">Binance 仓位<small>只读 · Keychain</small><span class="toggle on"></span></div>
+        </div>
+        <div class="set-sec">
+          <div class="sh">交易日历</div>
+          <div class="set-row">在主窗检查器显示<span class="toggle on"></span></div>
+          <div class="easter">
+            <div class="set-row">贴桌物理黄历<span class="toggle"></span></div>
+            <small>彩蛋 · 默认关闭。开启后,黄历以无边框贴桌窗呈现,撕页物理与合成纸声完整保留,与栏内版式共用同一份数据。</small>
+          </div>
+        </div>
+      </div>
+      <div class="set-note">
+        <b>设置不住在独立窗口,住在菜单栏纸签的第二态</b>(与现状一致,齿轮钮翻页)。彩蛋开关放进「交易日历」区,并用朱砂虚线框标明身份:默认关闭,开了也不会惊扰默认体验——检查器版式与物理窗读同一份缓存数据,互不打架。
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 07 状态与边界 ==================== -->
+  <section data-screen-label="状态">
+    <div class="sec-head"><span class="no">07</span><h2>状态与边界</h2><span class="en">States</span></div>
+    <div class="sheet">
+      <table class="spec">
+        <tr><th>状态</th><th>表现</th></tr>
+        <tr><td>闲日(无事件)</td><td class="dim">检查器「交易日历」半栏盖「本日无事」横章(周末为「休市」),不显示空列表</td></tr>
+        <tr><td>无日记日</td><td class="dim">日期列表行灰显「—」;编辑页为空白纸页 + 烛痕条 + 新建条目虚线位</td></tr>
+        <tr><td>待复盘</td><td class="dim">条目右侧 46pt 虚线章位「复盘」,盖下后 0.3s 落印</td></tr>
+        <tr><td>无仓位日</td><td class="dim">月历格用烛痕浅渍(有日记无仓位),与盈亏格区分</td></tr>
+        <tr><td>离线 / 日历拉取失败</td><td class="dim">检查器读磁盘缓存,半栏底部小字「缓存 · HH:mm」;同步点由烛火变灰</td></tr>
+        <tr><td>彩蛋开启 + 检查器关闭</td><td class="dim">两态独立;彩蛋窗不参与主窗布局,关主窗不收起</td></tr>
+      </table>
+    </div>
+    <div class="sheet-edge"></div>
+  </section>
+
+  <!-- ==================== 08 实现注记 ==================== -->
+  <section data-screen-label="实现">
+    <div class="sec-head"><span class="no">08</span><h2>实现注记</h2><span class="en">Handoff notes</span></div>
+    <div class="sheet">
+      <table class="spec">
+        <tr><th>主题</th><th>规则</th></tr>
+        <tr><td>色板映射</td><td class="dim"><code>tokens-v2.css</code> 与 <code>DayArcEngine</code> 锚点一一对应;新增 <code>--stain-1/2</code>(烛痕)、<code>--dai</code>(黛亏)、<code>--receipt</code>(单据恒色)。子夜 accent 不再变蓝 —— 火苗色跨时段恒定。</td></tr>
+        <tr><td>剪影形变</td><td class="dim">撕边/残边位移只加在背景 shape 层;SwiftUI 里对应 <code>.background</code> 上做单层 distortion,内容层不参与。</td></tr>
+        <tr><td>烛痕条刻度</td><td class="dim">日 24 / 周 7 / 月 31(按当月)/ 年 12;参数化,禁止一律 24。</td></tr>
+        <tr><td>方章</td><td class="dim">三层:残边 shape(turbulence 位移)/ 深浅渐变 / 噪点混合;章字独立一层。落印 = scale 1.7→1 + opacity spring(0.3s)。</td></tr>
+        <tr><td>盈亏色</td><td class="dim">红盈 / 黛亏(A 股习惯)。如需切回币圈西式绿涨红跌,只改 <code>--cinnabar</code> 与 <code>--dai</code> 的语义绑定。</td></tr>
+        <tr><td>对比度</td><td class="dim">正文 ink-1 on paper ≥ 12:1;事件行/单据等 9–10pt 印刷文字仅限栏内密排,触控目标 ≥ 44pt(iOS)/ 22pt(macOS)。</td></tr>
+        <tr><td>动效</td><td class="dim">界面反馈一律 180ms;烛苗呼吸 1.7s;落印 0.3s;撕页物理参数与现行 <code>PaperSim</code> 完全一致。</td></tr>
+      </table>
+    </div>
+    <div class="sheet-edge"></div>
+  </section>
+
+  <footer>
+    <span>秉烛 · 定稿 v1.0 · token 源 <code>tokens-v2.css</code></span>
+    <span><a href="v2.html">过程稿 v2.1 →</a> · <a href="v4-directions.html">v4 方向对照 →</a></span>
+  </footer>
+</div>
+
+<script src="theme.js"></script>
+</body>
+</html>

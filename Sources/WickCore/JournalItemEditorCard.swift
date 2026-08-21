@@ -30,10 +30,9 @@ struct JournalItemEditorCard: View {
     @State private var reviewNoteDraft = ""
 
     var body: some View {
-        // One flat surface per item: no inner boxes. Tag, body, and images
-        // read as one continuous piece; only whitespace and type color set
-        // them apart.
-        VStack(alignment: .leading, spacing: 10) {
+        // 条目 = 纸面上的一段墨迹:无卡片壳,条目之间靠发丝线与留白分隔;
+        // 只有复盘章有权浮在内容上(bottomTrailing)。
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 10) {
                 Text(
                     String(
@@ -41,13 +40,8 @@ struct JournalItemEditorCard: View {
                         index + 1
                     )
                 )
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(.tertiary)
-                .textCase(.uppercase)
-                .tracking(0.4)
-                // CJK ink sits low in its line box; nudge up so the label
-                // optically centers with the 28pt icon buttons in this row.
-                .offset(y: -2)
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(palette.textTertiary.color)
 
                 Spacer()
 
@@ -77,8 +71,8 @@ struct JournalItemEditorCard: View {
                     set: { item.tag = $0 }
                 ),
                 placeholder: L10n.string(.journalItemTagPlaceholder, language: settings.language),
-                font: .systemFont(ofSize: 13, weight: .medium),
-                textColor: palette.accentText.nsColor,
+                font: WickPrintFont.songti(12.5, bold: true),
+                textColor: palette.pnlUp.nsColor,
                 style: .plain,
                 onChange: onChange,
                 onPasteImage: onPasteImage
@@ -90,7 +84,7 @@ struct JournalItemEditorCard: View {
                     get: { item.body },
                     set: { item.body = $0 }
                 ),
-                font: .systemFont(ofSize: 14),
+                font: WickPrintFont.songti(13.5),
                 // ~2–3 lines empty; grows with content so short notes stay compact.
                 minHeight: 48,
                 maxHeight: nil,
@@ -103,7 +97,7 @@ struct JournalItemEditorCard: View {
                 // padding) + 5 (NSTextView line fragment padding).
                 if item.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(L10n.string(.journalBodyPlaceholder, language: settings.language))
-                        .font(.system(size: 14))
+                        .font(.custom("Songti SC", size: 13.5))
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 5)
                         .allowsHitTesting(false)
@@ -130,24 +124,15 @@ struct JournalItemEditorCard: View {
                 }
             }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(palette.cardTop.scaledAlpha(0.65).color)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(palette.cardStroke.scaledAlpha(0.5).color, lineWidth: 1)
-        }
-        // Once a verdict is picked, its seal floats over the card's bottom-
+        .padding(.vertical, 12)
+        // Once a verdict is picked, its seal floats over the entry's bottom-
         // trailing corner - covering the button's former spot and whatever
         // sits beneath it (positions, photos, body text) at reduced ink
         // opacity so the content underneath stays readable.
         .overlay(alignment: .bottomTrailing) {
             if let review = item.review {
                 floatingReviewSeal(review)
-                    .padding(.trailing, 10)
-                    .padding(.bottom, 4)
+                    .padding(.trailing, 2)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { _ in
@@ -170,37 +155,39 @@ struct JournalItemEditorCard: View {
     /// (figures, text) underneath it.
     private static let sealOpacity = 0.82
 
-    /// The seal says the verdict, this marked line carries the annotation.
-    /// (Italic is a no-op for CJK, so the marker + secondary color do the
-    /// distinguishing.)
+    /// 复盘批注:朱砂左边线引文(e-note),章本身只表对/错。
     private var noteRow: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "pencil.line")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(palette.textTertiary.color)
+        HStack(alignment: .top, spacing: 9) {
+            Rectangle()
+                .fill(palette.reviewCorrect.color)
+                .frame(width: 2)
             Text(noteText)
-                .font(.system(size: 13))
+                .font(.custom("Songti SC", size: 11.5))
                 .foregroundStyle(palette.textSecondary.color)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// In-row "复盘" call-to-action while unreviewed. It owns a normal row
-    /// and never overlaps content - floating over records/photos is a
-    /// privilege of the picked seal, not the button.
+    /// In-row "复盘" call-to-action while unreviewed: a dashed chop outline
+    /// waiting to be stamped. It owns a normal row and never overlaps
+    /// content - floating over records/photos is a privilege of the picked
+    /// seal, not the button.
     private var reviewButton: some View {
         Button {
             showReviewPopover = true
         } label: {
             Text(L10n.string(.journalReview, language: settings.language))
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(palette.accentText.color)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule(style: .continuous)
-                        .strokeBorder(palette.controlBorder.color, lineWidth: 1)
-                )
+                .font(.custom("Songti SC", size: 12).weight(.bold))
+                .foregroundStyle(palette.reviewCorrect.color.opacity(0.8))
+                .frame(width: 44, height: 44)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(
+                            palette.reviewCorrect.color.opacity(0.65),
+                            style: StrokeStyle(lineWidth: 1.5, dash: [4, 3])
+                        )
+                }
+                .rotationEffect(.degrees(-3))
         }
         .buttonStyle(.plain)
         .help(L10n.string(.journalReviewHelp, language: settings.language))
@@ -291,7 +278,7 @@ struct JournalItemEditorCard: View {
         return Button {
             setVerdict(verdict)
         } label: {
-            JournalReviewBadge(verdict: verdict, style: .seal)
+            JournalReviewBadge(verdict: verdict, style: .seal, size: 40)
                 .opacity(item.review == nil || isActive ? 1 : 0.3)
         }
         .buttonStyle(.plain)

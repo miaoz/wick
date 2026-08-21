@@ -114,7 +114,15 @@ PLIST
 printf 'APPL????' > "$CONTENTS_DIR/PkgInfo"
 
 if command -v codesign >/dev/null 2>&1; then
-    codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
+    # A stable local identity keeps Keychain item ACLs valid across rebuilds
+    # (ad-hoc re-signing changes the cdhash every build, so macOS re-prompts
+    # for every keychain item). CI machines without the identity still get
+    # ad-hoc signatures.
+    if security find-identity -v -p codesigning 2>/dev/null | grep -q "Wick Local"; then
+        codesign --force --deep --sign "Wick Local" "$APP_DIR" >/dev/null 2>&1 || true
+    else
+        codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
+    fi
 fi
 
 plutil -lint "$CONTENTS_DIR/Info.plist" >/dev/null

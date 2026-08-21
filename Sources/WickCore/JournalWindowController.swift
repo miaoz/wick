@@ -11,7 +11,7 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var languageObserver: NSObjectProtocol?
     private var activeJournalObserver: NSObjectProtocol?
-    private let legacyToolbarDelegate = LegacyJournalToolbarDelegate()
+    private var toolbarPin: NSKeyValueObservation?
 
     private override init() {
         super.init()
@@ -80,6 +80,12 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
             .environmentObject(JournalStore.shared)
 
         let hosting = NSHostingController(rootView: root)
+        // Content must reach the window's top edge so the in-view top bar
+        // (JournalRootView.topBar) shares one row with the traffic lights;
+        // the default titlebar safe area would push it into a second row.
+        if #available(macOS 13.3, *) {
+            hosting.safeAreaRegions = []
+        }
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 980, height: 640),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -97,8 +103,14 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         applyWindowTheme(to: window)
-        if journalNeedsInViewTopBar {
-            installLegacyToolbar(on: window)
+        // Run toolbar-less on every macOS version: NavigationSplitView (14+)
+        // force-installs a SwiftUI toolbar — an empty band holding only the
+        // system sidebar toggle, and every custom item gets a glass bezel on
+        // macOS 26. The in-content full-width top bar provides the window
+        // controls instead (JournalRootView.topBar). SwiftUI re-installs its
+        // toolbar on layout, so pin window.toolbar to nil.
+        toolbarPin = window.observe(\.toolbar, options: [.initial, .new]) { win, _ in
+            if win.toolbar != nil { win.toolbar = nil }
         }
 
         self.window = window
@@ -154,17 +166,6 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         window.backgroundColor = palette.backgroundBottom.nsColor
     }
 
-    /// macOS 13-only chrome: SwiftUI installs no toolbar in this manually
-    /// created window, so we install a real AppKit one — its items are laid
-    /// out by the system, level with the traffic lights by construction.
-    private func installLegacyToolbar(on window: NSWindow) {
-        let toolbar = NSToolbar(identifier: "WickJournalToolbar")
-        toolbar.delegate = legacyToolbarDelegate
-        toolbar.displayMode = .iconOnly
-        toolbar.allowsUserCustomization = false
-        window.toolbar = toolbar
-    }
-
     func windowDidBecomeKey(_ notification: Notification) {
         // Clicking an already-open journal should also dismiss the menu-bar panel.
         let keyWindow = (notification.object as? NSWindow) ?? window
@@ -179,5 +180,50 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         // Back to menu-bar-only presence once the journal window is gone.
         NSApp.setActivationPolicy(.accessory)
     }
+
+    #if DEBUG
+    /// DEBUG-only UI-check helper: captures the journal window (including the
+    /// title bar / toolbar chrome) to a PNG. An app capturing its own window
+    /// needs no Screen Recording consent.
+    func snapshotWindowToPNG(path: String) {
+        guard let window, window.isVisible else {
+            NSLog("Wick: snapshot failed, no visible journal window")
+            return
+        }
+        if let toolbar = window.toolbar {
+            for item in toolbar.visibleItems ?? [] {
+                let frame = item.view?.frame ?? .zero
+                let inWindow = item.view?.window != nil
+                NSLog(
+                    "Wick: toolbar item %@ frame=%@ inWindow=%@ hidden=%@",
+                    item.itemIdentifier.rawValue,
+                    NSStringFromRect(frame),
+                    inWindow ? "yes" : "no",
+                    item.view?.isHidden == true ? "yes" : "no"
+                )
+            }
+        }
+        guard let image = CGWindowListCreateImage(
+            .null,
+            .optionIncludingWindow,
+            CGWindowID(window.windowNumber),
+            [.bestResolution]
+        ) else {
+            NSLog("Wick: snapshot failed, CGWindowListCreateImage returned nil")
+            return
+        }
+        let rep = NSBitmapImageRep(cgImage: image)
+        guard let data = rep.representation(using: .png, properties: [:]) else {
+            NSLog("Wick: snapshot failed, PNG encoding failed")
+            return
+        }
+        do {
+            try data.write(to: URL(fileURLWithPath: path))
+            NSLog("Wick: journal snapshot written to %@", path)
+        } catch {
+            NSLog("Wick: snapshot failed, %@", error.localizedDescription)
+        }
+    }
+    #endif
 }
 

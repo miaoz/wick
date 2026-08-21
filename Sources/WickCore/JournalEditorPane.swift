@@ -1,7 +1,9 @@
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
+import WickCalendarKit
 import WickSync
+import WickTrading
 
 // MARK: - Editor
 
@@ -13,6 +15,7 @@ struct JournalEditorPane: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: JournalStore
     @Environment(\.wickPalette) private var palette
+    @ObservedObject private var positionCoordinator = ExchangePositionCoordinator.shared
 
     /// Per-entry drafts so multi-day editing survives LazyVStack recycling.
     @State private var drafts: [UUID: JournalEntry] = [:]
@@ -42,7 +45,7 @@ struct JournalEditorPane: View {
                 timelineChrome
             }
         }
-        .background(palette.backgroundBottom.color)
+        .background(palette.editorCanvas.color)
         .onAppear {
             seedDraftsForVisibleTimeline()
             queueScrollToSelection()
@@ -177,50 +180,41 @@ struct JournalEditorPane: View {
 
     // MARK: - Timeline
 
-    /// Date for the single top chrome strip (panel chrome, not per-day content).
-    private var chromeStripDate: Date {
-        if let id = store.selectedEntryID,
-           let entry = store.entries.first(where: { $0.id == id })
-        {
-            return entry.date
+    /// 烛痕进度:今天 = 实时已燃比例;过去 = 1(燃尽);未来 = 0(未点燃)。
+    private func burnElapsed(for date: Date) -> Double {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) {
+            return 1 - TimeProgressCalculator.dayFractionRemaining(at: Date(), calendar: calendar)
         }
-        if let first = store.filteredEntries.first {
-            return first.date
-        }
-        return Date()
+        return calendar.startOfDay(for: date) < calendar.startOfDay(for: Date()) ? 1 : 0
     }
 
     private var timelineChrome: some View {
-        VStack(spacing: 0) {
-            // One arc strip for the whole editor panel — not repeated per day/item.
-            DayArcStrip(date: chromeStripDate, language: settings.language)
-
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 28) {
-                        if isItemScoped {
-                            itemScopedSections
-                        } else {
-                            dayScopedSections
-                        }
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 30) {
+                    if isItemScoped {
+                        itemScopedSections
+                    } else {
+                        dayScopedSections
                     }
-                    .padding(.vertical, 20)
-                    .padding(.horizontal, 28)
-                    .frame(maxWidth: 880, alignment: .leading)
-                    .frame(maxWidth: .infinity)
                 }
-                .onChange(of: pendingScrollID) { target in
-                    guard let target else { return }
-                    // Double-pass: first layout pass may not have built LazyVStack rows yet.
-                    DispatchQueue.main.async {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            proxy.scrollTo(target, anchor: .top)
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                            proxy.scrollTo(target, anchor: .top)
-                            if pendingScrollID == target {
-                                pendingScrollID = nil
-                            }
+                .padding(.vertical, 20)
+                .padding(.horizontal, 28)
+                .frame(maxWidth: 880, alignment: .leading)
+                .frame(maxWidth: .infinity)
+            }
+            .onChange(of: pendingScrollID) { target in
+                guard let target else { return }
+                // Double-pass: first layout pass may not have built LazyVStack rows yet.
+                DispatchQueue.main.async {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        proxy.scrollTo(target, anchor: .top)
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        proxy.scrollTo(target, anchor: .top)
+                        if pendingScrollID == target {
+                            pendingScrollID = nil
                         }
                     }
                 }
@@ -245,38 +239,44 @@ struct JournalEditorPane: View {
     @ViewBuilder
     private var itemScopedSections: some View {
         ForEach(itemDayGroups) { group in
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 itemScopedDayHeader(group)
 
-                ForEach(group.items) { row in
-                    itemCard(
-                        entryID: row.ref.entryID,
-                        itemID: row.ref.itemID,
-                        isFocused: store.selectedItemID == row.ref.itemID
-                            && store.selectedEntryID == row.ref.entryID
-                    )
-                    .id(Self.itemScrollID(row.ref))
-                    .onAppear {
-                        ensureDraft(for: row.ref.entryID)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(group.items.enumerated()), id: \.element.id) { index, row in
+                        itemCard(
+                            entryID: row.ref.entryID,
+                            itemID: row.ref.itemID,
+                            isFocused: store.selectedItemID == row.ref.itemID
+                                && store.selectedEntryID == row.ref.entryID
+                        )
+                        .id(Self.itemScrollID(row.ref))
+                        .onAppear {
+                            ensureDraft(for: row.ref.entryID)
+                        }
+                        if index < group.items.count - 1 {
+                            Rectangle()
+                                .fill(palette.divider.color.opacity(0.8))
+                                .frame(height: 1)
+                        }
                     }
                 }
+                .padding(.top, 4)
             }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(palette.cardTop.scaledAlpha(0.35).color)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(palette.cardStroke.scaledAlpha(0.4).color, lineWidth: 1)
-            }
+            .padding(.horizontal, 26)
+            .padding(.top, 16)
+            .padding(.bottom, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(palette.pageSurface.color)
+            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .shadow(color: palette.pageShadow.color.opacity(0.3), radius: 13, x: 0, y: 5)
         }
     }
 
     private func itemScopedDayHeader(_ group: ItemDayGroup) -> some View {
         HStack(alignment: .center, spacing: 12) {
             Text(formattedDate(group.day))
-                .font(.system(size: 15, weight: .semibold, design: .rounded).monospacedDigit())
+                .font(.system(size: 17, weight: .black, design: .serif))
                 .foregroundStyle(palette.textPrimary.color)
 
             Spacer(minLength: 8)
@@ -295,7 +295,7 @@ struct JournalEditorPane: View {
         }
     }
 
-    // MARK: - Day section (full day)
+    // MARK: - Day section(一天 = 一页纸,秉烛 §03)
 
     @ViewBuilder
     private func daySection(
@@ -304,76 +304,57 @@ struct JournalEditorPane: View {
     ) -> some View {
         let draft = drafts[entryID] ?? store.entries.first(where: { $0.id == entryID }) ?? JournalEntry()
 
-        VStack(alignment: .leading, spacing: 16) {
-            dayHeader(entryID: entryID, draft: draft, itemCount: draft.items.count, isFocused: isFocused)
+        VStack(alignment: .leading, spacing: 0) {
+            dayHeader(entryID: entryID, draft: draft, isFocused: isFocused)
 
-            ForEach(Array(draft.items.enumerated()), id: \.element.id) { index, item in
-                itemCard(
-                    entryID: entryID,
-                    itemID: item.id,
-                    itemIndex: index,
-                    isFocused: false
-                )
-            }
+            dayBurnStrip(for: draft.date)
+                .padding(.top, 12)
 
-            HStack {
-                Spacer(minLength: 0)
-                Button {
-                    addItem(to: entryID)
-                } label: {
-                    Image(systemName: "plus.circle")
+            // 条目沿发丝线下排,不加卡片壳。
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(draft.items.enumerated()), id: \.element.id) { index, item in
+                    itemCard(
+                        entryID: entryID,
+                        itemID: item.id,
+                        itemIndex: index,
+                        isFocused: false
+                    )
+                    if index < draft.items.count - 1 {
+                        Rectangle()
+                            .fill(palette.divider.color.opacity(0.8))
+                            .frame(height: 1)
+                    }
                 }
-                .buttonStyle(JournalQuietIconButtonStyle())
-                .help(L10n.string(.journalAddItem, language: settings.language))
-                .accessibilityLabel(Text(L10n.string(.journalAddItem, language: settings.language)))
-                Spacer(minLength: 0)
             }
-            .padding(.top, 2)
+            .padding(.top, 4)
+
+            addItemRow(entryID: entryID)
+                .padding(.top, 10)
         }
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(palette.cardTop.scaledAlpha(isFocused ? 0.55 : 0.35).color)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(
-                    isFocused
-                        ? palette.accent.color.opacity(0.4)
-                        : palette.cardStroke.scaledAlpha(0.4).color,
-                    lineWidth: isFocused ? 1.5 : 1
-                )
-        }
+        .padding(.horizontal, 26)
+        .padding(.top, 20)
+        .padding(.bottom, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.pageSurface.color)
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .shadow(color: palette.pageShadow.color.opacity(0.3), radius: 13, x: 0, y: 5)
     }
 
+    /// 页眉:粗衬线大日期(点开可改日)+ 星期农历小注 + 当日已实现盈亏 + 删除。
     private func dayHeader(
         entryID: UUID,
         draft: JournalEntry,
-        itemCount: Int,
         isFocused: Bool
     ) -> some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .bottom, spacing: 14) {
             Button {
                 datePickerEntryID = entryID
             } label: {
-                HStack(spacing: 6) {
-                    Text(formattedDate(draft.date))
-                        .font(.system(size: 15, weight: .semibold, design: .rounded).monospacedDigit())
-                    Image(systemName: "calendar")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(palette.textTertiary.color)
-                }
-                .foregroundStyle(palette.textPrimary.color)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(palette.controlBackground.color)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(palette.controlBorder.color, lineWidth: 1)
-                }
+                Text(bigDayDate(draft.date))
+                    .font(.system(size: 28, weight: .black, design: .serif))
+                    .foregroundStyle(palette.textPrimary.color)
+                    .lineLimit(1)
+                    .fixedSize()
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(L10n.string(.journalChangeDate, language: settings.language)))
@@ -400,25 +381,46 @@ struct JournalEditorPane: View {
                 .padding(10)
             }
 
-            Spacer()
+            // 刻印小注:星期 · 农历干支(宋体);竖排两行,不折行。
+            VStack(alignment: .leading, spacing: 2) {
+                Text(draft.date.formatted(.dateTime.weekday(.wide).locale(settings.locale)))
+                if let lunar = LunarLine.string(for: draft.date) {
+                    Text(lunar)
+                }
+            }
+            .font(.custom("Songti SC", size: 11))
+            .foregroundStyle(palette.textSecondary.color)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.bottom, 3)
 
-            Text(
-                String(
-                    format: L10n.string(.journalItemCountFormat, language: settings.language),
-                    itemCount
-                )
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+
+            // 当日已实现盈亏:单据等宽数字,红盈黛亏;该日无成交则不占版。
+            if let pnl = dayPnLs[Calendar.current.startOfDay(for: draft.date)] {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(L10n.string(.exchangePositionRealizedPnl, language: settings.language))
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(palette.textTertiary.color)
+                    Text(Self.format(pnl: pnl) + " USDT")
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .foregroundStyle(pnl >= 0 ? palette.pnlUp.color : palette.pnlDown.color)
+                }
+                .padding(.bottom, 2)
+            }
 
             if store.isReadOnlyDueToLoadFailure {
                 Text(L10n.string(.journalReadOnly, language: settings.language))
                     .font(.caption)
                     .foregroundStyle(.orange)
+                    .padding(.bottom, 5)
             } else if isFocused {
                 Text(L10n.string(.journalAutosaved, language: settings.language))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(palette.textTertiary.color)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .padding(.bottom, 5)
             }
 
             Button {
@@ -428,9 +430,89 @@ struct JournalEditorPane: View {
                 Image(systemName: "trash")
             }
             .buttonStyle(JournalQuietIconButtonStyle(role: .destructive))
+            .padding(.bottom, 2)
             .help(L10n.string(.journalDelete, language: settings.language))
             .accessibilityLabel(Text(L10n.string(.journalDelete, language: settings.language)))
         }
+    }
+
+    /// 页内烛痕条:今天烧到此刻(带烛苗与进度小字),过去的天天然燃尽。
+    private func dayBurnStrip(for date: Date) -> some View {
+        let isToday = Calendar.current.isDateInToday(date)
+        let elapsed = burnElapsed(for: date)
+        return VStack(spacing: 5) {
+            BurnStripView(elapsed: elapsed, ticks: 24, showsFlame: isToday)
+                .frame(height: 8)
+            if isToday {
+                HStack {
+                    Text(String(
+                        format: L10n.string(.journalDayElapsedFormat, language: settings.language),
+                        Int((elapsed * 100).rounded())
+                    ))
+                    Spacer()
+                    Text("00:00 — 24:00")
+                }
+                .font(.system(size: 9.5, design: .monospaced))
+                .foregroundStyle(palette.textTertiary.color)
+            }
+        }
+    }
+
+    /// 新建条目:虚线位,安静的一行,不抢版面。
+    private func addItemRow(entryID: UUID) -> some View {
+        Button {
+            addItem(to: entryID)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(L10n.string(.journalAddItem, language: settings.language))
+                    .font(.custom("Songti SC", size: 11).weight(.medium))
+            }
+            .foregroundStyle(palette.textTertiary.color)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .overlay {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(
+                        palette.divider.color,
+                        style: StrokeStyle(lineWidth: 1, dash: [4, 3])
+                    )
+            }
+        }
+        .buttonStyle(.plain)
+        .help(L10n.string(.journalAddItem, language: settings.language))
+        .accessibilityLabel(Text(L10n.string(.journalAddItem, language: settings.language)))
+    }
+
+    /// 各日已实现盈亏(本地日分桶,与盈亏月历同一来源)。
+    private var dayPnLs: [Date: Double] {
+        DailyRealizedPnl.sumsByDay(
+            fills: positionCoordinator.snapshot?.fills ?? [],
+            calendar: .current
+        )
+    }
+
+    private static let pnlFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return formatter
+    }()
+
+    private static func format(pnl: Double) -> String {
+        let sign = pnl >= 0 ? "+" : "−"
+        let digits = pnlFormatter.string(from: NSNumber(value: pnl.magnitude)) ?? "0.00"
+        return sign + digits
+    }
+
+    /// 页眉大日期:中文「8月20日」,英文「Aug 20」。
+    private func bigDayDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = settings.language.locale
+        formatter.setLocalizedDateFormatFromTemplate("MMMd")
+        return formatter.string(from: date)
     }
 
     // MARK: - Item card
@@ -476,7 +558,7 @@ struct JournalEditorPane: View {
         )
         .overlay {
             if isFocused {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .strokeBorder(palette.accent.color.opacity(0.45), lineWidth: 1.5)
             }
         }
@@ -602,7 +684,7 @@ struct JournalEditorPane: View {
     private func formattedDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = settings.language.locale
-        formatter.setLocalizedDateFormatFromTemplate("yMMdd")
+        formatter.setLocalizedDateFormatFromTemplate("yMMMd")
         return formatter.string(from: date)
     }
 
