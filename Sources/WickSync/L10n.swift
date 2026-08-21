@@ -198,6 +198,7 @@ public enum L10n {
         case exchangeSection
         case exchangeExplanation
         case exchangeBindJournalFormat
+        case exchangeJournal
         case exchangeVenue
         case exchangeVenueBinance
         case exchangeVenueOKX
@@ -437,8 +438,9 @@ public enum L10n {
             case .journalLibrarySaveName: return "保存"
 
             case .exchangeSection: return "交易所"
-            case .exchangeExplanation: return "每个日记本可绑定一个交易所账号。仓位按「开仓日期 + 标签」挂到本日记条目上（标签 BTC 匹配 BTCUSDT 或 Hyperliquid 的 BTC）；没有日记的开仓日会自动创建条目。"
+            case .exchangeExplanation: return "先在上方选择日记本，再绑定一个交易所账号。仓位按「开仓日期 + 标签」挂到该日记条目上（标签 BTC 匹配 BTCUSDT 或 Hyperliquid 的 BTC）；没有日记的开仓日会自动创建条目。"
             case .exchangeBindJournalFormat: return "绑定到日记本「%@」"
+            case .exchangeJournal: return "日记本"
             case .exchangeVenue: return "交易所"
             case .exchangeVenueBinance: return "Binance"
             case .exchangeVenueOKX: return "OKX"
@@ -678,8 +680,9 @@ public enum L10n {
             case .journalLibrarySaveName: return "Save"
 
             case .exchangeSection: return "Exchange"
-            case .exchangeExplanation: return "Each journal binds to one exchange account. Positions attach to items by open date + tag (tag BTC matches BTCUSDT or Hyperliquid’s BTC); missing position days get an entry created automatically."
+            case .exchangeExplanation: return "Pick a journal above, then bind one exchange account. Positions attach to that journal’s items by open date + tag (tag BTC matches BTCUSDT or Hyperliquid’s BTC); missing position days get an entry created automatically."
             case .exchangeBindJournalFormat: return "Bound to journal “%@”"
+            case .exchangeJournal: return "Journal"
             case .exchangeVenue: return "Venue"
             case .exchangeVenueBinance: return "Binance"
             case .exchangeVenueOKX: return "OKX"

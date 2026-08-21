@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// Settings for the per-journal exchange binding. Venue picker + credential
-/// form while unbound; status / refresh / disconnect once bound to the
-/// **currently active** journal.
+/// Settings for the per-journal exchange binding. The journal is chosen in
+/// this panel; it is not implied by whichever book is open in the editor.
 struct ExchangeSettingsContent: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var coordinator = ExchangePositionCoordinator.shared
@@ -10,6 +9,7 @@ struct ExchangeSettingsContent: View {
     let theme: PanelTheme
     let language: AppLanguage
 
+    @State private var targetJournalID: UUID?
     @State private var venue: ExchangeVenue = .binance
     @State private var apiKeyDraft = ""
     @State private var secretDraft = ""
@@ -17,18 +17,38 @@ struct ExchangeSettingsContent: View {
     @State private var addressDraft = ""
     @State private var showDisconnectConfirm = false
 
+    private var targetJournal: JournalInfo? {
+        if let targetJournalID,
+           let match = journalStore.journals.first(where: { $0.id == targetJournalID })
+        {
+            return match
+        }
+        return journalStore.journals.first
+    }
+
+    private var isTargetConfigured: Bool {
+        guard let id = targetJournal?.id else { return false }
+        return coordinator.isConfigured(for: id)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let name = journalStore.activeJournal?.name {
-                Text(String(format: L10n.string(.exchangeBindJournalFormat, language: language), name))
-                    .font(.caption)
-                    .foregroundStyle(theme.secondaryText)
-            }
+            journalPicker
 
-            if coordinator.isEnabled {
+            if isTargetConfigured {
                 connectedContent
             } else {
                 setupContent
+            }
+        }
+        .onAppear {
+            if targetJournalID == nil {
+                targetJournalID = journalStore.activeJournalID ?? journalStore.journals.first?.id
+            }
+        }
+        .onChange(of: journalStore.journals.map(\.id)) { ids in
+            if let targetJournalID, !ids.contains(targetJournalID) {
+                self.targetJournalID = journalStore.activeJournalID ?? ids.first
             }
         }
         .confirmationDialog(
@@ -37,11 +57,32 @@ struct ExchangeSettingsContent: View {
             titleVisibility: .visible
         ) {
             Button(L10n.string(.exchangeDisconnect, language: language), role: .destructive) {
-                coordinator.disconnect()
+                if let id = targetJournal?.id {
+                    coordinator.disconnect(journalID: id)
+                }
             }
             Button(L10n.string(.cancel, language: language), role: .cancel) {}
         } message: {
             Text(L10n.string(.exchangeDisconnectConfirmBody, language: language))
+        }
+    }
+
+    private var journalPicker: some View {
+        HStack(spacing: 8) {
+            Text(L10n.string(.exchangeJournal, language: language))
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(theme.secondaryText)
+                .frame(width: 88, alignment: .leading)
+            Picker("", selection: Binding(
+                get: { targetJournal?.id },
+                set: { targetJournalID = $0 }
+            )) {
+                ForEach(journalStore.journals) { journal in
+                    Text(journal.name).tag(Optional(journal.id))
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
         }
     }
 
@@ -158,17 +199,23 @@ struct ExchangeSettingsContent: View {
 
     private var saveButton: some View {
         Button {
+            guard let journalID = targetJournal?.id else { return }
             switch venue {
             case .binance:
-                coordinator.saveAndSyncBinance(apiKey: apiKeyDraft, secret: secretDraft)
+                coordinator.saveAndSyncBinance(
+                    apiKey: apiKeyDraft,
+                    secret: secretDraft,
+                    journalID: journalID
+                )
             case .okx:
                 coordinator.saveAndSyncOKX(
                     apiKey: apiKeyDraft,
                     secret: secretDraft,
-                    passphrase: passphraseDraft
+                    passphrase: passphraseDraft,
+                    journalID: journalID
                 )
             case .hyperliquid:
-                coordinator.saveAndSyncHyperliquid(address: addressDraft)
+                coordinator.saveAndSyncHyperliquid(address: addressDraft, journalID: journalID)
             }
         } label: {
             HStack {
@@ -197,8 +244,8 @@ struct ExchangeSettingsContent: View {
             }
         }
         .buttonStyle(.plain)
-        .disabled(coordinator.isSyncing || !canSave)
-        .opacity(canSave ? 1 : 0.55)
+        .disabled(coordinator.isSyncing || !canSave || targetJournal == nil)
+        .opacity(canSave && targetJournal != nil ? 1 : 0.55)
     }
 
     private func credentialField(
@@ -228,7 +275,7 @@ struct ExchangeSettingsContent: View {
 
     private var connectedContent: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let binding = coordinator.activeBinding {
+            if let binding = targetJournal?.exchangeBinding {
                 HStack {
                     Text(venueTitle(binding.venue))
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
@@ -253,7 +300,9 @@ struct ExchangeSettingsContent: View {
                 title: L10n.string(.exchangeSyncNow, language: language),
                 systemImage: "arrow.triangle.2.circlepath"
             ) {
-                coordinator.syncNow()
+                if let id = targetJournal?.id {
+                    coordinator.syncNow(journalID: id)
+                }
             }
             .disabled(coordinator.isSyncing)
 
@@ -267,7 +316,7 @@ struct ExchangeSettingsContent: View {
     }
 
     private var windowHint: String {
-        switch coordinator.activeBinding?.venue {
+        switch targetJournal?.exchangeBinding?.venue {
         case .okx:
             return L10n.string(.exchangeOKXHint, language: language)
         case .hyperliquid:
@@ -316,7 +365,8 @@ struct ExchangeSettingsContent: View {
             Text(error.text(language: language))
                 .font(.caption)
                 .foregroundStyle(theme.secondaryText)
-        } else if let fetchedAt = coordinator.snapshot?.fetchedAt {
+        } else if let id = targetJournal?.id,
+                  let fetchedAt = coordinator.lastFetchedAt(for: id) {
             HStack {
                 Text(L10n.string(.exchangeLastSync, language: language))
                     .font(.caption)

@@ -527,6 +527,58 @@ final class JournalStore: ObservableObject {
         return created
     }
 
+    /// Entries of any journal. The active book's in-memory copy wins; others
+    /// are read from disk so exchange sync can bind a non-open journal.
+    func entries(for journalID: UUID) -> [JournalEntry] {
+        if journalID == activeJournalID {
+            return entries
+        }
+        return loadEntriesFromDisk(journalID: journalID)
+    }
+
+    /// Same as `autoCreateEntries`, but can target a journal that is not open.
+    @discardableResult
+    func autoCreateEntries(
+        _ skeletons: [(day: Date, items: [JournalItem])],
+        in journalID: UUID
+    ) -> [Date] {
+        if journalID == activeJournalID {
+            return autoCreateEntries(skeletons)
+        }
+        guard !skeletons.isEmpty else { return [] }
+        let calendar = Calendar.current
+        var stored = loadEntriesFromDisk(journalID: journalID)
+        var created: [Date] = []
+        for skeleton in skeletons {
+            let day = calendar.startOfDay(for: skeleton.day)
+            let exists = stored.contains { calendar.isDate($0.date, inSameDayAs: day) }
+            guard !exists else { continue }
+            let items = skeleton.items.isEmpty ? [JournalItem()] : skeleton.items
+            stored.insert(JournalEntry(date: day, items: items), at: 0)
+            created.append(day)
+        }
+        guard !created.isEmpty else { return [] }
+        persistEntries(stored, journalID: journalID)
+        return created
+    }
+
+    private func loadEntriesFromDisk(journalID: UUID) -> [JournalEntry] {
+        let url = librariesRoot
+            .appendingPathComponent(journalID.uuidString, isDirectory: true)
+            .appendingPathComponent("journal.json", isDirectory: false)
+        guard let snapshot = loadSnapshot(from: url) else { return [] }
+        return snapshot.entries.sorted { $0.date > $1.date }
+    }
+
+    private func persistEntries(_ entries: [JournalEntry], journalID: UUID) {
+        let dir = librariesRoot.appendingPathComponent(journalID.uuidString, isDirectory: true)
+        let url = dir.appendingPathComponent("journal.json", isDirectory: false)
+        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        let snapshot = JournalSnapshot(version: JournalSnapshot.currentVersion, entries: entries)
+        guard let data = try? encoder.encode(snapshot) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+
     func updateEntry(_ entry: JournalEntry) {
         guard !isReadOnlyDueToLoadFailure else { return }
         guard let index = entries.firstIndex(where: { $0.id == entry.id }) else {

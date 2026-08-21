@@ -132,28 +132,29 @@ final class ExchangePositionCoordinator: ObservableObject {
 
     // MARK: - Bind / disconnect
 
-    func saveAndSyncBinance(apiKey: String, secret: String) {
+    func saveAndSyncBinance(apiKey: String, secret: String, journalID: UUID) {
         saveCentralized(
             venue: .binance,
             apiKey: apiKey,
             secret: secret,
             passphrase: nil,
-            label: "Binance"
+            label: "Binance",
+            journalID: journalID
         )
     }
 
-    func saveAndSyncOKX(apiKey: String, secret: String, passphrase: String) {
+    func saveAndSyncOKX(apiKey: String, secret: String, passphrase: String, journalID: UUID) {
         saveCentralized(
             venue: .okx,
             apiKey: apiKey,
             secret: secret,
             passphrase: passphrase,
-            label: "OKX"
+            label: "OKX",
+            journalID: journalID
         )
     }
 
-    func saveAndSyncHyperliquid(address: String) {
-        guard let journalID = JournalStore.shared.activeJournalID else { return }
+    func saveAndSyncHyperliquid(address: String, journalID: UUID) {
         guard let normalized = HyperliquidInfoClient.normalizedAddress(address) else {
             lastError = .invalidKey
             return
@@ -165,18 +166,41 @@ final class ExchangePositionCoordinator: ObservableObject {
         lastError = nil
         updateHasCredentials()
         scheduleTimer()
-        syncNow()
+        syncNow(journalID: journalID)
     }
 
-    func disconnect() {
-        guard let journalID = JournalStore.shared.activeJournalID else { return }
+    func disconnect(journalID: UUID) {
         secretStore(for: journalID).clear()
         JournalStore.shared.setExchangeBinding(nil, for: journalID)
         try? FileManager.default.removeItem(at: Self.cacheURL(for: journalID))
-        snapshot = nil
+        if journalID == JournalStore.shared.activeJournalID {
+            snapshot = nil
+        }
         lastError = nil
         updateHasCredentials()
         if !isEnabled { stopTimer() }
+    }
+
+    func binding(for journalID: UUID) -> JournalExchangeBinding? {
+        JournalStore.shared.journals.first(where: { $0.id == journalID })?.exchangeBinding
+    }
+
+    func isConfigured(for journalID: UUID) -> Bool {
+        #if DEBUG
+        if Self.skipKeychainAccess { return false }
+        #endif
+        guard let binding = binding(for: journalID) else { return false }
+        if binding.venue == .hyperliquid {
+            return HyperliquidInfoClient.normalizedAddress(binding.accountLabel) != nil
+        }
+        return loadSecrets(for: journalID) != nil
+    }
+
+    func lastFetchedAt(for journalID: UUID) -> Date? {
+        if journalID == JournalStore.shared.activeJournalID {
+            return snapshot?.fetchedAt
+        }
+        return loadSnapshot(at: Self.cacheURL(for: journalID))?.fetchedAt
     }
 
     // MARK: - Sync
@@ -191,19 +215,30 @@ final class ExchangePositionCoordinator: ObservableObject {
     }
 
     func syncNow() {
-        guard isEnabled, !isSyncing else { return }
-        guard let journalID = JournalStore.shared.activeJournalID,
-              let binding = activeBinding,
+        guard let journalID = JournalStore.shared.activeJournalID else { return }
+        syncNow(journalID: journalID)
+    }
+
+    func syncNow(journalID: UUID) {
+        guard !isSyncing else { return }
+        guard isConfigured(for: journalID),
+              let binding = binding(for: journalID),
               let client = makeClient(binding: binding, journalID: journalID)
         else {
-            hasCredentials = false
+            if journalID == JournalStore.shared.activeJournalID {
+                hasCredentials = false
+            }
             return
         }
 
         isSyncing = true
         lastError = nil
-        let cached = snapshot
-        let desiredStart = Self.desiredWindowStart(entries: JournalStore.shared.entries)
+        let cached = journalID == JournalStore.shared.activeJournalID
+            ? snapshot
+            : loadSnapshot(at: Self.cacheURL(for: journalID))
+        let desiredStart = Self.desiredWindowStart(
+            entries: JournalStore.shared.entries(for: journalID)
+        )
         Task { [weak self] in
             await self?.runSync(
                 client: client,
@@ -305,18 +340,23 @@ final class ExchangePositionCoordinator: ObservableObject {
     ) {
         isSyncing = false
         lastError = error
-        guard journalID == JournalStore.shared.activeJournalID else { return }
-        // emptyWindow still has a successful snapshot (just no fills).
         let accepted = (error == nil || error == .emptyWindow)
         guard accepted, let fills, let positions, let windowStart else {
-            if error == .invalidKey {
+            if error == .invalidKey, journalID == JournalStore.shared.activeJournalID {
                 stopTimer()
             }
             return
         }
 
-        var handledOrdered = Array(snapshot?.handledPositionIDs ?? [])
-        autoCreateEntriesIfNeeded(positions: positions, handled: Set(handledOrdered))
+        let prior = journalID == JournalStore.shared.activeJournalID
+            ? snapshot
+            : loadSnapshot(at: Self.cacheURL(for: journalID))
+        var handledOrdered = Array(prior?.handledPositionIDs ?? [])
+        autoCreateEntriesIfNeeded(
+            positions: positions,
+            handled: Set(handledOrdered),
+            journalID: journalID
+        )
 
         for position in positions where !handledOrdered.contains(position.id) {
             handledOrdered.append(position.id)
@@ -325,14 +365,17 @@ final class ExchangePositionCoordinator: ObservableObject {
             handledOrdered = Array(handledOrdered.suffix(Self.handledIDsCap))
         }
 
-        snapshot = TradingPositionSnapshot(
+        let next = TradingPositionSnapshot(
             fetchedAt: Date(),
             windowStart: windowStart,
             positions: positions,
             fills: fills,
             handledPositionIDs: Set(handledOrdered)
         )
-        saveCache(for: journalID)
+        saveCache(next, for: journalID)
+        if journalID == JournalStore.shared.activeJournalID {
+            snapshot = next
+        }
     }
 
     private func rebuildDerivedStats() {
@@ -347,10 +390,15 @@ final class ExchangePositionCoordinator: ObservableObject {
         closedCountByDayKey = counts
     }
 
-    private func autoCreateEntriesIfNeeded(positions: [TradingPosition], handled: Set<String>) {
+    private func autoCreateEntriesIfNeeded(
+        positions: [TradingPosition],
+        handled: Set<String>,
+        journalID: UUID
+    ) {
+        let journalEntries = JournalStore.shared.entries(for: journalID)
         let plan = PositionEntryPlanner.plan(
             positions: positions,
-            existingDayKeys: Set(JournalStore.shared.entries.map(\.dayKey)),
+            existingDayKeys: Set(journalEntries.map(\.dayKey)),
             handledPositionIDs: handled,
             dayKey: { JournalDayKey.make(from: $0) },
             startOfDay: { Calendar.current.startOfDay(for: $0) }
@@ -358,7 +406,7 @@ final class ExchangePositionCoordinator: ObservableObject {
         guard !plan.isEmpty else { return }
 
         var tagCounts: [String: Int] = [:]
-        for entry in JournalStore.shared.entries {
+        for entry in journalEntries {
             for item in entry.items {
                 let tag = item.tag.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !tag.isEmpty else { continue }
@@ -376,7 +424,7 @@ final class ExchangePositionCoordinator: ObservableObject {
                 items: planned.symbols.map { JournalItem(tag: tagForSymbol($0)) }
             )
         }
-        let created = JournalStore.shared.autoCreateEntries(skeletons)
+        let created = JournalStore.shared.autoCreateEntries(skeletons, in: journalID)
         if !created.isEmpty {
             NSLog("Wick exchange: auto-created %ld journal day(s)", created.count)
         }
@@ -440,14 +488,14 @@ final class ExchangePositionCoordinator: ObservableObject {
         apiKey: String,
         secret: String,
         passphrase: String?,
-        label: String
+        label: String,
+        journalID: UUID
     ) {
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedSecret = secret.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedPass = passphrase?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !trimmedKey.isEmpty, !trimmedSecret.isEmpty else { return }
         if venue == .okx, trimmedPass.isEmpty { return }
-        guard let journalID = JournalStore.shared.activeJournalID else { return }
 
         let blob = ExchangeSecretBlob(
             venue: venue,
@@ -463,7 +511,7 @@ final class ExchangePositionCoordinator: ObservableObject {
         lastError = nil
         updateHasCredentials()
         scheduleTimer()
-        syncNow()
+        syncNow(journalID: journalID)
     }
 
     private func makeClient(
@@ -618,8 +666,7 @@ final class ExchangePositionCoordinator: ObservableObject {
         return decoded
     }
 
-    private func saveCache(for journalID: UUID) {
-        guard let snapshot else { return }
+    private func saveCache(_ snapshot: TradingPositionSnapshot, for journalID: UUID) {
         let url = Self.cacheURL(for: journalID)
         try? FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
