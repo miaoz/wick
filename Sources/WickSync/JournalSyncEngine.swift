@@ -192,8 +192,8 @@ public final class JournalSyncEngine: ObservableObject {
             // that exact content authoritatively. Only the store write needs a
             // writable source; a read-only store keeps the record so the
             // conflict stays visible.
-            guard let chosen = record.localEntry, writable else { return }
-            localSource.applySyncedEntry(chosen)
+            guard let chosen = record.localEntry, writable, let journalID = stateJournalID else { return }
+            localSource.applySyncedEntry(chosen, journalID: journalID)
             if let hash = try? JournalSyncEncoding.contentHash(for: chosen) {
                 dayState.settlement = .pushSettled(hash)
             }
@@ -414,6 +414,19 @@ public final class JournalSyncEngine: ObservableObject {
     }
 
     private func syncCycleBody(journalID: UUID) async throws {
+        try requireJournal(journalID)
+        // Freeze identity + days before any await. After a network round-trip
+        // the user may have switched journals; live `syncJournalName` /
+        // `syncDaySnapshots()` would then describe the NEW journal while
+        // `journalID` still names the old one, which is how one journal's
+        // remote days get written into another.
+        let frozenName = localSource.syncJournalName
+        var localDays: [String: (entry: JournalEntry, hash: String)] = [:]
+        for (key, entry) in localSource.syncDaySnapshots() {
+            guard let data = try? JournalSyncEncoding.canonicalData(for: entry) else { continue }
+            localDays[key] = (entry, JournalSyncEncoding.contentHash(of: data))
+        }
+
         // 0. Journal deletion propagation (own queue) runs BEFORE any
         // active-journal work, so a deleted journal can never be resurrected
         // by this cycle's manifest/day syncing.
@@ -438,6 +451,7 @@ public final class JournalSyncEngine: ObservableObject {
             }
         }
         state.cursor = newCursor
+        try requireJournal(journalID)
 
         // 1b. Peer tombstone detection + anti-resurrection, on the fresh view.
         await detectPeerJournalTombstones()
@@ -449,19 +463,14 @@ public final class JournalSyncEngine: ObservableObject {
         await flushConflictArchiveCleanups()
 
         // 2. Manifest format gate — refuses to touch newer-format remotes.
-        try await ensureManifest(journalID: journalID)
+        try requireJournal(journalID)
+        try await ensureManifest(journalID: journalID, localName: frozenName)
 
         // 2b. Discovery: collect manifests of OTHER journals on the remote so
         // the app can offer adopting them (best effort, never blocks sync).
         await refreshDiscoveredJournals(currentJournalID: journalID)
 
-        // 3. Reconcile every known day key.
-        let snapshots = localSource.syncDaySnapshots()
-        var localDays: [String: (entry: JournalEntry, hash: String)] = [:]
-        for (key, entry) in snapshots {
-            guard let data = try? JournalSyncEncoding.canonicalData(for: entry) else { continue }
-            localDays[key] = (entry, JournalSyncEncoding.contentHash(of: data))
-        }
+        try requireJournal(journalID)
 
         var dayKeys = Set(localDays.keys).union(state.days.keys)
         for path in state.remoteFiles.keys {
@@ -566,7 +575,7 @@ public final class JournalSyncEngine: ObservableObject {
             }
             if local != nil, localDayMatchesSnapshot(dayKey, snapshot: localDays[dayKey]) {
                 try requireJournal(journalID)
-                localSource.removeSyncedDay(dayKey: dayKey)
+                localSource.removeSyncedDay(dayKey: dayKey, journalID: journalID)
             }
             // Clean up a day file that outlived its tombstone (crash between writes).
             if remoteFile != nil {
@@ -582,6 +591,7 @@ public final class JournalSyncEngine: ObservableObject {
 
         // Local delete propagates: tombstone first, then the file delete.
         if localDeleted, remoteFile != nil, !remoteChanged {
+            try requireJournal(journalID)
             let tombstone = JournalTombstone(dayKey: dayKey, deletedAt: Date(), deviceID: deviceID)
             let data = try JournalSyncEncoding.encoder.encode(tombstone)
             let tombRev = try await backend.upload(path: tombPath, data: data, ifRev: nil)
@@ -773,6 +783,7 @@ public final class JournalSyncEngine: ObservableObject {
         journalID: UUID,
         currentRemoteRev: String?
     ) async throws {
+        try requireJournal(journalID)
         let dayKey = local.entry.dayKey
         let dayPath = JournalSyncLayout.dayPath(for: journalID, dayKey: dayKey)
         let data = try JournalSyncEncoding.canonicalData(for: local.entry)
@@ -805,7 +816,7 @@ public final class JournalSyncEngine: ObservableObject {
         guard localDayMatchesSnapshot(dayKey, snapshot: snapshot) else { return false }
 
         try requireJournal(journalID)
-        localSource.applySyncedEntry(entry)
+        localSource.applySyncedEntry(entry, journalID: journalID)
 
         // Baselines use the canonical hash of the downloaded bytes - never the
         // backend's metadata hash - so re-hashing the applied content
@@ -902,7 +913,7 @@ public final class JournalSyncEngine: ObservableObject {
 
         if mergedHash != local.hash {
             try requireJournal(journalID)
-            localSource.applySyncedEntry(result.merged)
+            localSource.applySyncedEntry(result.merged, journalID: journalID)
         }
     }
 
@@ -1040,16 +1051,16 @@ public final class JournalSyncEngine: ObservableObject {
             guard state.remoteFiles[path.lowercased()] != nil else { continue }
             if let (data, _) = try? await backend.download(path: path) {
                 try requireJournal(journalID)
-                localSource.storeSyncedImage(filename: filename, data: data)
+                localSource.storeSyncedImage(filename: filename, data: data, journalID: journalID)
             }
         }
     }
 
     // MARK: - Manifest / tombstones
 
-    private func ensureManifest(journalID: UUID) async throws {
+    private func ensureManifest(journalID: UUID, localName: String) async throws {
+        try requireJournal(journalID)
         let path = JournalSyncLayout.manifestPath(for: journalID)
-        let localName = localSource.syncJournalName
 
         guard let meta = state.remoteFiles[path] else {
             // First device to sync creates the manifest; a create race is harmless.
@@ -1148,7 +1159,7 @@ public final class JournalSyncEngine: ObservableObject {
             return
         }
         try requireJournal(journalID)
-        state.manifestName = localSource.applySyncedJournalName(name)
+        state.manifestName = localSource.applySyncedJournalName(name, journalID: journalID)
     }
 
     private func downloadTombstone(path: String) async throws -> JournalTombstone {

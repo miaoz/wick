@@ -22,17 +22,22 @@ public protocol JournalLocalSource: AnyObject {
 
     /// Inserts or replaces the day with the same day key. Must not bump
     /// `updatedAt` (the remote timestamp drives last-writer-wins decisions).
-    func applySyncedEntry(_ entry: JournalEntry)
+    /// No-op when `journalID` is not the currently active journal — a cycle
+    /// that outlives a user switch must not write the previous journal's
+    /// remote days into the one now on screen.
+    func applySyncedEntry(_ entry: JournalEntry, journalID: UUID)
 
     /// Removes the day with the given key together with its image files.
-    func removeSyncedDay(dayKey: String)
+    /// Same active-journal guard as `applySyncedEntry`.
+    func removeSyncedDay(dayKey: String, journalID: UUID)
 
-    /// Renames the active journal to the name from the remote manifest and
-    /// returns the name actually applied (stores may uniquify on collision
-    /// with another local journal). The engine records the returned name as
-    /// the new rename baseline, so the result must stay stable across cycles.
+    /// Renames the journal identified by `journalID` to the remote manifest's
+    /// name and returns the name actually applied (stores may uniquify on
+    /// collision with another local journal). The engine records the returned
+    /// name as the new rename baseline, so the result must stay stable across
+    /// cycles. No-op when `journalID` is not currently active.
     @discardableResult
-    func applySyncedJournalName(_ name: String) -> String
+    func applySyncedJournalName(_ name: String, journalID: UUID) -> String
 
     /// Image filenames referenced by any local entry.
     func syncedImageFilenames() -> Set<String>
@@ -40,5 +45,6 @@ public protocol JournalLocalSource: AnyObject {
     func hasSyncedImage(filename: String) -> Bool
     /// Stores image bytes under an existing referenced filename (no renaming —
     /// filenames are content-addressed UUIDs chosen at import time).
-    func storeSyncedImage(filename: String, data: Data)
+    /// Same active-journal guard as `applySyncedEntry`.
+    func storeSyncedImage(filename: String, data: Data, journalID: UUID)
 }

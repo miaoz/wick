@@ -227,4 +227,27 @@ final class JournalStoreSyncTests: XCTestCase {
         XCTAssertEqual(store.applySyncedJournalName(current), current)
         XCTAssertEqual(store.activeJournal?.updatedAt, updatedAt, "no-op apply must not touch metadata")
     }
+
+    func testApplySyncedMutationsIgnoreNonActiveJournal() {
+        let firstID = store.activeJournalID!
+        let originalFirstName = store.activeJournal!.name
+        _ = store.createEntry()
+        XCTAssertEqual(store.entries.count, 1)
+
+        _ = store.createJournal(name: "Empty")
+        XCTAssertEqual(store.entries.count, 0)
+
+        store.applySyncedEntry(
+            JournalEntry(dayKey: "2026-08-01", title: "from previous"),
+            journalID: firstID
+        )
+        XCTAssertTrue(store.entries.isEmpty, "must not write the previous journal's days into the active one")
+
+        _ = store.applySyncedJournalName("trading", journalID: firstID)
+        XCTAssertEqual(store.activeJournal?.name, "Empty")
+        XCTAssertEqual(store.journals.first { $0.id == firstID }?.name, originalFirstName)
+
+        store.switchToJournal(id: firstID)
+        XCTAssertEqual(store.entries.count, 1)
+    }
 }

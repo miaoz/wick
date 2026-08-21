@@ -30,6 +30,7 @@ final class PhoneJournalStore: ObservableObject {
     private(set) var imagesDirectory: URL
     private(set) var databaseURL: URL
     private(set) var backupURL: URL
+    private var persistBlocked = false
 
     private init() {
         let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -104,11 +105,13 @@ final class PhoneJournalStore: ObservableObject {
     func switchToJournal(id: UUID) {
         guard id != activeJournalID, journals.contains(where: { $0.id == id }) else { return }
         flushPendingWrites()
+        persistBlocked = true
         activeJournalID = id
         bindPaths(for: id)
         ensureDirectories()
         isReadOnlyDueToLoadFailure = false
         load()
+        persistBlocked = false
         persistCatalog()
     }
 
@@ -173,6 +176,7 @@ final class PhoneJournalStore: ObservableObject {
         journals.removeAll { $0.id == id }
         if wasActive {
             let next = journals.sorted { $0.updatedAt > $1.updatedAt }.first ?? journals.first
+            persistBlocked = true
             activeJournalID = next?.id
             if let nextID = activeJournalID {
                 bindPaths(for: nextID)
@@ -180,6 +184,7 @@ final class PhoneJournalStore: ObservableObject {
                 isReadOnlyDueToLoadFailure = false
                 load()
             }
+            persistBlocked = false
         }
         persistCatalog()
         return true
@@ -323,6 +328,7 @@ final class PhoneJournalStore: ObservableObject {
     }
 
     private func persist() {
+        guard !persistBlocked else { return }
         guard !isReadOnlyDueToLoadFailure else { return }
         ensureDirectories()
         if fileManager.fileExists(atPath: databaseURL.path),
@@ -357,7 +363,8 @@ extension PhoneJournalStore: JournalLocalSource {
         return result
     }
 
-    func applySyncedEntry(_ entry: JournalEntry) {
+    func applySyncedEntry(_ entry: JournalEntry, journalID: UUID) {
+        guard journalID == activeJournalID else { return }
         guard !isReadOnlyDueToLoadFailure else { return }
         var applied = entry
         if applied.items.isEmpty {
@@ -377,14 +384,14 @@ extension PhoneJournalStore: JournalLocalSource {
     /// name actually applied (uniquified against OTHER local journals). The
     /// engine records the result as its rename baseline.
     @discardableResult
-    func applySyncedJournalName(_ name: String) -> String {
+    func applySyncedJournalName(_ name: String, journalID: UUID) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let activeJournalID,
-              let index = journals.firstIndex(where: { $0.id == activeJournalID })
-        else { return activeJournal?.name ?? name }
+        guard journalID == activeJournalID,
+              let index = journals.firstIndex(where: { $0.id == journalID })
+        else { return journals.first { $0.id == journalID }?.name ?? activeJournal?.name ?? name }
         let resolved = trimmed.isEmpty
             ? journals[index].name
-            : uniquifiedJournalName(trimmed, excluding: activeJournalID)
+            : uniquifiedJournalName(trimmed, excluding: journalID)
         guard resolved != journals[index].name else { return resolved }
         journals[index].name = resolved
         journals[index].updatedAt = Date()
@@ -392,7 +399,8 @@ extension PhoneJournalStore: JournalLocalSource {
         return resolved
     }
 
-    func removeSyncedDay(dayKey: String) {
+    func removeSyncedDay(dayKey: String, journalID: UUID) {
+        guard journalID == activeJournalID else { return }
         guard !isReadOnlyDueToLoadFailure else { return }
         guard let index = entries.firstIndex(where: { $0.dayKey == dayKey }) else { return }
         for filename in entries[index].allImageFilenames {
@@ -416,7 +424,8 @@ extension PhoneJournalStore: JournalLocalSource {
         return fileManager.fileExists(atPath: imageURL(for: filename).path)
     }
 
-    func storeSyncedImage(filename: String, data: Data) {
+    func storeSyncedImage(filename: String, data: Data, journalID: UUID) {
+        guard journalID == activeJournalID else { return }
         guard !isReadOnlyDueToLoadFailure else { return }
         guard isSafeSyncedImageFilename(filename) else { return }
         try? data.write(to: imageURL(for: filename), options: .atomic)

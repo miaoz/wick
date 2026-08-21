@@ -95,6 +95,9 @@ final class JournalStore: ObservableObject {
 
     private let maxRollingBackups = 5
     private var lastRollingBackupAt: Date?
+    /// True while switching journals, so `persist()` cannot write the previous
+    /// journal's in-memory snapshot into the newly bound folder.
+    private var persistBlocked = false
 
     // MARK: - Init
 
@@ -154,10 +157,15 @@ final class JournalStore: ObservableObject {
         guard journals.contains(where: { $0.id == id }) else { return }
 
         flushActiveJournalSession()
+        // Block persist until the new journal is loaded so a stray write
+        // cannot dump the previous journal's in-memory entries into the
+        // newly bound directory (and then sync them up as that journal).
+        persistBlocked = true
         activeJournalID = id
         bindPaths(for: id)
         resetSessionState()
         loadActiveJournalContent()
+        persistBlocked = false
         persistCatalog()
         notifyActiveJournalChanged()
     }
@@ -241,12 +249,14 @@ final class JournalStore: ObservableObject {
         if wasActive {
             let next = journals.sorted { $0.updatedAt > $1.updatedAt }.first
                 ?? journals.first
+            persistBlocked = true
             activeJournalID = next?.id
             if let nextID = activeJournalID {
                 bindPaths(for: nextID)
                 resetSessionState()
                 loadActiveJournalContent()
             }
+            persistBlocked = false
         }
 
         persistCatalog()
@@ -1263,6 +1273,7 @@ final class JournalStore: ObservableObject {
     }
 
     private func persist() {
+        guard !persistBlocked else { return }
         guard !isReadOnlyDueToLoadFailure else {
             return
         }
@@ -1447,7 +1458,14 @@ extension JournalStore: JournalLocalSource {
         return result
     }
 
+    /// Test helper: apply against the currently active journal.
     func applySyncedEntry(_ entry: JournalEntry) {
+        guard let activeJournalID else { return }
+        applySyncedEntry(entry, journalID: activeJournalID)
+    }
+
+    func applySyncedEntry(_ entry: JournalEntry, journalID: UUID) {
+        guard journalID == activeJournalID else { return }
         guard !isReadOnlyDueToLoadFailure else { return }
         // Commit any in-flight editor draft before replacing the entry underneath it.
         NotificationCenter.default.post(name: .wickWillFlushJournalDrafts, object: nil)
@@ -1482,6 +1500,12 @@ extension JournalStore: JournalLocalSource {
     }
 
     func removeSyncedDay(dayKey: String) {
+        guard let activeJournalID else { return }
+        removeSyncedDay(dayKey: dayKey, journalID: activeJournalID)
+    }
+
+    func removeSyncedDay(dayKey: String, journalID: UUID) {
+        guard journalID == activeJournalID else { return }
         guard !isReadOnlyDueToLoadFailure else { return }
         guard let index = entries.firstIndex(where: { $0.dayKey == dayKey }) else { return }
         let entry = entries[index]
@@ -1496,18 +1520,27 @@ extension JournalStore: JournalLocalSource {
         touchActiveJournalMetadata()
     }
 
-    /// Renames the active journal to the remote manifest's name, returning the
-    /// name actually applied (uniquified against OTHER local journals). The
-    /// engine records the result as its rename baseline.
+    /// Renames the journal identified by `journalID` to the remote manifest's
+    /// name, returning the name actually applied (uniquified against OTHER
+    /// local journals). No-op when that journal is not the one currently
+    /// bound — a cycle that outlives a user switch must not rename the
+    /// newly opened journal to the previous one's remote name.
+    /// Test helper: rename the currently active journal from a remote name.
     @discardableResult
     func applySyncedJournalName(_ name: String) -> String {
+        guard let activeJournalID else { return name }
+        return applySyncedJournalName(name, journalID: activeJournalID)
+    }
+
+    @discardableResult
+    func applySyncedJournalName(_ name: String, journalID: UUID) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let activeJournalID,
-              let index = journals.firstIndex(where: { $0.id == activeJournalID })
-        else { return activeJournal?.name ?? name }
+        guard journalID == activeJournalID,
+              let index = journals.firstIndex(where: { $0.id == journalID })
+        else { return journals.first { $0.id == journalID }?.name ?? activeJournal?.name ?? name }
         let resolved = trimmed.isEmpty
             ? journals[index].name
-            : uniquifiedJournalName(trimmed, excluding: activeJournalID)
+            : uniquifiedJournalName(trimmed, excluding: journalID)
         guard resolved != journals[index].name else { return resolved }
         journals[index].name = resolved
         journals[index].updatedAt = Date()
@@ -1531,6 +1564,12 @@ extension JournalStore: JournalLocalSource {
     }
 
     func storeSyncedImage(filename: String, data: Data) {
+        guard let activeJournalID else { return }
+        storeSyncedImage(filename: filename, data: data, journalID: activeJournalID)
+    }
+
+    func storeSyncedImage(filename: String, data: Data, journalID: UUID) {
+        guard journalID == activeJournalID else { return }
         guard !isReadOnlyDueToLoadFailure else { return }
         guard isSafeSyncedImageFilename(filename) else { return }
         try? data.write(to: imageURL(for: filename), options: .atomic)

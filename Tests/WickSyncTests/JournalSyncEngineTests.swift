@@ -44,6 +44,9 @@ final class FakeSyncBackend: JournalSyncBackend {
     var downloadCount = 0
     /// When set, incremental listings throw this error once.
     var failNextIncremental: SyncBackendError?
+    /// Fires once at the start of `listChanges`, so a test can switch the
+    /// active journal mid-cycle after the engine has already captured an id.
+    var onListChanges: (() -> Void)?
 
     var isAuthorized: Bool { authorized }
     var accountEmail: String? { authorized ? "fake@example.com" : nil }
@@ -52,6 +55,8 @@ final class FakeSyncBackend: JournalSyncBackend {
     func signOut() { authorized = false }
 
     func listChanges(since cursor: String?) async throws -> (entries: [RemoteFileMeta], cursor: String) {
+        onListChanges?()
+        onListChanges = nil
         if let cursor {
             if let error = failNextIncremental {
                 failNextIncremental = nil
@@ -157,14 +162,19 @@ final class FakeLocalSource: JournalLocalSource {
         }
         return days
     }
-    func applySyncedEntry(_ entry: JournalEntry) { days[entry.dayKey] = entry }
-    func removeSyncedDay(dayKey: String) {
+    func applySyncedEntry(_ entry: JournalEntry, journalID: UUID) {
+        guard journalID == self.journalID else { return }
+        days[entry.dayKey] = entry
+    }
+    func removeSyncedDay(dayKey: String, journalID: UUID) {
+        guard journalID == self.journalID else { return }
         days.removeValue(forKey: dayKey)
         removedDayKeys.append(dayKey)
     }
 
     @discardableResult
-    func applySyncedJournalName(_ name: String) -> String {
+    func applySyncedJournalName(_ name: String, journalID: UUID) -> String {
+        guard journalID == self.journalID else { return journalName }
         journalName = name
         return name
     }
@@ -172,7 +182,10 @@ final class FakeLocalSource: JournalLocalSource {
     func syncedImageFilenames() -> Set<String> { Set(days.values.flatMap(\.allImageFilenames)) }
     func syncedImageData(filename: String) -> Data? { images[filename] }
     func hasSyncedImage(filename: String) -> Bool { images[filename] != nil }
-    func storeSyncedImage(filename: String, data: Data) { images[filename] = data }
+    func storeSyncedImage(filename: String, data: Data, journalID: UUID) {
+        guard journalID == self.journalID else { return }
+        images[filename] = data
+    }
 }
 
 // MARK: - Tests
@@ -1067,6 +1080,41 @@ final class JournalSyncEngineTests: XCTestCase {
         XCTAssertEqual(engine.status, .idle)
         XCTAssertFalse(backend.hasFile(JournalSyncLayout.dayPath(for: otherID, dayKey: "2026-08-01")))
         XCTAssertTrue(backend.hasFile(JournalSyncLayout.manifestPath(for: otherID)))
+    }
+
+    /// Rename journal A, then switch to empty journal B *during* the cycle that
+    /// is still running for A. B must not inherit A's name or A's days, and A's
+    /// remote days must not be tombstoned as if B's emptiness were A's deletion.
+    func testMidCycleSwitchDoesNotImportPreviousJournal() async throws {
+        let source = makeSource(name: "trading")
+        source.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "btc")
+        source.days["2026-08-02"] = entry(dayKey: "2026-08-02", body: "eth")
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        await engine.performSyncCycle()
+        XCTAssertTrue(backend.hasFile(dayPath("2026-08-01")))
+
+        source.journalName = "币安手工"
+        let otherID = UUID()
+        backend.onListChanges = {
+            source.journalID = otherID
+            source.journalName = "test"
+            source.days = [:]
+        }
+        await engine.performSyncCycle()
+
+        XCTAssertEqual(source.journalName, "test")
+        XCTAssertTrue(source.days.isEmpty, "the newly opened journal must stay empty")
+        XCTAssertTrue(backend.hasFile(dayPath("2026-08-01")), "the previous journal's remote days must remain")
+        XCTAssertTrue(backend.hasFile(dayPath("2026-08-02")))
+        XCTAssertFalse(
+            backend.hasFile(JournalSyncLayout.dayPath(for: otherID, dayKey: "2026-08-01")),
+            "the previous journal's days must not be pushed under the new id"
+        )
+
+        // A subsequent cycle for the empty journal still must not pull A's days.
+        await engine.performSyncCycle()
+        XCTAssertTrue(source.days.isEmpty)
+        XCTAssertEqual(source.journalName, "test")
     }
 
     // MARK: discovery
