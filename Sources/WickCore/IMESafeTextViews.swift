@@ -233,7 +233,7 @@ struct IMESafeTextEditor: NSViewRepresentable {
         textView.autoresizingMask = [.width]
         textView.textContainerInset = NSSize(width: 0, height: 0)
         textView.textContainer?.containerSize = NSSize(
-            width: 0,
+            width: 400,
             height: CGFloat.greatestFiniteMagnitude
         )
         textView.textContainer?.widthTracksTextView = true
@@ -253,7 +253,10 @@ struct IMESafeTextEditor: NSViewRepresentable {
         context.coordinator.textView = textView
         context.coordinator.scrollView = scrollView
         context.coordinator.trackClipWidth(of: scrollView, textView: textView)
-        context.coordinator.recomputeHeight()
+        // Do not measure here: clip width is still 0 during `makeNSView`,
+        // and `setFrameSize` posts frame-change notifications that re-enter
+        // SwiftUI layout. On macOS 13 a timeline of many editors hangs the
+        // main thread in that loop. `updateNSView` measures once width is real.
         return scrollView
     }
 
@@ -294,6 +297,7 @@ struct IMESafeTextEditor: NSViewRepresentable {
         var parent: IMESafeTextEditor
         weak var textView: NSTextView?
         weak var scrollView: AutoHeightScrollView?
+        private var isRecomputingHeight = false
 
         init(_ parent: IMESafeTextEditor) {
             self.parent = parent
@@ -328,24 +332,33 @@ struct IMESafeTextEditor: NSViewRepresentable {
 
         @objc private func clipBoundsDidChange(_ note: Notification) {
             guard let clipView = note.object as? NSClipView, let textView else { return }
-            syncWidth(clipView, textView: textView)
-            recomputeHeight()
+            let widthChanged = syncWidth(clipView, textView: textView)
+            if widthChanged {
+                recomputeHeight()
+            }
         }
 
         @objc private func clipFrameDidChange(_ note: Notification) {
             guard let clipView = note.object as? NSClipView, let textView else { return }
-            syncWidth(clipView, textView: textView)
-            recomputeHeight()
+            let widthChanged = syncWidth(clipView, textView: textView)
+            // Height-only frame changes are usually our own `setFrameSize`
+            // from `recomputeHeight`; measuring again re-enters AppKit layout
+            // (seen as a 79s hang on macOS 13).
+            if widthChanged {
+                recomputeHeight()
+            }
         }
 
-        private func syncWidth(_ clipView: NSClipView, textView: NSTextView) {
+        @discardableResult
+        private func syncWidth(_ clipView: NSClipView, textView: NSTextView) -> Bool {
             let width = clipView.bounds.width
-            guard width > 0, abs(textView.frame.width - width) > 0.5 else { return }
+            guard width > 0, abs(textView.frame.width - width) > 0.5 else { return false }
             textView.setFrameSize(NSSize(width: width, height: textView.frame.height))
             textView.textContainer?.containerSize = NSSize(
                 width: width,
                 height: CGFloat.greatestFiniteMagnitude
             )
+            return true
         }
 
         func textDidChange(_ notification: Notification) {
@@ -361,19 +374,24 @@ struct IMESafeTextEditor: NSViewRepresentable {
         /// Measure laid-out text and push height into the scroll view's
         /// intrinsic size so SwiftUI reflows the card.
         func recomputeHeight() {
+            guard !isRecomputingHeight else { return }
             guard let textView, let scrollView else { return }
+            isRecomputingHeight = true
+            defer { isRecomputingHeight = false }
 
             let width = scrollView.contentView.bounds.width
-            if width > 1 {
-                if abs(textView.frame.width - width) > 0.5 {
-                    textView.setFrameSize(NSSize(width: width, height: textView.frame.height))
-                }
-                textView.textContainer?.widthTracksTextView = true
-                textView.textContainer?.containerSize = NSSize(
-                    width: width,
-                    height: CGFloat.greatestFiniteMagnitude
-                )
+            // Width 0 yields a huge usedRect (one glyph per line). Leave the
+            // min-height placeholder until the clip view has a real width.
+            guard width > 1 else { return }
+
+            if abs(textView.frame.width - width) > 0.5 {
+                textView.setFrameSize(NSSize(width: width, height: textView.frame.height))
             }
+            textView.textContainer?.widthTracksTextView = true
+            textView.textContainer?.containerSize = NSSize(
+                width: width,
+                height: CGFloat.greatestFiniteMagnitude
+            )
 
             guard let layoutManager = textView.layoutManager,
                   let textContainer = textView.textContainer
