@@ -150,28 +150,32 @@ struct ExchangeSettingsContent: View {
     }
 
     private var venuePicker: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             ForEach(ExchangeVenue.allCases) { option in
                 let selected = venue == option
                 Button {
                     venue = option
                 } label: {
                     Text(venueTitle(option))
-                        .font(.system(size: 12, weight: selected ? .semibold : .medium, design: .rounded))
-                        .foregroundStyle(selected ? theme.primaryText : theme.secondaryText)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
+                        .font(.system(size: 12, weight: selected ? .semibold : .regular, design: .rounded))
+                        .foregroundStyle(
+                            selected ? Color(red: 1, green: 0.95, blue: 0.88)
+                                : theme.palette.textPrimary.color
+                        )
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
                         .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(selected ? theme.selectionBackground : theme.controlBackground)
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(selected ? theme.palette.accent.color : theme.palette.controlBackground.color.opacity(0.45))
                         )
                         .overlay {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
                                 .strokeBorder(
-                                    selected ? theme.selectionAccent.opacity(0.45) : theme.controlBorder,
-                                    lineWidth: 1
+                                    selected ? theme.palette.accent.color : theme.palette.divider.color.opacity(0.8),
+                                    lineWidth: 0.8
                                 )
                         }
+                        .shadow(color: selected ? theme.palette.glow.color.opacity(0.6) : .clear, radius: 3)
                 }
                 .buttonStyle(.plain)
             }
@@ -218,7 +222,7 @@ struct ExchangeSettingsContent: View {
                 coordinator.saveAndSyncHyperliquid(address: addressDraft, journalID: journalID)
             }
         } label: {
-            HStack {
+            HStack(spacing: 8) {
                 if coordinator.isSyncing {
                     ProgressView()
                         .controlSize(.small)
@@ -228,19 +232,22 @@ struct ExchangeSettingsContent: View {
                         ? L10n.string(.exchangeSyncing, language: language)
                         : L10n.string(.exchangeSaveAndSync, language: language)
                 )
-                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .font(.system(size: 12.5, weight: .medium, design: .rounded))
                 Spacer(minLength: 8)
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(theme.palette.textTertiary.color)
             }
             .foregroundStyle(theme.primaryText)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6.5)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(theme.controlBackground)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(theme.palette.controlBackground.color.opacity(0.45))
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(theme.controlBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(theme.palette.divider.color.opacity(0.8), lineWidth: 0.8)
             }
         }
         .buttonStyle(.plain)
@@ -255,9 +262,9 @@ struct ExchangeSettingsContent: View {
     ) -> some View {
         HStack(spacing: 8) {
             Text(title)
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.secondaryText)
-                .frame(width: 88, alignment: .leading)
+                .frame(width: 80, alignment: .leading)
             Group {
                 if secure {
                     SecureField("", text: text)
@@ -265,8 +272,18 @@ struct ExchangeSettingsContent: View {
                     TextField("", text: text)
                 }
             }
-            .textFieldStyle(.roundedBorder)
-            .font(.system(size: 12, design: .monospaced))
+            .textFieldStyle(.plain)
+            .font(.system(size: 11.5, design: .monospaced))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4.5)
+            .background(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(theme.palette.controlBackground.color.opacity(0.4))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(theme.palette.divider.color.opacity(0.8), lineWidth: 0.8)
+            }
             .autocorrectionDisabled()
         }
     }
@@ -274,15 +291,15 @@ struct ExchangeSettingsContent: View {
     // MARK: - Connected
 
     private var connectedContent: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             if let binding = targetJournal?.exchangeBinding {
                 HStack {
                     Text(venueTitle(binding.venue))
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .font(.custom("Songti SC", size: 12).weight(.bold))
                         .foregroundStyle(theme.primaryText)
                     Spacer()
                     Text(binding.accountLabel)
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(.system(size: 11.5, design: .monospaced))
                         .foregroundStyle(theme.secondaryText)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -308,7 +325,8 @@ struct ExchangeSettingsContent: View {
 
             actionButton(
                 title: L10n.string(.exchangeDisconnect, language: language),
-                systemImage: "link"
+                systemImage: "link",
+                isDestructive: true
             ) {
                 showDisconnectConfirm = true
             }
@@ -329,26 +347,36 @@ struct ExchangeSettingsContent: View {
     private func actionButton(
         title: String,
         systemImage: String,
+        isDestructive: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack {
+            HStack(spacing: 8) {
                 Image(systemName: systemImage)
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 16)
                 Text(title)
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
                 Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(theme.palette.textTertiary.color)
             }
-            .foregroundStyle(theme.primaryText)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .foregroundStyle(
+                isDestructive ? theme.palette.pnlUp.color
+                    : theme.palette.textPrimary.color
+            )
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6.5)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(theme.controlBackground)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(theme.palette.controlBackground.color.opacity(0.45))
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(theme.controlBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(theme.palette.divider.color.opacity(0.8), lineWidth: 0.8)
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

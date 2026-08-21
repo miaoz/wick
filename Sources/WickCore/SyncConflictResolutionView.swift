@@ -82,17 +82,17 @@ struct SyncConflictResolutionList: View {
     private func batchButton(title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .font(.system(size: 11.5, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.primaryText)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(
-                    Capsule(style: .continuous)
-                        .fill(theme.controlBackground)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(theme.palette.controlBackground.color.opacity(0.45))
                 )
                 .overlay {
-                    Capsule(style: .continuous)
-                        .strokeBorder(theme.controlBorder, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(theme.palette.divider.color.opacity(0.8), lineWidth: 0.8)
                 }
         }
         .buttonStyle(.plain)
@@ -112,7 +112,7 @@ private struct SyncConflictRow: View {
             Button(action: onToggle) {
                 HStack(spacing: 6) {
                     Text(conflict.dayKey)
-                        .font(.system(size: 13, weight: .semibold, design: .rounded).monospacedDigit())
+                        .font(.system(size: 12.5, weight: .semibold, design: .rounded).monospacedDigit())
                         .foregroundStyle(theme.primaryText)
 
                     Text(kindText)
@@ -123,7 +123,7 @@ private struct SyncConflictRow: View {
                     Spacer(minLength: 4)
 
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(theme.tertiaryText)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
@@ -180,15 +180,15 @@ private struct SyncConflictRow: View {
                 }
             }
         }
-        .padding(10)
+        .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(theme.controlBackground)
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(theme.palette.controlBackground.color.opacity(0.35))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(theme.controlBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .strokeBorder(theme.palette.divider.color.opacity(0.75), lineWidth: 0.8)
         }
     }
 
@@ -210,9 +210,8 @@ private struct SyncConflictRow: View {
     private func versionPreview(title: String, entry: JournalEntry?) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .font(.custom("Songti SC", size: 10.5).weight(.bold))
                 .foregroundStyle(theme.tertiaryText)
-                .textCase(.uppercase)
                 .tracking(0.4)
 
             if let entry {
@@ -271,17 +270,17 @@ private struct SyncConflictRow: View {
     private func choiceButton(title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .font(.system(size: 11.5, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.primaryText)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(
-                    Capsule(style: .continuous)
-                        .fill(theme.controlBackground)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(theme.palette.controlBackground.color.opacity(0.45))
                 )
                 .overlay {
-                    Capsule(style: .continuous)
-                        .strokeBorder(theme.controlBorder, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(theme.palette.divider.color.opacity(0.8), lineWidth: 0.8)
                 }
         }
         .buttonStyle(.plain)

@@ -11,10 +11,14 @@ private enum PanelViewLayout {
 struct ProgressPanelView: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var settings: AppSettings
-    @State private var showsSettings = false
+    @State private var showsSettings: Bool
     /// False while the MenuBarExtra panel is hidden so `TimelineView` unmounts
     /// (P4: Ventura keeps the scene alive after dismiss).
     @State private var isPanelVisible = true
+
+    init(showsSettings: Bool = false) {
+        _showsSettings = State(initialValue: showsSettings)
+    }
 
     var body: some View {
         let language = settings.language
@@ -27,6 +31,8 @@ struct ProgressPanelView: View {
                     ScrollView {
                         SettingsContentView(theme: theme, language: language)
                     }
+                    .scrollIndicators(.never)
+                    .hidesAppKitScrollers()
                     .frame(maxHeight: 520)
                 }
             } else {
@@ -211,7 +217,7 @@ struct ProgressPanelView: View {
     }
 }
 
-private struct SettingsContentView: View {
+struct SettingsContentView: View {
     @EnvironmentObject private var settings: AppSettings
     @ObservedObject private var reminderScheduler = JournalReminderScheduler.shared
     @EnvironmentObject private var journalStore: JournalStore
@@ -229,11 +235,11 @@ private struct SettingsContentView: View {
     @State private var showDisconnectConfirm = false
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
             settingsSection(
                 title: L10n.string(.language, language: language)
             ) {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     ForEach(AppLanguage.allCases) { option in
                         settingsOptionButton(
                             title: option.displayName,
@@ -250,7 +256,7 @@ private struct SettingsContentView: View {
             settingsSection(
                 title: L10n.string(.appearance, language: language)
             ) {
-                VStack(spacing: 8) {
+                HStack(spacing: 6) {
                     ForEach(AppAppearance.allCases) { option in
                         settingsOptionButton(
                             title: option.displayName(language: language),
@@ -268,10 +274,10 @@ private struct SettingsContentView: View {
             settingsSection(
                 title: L10n.string(.generalSection, language: language)
             ) {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 9) {
                     Toggle(isOn: $settings.showMenuBarPercentage) {
                         Text(L10n.string(.menuBarPercentage, language: language))
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundStyle(theme.primaryText)
                     }
                     .toggleStyle(.switch)
@@ -279,7 +285,7 @@ private struct SettingsContentView: View {
 
                     Toggle(isOn: $settings.weekStartsOnMonday) {
                         Text(L10n.string(.weekStartsOnMonday, language: language))
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundStyle(theme.primaryText)
                     }
                     .toggleStyle(.switch)
@@ -287,7 +293,7 @@ private struct SettingsContentView: View {
 
                     Toggle(isOn: $settings.launchAtLoginDesired) {
                         Text(L10n.string(.launchAtLogin, language: language))
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundStyle(theme.primaryText)
                     }
                     .toggleStyle(.switch)
@@ -301,7 +307,7 @@ private struct SettingsContentView: View {
                             LaunchAtLogin.openSystemLoginItems()
                         } label: {
                             Text(L10n.string(.openLoginItems, language: language))
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(theme.selectionAccent)
@@ -312,35 +318,17 @@ private struct SettingsContentView: View {
             settingsSection(
                 title: L10n.string(.journalSection, language: language)
             ) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Button {
+                VStack(alignment: .leading, spacing: 8) {
+                    actionRowButton(
+                        title: L10n.string(.journalOpenAction, language: language),
+                        systemImage: "book.closed"
+                    ) {
                         JournalWindowController.shared.openJournal()
-                    } label: {
-                        HStack {
-                            Image(systemName: "book.closed")
-                            Text(L10n.string(.journalOpenAction, language: language))
-                                .font(.system(size: 14, weight: .medium, design: .rounded))
-                            Spacer(minLength: 8)
-                            Image(systemName: "arrow.up.right")
-                                .font(.system(size: 11, weight: .semibold))
-                        }
-                        .foregroundStyle(theme.primaryText)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(theme.controlBackground)
-                        )
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(theme.controlBorder, lineWidth: 1)
-                        }
                     }
-                    .buttonStyle(.plain)
 
                     Toggle(isOn: $settings.journalReminderEnabled) {
                         Text(L10n.string(.journalReminderEnabled, language: language))
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundStyle(theme.primaryText)
                     }
                     .toggleStyle(.switch)
@@ -349,7 +337,7 @@ private struct SettingsContentView: View {
                     if settings.journalReminderEnabled {
                         HStack {
                             Text(L10n.string(.journalReminderTime, language: language))
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .font(.system(size: 12.5, weight: .medium, design: .rounded))
                                 .foregroundStyle(theme.secondaryText)
                             Spacer()
                             DatePicker(
@@ -363,7 +351,7 @@ private struct SettingsContentView: View {
                             .labelsHidden()
                             .datePickerStyle(.field)
                         }
-                        .padding(.horizontal, 4)
+                        .padding(.horizontal, 2)
 
                         reminderPermissionFooter
                     }
@@ -373,29 +361,50 @@ private struct SettingsContentView: View {
             settingsSection(
                 title: L10n.string(.tradingCalendar, language: language)
             ) {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Toggle(isOn: $settings.physicalCalendarEnabled) {
-                        Text(L10n.string(.calendarEasterEggTitle, language: language))
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
-                            .foregroundStyle(theme.primaryText)
+                        HStack(spacing: 6) {
+                            Text(L10n.string(.calendarEasterEggTitle, language: language))
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(theme.primaryText)
+                            Text("彩蛋")
+                                .font(.custom("Songti SC", size: 9).weight(.bold))
+                                .foregroundStyle(theme.palette.pnlUp.color)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                        .fill(theme.palette.pnlUp.color.opacity(0.12))
+                                )
+                        }
                     }
                     .toggleStyle(.switch)
                     .tint(theme.selectionAccent)
 
                     Text(L10n.string(.calendarEasterEggNote, language: language))
-                        .font(.caption)
+                        .font(.custom("Songti SC", size: 10.5))
                         .foregroundStyle(theme.secondaryText)
+                        .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(9)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(theme.palette.stain1.color.opacity(0.4))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(theme.palette.pnlUp.color.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
                 }
             }
 
             settingsSection(
                 title: L10n.string(.dataSection, language: language)
             ) {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 7) {
                     if journalStore.isReadOnlyDueToLoadFailure {
                         Text(L10n.string(.journalLoadFailureTitle, language: language))
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .font(.system(size: 12.5, weight: .semibold, design: .rounded))
                             .foregroundStyle(theme.primaryText)
                         Text(L10n.string(.journalLoadFailureBody, language: language))
                             .font(.caption)
@@ -409,29 +418,29 @@ private struct SettingsContentView: View {
                             showStartFreshConfirm = true
                         } label: {
                             Text(L10n.string(.journalStartFresh, language: language))
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .font(.system(size: 12.5, weight: .medium, design: .rounded))
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(.red.opacity(0.85))
+                        .foregroundStyle(theme.palette.pnlUp.color)
                     } else if journalStore.didRestoreFromBackup {
                         Text(L10n.string(.journalRestoredFromBackup, language: language))
                             .font(.caption)
                             .foregroundStyle(theme.secondaryText)
                     }
 
-                    dataActionButton(
+                    actionRowButton(
                         title: L10n.string(.journalExport, language: language),
                         systemImage: "square.and.arrow.up"
                     ) {
                         exportJournal()
                     }
-                    dataActionButton(
+                    actionRowButton(
                         title: L10n.string(.journalImport, language: language),
                         systemImage: "square.and.arrow.down"
                     ) {
                         importJournal()
                     }
-                    dataActionButton(
+                    actionRowButton(
                         title: L10n.string(.journalRevealData, language: language),
                         systemImage: "folder"
                     ) {
@@ -455,15 +464,15 @@ private struct SettingsContentView: View {
             settingsSection(
                 title: L10n.string(.syncSection, language: language)
             ) {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     if settings.syncEnabled && syncCoordinator.backend.isAuthorized {
                         HStack {
                             Text("Dropbox")
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .font(.system(size: 12.5, weight: .medium, design: .rounded))
                                 .foregroundStyle(theme.secondaryText)
                             Spacer()
                             Text(settings.syncAccountEmail.isEmpty ? "—" : settings.syncAccountEmail)
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .font(.system(size: 12.5, weight: .semibold, design: .rounded))
                                 .foregroundStyle(theme.primaryText)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
@@ -490,7 +499,7 @@ private struct SettingsContentView: View {
                                         syncCoordinator.adoptRemoteJournal(manifest)
                                     } label: {
                                         Text(L10n.string(.syncImportJournal, language: language))
-                                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                                            .font(.system(size: 12, weight: .medium, design: .rounded))
                                     }
                                     .buttonStyle(.plain)
                                     .foregroundStyle(theme.selectionAccent)
@@ -498,15 +507,16 @@ private struct SettingsContentView: View {
                             }
                         }
 
-                        dataActionButton(
+                        actionRowButton(
                             title: L10n.string(.syncNow, language: language),
                             systemImage: "arrow.triangle.2.circlepath"
                         ) {
                             syncCoordinator.engine.syncNow()
                         }
-                        dataActionButton(
+                        actionRowButton(
                             title: L10n.string(.syncDisconnect, language: language),
-                            systemImage: "link"
+                            systemImage: "link",
+                            isDestructive: true
                         ) {
                             showDisconnectConfirm = true
                         }
@@ -516,7 +526,7 @@ private struct SettingsContentView: View {
                             .foregroundStyle(theme.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        dataActionButton(
+                        actionRowButton(
                             title: isConnectingDropbox
                                 ? L10n.string(.syncConnecting, language: language)
                                 : L10n.string(.syncConnect, language: language),
@@ -551,52 +561,34 @@ private struct SettingsContentView: View {
             settingsSection(
                 title: L10n.string(.aboutSection, language: language)
             ) {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text(L10n.string(.versionLabel, language: language))
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .font(.system(size: 12.5, weight: .medium, design: .rounded))
                             .foregroundStyle(theme.secondaryText)
                         Spacer()
                         Text(AppInfo.versionDisplay)
-                            .font(.system(size: 13, weight: .semibold, design: .rounded).monospacedDigit())
+                            .font(.system(size: 12.5, weight: .semibold, design: .rounded).monospacedDigit())
                             .foregroundStyle(theme.primaryText)
                             .textSelection(.enabled)
                     }
 
                     Toggle(isOn: $settings.checkForUpdatesOnLaunch) {
                         Text(L10n.string(.checkUpdatesOnLaunch, language: language))
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundStyle(theme.primaryText)
                     }
                     .toggleStyle(.switch)
                     .tint(theme.selectionAccent)
 
-                    Button {
+                    actionRowButton(
+                        title: isCheckingUpdates
+                            ? L10n.string(.checkingForUpdates, language: language)
+                            : L10n.string(.checkForUpdates, language: language),
+                        systemImage: "arrow.triangle.2.circlepath"
+                    ) {
                         Task { await checkForUpdates() }
-                    } label: {
-                        HStack {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                            Text(
-                                isCheckingUpdates
-                                    ? L10n.string(.checkingForUpdates, language: language)
-                                    : L10n.string(.checkForUpdates, language: language)
-                            )
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
-                            Spacer()
-                        }
-                        .foregroundStyle(theme.primaryText)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(theme.controlBackground)
-                        )
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(theme.controlBorder, lineWidth: 1)
-                        }
                     }
-                    .buttonStyle(.plain)
                     .disabled(isCheckingUpdates)
 
                     if let updateStatusText {
@@ -640,28 +632,14 @@ private struct SettingsContentView: View {
                 }
             }
 
-            Button {
+            actionRowButton(
+                title: L10n.string(.quit, language: language),
+                systemImage: "power",
+                isDestructive: true
+            ) {
                 NSApplication.shared.terminate(nil)
-            } label: {
-                HStack {
-                    Image(systemName: "power")
-                    Text(L10n.string(.quit, language: language))
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                    Spacer()
-                }
-                .foregroundStyle(theme.primaryText)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(theme.controlBackground)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(theme.controlBorder, lineWidth: 1)
-                }
             }
-            .buttonStyle(.plain)
+            .padding(.top, 12)
         }
         .confirmationDialog(
             L10n.string(.syncDisconnectConfirmTitle, language: language),
@@ -716,29 +694,39 @@ private struct SettingsContentView: View {
         }
     }
 
-    private func dataActionButton(
+    private func actionRowButton(
         title: String,
         systemImage: String,
+        isDestructive: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack {
+            HStack(spacing: 8) {
                 Image(systemName: systemImage)
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 16)
                 Text(title)
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
                 Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(theme.palette.textTertiary.color)
             }
-            .foregroundStyle(theme.primaryText)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .foregroundStyle(
+                isDestructive ? theme.palette.pnlUp.color
+                    : theme.palette.textPrimary.color
+            )
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6.5)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(theme.controlBackground)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(theme.palette.controlBackground.color.opacity(0.45))
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(theme.controlBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(theme.palette.divider.color.opacity(0.8), lineWidth: 0.8)
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -855,30 +843,20 @@ private struct SettingsContentView: View {
         title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(theme.secondaryText)
-                .textCase(.uppercase)
-                .tracking(0.6)
+                .font(.custom("Songti SC", size: 11.5).weight(.bold))
+                .foregroundStyle(theme.palette.textSecondary.color)
+                .tracking(0.4)
 
             content()
         }
-        .padding(14)
+        .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: theme.settingsCardColors,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(theme.cardBorder, lineWidth: 1)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(theme.palette.divider.color.opacity(0.75))
+                .frame(height: 1)
         }
     }
 
@@ -889,35 +867,39 @@ private struct SettingsContentView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack {
+            HStack(spacing: 6) {
                 Text(title)
-                    .font(.system(size: 14, weight: isSelected ? .semibold : .medium, design: .rounded))
-                    .foregroundStyle(isSelected ? theme.primaryText : theme.secondaryText)
+                    .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular, design: .rounded))
+                    .foregroundStyle(
+                        isSelected ? Color(red: 1, green: 0.95, blue: 0.88)
+                            : theme.palette.textPrimary.color
+                    )
 
                 if expands {
-                    Spacer(minLength: 8)
+                    Spacer(minLength: 4)
                 }
 
                 if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(theme.selectionAccent)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color(red: 1, green: 0.95, blue: 0.88))
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
             .frame(maxWidth: expands ? .infinity : nil, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isSelected ? theme.selectionBackground : theme.controlBackground)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(isSelected ? theme.palette.accent.color : theme.palette.controlBackground.color.opacity(0.45))
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .strokeBorder(
-                        isSelected ? theme.selectionAccent.opacity(0.45) : theme.controlBorder,
-                        lineWidth: 1
+                        isSelected ? theme.palette.accent.color : theme.palette.divider.color.opacity(0.8),
+                        lineWidth: 0.8
                     )
             }
+            .shadow(color: isSelected ? theme.palette.glow.color.opacity(0.6) : .clear, radius: 3)
         }
         .buttonStyle(.plain)
     }
