@@ -47,8 +47,8 @@ struct JournalRootView: View {
     @State private var journalNameDraft = ""
     /// rename/delete 的目标日记本(右键菜单行),nil 回退到当前活跃本。
     @State private var journalActionTargetID: UUID?
-    /// 红绿灯按钮行的垂直中心距内容顶缘的实测距离;0 = 未测量。
-    @State private var trafficLightCenterY: CGFloat = 0
+
+    static let topBarHeight: CGFloat = 48
 
     init() {
         #if DEBUG
@@ -434,8 +434,8 @@ struct JournalRootView: View {
 
     /// 全宽顶栏,扮演标题栏角色:三态循环钮(⌃⌘S)、日记名(静态)、
     /// 选中日小注、搜索、新建、右钮(检查器 ⌥⌘0 / 彩蛋模式召唤物理黄历)。
-    /// 红绿灯浮在左上角,内容左缘让位;内容行垂直中心用实测的红绿灯中心
-    /// 对齐(`TrafficLightProbe`),否则红绿灯会孤零零漂在按钮行上方。
+    /// 红绿灯浮在左上角,内容左缘让位;整体高度由 `Self.topBarHeight` 统一
+    /// 控制,按钮/文本/搜索框在栏内垂直居中,红绿灯由 `JournalWindow` 对齐。
     private func topBar(palette: WickPalette) -> some View {
         HStack(spacing: 10) {
             InkIconButton(
@@ -484,13 +484,9 @@ struct JournalRootView: View {
                 }
             }
         }
-        // 内容左缘避让红绿灯;垂直方向:上下留白相等,且整行中心比红绿灯
-        // 中心低 ~3.5pt——原生统一工具栏里内容也坐在灯线偏下,与灯心完全
-        // 同线反而读起来偏上。按钮行高 28pt,半高 14;未测量时回退 7/7。
         .padding(.leading, 78)
         .padding(.trailing, 14)
-        .padding(.top, trafficLightCenterY > 0 ? max(3, trafficLightCenterY - 11) : 7)
-        .padding(.bottom, trafficLightCenterY > 0 ? max(3, trafficLightCenterY - 11) : 7)
+        .frame(height: Self.topBarHeight)
         .background(
             LinearGradient(
                 colors: [palette.cardTop.color, palette.cardBottom.color],
@@ -500,10 +496,6 @@ struct JournalRootView: View {
         )
         .overlay(alignment: .bottom) {
             Rectangle().fill(palette.divider.color).frame(height: 1)
-        }
-        .background(alignment: .topLeading) {
-            TrafficLightProbe(centerY: $trafficLightCenterY)
-                .frame(width: 0, height: 0)
         }
         .windowDragBackground()
     }
@@ -624,69 +616,3 @@ private struct JournalColumnDivider: View {
     }
 }
 
-// MARK: - 红绿灯位置探针
-
-/// 实测窗口红绿灯(close)按钮行的垂直中心距内容顶缘的距离,写回 binding。
-/// AppKit 对 hidden-title 窗口的红绿灯纵向位置没有公开常量(且随系统版本
-/// 微调),顶栏内容行靠这个实测值与红绿灯保持在同一水平线上。
-private struct TrafficLightProbe: NSViewRepresentable {
-    @Binding var centerY: CGFloat
-
-    func makeNSView(context: Context) -> ProbeView {
-        ProbeView(onChange: { centerY = $0 })
-    }
-
-    func updateNSView(_ nsView: ProbeView, context: Context) {
-        nsView.onChange = { centerY = $0 }
-    }
-
-    final class ProbeView: NSView {
-        var onChange: (CGFloat) -> Void
-        private var lastReported: CGFloat = 0
-
-        init(onChange: @escaping (CGFloat) -> Void) {
-            self.onChange = onChange
-            super.init(frame: .zero)
-        }
-
-        @available(*, unavailable)
-        required init?(coder: NSCoder) { fatalError() }
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            // The titlebar buttons get their real frames only after the window
-            // is on-screen; report once now and once after the runloop settles.
-            report()
-            DispatchQueue.main.async { [weak self] in self?.report() }
-        }
-
-        override func layout() {
-            super.layout()
-            report()
-        }
-
-        override func resize(withOldSuperviewSize oldSize: NSSize) {
-            super.resize(withOldSuperviewSize: oldSize)
-            report()
-        }
-
-        private func report() {
-            guard let window,
-                  let close = window.standardWindowButton(.closeButton),
-                  close.window == window,
-                  window.frame.size.height > 0
-            else { return }
-            // Measure in window base coordinates. Conversion to contentView is
-            // unreliable here (the hosting view has a stale frame early on);
-            // the titlebar buttons always sit in the window's own coordinate
-            // space, so "window height - button midY" is the true top offset.
-            let inWindow = close.convert(close.bounds, to: nil)
-            guard inWindow != .zero else { return }
-            let fromTop = window.frame.size.height - inWindow.midY
-            // Sanity gate: standard chrome puts the row center at ~16pt.
-            guard (6...60).contains(fromTop), fromTop != lastReported else { return }
-            lastReported = fromTop
-            onChange(fromTop)
-        }
-    }
-}
