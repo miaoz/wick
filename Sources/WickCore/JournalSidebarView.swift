@@ -13,7 +13,7 @@ struct JournalNavigationSidebar: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: JournalStore
     @Environment(\.wickPalette) private var palette
-    @State private var draggedJournal: JournalInfo?
+    @StateObject private var journalDragSession = JournalDragSession()
 
     let onNewJournal: () -> Void
     let onRenameJournal: (JournalInfo) -> Void
@@ -33,55 +33,7 @@ struct JournalNavigationSidebar: View {
                 addHelp: L10n.string(.journalLibraryNew, language: settings.language)
             ) {
                 ForEach(store.journals) { journal in
-                    Button {
-                        store.switchToJournal(id: journal.id)
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text(journal.name)
-                                .font(.system(size: 13, weight: journal.id == store.activeJournalID ? .semibold : .regular, design: .rounded))
-                                .lineLimit(1)
-                            Spacer(minLength: 4)
-                            if journal.id == store.activeJournalID {
-                                Text(L10n.string(.sidebarTodayMark, language: settings.language))
-                                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                                    .foregroundStyle(Color(red: 1, green: 0.95, blue: 0.88).opacity(0.85))
-                            }
-                        }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .foregroundStyle(journal.id == store.activeJournalID ? Color(red: 1, green: 0.95, blue: 0.88) : palette.textPrimary.color)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(journal.id == store.activeJournalID ? palette.accent.color : .clear)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 4)
-                    .opacity(draggedJournal?.id == journal.id ? 0.35 : 1.0)
-                    .onDrag {
-                        draggedJournal = journal
-                        return NSItemProvider(object: journal.id.uuidString as NSString)
-                    }
-                    .onDrop(
-                        of: [UTType.text, UTType.plainText],
-                        delegate: JournalDropDelegate(
-                            item: journal,
-                            store: store,
-                            draggedItem: $draggedJournal
-                        )
-                    )
-                    .contextMenu {
-                        Button { onRenameJournal(journal) } label: {
-                            Text(L10n.string(.journalLibraryRename, language: settings.language))
-                        }
-                        if store.journals.count > 1 {
-                            Button(role: .destructive) { onDeleteJournal(journal) } label: {
-                                Text(L10n.string(.journalLibraryDelete, language: settings.language))
-                            }
-                        }
-                    }
+                    journalRow(journal)
                 }
             }
 
@@ -98,6 +50,80 @@ struct JournalNavigationSidebar: View {
         .padding(.top, 14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(palette.sidebarBackground.color)
+        .onDisappear { journalDragSession.reset() }
+    }
+
+    @ViewBuilder
+    private func journalRow(_ journal: JournalInfo) -> some View {
+        let row = journalRowLabel(journal)
+
+        Group {
+            if #available(macOS 14.0, *) {
+                Button {
+                    store.switchToJournal(id: journal.id)
+                } label: {
+                    row
+                }
+                .buttonStyle(.plain)
+            } else {
+                // On Ventura a Button consumes the mouse sequence before
+                // SwiftUI's onDrag can establish its AppKit dragging session.
+                row
+                    .onTapGesture {
+                        store.switchToJournal(id: journal.id)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction {
+                        store.switchToJournal(id: journal.id)
+                    }
+            }
+        }
+        .padding(.horizontal, 4)
+        .onDrag {
+            journalDragSession.begin(journalID: journal.id)
+        }
+        .onDrop(
+            of: [UTType.text, UTType.plainText],
+            delegate: JournalDropDelegate(
+                item: journal,
+                store: store,
+                session: journalDragSession
+            )
+        )
+        .contextMenu {
+            Button { onRenameJournal(journal) } label: {
+                Text(L10n.string(.journalLibraryRename, language: settings.language))
+            }
+            if store.journals.count > 1 {
+                Button(role: .destructive) { onDeleteJournal(journal) } label: {
+                    Text(L10n.string(.journalLibraryDelete, language: settings.language))
+                }
+            }
+        }
+    }
+
+    private func journalRowLabel(_ journal: JournalInfo) -> some View {
+        HStack(spacing: 8) {
+            Text(journal.name)
+                .font(.system(size: 13, weight: journal.id == store.activeJournalID ? .semibold : .regular, design: .rounded))
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            if journal.id == store.activeJournalID {
+                Text(L10n.string(.sidebarTodayMark, language: settings.language))
+                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color(red: 1, green: 0.95, blue: 0.88).opacity(0.85))
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .foregroundStyle(journal.id == store.activeJournalID ? Color(red: 1, green: 0.95, blue: 0.88) : palette.textPrimary.color)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(journal.id == store.activeJournalID ? palette.accent.color : .clear)
+        )
     }
 
     private func sideSection<Content: View>(
@@ -661,22 +687,35 @@ struct JournalItemTimelineRow: View {
 
 // MARK: - 日记本拖拽排序代理
 
+@MainActor
+private final class JournalDragSession: ObservableObject {
+    var draggedJournalID: UUID?
+    var destinationJournalID: UUID?
+
+    func begin(journalID: UUID) -> NSItemProvider {
+        draggedJournalID = journalID
+        destinationJournalID = nil
+        return NSItemProvider(object: journalID.uuidString as NSString)
+    }
+
+    func reset() {
+        draggedJournalID = nil
+        destinationJournalID = nil
+    }
+}
+
 private struct JournalDropDelegate: DropDelegate {
     let item: JournalInfo
     let store: JournalStore
-    @Binding var draggedItem: JournalInfo?
+    let session: JournalDragSession
 
     func dropEntered(info: DropInfo) {
-        guard let dragged = draggedItem,
-              dragged.id != item.id,
-              let from = store.journals.firstIndex(where: { $0.id == dragged.id }),
-              let to = store.journals.firstIndex(where: { $0.id == item.id }),
-              from != to
-        else { return }
-
-        withAnimation(.easeInOut(duration: 0.18)) {
-            store.moveJournal(from: IndexSet(integer: from), to: to > from ? to + 1 : to)
+        guard let draggedID = session.draggedJournalID else { return }
+        if draggedID == item.id {
+            session.destinationJournalID = nil
+            return
         }
+        session.destinationJournalID = item.id
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
@@ -684,12 +723,28 @@ private struct JournalDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        draggedItem = nil
+        defer { session.reset() }
+        guard let draggedID = session.draggedJournalID else { return false }
+
+        guard let destinationID = session.destinationJournalID,
+              let from = store.journals.firstIndex(where: { $0.id == draggedID }),
+              let to = store.journals.firstIndex(where: { $0.id == destinationID }),
+              from != to
+        else { return true }
+
+        let move = {
+            store.moveJournal(from: IndexSet(integer: from), to: to > from ? to + 1 : to)
+        }
+        if #available(macOS 14.0, *) {
+            withAnimation(.easeInOut(duration: 0.18), move)
+        } else {
+            move()
+        }
         return true
     }
 
     func validateDrop(info: DropInfo) -> Bool {
-        draggedItem != nil
+        session.draggedJournalID != nil
+            && info.hasItemsConforming(to: [UTType.text, UTType.plainText])
     }
 }
-
