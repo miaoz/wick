@@ -401,9 +401,8 @@ struct JournalEditorPane: View {
             get: { datePickerEntryID == entryID },
             set: { if !$0 { datePickerEntryID = nil } }
         ), arrowEdge: .top) {
-            DatePicker(
-                "",
-                selection: Binding(
+            JournalDatePickerView(
+                selectedDate: Binding(
                     get: { drafts[entryID]?.date ?? draft.date },
                     set: { newValue in
                         mutateDraft(entryID) { entry in
@@ -412,12 +411,10 @@ struct JournalEditorPane: View {
                         scheduleSave(for: entryID)
                     }
                 ),
-                displayedComponents: .date
+                onSelectDate: { _ in
+                    datePickerEntryID = nil
+                }
             )
-            .labelsHidden()
-            .datePickerStyle(.graphical)
-            .environment(\.locale, settings.language.locale)
-            .padding(10)
         }
     }
 
