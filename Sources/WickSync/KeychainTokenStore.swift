@@ -1,12 +1,14 @@
 import Foundation
 import Security
 
-/// Minimal Keychain-backed store for the OAuth refresh token.
+/// Minimal Keychain-backed store for secrets (Dropbox refresh token, exchange
+/// API keys).
 ///
-/// Note: with ad-hoc signed builds the Keychain may treat a recompiled binary
-/// as a different trust identity and the item can become unreadable — the user
-/// simply signs in again. No access group is used so this works without
-/// entitlements on macOS and iOS alike.
+/// Packaged `.app` builds (stable `Wick Local` identity) use the real
+/// Keychain. Unpackaged `swift run` / `.build` binaries are a new ad-hoc
+/// identity on every rebuild, which would prompt for the login password on
+/// every Keychain read — so those builds persist to a 0600 JSON file under
+/// Application Support instead. Same API either way.
 public struct KeychainTokenStore: Sendable {
     private let service: String
     private let account: String
@@ -16,7 +18,17 @@ public struct KeychainTokenStore: Sendable {
         self.account = account
     }
 
+    /// `true` inside a packaged `.app`. False for `swift run` / XCTest.
+    public static var isPackagedApp: Bool {
+        let url = Bundle.main.bundleURL
+        if url.pathExtension == "app" { return true }
+        return url.path.contains(".app/")
+    }
+
     public func load() -> String? {
+        if !Self.isPackagedApp {
+            return DevSecretFile.load(service: service, account: account)
+        }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -35,6 +47,10 @@ public struct KeychainTokenStore: Sendable {
     }
 
     public func save(_ token: String) {
+        if !Self.isPackagedApp {
+            DevSecretFile.save(service: service, account: account, token: token)
+            return
+        }
         let data = Data(token.utf8)
         let match: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -55,11 +71,72 @@ public struct KeychainTokenStore: Sendable {
     }
 
     public func clear() {
+        if !Self.isPackagedApp {
+            DevSecretFile.clear(service: service, account: account)
+            return
+        }
         let match: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
         SecItemDelete(match as CFDictionary)
+    }
+}
+
+/// 0600 JSON map `service\naccount → token` for unpackaged builds.
+enum DevSecretFile {
+    private static let lock = NSLock()
+
+    static let fileURL: URL = {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        return support.appendingPathComponent("Wick/dev-secrets.json")
+    }()
+
+    private static func key(_ service: String, _ account: String) -> String {
+        service + "\n" + account
+    }
+
+    static func load(service: String, account: String) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return readUnlocked()[key(service, account)]
+    }
+
+    static func save(service: String, account: String, token: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        var map = readUnlocked()
+        map[key(service, account)] = token
+        writeUnlocked(map)
+    }
+
+    static func clear(service: String, account: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        var map = readUnlocked()
+        map.removeValue(forKey: key(service, account))
+        writeUnlocked(map)
+    }
+
+    private static func readUnlocked() -> [String: String] {
+        guard let data = try? Data(contentsOf: fileURL),
+              let map = try? JSONDecoder().decode([String: String].self, from: data)
+        else {
+            return [:]
+        }
+        return map
+    }
+
+    private static func writeUnlocked(_ map: [String: String]) {
+        let dir = fileURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        guard let data = try? JSONEncoder().encode(map) else { return }
+        try? data.write(to: fileURL, options: .atomic)
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: fileURL.path
+        )
     }
 }

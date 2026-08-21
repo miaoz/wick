@@ -263,6 +263,12 @@ final class SymbolTagMatcherTests: XCTestCase {
         XCTAssertFalse(SymbolTagMatcher.matches(tag: "BTCUSDT", symbol: "BTCUSDC"))
     }
 
+    func testBareBaseMatchesHyperliquidCoinAndPair() {
+        XCTAssertTrue(SymbolTagMatcher.matches(tag: "BTC", symbol: "BTC"))
+        XCTAssertTrue(SymbolTagMatcher.matches(tag: "BTCUSDT", symbol: "BTC"))
+        XCTAssertFalse(SymbolTagMatcher.matches(tag: "ETH", symbol: "ETHBTC"))
+    }
+
     func testNonMatches() {
         XCTAssertFalse(SymbolTagMatcher.matches(tag: "ETH", symbol: "BTCUSDT"))
         XCTAssertFalse(SymbolTagMatcher.matches(tag: "USDT", symbol: "BTCUSDT"))

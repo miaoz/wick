@@ -139,8 +139,8 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// Binance position sync master switch (driven by
-    /// `ExchangePositionCoordinator`; the key/secret live in the Keychain).
+    /// Legacy Binance master switch. New bindings live on `JournalInfo`;
+    /// this flag is only read during one-shot migration.
     @Published var binancePositionsEnabled: Bool {
         didSet {
             UserDefaults.standard.set(binancePositionsEnabled, forKey: Keys.binancePositionsEnabled)

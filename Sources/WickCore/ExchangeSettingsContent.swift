@@ -1,23 +1,30 @@
 import SwiftUI
 
-/// Settings content for the Binance position integration. Two states, mirroring
-/// the Dropbox sync section: a credential form while not connected, and a
-/// status/refresh/disconnect block once enabled. Auth failures drop back to
-/// the form (with the error shown) so a mistyped key can be fixed in place.
+/// Settings for the per-journal exchange binding. Venue picker + credential
+/// form while unbound; status / refresh / disconnect once bound to the
+/// **currently active** journal.
 struct ExchangeSettingsContent: View {
-    // Observed directly (not via environment) so `isEnabled` flips - which
-    // read AppSettings - always re-render this view.
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var coordinator = ExchangePositionCoordinator.shared
+    @ObservedObject private var journalStore = JournalStore.shared
     let theme: PanelTheme
     let language: AppLanguage
 
+    @State private var venue: ExchangeVenue = .binance
     @State private var apiKeyDraft = ""
     @State private var secretDraft = ""
+    @State private var passphraseDraft = ""
+    @State private var addressDraft = ""
     @State private var showDisconnectConfirm = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if let name = journalStore.activeJournal?.name {
+                Text(String(format: L10n.string(.exchangeBindJournalFormat, language: language), name))
+                    .font(.caption)
+                    .foregroundStyle(theme.secondaryText)
+            }
+
             if coordinator.isEnabled {
                 connectedContent
             } else {
@@ -38,7 +45,7 @@ struct ExchangeSettingsContent: View {
         }
     }
 
-    // MARK: - Setup (no working credentials yet)
+    // MARK: - Setup
 
     private var setupContent: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -47,15 +54,48 @@ struct ExchangeSettingsContent: View {
                 .foregroundStyle(theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
-            credentialField(
-                title: L10n.string(.exchangeApiKey, language: language),
-                text: $apiKeyDraft
-            )
-            credentialField(
-                title: L10n.string(.exchangeSecretKey, language: language),
-                text: $secretDraft,
-                secure: true
-            )
+            venuePicker
+
+            switch venue {
+            case .hyperliquid:
+                credentialField(
+                    title: L10n.string(.exchangeWalletAddress, language: language),
+                    text: $addressDraft
+                )
+                Text(L10n.string(.exchangeHyperliquidHint, language: language))
+                    .font(.caption2)
+                    .foregroundStyle(theme.tertiaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            case .okx:
+                credentialField(
+                    title: L10n.string(.exchangeApiKey, language: language),
+                    text: $apiKeyDraft
+                )
+                credentialField(
+                    title: L10n.string(.exchangeSecretKey, language: language),
+                    text: $secretDraft,
+                    secure: true
+                )
+                credentialField(
+                    title: L10n.string(.exchangePassphrase, language: language),
+                    text: $passphraseDraft,
+                    secure: true
+                )
+                Text(L10n.string(.exchangeOKXHint, language: language))
+                    .font(.caption2)
+                    .foregroundStyle(theme.tertiaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            case .binance:
+                credentialField(
+                    title: L10n.string(.exchangeApiKey, language: language),
+                    text: $apiKeyDraft
+                )
+                credentialField(
+                    title: L10n.string(.exchangeSecretKey, language: language),
+                    text: $secretDraft,
+                    secure: true
+                )
+            }
 
             saveButton
 
@@ -68,11 +108,68 @@ struct ExchangeSettingsContent: View {
         }
     }
 
+    private var venuePicker: some View {
+        HStack(spacing: 8) {
+            ForEach(ExchangeVenue.allCases) { option in
+                let selected = venue == option
+                Button {
+                    venue = option
+                } label: {
+                    Text(venueTitle(option))
+                        .font(.system(size: 12, weight: selected ? .semibold : .medium, design: .rounded))
+                        .foregroundStyle(selected ? theme.primaryText : theme.secondaryText)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(selected ? theme.selectionBackground : theme.controlBackground)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(
+                                    selected ? theme.selectionAccent.opacity(0.45) : theme.controlBorder,
+                                    lineWidth: 1
+                                )
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func venueTitle(_ venue: ExchangeVenue) -> String {
+        switch venue {
+        case .binance: return L10n.string(.exchangeVenueBinance, language: language)
+        case .okx: return L10n.string(.exchangeVenueOKX, language: language)
+        case .hyperliquid: return L10n.string(.exchangeVenueHyperliquid, language: language)
+        }
+    }
+
+    private var canSave: Bool {
+        switch venue {
+        case .hyperliquid:
+            return HyperliquidInfoClient.normalizedAddress(addressDraft) != nil
+        case .okx:
+            return !apiKeyDraft.isEmpty && !secretDraft.isEmpty && !passphraseDraft.isEmpty
+        case .binance:
+            return !apiKeyDraft.isEmpty && !secretDraft.isEmpty
+        }
+    }
+
     private var saveButton: some View {
         Button {
-            coordinator.saveAndSync(apiKey: apiKeyDraft, secret: secretDraft)
-            // Keep the drafts: on auth failure they stay editable; a later
-            // successful sync swaps the whole block to the connected state.
+            switch venue {
+            case .binance:
+                coordinator.saveAndSyncBinance(apiKey: apiKeyDraft, secret: secretDraft)
+            case .okx:
+                coordinator.saveAndSyncOKX(
+                    apiKey: apiKeyDraft,
+                    secret: secretDraft,
+                    passphrase: passphraseDraft
+                )
+            case .hyperliquid:
+                coordinator.saveAndSyncHyperliquid(address: addressDraft)
+            }
         } label: {
             HStack {
                 if coordinator.isSyncing {
@@ -100,8 +197,8 @@ struct ExchangeSettingsContent: View {
             }
         }
         .buttonStyle(.plain)
-        .disabled(coordinator.isSyncing || apiKeyDraft.isEmpty || secretDraft.isEmpty)
-        .opacity(apiKeyDraft.isEmpty || secretDraft.isEmpty ? 0.55 : 1)
+        .disabled(coordinator.isSyncing || !canSave)
+        .opacity(canSave ? 1 : 0.55)
     }
 
     private func credentialField(
@@ -113,7 +210,7 @@ struct ExchangeSettingsContent: View {
             Text(title)
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.secondaryText)
-                .frame(width: 74, alignment: .leading)
+                .frame(width: 88, alignment: .leading)
             Group {
                 if secure {
                     SecureField("", text: text)
@@ -131,9 +228,24 @@ struct ExchangeSettingsContent: View {
 
     private var connectedContent: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.string(.exchangeWindowHint, language: language))
+            if let binding = coordinator.activeBinding {
+                HStack {
+                    Text(venueTitle(binding.venue))
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(theme.primaryText)
+                    Spacer()
+                    Text(binding.accountLabel)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(theme.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+
+            Text(windowHint)
                 .font(.caption)
                 .foregroundStyle(theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
 
             statusFooter
 
@@ -151,6 +263,17 @@ struct ExchangeSettingsContent: View {
             ) {
                 showDisconnectConfirm = true
             }
+        }
+    }
+
+    private var windowHint: String {
+        switch coordinator.activeBinding?.venue {
+        case .okx:
+            return L10n.string(.exchangeOKXHint, language: language)
+        case .hyperliquid:
+            return L10n.string(.exchangeHyperliquidHint, language: language)
+        default:
+            return L10n.string(.exchangeWindowHint, language: language)
         }
     }
 

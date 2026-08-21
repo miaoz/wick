@@ -197,8 +197,15 @@ public enum L10n {
         // Exchange positions
         case exchangeSection
         case exchangeExplanation
+        case exchangeBindJournalFormat
+        case exchangeVenue
+        case exchangeVenueBinance
+        case exchangeVenueOKX
+        case exchangeVenueHyperliquid
         case exchangeApiKey
         case exchangeSecretKey
+        case exchangePassphrase
+        case exchangeWalletAddress
         case exchangeSaveAndSync
         case exchangeSyncNow
         case exchangeDisconnect
@@ -206,6 +213,8 @@ public enum L10n {
         case exchangeDisconnectConfirmBody
         case exchangeReadonlyHint
         case exchangeWindowHint
+        case exchangeOKXHint
+        case exchangeHyperliquidHint
         case exchangeSyncing
         case exchangeLastSync
         case exchangeNeverSynced
@@ -213,6 +222,7 @@ public enum L10n {
         case exchangeErrorRateLimited
         case exchangeErrorNetwork
         case exchangeErrorOther
+        case exchangeErrorEmptyWindow
         case exchangePositionsTitle
         case exchangePositionVwap
         case exchangePositionSize
@@ -427,23 +437,33 @@ public enum L10n {
             case .journalLibrarySaveName: return "保存"
 
             case .exchangeSection: return "交易所"
-            case .exchangeExplanation: return "填入 Binance API Key，自动同步自最早一篇日记起的合约仓位，并按「开仓日期 + 标签」显示在对应日记条目中（如标签 BTC 匹配 BTCUSDT、BTCUSDC）；没有日记的开仓日会自动创建日记条目。"
+            case .exchangeExplanation: return "每个日记本可绑定一个交易所账号。仓位按「开仓日期 + 标签」挂到本日记条目上（标签 BTC 匹配 BTCUSDT 或 Hyperliquid 的 BTC）；没有日记的开仓日会自动创建条目。"
+            case .exchangeBindJournalFormat: return "绑定到日记本「%@」"
+            case .exchangeVenue: return "交易所"
+            case .exchangeVenueBinance: return "Binance"
+            case .exchangeVenueOKX: return "OKX"
+            case .exchangeVenueHyperliquid: return "Hyperliquid"
             case .exchangeApiKey: return "API Key"
-            case .exchangeSecretKey: return "Secret Key"
+            case .exchangeSecretKey: return "Secret"
+            case .exchangePassphrase: return "Passphrase"
+            case .exchangeWalletAddress: return "钱包地址"
             case .exchangeSaveAndSync: return "保存并同步"
             case .exchangeSyncNow: return "立即刷新"
-            case .exchangeDisconnect: return "断开 Binance"
-            case .exchangeDisconnectConfirmTitle: return "断开 Binance？"
-            case .exchangeDisconnectConfirmBody: return "将删除本机保存的 API Key 并清空已同步的仓位。日记内容不受影响。"
-            case .exchangeReadonlyHint: return "密钥仅保存在本机钥匙串，不会上传；建议使用「只读取」权限的 API Key。"
-            case .exchangeWindowHint: return "同步范围从最早的一篇日记开始（没有日记时为近 180 天），仅同步 USDⓈ-M 合约；开仓日没有日记时会自动创建条目，删除后不会自动重建。"
+            case .exchangeDisconnect: return "断开交易所"
+            case .exchangeDisconnectConfirmTitle: return "断开交易所？"
+            case .exchangeDisconnectConfirmBody: return "将删除本日记本保存的凭据并清空已同步的仓位。日记内容不受影响。"
+            case .exchangeReadonlyHint: return "中心化交易所请用只读 API Key。打包后的应用把密钥存在本机钥匙串；用 swift run 开发时写在 Application Support 的本地文件里，避免每次重编译都弹钥匙串密码。"
+            case .exchangeWindowHint: return "同步范围从本日记最早一天起（没有日记时近 180 天）。Binance 为 USDⓈ-M 合约；开仓日没有日记时会自动创建条目，删除后不会自动重建。"
+            case .exchangeOKXHint: return "OKX 永续（SWAP），只读 API Key。同步从本日记第一天起，更早的成交不拉；所侧大约最多只能提供近 3 个月。"
+            case .exchangeHyperliquidHint: return "只需填写 0x 地址，无需私钥（成交查询公开）。同步从本日记第一天起，更早的成交不拉；所侧大约最多保留最近 1 万笔。"
             case .exchangeSyncing: return "正在同步…"
             case .exchangeLastSync: return "上次同步"
             case .exchangeNeverSynced: return "尚未同步"
-            case .exchangeErrorInvalidKey: return "API Key 无效或权限不足"
+            case .exchangeErrorInvalidKey: return "API Key 无效、权限不足，或地址格式不对"
             case .exchangeErrorRateLimited: return "请求过于频繁，请稍后再试"
             case .exchangeErrorNetwork: return "网络错误，稍后自动重试"
             case .exchangeErrorOther: return "同步失败"
+            case .exchangeErrorEmptyWindow: return "该账号在同步窗口内没有成交"
             case .exchangePositionsTitle: return "交易所仓位"
             case .exchangePositionVwap: return "开仓 → 平仓 VWAP"
             case .exchangePositionSize: return "数量 · 峰值"
@@ -658,23 +678,33 @@ public enum L10n {
             case .journalLibrarySaveName: return "Save"
 
             case .exchangeSection: return "Exchange"
-            case .exchangeExplanation: return "Enter a Binance API key to sync futures positions from your earliest journal day onward and show them on journal items by open date + tag (tag BTC matches BTCUSDT, BTCUSDC, …); position days without a journal entry get one created automatically."
+            case .exchangeExplanation: return "Each journal binds to one exchange account. Positions attach to items by open date + tag (tag BTC matches BTCUSDT or Hyperliquid’s BTC); missing position days get an entry created automatically."
+            case .exchangeBindJournalFormat: return "Bound to journal “%@”"
+            case .exchangeVenue: return "Venue"
+            case .exchangeVenueBinance: return "Binance"
+            case .exchangeVenueOKX: return "OKX"
+            case .exchangeVenueHyperliquid: return "Hyperliquid"
             case .exchangeApiKey: return "API Key"
-            case .exchangeSecretKey: return "Secret Key"
+            case .exchangeSecretKey: return "Secret"
+            case .exchangePassphrase: return "Passphrase"
+            case .exchangeWalletAddress: return "Wallet address"
             case .exchangeSaveAndSync: return "Save & Sync"
             case .exchangeSyncNow: return "Refresh Now"
-            case .exchangeDisconnect: return "Disconnect Binance"
-            case .exchangeDisconnectConfirmTitle: return "Disconnect Binance?"
-            case .exchangeDisconnectConfirmBody: return "The stored API key and synced positions will be removed. Journal content is not affected."
-            case .exchangeReadonlyHint: return "Secrets stay in this Mac’s Keychain; a read-only API key is recommended."
-            case .exchangeWindowHint: return "Syncing covers from your earliest journal day (last 180 days when the journal is empty), USDⓈ-M futures only; missing position days get an entry created automatically, and deletions are respected."
+            case .exchangeDisconnect: return "Disconnect"
+            case .exchangeDisconnectConfirmTitle: return "Disconnect exchange?"
+            case .exchangeDisconnectConfirmBody: return "Credentials stored for this journal and synced positions will be removed. Journal content is not affected."
+            case .exchangeReadonlyHint: return "Use a read-only API key on centralized venues. The packaged app stores secrets in Keychain; `swift run` writes a local Application Support file so rebuilds don’t prompt for the login password."
+            case .exchangeWindowHint: return "Sync covers from this journal’s earliest day (last 180 days when empty). Binance is USDⓈ-M futures; missing position days get an entry, and deletions are respected."
+            case .exchangeOKXHint: return "OKX perpetuals (SWAP), read-only key. Sync starts at this journal’s first day — older fills are not fetched. The venue itself only keeps about three months."
+            case .exchangeHyperliquidHint: return "Address only — no private key (fills are public). Sync starts at this journal’s first day — older fills are not fetched. The venue keeps about the latest 10,000 fills."
             case .exchangeSyncing: return "Syncing…"
             case .exchangeLastSync: return "Last synced"
             case .exchangeNeverSynced: return "Not synced yet"
-            case .exchangeErrorInvalidKey: return "Invalid API key or missing permission"
+            case .exchangeErrorInvalidKey: return "Invalid API key, missing permission, or bad address"
             case .exchangeErrorRateLimited: return "Rate limited - try again later"
             case .exchangeErrorNetwork: return "Network error - will retry later"
             case .exchangeErrorOther: return "Sync failed"
+            case .exchangeErrorEmptyWindow: return "No fills in the sync window for this account"
             case .exchangePositionsTitle: return "Exchange positions"
             case .exchangePositionVwap: return "Open → Close VWAP"
             case .exchangePositionSize: return "Size · Peak"

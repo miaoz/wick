@@ -1,14 +1,20 @@
 import Combine
 import Foundation
 
-/// Sync failure translated for display; views map it to localized text.
+/// Sync failure translated for display; views map these to localized UI text.
 enum ExchangeSyncError: Error, Equatable {
     case invalidKey
     case rateLimited
     case network
     case other
+    /// Window contained no fills (typical for a mistyped Hyperliquid address).
+    case emptyWindow
 
     init(_ error: BinanceError) {
+        self.init(error.asExchangeClientError)
+    }
+
+    init(_ error: ExchangeClientError) {
         switch error {
         case .invalidCredentials:
             self = .invalidKey
@@ -28,42 +34,36 @@ enum ExchangeSyncError: Error, Equatable {
         case .rateLimited: key = .exchangeErrorRateLimited
         case .network: key = .exchangeErrorNetwork
         case .other: key = .exchangeErrorOther
+        case .emptyWindow: key = .exchangeErrorEmptyWindow
         }
         return L10n.string(key, language: language)
     }
 }
 
-/// Owns the Binance credentials (Keychain), the incremental position cache
-/// (`Application Support/Wick/TradingPositions.json`), and the periodic
-/// refresh.
+/// Per-journal exchange credentials stored as **one** Keychain (or dev-file)
+/// item so a packaged build prompts once per journal, not once per field.
+struct ExchangeSecretBlob: Codable, Equatable {
+    var venue: ExchangeVenue
+    var apiKey: String
+    var secret: String
+    var passphrase: String?
+}
+
+/// Owns per-journal exchange bindings, secrets, and the incremental fill cache.
 ///
-/// The sync window starts at the earliest journal day (fallback: the client's
-/// 180-day default when the journal is empty); positions opened earlier are
-/// never fetched. Refreshes are incremental - raw fills are cached and only
-/// the tail since the last successful fetch is re-requested (past fills are
-/// immutable), plus a one-time backward extension when the journal's earliest
-/// day moves earlier. Position days without a journal entry get one created
-/// automatically (one item per symbol, so tag matching renders the positions
-/// inside it); a position is considered for creation exactly once, so deleting
-/// an auto-created entry is respected. Journal views query
-/// `positions(entryDayKey:tag:)` which keeps matching at display time - no
-/// journal content is ever rewritten by the exchange integration.
+/// One journal ≤ one venue. Switching journals loads that journal's snapshot.
+/// Unpackaged `swift run` builds persist secrets to a 0600 file (no Keychain
+/// password prompts on every rebuild); packaged `.app` builds use Keychain.
 @MainActor
 final class ExchangePositionCoordinator: ObservableObject {
     static let shared = ExchangePositionCoordinator()
 
-    /// Auto-refresh cadence while enabled; also the staleness threshold for
-    /// refresh-on-journal-open.
     static let refreshInterval: TimeInterval = 30 * 60
-
-    /// Re-fetch overlap ahead of the last coverage point; dedupe makes it exact.
     private static let fetchOverlap: TimeInterval = 5 * 60
-
-    /// Journal-auto-creation decisions survive `disconnect()` (which wipes the
-    /// data cache): without this, reconnecting would resurrect entries the
-    /// user deleted. Capped to bound growth.
-    private static let handledIDsKey = "wick.binance.handledPositionIDs"
     private static let handledIDsCap = 5000
+    private static let exchangeService = "com.miaoz.wick.exchange"
+    private static let legacyBinanceService = "com.miaoz.wick.binance"
+    private static let legacyHandledIDsKey = "wick.binance.handledPositionIDs"
 
     @Published private(set) var snapshot: TradingPositionSnapshot? {
         didSet { rebuildDerivedStats() }
@@ -71,54 +71,47 @@ final class ExchangePositionCoordinator: ObservableObject {
     @Published private(set) var isSyncing = false
     @Published private(set) var lastError: ExchangeSyncError?
     @Published private(set) var hasCredentials = false
-    /// Realized PnL per local day; rebuilt when `snapshot` changes (P5).
+
     private(set) var pnlByDay: [Date: Double] = [:]
-    /// Closed position count keyed by open-day `yyyy-MM-dd`.
     private(set) var closedCountByDayKey: [String: Int] = [:]
 
-    private let apiKeyStore: KeychainTokenStore
-    private let secretStore: KeychainTokenStore
     private var refreshTimer: Timer?
+    private var cancellables = Set<AnyCancellable>()
+    private var observedJournalID: UUID?
 
     #if DEBUG
-    /// UI-check/screenshot mode: skip Keychain reads so a headless launch
-    /// never blocks on an access prompt. Credentials look absent, so all
-    /// network sync paths stay inert as well.
     static var skipKeychainAccess = false
     #endif
 
-    init(
-        keychainService: String = "com.miaoz.wick.binance"
-    ) {
-        apiKeyStore = KeychainTokenStore(service: keychainService, account: "apiKey")
-        secretStore = KeychainTokenStore(service: keychainService, account: "apiSecret")
-        #if DEBUG
-        if Self.skipKeychainAccess {
-            hasCredentials = false
-        } else {
-            hasCredentials = apiKeyStore.load() != nil && secretStore.load() != nil
-        }
-        #else
-        hasCredentials = apiKeyStore.load() != nil && secretStore.load() != nil
-        #endif
+    init() {}
+
+    var activeBinding: JournalExchangeBinding? {
+        JournalStore.shared.activeJournal?.exchangeBinding
     }
 
     var isEnabled: Bool {
-        AppSettings.shared.binancePositionsEnabled && hasCredentials
+        #if DEBUG
+        if Self.skipKeychainAccess { return false }
+        #endif
+        guard let binding = activeBinding else { return false }
+        if binding.venue == .hyperliquid {
+            return HyperliquidInfoClient.normalizedAddress(binding.accountLabel) != nil
+        }
+        return loadSecrets(for: JournalStore.shared.activeJournalID) != nil
     }
 
     // MARK: - Lifecycle
 
-    /// Loads the disk cache and kicks off the first refresh when enabled.
     func start() {
-        loadCache()
+        migrateLegacyBinanceIfNeeded()
+        observeJournalChanges()
+        loadCacheForActiveJournal()
+        updateHasCredentials()
         guard isEnabled else { return }
         scheduleTimer()
         refreshIfStale()
     }
 
-    /// Positions for journal display: opened on `entryDayKey` and loosely
-    /// matching the item's tag (BTC -> BTCUSDT / BTCUSDC, ...).
     func positions(entryDayKey: String, tag: String) -> [TradingPosition] {
         guard let all = snapshot?.positions else { return [] }
         return SymbolTagMatcher
@@ -127,7 +120,6 @@ final class ExchangePositionCoordinator: ObservableObject {
             .sorted { $0.openTime < $1.openTime }
     }
 
-    /// Refresh (if enabled) when the cached data is older than the interval.
     func refreshIfStale() {
         guard isEnabled, !isSyncing else { return }
         if let fetchedAt = snapshot?.fetchedAt,
@@ -138,42 +130,57 @@ final class ExchangePositionCoordinator: ObservableObject {
         syncNow()
     }
 
-    // MARK: - Credentials
+    // MARK: - Bind / disconnect
 
-    /// Stores credentials, enables the integration, and starts a sync.
-    /// Auth failures surface via `lastError` and disable auto-sync until the
-    /// user saves a working key; other failures keep the schedule running.
-    func saveAndSync(apiKey: String, secret: String) {
-        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedSecret = secret.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedKey.isEmpty, !trimmedSecret.isEmpty else { return }
+    func saveAndSyncBinance(apiKey: String, secret: String) {
+        saveCentralized(
+            venue: .binance,
+            apiKey: apiKey,
+            secret: secret,
+            passphrase: nil,
+            label: "Binance"
+        )
+    }
 
-        apiKeyStore.save(trimmedKey)
-        secretStore.save(trimmedSecret)
-        hasCredentials = true
-        AppSettings.shared.binancePositionsEnabled = true
+    func saveAndSyncOKX(apiKey: String, secret: String, passphrase: String) {
+        saveCentralized(
+            venue: .okx,
+            apiKey: apiKey,
+            secret: secret,
+            passphrase: passphrase,
+            label: "OKX"
+        )
+    }
+
+    func saveAndSyncHyperliquid(address: String) {
+        guard let journalID = JournalStore.shared.activeJournalID else { return }
+        guard let normalized = HyperliquidInfoClient.normalizedAddress(address) else {
+            lastError = .invalidKey
+            return
+        }
+        JournalStore.shared.setExchangeBinding(
+            JournalExchangeBinding(venue: .hyperliquid, accountLabel: normalized),
+            for: journalID
+        )
         lastError = nil
+        updateHasCredentials()
         scheduleTimer()
         syncNow()
     }
 
-    /// Removes credentials and all synced data (journal content untouched).
     func disconnect() {
-        AppSettings.shared.binancePositionsEnabled = false
-        apiKeyStore.clear()
-        secretStore.clear()
-        hasCredentials = false
+        guard let journalID = JournalStore.shared.activeJournalID else { return }
+        secretStore(for: journalID).clear()
+        JournalStore.shared.setExchangeBinding(nil, for: journalID)
+        try? FileManager.default.removeItem(at: Self.cacheURL(for: journalID))
         snapshot = nil
         lastError = nil
-        stopTimer()
-        try? FileManager.default.removeItem(at: Self.cacheURL)
+        updateHasCredentials()
+        if !isEnabled { stopTimer() }
     }
 
     // MARK: - Sync
 
-    /// Lower bound of the sync window: the earliest journal day. Positions
-    /// opened before it are not synced at all; with an empty journal the
-    /// client's fallback window applies.
     static func desiredWindowStart(entries: [JournalEntry], now: Date = Date()) -> Date {
         if let earliest = entries.map(\.date).min() {
             return Calendar.current.startOfDay(for: earliest)
@@ -185,28 +192,33 @@ final class ExchangePositionCoordinator: ObservableObject {
 
     func syncNow() {
         guard isEnabled, !isSyncing else { return }
-        guard let apiKey = apiKeyStore.load(), let secret = secretStore.load() else {
+        guard let journalID = JournalStore.shared.activeJournalID,
+              let binding = activeBinding,
+              let client = makeClient(binding: binding, journalID: journalID)
+        else {
             hasCredentials = false
             return
         }
 
         isSyncing = true
         lastError = nil
-
-        let client = BinanceFuturesClient(apiKey: apiKey, secret: secret)
         let cached = snapshot
         let desiredStart = Self.desiredWindowStart(entries: JournalStore.shared.entries)
         Task { [weak self] in
-            await self?.runSync(client: client, cached: cached, desiredStart: desiredStart)
+            await self?.runSync(
+                client: client,
+                cached: cached,
+                desiredStart: desiredStart,
+                journalID: journalID
+            )
         }
     }
 
-    /// The fetch itself runs off the main actor (client is Sendable and
-    /// non-isolated); reads of journal state happened on main before it.
     private func runSync(
-        client: BinanceFuturesClient,
+        client: any ExchangeTradeClient,
         cached: TradingPositionSnapshot?,
-        desiredStart: Date
+        desiredStart: Date,
+        journalID: UUID
     ) async {
         do {
             let now = Date()
@@ -215,17 +227,25 @@ final class ExchangePositionCoordinator: ObservableObject {
             var ranges: [(Date, Date)] = []
 
             if fills.isEmpty {
-                // First sync (or legacy cache without fills): full window.
                 windowStart = desiredStart
                 ranges = [(desiredStart, now)]
+            } else if desiredStart > windowStart {
+                // First journal day is later than a previous empty-book
+                // 180-day fallback. Drop older fills; never fetch further back.
+                fills = TradingFill.clipped(fills, from: desiredStart, to: now)
+                windowStart = desiredStart
+                let resumeAt = max(
+                    windowStart,
+                    min(cached!.fetchedAt, now).addingTimeInterval(-Self.fetchOverlap)
+                )
+                if resumeAt < now {
+                    ranges.append((resumeAt, now))
+                }
             } else {
-                // Journal grew an earlier day since last sync: extend back.
-                // Past fills are immutable, so this is a one-time top-up.
                 if desiredStart < windowStart {
                     ranges.append((desiredStart, windowStart))
                     windowStart = desiredStart
                 }
-                // Incremental: everything from the last coverage point on.
                 let resumeAt = max(
                     windowStart,
                     min(cached!.fetchedAt, now).addingTimeInterval(-Self.fetchOverlap)
@@ -247,13 +267,32 @@ final class ExchangePositionCoordinator: ObservableObject {
                 }
                 fills.sort { ($0.time, $0.id) < ($1.time, $1.id) }
             }
+            fills = TradingFill.clipped(fills, from: windowStart, to: now)
 
             let positions = PositionAggregator.aggregate(fills: fills)
-            finishSync(fills: fills, positions: positions, windowStart: windowStart, error: nil)
+            let emptyWindow = fills.isEmpty
+            finishSync(
+                fills: fills,
+                positions: positions,
+                windowStart: windowStart,
+                journalID: journalID,
+                error: emptyWindow ? .emptyWindow : nil
+            )
+        } catch let error as ExchangeClientError {
+            finishSync(
+                fills: nil, positions: nil, windowStart: nil, journalID: journalID,
+                error: ExchangeSyncError(error)
+            )
         } catch let error as BinanceError {
-            finishSync(fills: nil, positions: nil, windowStart: nil, error: ExchangeSyncError(error))
+            finishSync(
+                fills: nil, positions: nil, windowStart: nil, journalID: journalID,
+                error: ExchangeSyncError(error)
+            )
         } catch {
-            finishSync(fills: nil, positions: nil, windowStart: nil, error: .other)
+            finishSync(
+                fills: nil, positions: nil, windowStart: nil, journalID: journalID,
+                error: .other
+            )
         }
     }
 
@@ -261,29 +300,22 @@ final class ExchangePositionCoordinator: ObservableObject {
         fills: [TradingFill]?,
         positions: [TradingPosition]?,
         windowStart: Date?,
+        journalID: UUID,
         error: ExchangeSyncError?
     ) {
         isSyncing = false
         lastError = error
-        guard error == nil, let fills, let positions, let windowStart else {
+        guard journalID == JournalStore.shared.activeJournalID else { return }
+        // emptyWindow still has a successful snapshot (just no fills).
+        let accepted = (error == nil || error == .emptyWindow)
+        guard accepted, let fills, let positions, let windowStart else {
             if error == .invalidKey {
-                // Bad key: keep it in the Keychain for editing, stop retrying.
-                AppSettings.shared.binancePositionsEnabled = false
                 stopTimer()
             }
             return
         }
 
-        // Position days without a journal entry get one (one item per symbol,
-        // so tag matching renders the positions inside it). Positions already
-        // decided in an earlier sync never trigger creation again - a deleted
-        // auto-entry stays deleted.
-        var handledOrdered = Self.loadHandledIDs()
-        if let cachedHandled = snapshot?.handledPositionIDs {
-            for id in cachedHandled where !handledOrdered.contains(id) {
-                handledOrdered.append(id)
-            }
-        }
+        var handledOrdered = Array(snapshot?.handledPositionIDs ?? [])
         autoCreateEntriesIfNeeded(positions: positions, handled: Set(handledOrdered))
 
         for position in positions where !handledOrdered.contains(position.id) {
@@ -292,7 +324,6 @@ final class ExchangePositionCoordinator: ObservableObject {
         if handledOrdered.count > Self.handledIDsCap {
             handledOrdered = Array(handledOrdered.suffix(Self.handledIDsCap))
         }
-        Self.saveHandledIDs(handledOrdered)
 
         snapshot = TradingPositionSnapshot(
             fetchedAt: Date(),
@@ -301,7 +332,7 @@ final class ExchangePositionCoordinator: ObservableObject {
             fills: fills,
             handledPositionIDs: Set(handledOrdered)
         )
-        saveCache()
+        saveCache(for: journalID)
     }
 
     private func rebuildDerivedStats() {
@@ -316,14 +347,6 @@ final class ExchangePositionCoordinator: ObservableObject {
         closedCountByDayKey = counts
     }
 
-    private static func loadHandledIDs() -> [String] {
-        UserDefaults.standard.stringArray(forKey: handledIDsKey) ?? []
-    }
-
-    private static func saveHandledIDs(_ ids: [String]) {
-        UserDefaults.standard.set(ids, forKey: handledIDsKey)
-    }
-
     private func autoCreateEntriesIfNeeded(positions: [TradingPosition], handled: Set<String>) {
         let plan = PositionEntryPlanner.plan(
             positions: positions,
@@ -334,10 +357,6 @@ final class ExchangePositionCoordinator: ObservableObject {
         )
         guard !plan.isEmpty else { return }
 
-        // New items adopt the user's own spelling when one exists (they write
-        // BTC, the symbol is BTCUSDT -> tag the new item BTC); otherwise the
-        // derived base asset (BTCUSDT -> BTC, 1000PEPEUSDT -> PEPE). Existing
-        // tags are never rewritten.
         var tagCounts: [String: Int] = [:]
         for entry in JournalStore.shared.entries {
             for item in entry.items {
@@ -363,6 +382,190 @@ final class ExchangePositionCoordinator: ObservableObject {
         }
     }
 
+    // MARK: - Journal switching
+
+    private func observeJournalChanges() {
+        observedJournalID = JournalStore.shared.activeJournalID
+        NotificationCenter.default.publisher(for: .wickActiveJournalDidChange)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.activeJournalDidChange()
+            }
+            .store(in: &cancellables)
+
+        JournalStore.shared.$journals
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] journals in
+                self?.pruneDeletedJournals(journals)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func activeJournalDidChange() {
+        let newID = JournalStore.shared.activeJournalID
+        guard newID != observedJournalID else {
+            updateHasCredentials()
+            return
+        }
+        observedJournalID = newID
+        loadCacheForActiveJournal()
+        updateHasCredentials()
+        if isEnabled {
+            scheduleTimer()
+            refreshIfStale()
+        } else {
+            stopTimer()
+        }
+    }
+
+    private func pruneDeletedJournals(_ journals: [JournalInfo]) {
+        let live = Set(journals.map(\.id))
+        let dir = Self.tradingDirectory()
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: nil
+        ) else { return }
+        for file in files where file.pathExtension == "json" {
+            let name = file.deletingPathExtension().lastPathComponent
+            guard let id = UUID(uuidString: name), !live.contains(id) else { continue }
+            secretStore(for: id).clear()
+            try? FileManager.default.removeItem(at: file)
+        }
+    }
+
+    // MARK: - Client / secrets
+
+    private func saveCentralized(
+        venue: ExchangeVenue,
+        apiKey: String,
+        secret: String,
+        passphrase: String?,
+        label: String
+    ) {
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSecret = secret.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPass = passphrase?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedKey.isEmpty, !trimmedSecret.isEmpty else { return }
+        if venue == .okx, trimmedPass.isEmpty { return }
+        guard let journalID = JournalStore.shared.activeJournalID else { return }
+
+        let blob = ExchangeSecretBlob(
+            venue: venue,
+            apiKey: trimmedKey,
+            secret: trimmedSecret,
+            passphrase: venue == .okx ? trimmedPass : nil
+        )
+        saveSecrets(blob, for: journalID)
+        JournalStore.shared.setExchangeBinding(
+            JournalExchangeBinding(venue: venue, accountLabel: label),
+            for: journalID
+        )
+        lastError = nil
+        updateHasCredentials()
+        scheduleTimer()
+        syncNow()
+    }
+
+    private func makeClient(
+        binding: JournalExchangeBinding,
+        journalID: UUID
+    ) -> (any ExchangeTradeClient)? {
+        switch binding.venue {
+        case .hyperliquid:
+            guard let address = HyperliquidInfoClient.normalizedAddress(binding.accountLabel) else {
+                return nil
+            }
+            return HyperliquidInfoClient(user: address)
+        case .binance:
+            guard let secrets = loadSecrets(for: journalID) else { return nil }
+            return BinanceFuturesClient(apiKey: secrets.apiKey, secret: secrets.secret)
+        case .okx:
+            guard let secrets = loadSecrets(for: journalID),
+                  let passphrase = secrets.passphrase, !passphrase.isEmpty
+            else { return nil }
+            return OKXSwapClient(
+                apiKey: secrets.apiKey,
+                secret: secrets.secret,
+                passphrase: passphrase
+            )
+        }
+    }
+
+    private func secretStore(for journalID: UUID) -> KeychainTokenStore {
+        KeychainTokenStore(service: Self.exchangeService, account: journalID.uuidString)
+    }
+
+    private func loadSecrets(for journalID: UUID?) -> ExchangeSecretBlob? {
+        #if DEBUG
+        if Self.skipKeychainAccess { return nil }
+        #endif
+        guard let journalID,
+              let raw = secretStore(for: journalID).load(),
+              let data = raw.data(using: .utf8),
+              let blob = try? JSONDecoder().decode(ExchangeSecretBlob.self, from: data)
+        else {
+            return nil
+        }
+        return blob
+    }
+
+    private func saveSecrets(_ blob: ExchangeSecretBlob, for journalID: UUID) {
+        guard let data = try? JSONEncoder().encode(blob),
+              let raw = String(data: data, encoding: .utf8)
+        else { return }
+        secretStore(for: journalID).save(raw)
+    }
+
+    private func updateHasCredentials() {
+        hasCredentials = isEnabled
+    }
+
+    // MARK: - Legacy migration (global Binance → active journal)
+
+    private func migrateLegacyBinanceIfNeeded() {
+        guard let journalID = JournalStore.shared.activeJournalID else { return }
+        if JournalStore.shared.activeJournal?.exchangeBinding != nil { return }
+        if loadSecrets(for: journalID) != nil { return }
+
+        let legacyKey = KeychainTokenStore(service: Self.legacyBinanceService, account: "apiKey")
+        let legacySecret = KeychainTokenStore(service: Self.legacyBinanceService, account: "apiSecret")
+        guard let apiKey = legacyKey.load(), let secret = legacySecret.load() else { return }
+
+        saveSecrets(
+            ExchangeSecretBlob(venue: .binance, apiKey: apiKey, secret: secret, passphrase: nil),
+            for: journalID
+        )
+        JournalStore.shared.setExchangeBinding(
+            JournalExchangeBinding(venue: .binance, accountLabel: "Binance"),
+            for: journalID
+        )
+        legacyKey.clear()
+        legacySecret.clear()
+
+        let legacyCache = Self.legacyCacheURL
+        let newCache = Self.cacheURL(for: journalID)
+        if FileManager.default.fileExists(atPath: legacyCache.path),
+           !FileManager.default.fileExists(atPath: newCache.path)
+        {
+            try? FileManager.default.createDirectory(
+                at: newCache.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try? FileManager.default.moveItem(at: legacyCache, to: newCache)
+        }
+
+        if let handled = UserDefaults.standard.stringArray(forKey: Self.legacyHandledIDsKey),
+           var snapshot = loadSnapshot(at: newCache)
+        {
+            snapshot.handledPositionIDs.formUnion(handled)
+            if let data = try? JSONEncoder().encode(snapshot) {
+                try? data.write(to: newCache, options: .atomic)
+            }
+        }
+        UserDefaults.standard.removeObject(forKey: Self.legacyHandledIDsKey)
+        AppSettings.shared.binancePositionsEnabled = false
+    }
+
     // MARK: - Timer
 
     private func scheduleTimer() {
@@ -384,15 +587,40 @@ final class ExchangePositionCoordinator: ObservableObject {
 
     // MARK: - Cache
 
-    private static var cacheURL: URL {
+    private static func tradingDirectory() -> URL {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        return support.appendingPathComponent("Wick/Trading", isDirectory: true)
+    }
+
+    private static func cacheURL(for journalID: UUID) -> URL {
+        tradingDirectory().appendingPathComponent("\(journalID.uuidString).json")
+    }
+
+    private static var legacyCacheURL: URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         return support.appendingPathComponent("Wick/TradingPositions.json")
     }
 
-    private func saveCache() {
+    private func loadCacheForActiveJournal() {
+        guard let journalID = JournalStore.shared.activeJournalID else {
+            snapshot = nil
+            return
+        }
+        snapshot = loadSnapshot(at: Self.cacheURL(for: journalID))
+    }
+
+    private func loadSnapshot(at url: URL) -> TradingPositionSnapshot? {
+        guard let data = try? Data(contentsOf: url),
+              let decoded = try? JSONDecoder().decode(TradingPositionSnapshot.self, from: data)
+        else { return nil }
+        return decoded
+    }
+
+    private func saveCache(for journalID: UUID) {
         guard let snapshot else { return }
-        let url = Self.cacheURL
+        let url = Self.cacheURL(for: journalID)
         try? FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -400,12 +628,5 @@ final class ExchangePositionCoordinator: ObservableObject {
         if let data = try? JSONEncoder().encode(snapshot) {
             try? data.write(to: url, options: .atomic)
         }
-    }
-
-    private func loadCache() {
-        guard let data = try? Data(contentsOf: Self.cacheURL),
-              let decoded = try? JSONDecoder().decode(TradingPositionSnapshot.self, from: data)
-        else { return }
-        snapshot = decoded
     }
 }

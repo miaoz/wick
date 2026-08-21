@@ -201,23 +201,48 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
 
 // MARK: - Multi-journal catalog
 
+/// Which venue a journal is bound to. One journal ≤ one account.
+public enum ExchangeVenue: String, Codable, Sendable, CaseIterable, Identifiable {
+    case binance
+    case okx
+    case hyperliquid
+
+    public var id: String { rawValue }
+}
+
+/// Non-secret binding stored in the catalog. Secrets stay in the Keychain
+/// (or the unpackaged dev-secrets file).
+public struct JournalExchangeBinding: Codable, Equatable, Hashable, Sendable {
+    public var venue: ExchangeVenue
+    /// Hyperliquid: `0x` address. Centralized venues: display name ("OKX").
+    public var accountLabel: String
+
+    public init(venue: ExchangeVenue, accountLabel: String) {
+        self.venue = venue
+        self.accountLabel = accountLabel
+    }
+}
+
 /// Metadata for one journal library (a named container of day entries).
 public struct JournalInfo: Identifiable, Codable, Equatable, Hashable {
     public var id: UUID
     public var name: String
     public var createdAt: Date
     public var updatedAt: Date
+    public var exchangeBinding: JournalExchangeBinding?
 
     public init(
         id: UUID = UUID(),
         name: String,
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        exchangeBinding: JournalExchangeBinding? = nil
     ) {
         self.id = id
         self.name = name
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.exchangeBinding = exchangeBinding
     }
 }
 

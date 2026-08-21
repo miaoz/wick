@@ -16,19 +16,53 @@ public enum SymbolTagMatcher {
         "USD", "BNB", "BTC", "ETH"
     ]
 
+    /// Quote suffixes treated as "perp quote" when matching a bare base
+    /// (`BTC`) to a pair (`BTCUSDT`) or a Hyperliquid coin (`BTC`).
+    /// BTC/ETH as *quote* of a different base (ETHBTC) are not stripped here.
+    private static let stableQuotes = [
+        "FDUSD", "USDT", "USDC", "BUSD", "TUSD", "USDP", "DAI", "USD"
+    ]
+
     public static func matches(tag: String, symbol: String) -> Bool {
         guard let normalizedTag = normalize(tag),
               let normalizedSymbol = normalize(symbol)
         else { return false }
 
         if normalizedSymbol == normalizedTag { return true }
-        if normalizedSymbol.hasPrefix(normalizedTag) { return true }
+        if normalizedSymbol.hasPrefix(normalizedTag) {
+            let rest = String(normalizedSymbol.dropFirst(normalizedTag.count))
+            if rest.isEmpty || stableQuotes.contains(rest) { return true }
+        }
         for prefix in derivativePrefixes where normalizedSymbol.hasPrefix(prefix) {
             if normalizedSymbol.dropFirst(prefix.count).hasPrefix(normalizedTag) {
                 return true
             }
         }
+        // Bare base ↔ pair / HL coin: `BTC` matches `BTCUSDT` and `BTC`,
+        // and `BTCUSDT` matches HL `BTC`. Two fully-quoted pairs stay
+        // distinct (`BTCUSDT` does not match `BTCUSDC`).
+        let tagBase = perpBase(normalizedTag)
+        let symbolBase = perpBase(normalizedSymbol)
+        if !tagBase.isEmpty, tagBase == symbolBase {
+            let tagBare = tagBase == normalizedTag
+            let symbolBare = symbolBase == normalizedSymbol
+            if tagBare || symbolBare { return true }
+        }
         return false
+    }
+
+    /// Base asset after stripping derivative prefixes and stable quotes only.
+    static func perpBase(_ normalized: String) -> String {
+        var base = normalized
+        for prefix in derivativePrefixes where base.hasPrefix(prefix) {
+            base.removeFirst(prefix.count)
+            break
+        }
+        for quote in stableQuotes where base.hasSuffix(quote) {
+            base.removeLast(quote.count)
+            break
+        }
+        return base
     }
 
     /// Quote asset of a pair inferred from its suffix (display only; no

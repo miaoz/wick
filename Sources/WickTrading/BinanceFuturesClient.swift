@@ -212,6 +212,8 @@ public struct BinanceFuturesClient: Sendable {
     }
 }
 
+extension BinanceFuturesClient: ExchangeTradeClient {}
+
 private extension URL {
     /// `appendingPathComponent` percent-encodes query metacharacters, so the
     /// raw query is attached as a string instead.

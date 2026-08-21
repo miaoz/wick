@@ -226,6 +226,16 @@ final class JournalStore: ObservableObject {
         return info
     }
 
+    /// Binds (or clears) the exchange account for one journal. Secrets are
+    /// not stored here — only the venue + display label.
+    func setExchangeBinding(_ binding: JournalExchangeBinding?, for id: UUID) {
+        guard let index = journals.firstIndex(where: { $0.id == id }) else { return }
+        journals[index].exchangeBinding = binding
+        journals[index].updatedAt = Date()
+        persistCatalog()
+        objectWillChange.send()
+    }
+
     /// Renames a journal in the catalog.
     func renameJournal(id: UUID, to name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
