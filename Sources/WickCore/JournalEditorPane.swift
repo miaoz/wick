@@ -204,6 +204,7 @@ struct JournalEditorPane: View {
                 .frame(maxWidth: 880, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
+            .scrollIndicators(.hidden)
             .onChange(of: pendingScrollID) { target in
                 guard let target else { return }
                 // Double-pass: first layout pass may not have built LazyVStack rows yet.

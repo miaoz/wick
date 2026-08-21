@@ -109,6 +109,7 @@ make clean                 # rm -rf .build dist
 - **UserNotifications 只在正式 `.app` 包内可用**（`swift run`/裸二进制下调用会 abort）；`JournalReminderScheduler.notificationsAvailable` 的包形态门控必须维持。
 - **Dropbox 同步**：回调 scheme `db-hm5yscsy9a11g0q` 只在打包 `.app` 内注册；**App secret 永不入仓库/二进制**（PKCE 公共客户端只需 App key）；同步仅针对当前活跃日记本；只读/版本门命中时引擎一律只读拒写。**删除日记本 = 全端删除**（本地删除上传墓碑 + 清远端文件夹，所有设备同步删除；无「仅本机移除」选项）。
 - **`MenuBarExtra` 的 label 禁止放 `TimelineView` 等高频失效源**（会触发 `requestUpdate`→`setImage` 死循环占满 CPU；当前 label 用 30s `Timer` 且仅文本变化时更新）。
+- **macOS 13（Ventura）下 `MenuBarExtra` `.window` 内容首版布局会拿到错误几何**：全部 Text 错位并随每秒 tick 漂移，手动切设置再返回即恢复（子树重建）。`ProgressPanelView` 因此在 `onAppear` 后做一次性的 `.id` 翻转重建（`warmUpPanelLayoutIfNeeded`，仅 13.x，勿删）；**面板根部禁止挂隐式 `.animation(value:)`**（根部每秒随 TimelineView 重渲染，Ventura 会把这些事务卷进动画），动画一律在状态变更点显式 `withAnimation`。
 - 日记编辑必须用 `IMESafeTextViews`，原生 SwiftUI `TextField` 在中文 IME 下吞字。
 - macOS 13 下手动 `NSWindow` + 隐藏标题栏不会安装任何工具栏——日记窗全版本不装 toolbar（见下条），栏位折叠走 `JournalRootView` 顶栏的三态循环(⌃⌘S);勿用自研 binding 桥或 `sidebarTrackingSeparator`。
 - **macOS 26 会给工具栏里的一切 item(Menu/Button/NSViewRepresentable)强制套玻璃胶囊、且 `titleVisibility = .hidden` 不再隐藏窗口标题**——日记窗因此**全版本无 toolbar**(`JournalWindowController` 用 KVO 把 `window.toolbar` 钉住为 `nil`,SwiftUI 会在布局时重装上),全部窗口控件(三态循环钮/日记本菜单/搜索/新建/检查器)做成全宽内建顶栏(`JournalRootView.topBar`,左缘 78pt 避让红绿灯、垫 `windowDragBackground()` 供拖窗);勿把自定义控件搬回工具栏。
