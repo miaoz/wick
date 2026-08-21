@@ -9,6 +9,7 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
     static let shared = JournalWindowController()
 
     private var window: NSWindow?
+    private var hostingController: NSViewController?
     private var languageObserver: NSObjectProtocol?
     private var activeJournalObserver: NSObjectProtocol?
     private var toolbarPin: NSKeyValueObservation?
@@ -80,6 +81,9 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
             .environmentObject(JournalStore.shared)
 
         let hosting = NSHostingController(rootView: root)
+        // The window's size is owned by this controller (autosave + minSize
+        // floor), never by the SwiftUI content — see the container note below.
+        hosting.sizingOptions = []
         // Content must reach the window's top edge so the in-view top bar
         // (JournalRootView.topBar) shares one row with the traffic lights;
         // the default titlebar safe area would push it into a second row.
@@ -92,17 +96,46 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.contentViewController = hosting
+        // Wrap the hosting view in a plain container instead of assigning
+        // `contentViewController`: NSHostingView.windowDidLayout calls
+        // `updateAnimatedWindowSize` for the window's DIRECT content view,
+        // and the editor ScrollView's ideal height is the full unrolled
+        // timeline — the window then grows a step per layout pass until it
+        // fills the screen's visible height. (Verified: sizingOptions alone
+        // does not stop it; the indirection does.)
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 980, height: 640))
+        container.autoresizingMask = [.width, .height]
+        hosting.view.autoresizingMask = [.width, .height]
+        hosting.view.frame = container.bounds
+        container.addSubview(hosting.view)
+        window.contentView = container
+        hostingController = hosting
         window.title = L10n.string(.journalTitle, language: AppSettings.shared.language)
         window.setContentSize(NSSize(width: 980, height: 640))
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.setFrameAutosaveName("WickJournalWindow")
+
+        let autosaveName = "WickJournalWindow"
+        let hasSavedFrame = UserDefaults.standard.object(forKey: "NSWindow Frame \(autosaveName)") != nil
+        window.setFrameAutosaveName(autosaveName)
         // minSize/grow AFTER the autosave restore — the restored frame wins
         // over anything applied earlier, and its own width may sit below the
         // editor floor.
         updateMinSize(for: window)
-        window.center()
+        if hasSavedFrame {
+            // The restored frame keeps the user's size AND position; only
+            // rescue it when it stranded off every screen (disconnected
+            // display), where it would be unreachable.
+            if !isMostlyOnScreen(window.frame) {
+                window.center()
+            }
+        } else {
+            // First launch: no autosave frame yet — open at a landscape size
+            // scaled to the screen instead of the bare 980x640 above.
+            window.setContentSize(defaultContentSize(for: NSScreen.main))
+            updateMinSize(for: window)
+            window.center()
+        }
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         applyWindowTheme(to: window)
@@ -211,16 +244,18 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
     }
 
     /// Column-aware width floor shared by minSize and the resize enforcer.
+    /// Uses the CURRENT persisted column widths (not the range minimums):
+    /// columns dragged wider than their minimum must not eat the editor floor.
     private func requiredMinWidth() -> CGFloat {
         let settings = AppSettings.shared
         var width = JournalRootView.editorMinWidth
         switch settings.journalColumnMode {
         case 0:
-            width += JournalRootView.navWidthRange.lowerBound
-                + JournalRootView.listWidthRange.lowerBound
+            width += JournalRootView.currentNavWidth
+                + JournalRootView.currentListWidth
                 + 14 // two 7pt divider hit areas
         case 1:
-            width += JournalRootView.listWidthRange.lowerBound + 7
+            width += JournalRootView.currentListWidth + 7
         default:
             break
         }
@@ -228,6 +263,36 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
             width += 288 + 1
         }
         return width
+    }
+
+    /// Current width of the journal window's content area (0 while no window
+    /// exists). Column drags clamp against it so the editor page keeps its
+    /// floor instead of being squeezed mid-drag.
+    var contentWidth: CGFloat {
+        window?.contentView?.frame.width ?? 0
+    }
+
+    /// First-launch content size: a landscape four-column proportion scaled to
+    /// the screen's visible area. Width aims at the editor's COMFORT width
+    /// (single-row page header), clamped between the editor floor and what
+    /// the display actually fits.
+    private func defaultContentSize(for screen: NSScreen?) -> NSSize {
+        let visible = (screen ?? NSScreen.main)?.visibleFrame.size ?? NSSize(width: 1440, height: 900)
+        let height = min(max(visible.height * 0.78, 640), 940, visible.height - 60)
+        let comfortable = requiredMinWidth()
+            - JournalRootView.editorMinWidth
+            + JournalRootView.editorComfortWidth
+        let width = min(max(height * 1.6, comfortable), 1500, visible.width - 60)
+        return NSSize(width: width.rounded(), height: height.rounded())
+    }
+
+    /// True when a usable chunk of the frame lands on some screen's visible
+    /// area; autosave-restored frames can strand on a disconnected display.
+    private func isMostlyOnScreen(_ frame: NSRect) -> Bool {
+        NSScreen.screens.contains { screen in
+            let intersection = frame.intersection(screen.visibleFrame)
+            return intersection.width > 120 && intersection.height > 120
+        }
     }
 
     func windowWillClose(_ notification: Notification) {

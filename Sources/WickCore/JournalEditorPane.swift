@@ -342,99 +342,141 @@ struct JournalEditorPane: View {
     }
 
     /// 页眉:粗衬线大日期(点开可改日)+ 星期农历小注 + 当日已实现盈亏 + 删除。
+    /// 单行排不下时(ViewThatFits 按理想宽度判定)退成两行版——所有部件都是
+    /// fixedSize,绝不把盈亏数字压成竖排;页宽一致后各页也不会宽窄不一。
     private func dayHeader(
         entryID: UUID,
         draft: JournalEntry,
         isFocused: Bool
     ) -> some View {
-        HStack(alignment: .bottom, spacing: 14) {
-            Button {
-                datePickerEntryID = entryID
-            } label: {
-                Text(bigDayDate(draft.date))
-                    .font(.system(size: 28, weight: .black, design: .serif))
-                    .foregroundStyle(palette.textPrimary.color)
-                    .lineLimit(1)
-                    .fixedSize()
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text(L10n.string(.journalChangeDate, language: settings.language)))
-            .popover(isPresented: Binding(
-                get: { datePickerEntryID == entryID },
-                set: { if !$0 { datePickerEntryID = nil } }
-            ), arrowEdge: .top) {
-                DatePicker(
-                    "",
-                    selection: Binding(
-                        get: { drafts[entryID]?.date ?? draft.date },
-                        set: { newValue in
-                            mutateDraft(entryID) { entry in
-                                entry.date = Calendar.current.startOfDay(for: newValue)
-                            }
-                            scheduleSave(for: entryID)
-                        }
-                    ),
-                    displayedComponents: .date
-                )
-                .labelsHidden()
-                .datePickerStyle(.graphical)
-                .environment(\.locale, settings.language.locale)
-                .padding(10)
+        ViewThatFits {
+            // 舒适宽:单行全件。
+            HStack(alignment: .bottom, spacing: 14) {
+                dayHeaderDateButton(entryID: entryID, draft: draft)
+                dayHeaderStamp(draft: draft)
+                Spacer(minLength: 8)
+                dayHeaderPnL(draft: draft)
+                dayHeaderMeta(isFocused: isFocused)
+                dayHeaderTrash(entryID: entryID)
             }
 
-            // 刻印小注:星期 · 农历干支(宋体);竖排两行,不折行。
-            VStack(alignment: .leading, spacing: 2) {
-                Text(draft.date.formatted(.dateTime.weekday(.wide).locale(settings.locale)))
-                if let lunar = LunarLine.string(for: draft.date) {
-                    Text(lunar)
+            // 地板宽:大日期+小注+删除一行,盈亏与保存注挪到下行靠右。
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .bottom, spacing: 14) {
+                    dayHeaderDateButton(entryID: entryID, draft: draft)
+                    dayHeaderStamp(draft: draft)
+                    Spacer(minLength: 8)
+                    dayHeaderTrash(entryID: entryID)
+                }
+                HStack(alignment: .bottom, spacing: 10) {
+                    Spacer(minLength: 8)
+                    dayHeaderPnL(draft: draft)
+                    dayHeaderMeta(isFocused: isFocused)
                 }
             }
-            .font(.custom("Songti SC", size: 11))
-            .foregroundStyle(palette.textSecondary.color)
-            .lineLimit(1)
-            .fixedSize()
-            .padding(.bottom, 3)
-
-            Spacer(minLength: 8)
-
-            // 当日已实现盈亏:单据等宽数字,红盈黛亏;该日无成交则不占版。
-            if let pnl = dayPnLs[Calendar.current.startOfDay(for: draft.date)] {
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(L10n.string(.exchangePositionRealizedPnl, language: settings.language))
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
-                        .foregroundStyle(palette.textTertiary.color)
-                    Text(Self.format(pnl: pnl) + " USDT")
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                        .foregroundStyle(pnl >= 0 ? palette.pnlUp.color : palette.pnlDown.color)
-                }
-                .padding(.bottom, 2)
-            }
-
-            if store.isReadOnlyDueToLoadFailure {
-                Text(L10n.string(.journalReadOnly, language: settings.language))
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .padding(.bottom, 5)
-            } else if isFocused {
-                Text(L10n.string(.journalAutosaved, language: settings.language))
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(palette.textTertiary.color)
-                    .lineLimit(1)
-                    .fixedSize()
-                    .padding(.bottom, 5)
-            }
-
-            Button {
-                pendingDeleteDayID = entryID
-                showDeleteDayConfirm = true
-            } label: {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(JournalQuietIconButtonStyle(role: .destructive))
-            .padding(.bottom, 2)
-            .help(L10n.string(.journalDelete, language: settings.language))
-            .accessibilityLabel(Text(L10n.string(.journalDelete, language: settings.language)))
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// 大日期钮(点开改日),两种排版共用。
+    private func dayHeaderDateButton(entryID: UUID, draft: JournalEntry) -> some View {
+        Button {
+            datePickerEntryID = entryID
+        } label: {
+            Text(bigDayDate(draft.date))
+                .font(.system(size: 28, weight: .black, design: .serif))
+                .foregroundStyle(palette.textPrimary.color)
+                .lineLimit(1)
+                .fixedSize()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(L10n.string(.journalChangeDate, language: settings.language)))
+        .popover(isPresented: Binding(
+            get: { datePickerEntryID == entryID },
+            set: { if !$0 { datePickerEntryID = nil } }
+        ), arrowEdge: .top) {
+            DatePicker(
+                "",
+                selection: Binding(
+                    get: { drafts[entryID]?.date ?? draft.date },
+                    set: { newValue in
+                        mutateDraft(entryID) { entry in
+                            entry.date = Calendar.current.startOfDay(for: newValue)
+                        }
+                        scheduleSave(for: entryID)
+                    }
+                ),
+                displayedComponents: .date
+            )
+            .labelsHidden()
+            .datePickerStyle(.graphical)
+            .environment(\.locale, settings.language.locale)
+            .padding(10)
+        }
+    }
+
+    /// 刻印小注:星期 · 农历干支(宋体);竖排两行,不折行。
+    private func dayHeaderStamp(draft: JournalEntry) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(draft.date.formatted(.dateTime.weekday(.wide).locale(settings.locale)))
+            if let lunar = LunarLine.string(for: draft.date) {
+                Text(lunar)
+            }
+        }
+        .font(.custom("Songti SC", size: 11))
+        .foregroundStyle(palette.textSecondary.color)
+        .lineLimit(1)
+        .fixedSize()
+        .padding(.bottom, 3)
+    }
+
+    /// 当日已实现盈亏:单据等宽数字,红盈黛亏;该日无成交则不占版。
+    /// fixedSize 钉死——宁可换行排版也绝不逐字竖排。
+    @ViewBuilder
+    private func dayHeaderPnL(draft: JournalEntry) -> some View {
+        if let pnl = dayPnLs[Calendar.current.startOfDay(for: draft.date)] {
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(L10n.string(.exchangePositionRealizedPnl, language: settings.language))
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(palette.textTertiary.color)
+                Text(Self.format(pnl: pnl) + " USDT")
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundStyle(pnl >= 0 ? palette.pnlUp.color : palette.pnlDown.color)
+            }
+            .fixedSize()
+            .padding(.bottom, 2)
+        }
+    }
+
+    /// 保存状态小注(只读告警 / 已自动保存),无则空视图。
+    @ViewBuilder
+    private func dayHeaderMeta(isFocused: Bool) -> some View {
+        if store.isReadOnlyDueToLoadFailure {
+            Text(L10n.string(.journalReadOnly, language: settings.language))
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .padding(.bottom, 5)
+        } else if isFocused {
+            Text(L10n.string(.journalAutosaved, language: settings.language))
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(palette.textTertiary.color)
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.bottom, 5)
+        }
+    }
+
+    private func dayHeaderTrash(entryID: UUID) -> some View {
+        Button {
+            pendingDeleteDayID = entryID
+            showDeleteDayConfirm = true
+        } label: {
+            Image(systemName: "trash")
+        }
+        .buttonStyle(JournalQuietIconButtonStyle(role: .destructive))
+        .padding(.bottom, 2)
+        .help(L10n.string(.journalDelete, language: settings.language))
+        .accessibilityLabel(Text(L10n.string(.journalDelete, language: settings.language)))
     }
 
     /// 页内烛痕条:今天烧到此刻(带烛苗与进度小字),过去的天天然燃尽。

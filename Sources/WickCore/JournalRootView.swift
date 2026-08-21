@@ -94,7 +94,7 @@ struct JournalRootView: View {
         }
         .environment(\.wickPalette, palette)
         .tint(palette.accent.color)
-        .frame(minWidth: 720, minHeight: 480)
+        .frame(minWidth: Self.editorMinWidth, minHeight: 480)
         .preferredColorScheme(settings.preferredColorScheme)
         .background(palette.backgroundBottom.color)
         .confirmationDialog(
@@ -317,7 +317,11 @@ struct JournalRootView: View {
             }
 
             HStack(spacing: 0) {
+                // The 440pt floor sits on the editor PAGE itself — putting it
+                // on the editor+inspector group lets the fixed-width inspector
+                // eat the floor and deform the page header first.
                 JournalEditorPane()
+                    .frame(minWidth: Self.editorMinWidth, maxWidth: .infinity, maxHeight: .infinity)
                 // 栏四 · 检查器(今日事件 + 盈亏月历):仅彩蛋关闭时存在;
                 // ⌥⌘0 / 顶栏右钮开关。彩蛋开启时主窗退为纯三栏。
                 if !settings.physicalCalendarEnabled && settings.journalInspectorVisible {
@@ -330,7 +334,7 @@ struct JournalRootView: View {
                         .transition(.move(edge: .trailing))
                 }
             }
-            .frame(minWidth: Self.editorMinWidth, maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -340,6 +344,21 @@ struct JournalRootView: View {
     /// 编辑栏宽度地板:再窄页眉(大日期+小注+盈亏+删除)就溢出变形。
     /// JournalWindowController 用它算窗口 minSize。
     static let editorMinWidth: CGFloat = 440
+    /// 编辑栏舒适宽度:页眉单行全件(大日期+小注+盈亏+保存注+删除)正好排开。
+    /// 只用于首启默认尺寸,不作为地板——窄窗时页眉走 ViewThatFits 两行版。
+    static let editorComfortWidth: CGFloat = 640
+
+    /// Current persisted column widths (defaults until first drag). The window
+    /// controller reads these to floor minSize at the REAL column widths —
+    /// flooring at the range minimums let the actual (wider) columns squeeze
+    /// the editor page below its own floor.
+    static var currentNavWidth: CGFloat {
+        storedWidth(navWidthKey, fallback: 224, minimum: 160)
+    }
+
+    static var currentListWidth: CGFloat {
+        storedWidth(listWidthKey, fallback: 260, minimum: 200)
+    }
 
     private func setColumnMode(_ mode: Int) {
         settings.journalColumnMode = mode
@@ -355,7 +374,7 @@ struct JournalRootView: View {
             setColumnMode(1)
             return
         }
-        navWidth = min(Self.navWidthRange.upperBound, max(Self.navWidthRange.lowerBound, target))
+        navWidth = min(navWidthCeiling(), max(Self.navWidthRange.lowerBound, target))
     }
 
     private func endNavDrag() {
@@ -372,12 +391,42 @@ struct JournalRootView: View {
             setColumnMode(2)
             return
         }
-        listWidth = min(Self.listWidthRange.upperBound, max(Self.listWidthRange.lowerBound, target))
+        listWidth = min(listWidthCeiling(), max(Self.listWidthRange.lowerBound, target))
     }
 
     private func endListDrag() {
         listDragStart = nil
         UserDefaults.standard.set(Double(listWidth), forKey: Self.listWidthKey)
+    }
+
+    /// Width the inspector currently occupies (1pt rule + 288), factored into
+    /// drag ceilings and the window floor.
+    private var inspectorReserve: CGFloat {
+        !settings.physicalCalendarEnabled && settings.journalInspectorVisible ? 289 : 0
+    }
+
+    /// Live drag ceilings: the rest of the window must keep the editor page's
+    /// floor, so a column drag can never squeeze the page (the window minSize
+    /// only catches up with the persisted widths on drag end).
+    private func navWidthCeiling() -> CGFloat {
+        let contentWidth = JournalWindowController.shared.contentWidth
+        guard contentWidth > 0 else { return Self.navWidthRange.upperBound }
+        let reserved = listWidth + 14 + Self.editorMinWidth + inspectorReserve
+        return max(
+            Self.navWidthRange.lowerBound,
+            min(Self.navWidthRange.upperBound, contentWidth - reserved)
+        )
+    }
+
+    private func listWidthCeiling() -> CGFloat {
+        let contentWidth = JournalWindowController.shared.contentWidth
+        guard contentWidth > 0 else { return Self.listWidthRange.upperBound }
+        let leading = columnMode == 0 ? navWidth + 14 : 7
+        let reserved = leading + Self.editorMinWidth + inspectorReserve
+        return max(
+            Self.listWidthRange.lowerBound,
+            min(Self.listWidthRange.upperBound, contentWidth - reserved)
+        )
     }
 
     // MARK: - 顶栏(全宽,原生红绿灯位)
