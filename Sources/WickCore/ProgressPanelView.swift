@@ -107,20 +107,6 @@ struct ProgressPanelView: View {
 
             HStack(spacing: 8) {
                 InkIconButton(
-                    systemName: "calendar",
-                    help: L10n.string(.tradingCalendar, language: language)
-                ) {
-                    if settings.physicalCalendarEnabled {
-                        // 彩蛋:召唤贴桌物理黄历
-                        TradingCalendarWindowController.shared.openCalendar()
-                    } else {
-                        // 默认:主窗 + 检查器
-                        settings.journalInspectorVisible = true
-                        JournalWindowController.shared.openJournal(createTodayIfNeeded: false)
-                    }
-                }
-
-                InkIconButton(
                     systemName: "book.closed",
                     help: L10n.string(.journal, language: language)
                 ) {
