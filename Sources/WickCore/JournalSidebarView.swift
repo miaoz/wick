@@ -120,8 +120,8 @@ struct JournalNavigationSidebar: View {
 
     private var sidebarTagFlow: some View {
         let tags = store.allTags
-        return VStack(alignment: .leading, spacing: 6) {
-            TagChipWrap(tags: tags) { tag in
+        return SidebarChipFlow(spacing: 6) {
+            ForEach(tags, id: \.self) { tag in
                 sidebarTagChip(tag)
             }
         }
@@ -135,6 +135,7 @@ struct JournalNavigationSidebar: View {
         } label: {
             Text(tag)
                 .font(.custom("Songti SC", size: 11).weight(isSelected ? .bold : .medium))
+                .lineLimit(1)
                 .foregroundStyle(isSelected ? Color(red: 0.98, green: 0.92, blue: 0.85) : palette.pnlUp.color)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
@@ -149,20 +150,51 @@ struct JournalNavigationSidebar: View {
     }
 }
 
-/// Simple left-to-right chip wrap for the sidebar tag section (the old
-/// width-measuring flow lived in the timeline sidebar; the new sidebar is a
-/// fixed 200–260pt column, so a plain wrap is enough).
-private struct TagChipWrap<Content: View>: View {
-    let tags: [String]
-    @ViewBuilder let chip: (String) -> Content
+/// 签条贪心换行布局(macOS 13+ Layout):逐条量宽、放不下就换行,
+/// 超长签条按栏宽截断(…)。LazyVGrid adaptive 的等宽列会让长签条
+/// 溢出列框、拖栏时与邻签重叠,故不用。
+private struct SidebarChipFlow: Layout {
+    var spacing: CGFloat = 6
 
-    var body: some View {
-        // LazyVGrid with adaptive chips keeps this simple; each chip sizes to fit.
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: 6, alignment: .leading)], alignment: .leading, spacing: 6) {
-            ForEach(tags, id: \.self) { tag in
-                chip(tag)
-                    .fixedSize()
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0
+        var height: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var usedWidth: CGFloat = 0
+        for subview in subviews {
+            var size = subview.sizeThatFits(.unspecified)
+            size.width = min(size.width, maxWidth)
+            if x > 0, x + size.width > maxWidth {
+                x = 0
+                height += rowHeight + spacing
+                rowHeight = 0
             }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+            usedWidth = max(usedWidth, x - spacing)
+        }
+        return CGSize(width: min(usedWidth, maxWidth), height: height + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            var size = subview.sizeThatFits(.unspecified)
+            size.width = min(size.width, bounds.width)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(
+                at: CGPoint(x: x, y: y),
+                proposal: ProposedViewSize(width: size.width, height: size.height)
+            )
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
         }
     }
 }

@@ -95,11 +95,14 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         window.contentViewController = hosting
         window.title = L10n.string(.journalTitle, language: AppSettings.shared.language)
         window.setContentSize(NSSize(width: 980, height: 640))
-        window.minSize = NSSize(width: 720, height: 480)
-        window.center()
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.setFrameAutosaveName("WickJournalWindow")
+        // minSize/grow AFTER the autosave restore — the restored frame wins
+        // over anything applied earlier, and its own width may sit below the
+        // editor floor.
+        updateMinSize(for: window)
+        window.center()
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         applyWindowTheme(to: window)
@@ -124,6 +127,8 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
                 guard let self, let window = self.window else { return }
                 self.updateTitle(for: window)
                 self.applyWindowTheme(to: window)
+                // 栏位/检查器开关也走 UserDefaults——窗口最小宽跟着变。
+                self.updateMinSize(for: window)
             }
         }
 
@@ -153,6 +158,21 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// The minimum window width follows the visible columns: nav/list minimums
+    /// (JournalRootView.navWidthRange/listWidthRange) + the 440pt editor floor
+    /// + the 288pt inspector, plus divider widths. When a toggle raises the
+    /// floor past the current width (e.g. opening the inspector on a narrow
+    /// window), grow the window so the editor page never deforms.
+    private func updateMinSize(for window: NSWindow) {
+        let width = requiredMinWidth()
+        window.minSize = NSSize(width: width, height: 480)
+        if window.frame.width < width {
+            var frame = window.frame
+            frame.size.width = width
+            window.setFrame(frame, display: true, animate: true)
+        }
+    }
+
     /// Syncs the window chrome (background behind the titlebar area) with the
     /// current day-arc palette. Called on open and on settings changes; the
     /// palette drifts slowly, so per-minute accuracy is not needed here.
@@ -172,6 +192,42 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         if let keyWindow {
             MenuBarExtraPanel.dismiss(excluding: [keyWindow])
         }
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              !window.styleMask.contains(.fullScreen)
+        else { return }
+        // Programmatic sizing passes (autosave restore, content-size tracking)
+        // do NOT respect minSize — enforce the editor floor after the fact.
+        // Note this fires for the autosave restore itself, which lands while
+        // self.window is still nil (restore happens mid-ensureWindow).
+        let required = requiredMinWidth()
+        if window.frame.width < required - 0.5 {
+            var frame = window.frame
+            frame.size.width = required
+            window.setFrame(frame, display: true, animate: false)
+        }
+    }
+
+    /// Column-aware width floor shared by minSize and the resize enforcer.
+    private func requiredMinWidth() -> CGFloat {
+        let settings = AppSettings.shared
+        var width = JournalRootView.editorMinWidth
+        switch settings.journalColumnMode {
+        case 0:
+            width += JournalRootView.navWidthRange.lowerBound
+                + JournalRootView.listWidthRange.lowerBound
+                + 14 // two 7pt divider hit areas
+        case 1:
+            width += JournalRootView.listWidthRange.lowerBound + 7
+        default:
+            break
+        }
+        if !settings.physicalCalendarEnabled && settings.journalInspectorVisible {
+            width += 288 + 1
+        }
+        return width
     }
 
     func windowWillClose(_ notification: Notification) {

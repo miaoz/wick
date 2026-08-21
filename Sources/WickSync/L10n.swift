@@ -234,7 +234,7 @@ public enum L10n {
         case macroMoreEventsFormat
         case calendarIdleWeekday
         case calendarIdleWeekend
-        case inspectorPnlSuffix
+        case inspectorMonthlyOverview
         case inspectorJournalsSection
         case inspectorTagsSection
         case journalLibraryManage
@@ -462,7 +462,7 @@ public enum L10n {
             case .macroMoreEventsFormat: return "另有 %d 项"
             case .calendarIdleWeekday: return "本日无事"
             case .calendarIdleWeekend: return "休市"
-            case .inspectorPnlSuffix: return "盈亏"
+            case .inspectorMonthlyOverview: return "月度总览"
             case .inspectorJournalsSection: return "日记本"
             case .inspectorTagsSection: return "标签"
             case .journalLibraryManage: return "管理"
@@ -691,7 +691,7 @@ public enum L10n {
             case .macroMoreEventsFormat: return "%d more"
             case .calendarIdleWeekday: return "Quiet day"
             case .calendarIdleWeekend: return "Market closed"
-            case .inspectorPnlSuffix: return " PnL"
+            case .inspectorMonthlyOverview: return "Monthly Overview"
             case .inspectorJournalsSection: return "Journals"
             case .inspectorTagsSection: return "Tags"
             case .journalLibraryManage: return "Manage"

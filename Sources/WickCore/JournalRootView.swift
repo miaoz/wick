@@ -330,13 +330,16 @@ struct JournalRootView: View {
                         .transition(.move(edge: .trailing))
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(minWidth: Self.editorMinWidth, maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private static let navWidthRange: ClosedRange<CGFloat> = 190...280
-    private static let listWidthRange: ClosedRange<CGFloat> = 220...340
+    static let navWidthRange: ClosedRange<CGFloat> = 190...280
+    static let listWidthRange: ClosedRange<CGFloat> = 220...340
+    /// 编辑栏宽度地板:再窄页眉(大日期+小注+盈亏+删除)就溢出变形。
+    /// JournalWindowController 用它算窗口 minSize。
+    static let editorMinWidth: CGFloat = 440
 
     private func setColumnMode(_ mode: Int) {
         settings.journalColumnMode = mode
@@ -430,12 +433,13 @@ struct JournalRootView: View {
                 }
             }
         }
-        // 内容左缘避让红绿灯;垂直方向:行中心 = 红绿灯中心(实测值,
-        // 未测量时回退旧调参 top 7 / bottom 11)。按钮行高 28pt,半高 14。
+        // 内容左缘避让红绿灯;垂直方向:上下留白相等,且整行中心比红绿灯
+        // 中心低 ~3.5pt——原生统一工具栏里内容也坐在灯线偏下,与灯心完全
+        // 同线反而读起来偏上。按钮行高 28pt,半高 14;未测量时回退 7/7。
         .padding(.leading, 78)
         .padding(.trailing, 14)
-        .padding(.top, trafficLightCenterY > 0 ? max(2, trafficLightCenterY - 14) : 7)
-        .padding(.bottom, trafficLightCenterY > 0 ? max(7, trafficLightCenterY - 14) : 11)
+        .padding(.top, trafficLightCenterY > 0 ? max(3, trafficLightCenterY - 11) : 7)
+        .padding(.bottom, trafficLightCenterY > 0 ? max(3, trafficLightCenterY - 11) : 7)
         .background(
             LinearGradient(
                 colors: [palette.cardTop.color, palette.cardBottom.color],

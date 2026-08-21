@@ -185,7 +185,8 @@ struct JournalInspectorView: View {
                         Text(event.title)
                             .font(.custom("Songti SC", size: 10.5))
                             .foregroundStyle(palette.textPrimary.color)
-                            .lineLimit(1)
+                            // 检查器行短,长标题(讲话/发布会)允许折两行。
+                            .lineLimit(2)
                         Spacer(minLength: 4)
                         Text(macroValues(event))
                             .font(.system(size: 8.5, weight: .medium, design: .monospaced))
@@ -224,7 +225,10 @@ struct JournalInspectorView: View {
                         Text(report.code)
                             .font(.system(size: 9.5, weight: .bold, design: .monospaced))
                             .foregroundStyle(palette.textPrimary.color)
-                            .frame(width: 52, alignment: .leading)
+                            // 代码永不折行(溢出两行比参差不齐更难看),公司名让位。
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .frame(minWidth: 52, alignment: .leading)
                         Text(report.companyName)
                             .font(.custom("Songti SC", size: 10.5))
                             .foregroundStyle(palette.textPrimary.color)
@@ -276,8 +280,7 @@ struct JournalInspectorView: View {
     private var pnlSection: some View {
         VStack(spacing: 0) {
             sectionHeader(
-                title: Date().formatted(.dateTime.month(.wide).locale(settings.locale))
-                    + L10n.string(.inspectorPnlSuffix, language: settings.language),
+                title: L10n.string(.inspectorMonthlyOverview, language: settings.language),
                 detail: nil,
                 collapsed: $pnlCollapsed
             )
