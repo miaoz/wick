@@ -72,6 +72,21 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.activeJournal?.name, "Trading")
     }
 
+    func testReorderJournalsPersists() {
+        let first = store.journals.first!.name
+        let second = store.createJournal(name: "Second")
+        let third = store.createJournal(name: "Third")
+        XCTAssertEqual(store.journals.map(\.name), [first, "Second", "Third"])
+
+        // Move "Third" (index 2) to the top (index 0)
+        store.moveJournal(from: IndexSet(integer: 2), to: 0)
+        XCTAssertEqual(store.journals.map(\.name), ["Third", first, "Second"])
+
+        // Verify order persists after reloading from disk
+        let reloaded = JournalStore(rootDirectory: tempRoot)
+        XCTAssertEqual(reloaded.journals.map(\.name), ["Third", first, "Second"])
+    }
+
     func testMigrateLegacySingleJournal() throws {
         let fm = FileManager.default
         let base = fm.temporaryDirectory

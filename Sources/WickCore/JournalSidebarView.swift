@@ -13,6 +13,7 @@ struct JournalNavigationSidebar: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: JournalStore
     @Environment(\.wickPalette) private var palette
+    @State private var draggedJournal: JournalInfo?
 
     let onNewJournal: () -> Void
     let onRenameJournal: (JournalInfo) -> Void
@@ -58,6 +59,19 @@ struct JournalNavigationSidebar: View {
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 4)
+                    .opacity(draggedJournal?.id == journal.id ? 0.35 : 1.0)
+                    .onDrag {
+                        draggedJournal = journal
+                        return NSItemProvider(object: journal.id.uuidString as NSString)
+                    }
+                    .onDrop(
+                        of: [UTType.text, UTType.plainText],
+                        delegate: JournalDropDelegate(
+                            item: journal,
+                            store: store,
+                            draggedItem: $draggedJournal
+                        )
+                    )
                     .contextMenu {
                         Button { onRenameJournal(journal) } label: {
                             Text(L10n.string(.journalLibraryRename, language: settings.language))
@@ -644,3 +658,38 @@ struct JournalItemTimelineRow: View {
         return tag
     }
 }
+
+// MARK: - 日记本拖拽排序代理
+
+private struct JournalDropDelegate: DropDelegate {
+    let item: JournalInfo
+    let store: JournalStore
+    @Binding var draggedItem: JournalInfo?
+
+    func dropEntered(info: DropInfo) {
+        guard let dragged = draggedItem,
+              dragged.id != item.id,
+              let from = store.journals.firstIndex(where: { $0.id == dragged.id }),
+              let to = store.journals.firstIndex(where: { $0.id == item.id }),
+              from != to
+        else { return }
+
+        withAnimation(.easeInOut(duration: 0.18)) {
+            store.moveJournal(from: IndexSet(integer: from), to: to > from ? to + 1 : to)
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedItem = nil
+        return true
+    }
+
+    func validateDrop(info: DropInfo) -> Bool {
+        draggedItem != nil
+    }
+}
+

@@ -16,6 +16,8 @@ struct JournalInspectorView: View {
     @State private var eventsCollapsed = false
     @State private var pnlCollapsed = false
     @State private var tab: InspectorTab = .macro
+    @State private var expandedMacroEventIDs: Set<String> = []
+    @State private var expandedEarningsIDs: Set<String> = []
 
     private enum InspectorTab {
         case macro
@@ -171,6 +173,7 @@ struct JournalInspectorView: View {
             } else {
                 let shown = limit.map { Array(events.prefix($0)) } ?? events
                 ForEach(shown) { event in
+                    let isExpanded = expandedMacroEventIDs.contains(event.id)
                     HStack(alignment: .firstTextBaseline, spacing: 7) {
                         Text(Self.eventTimeFormatter.string(from: event.time))
                             .font(.system(size: 9.5, weight: .bold, design: .monospaced))
@@ -184,8 +187,8 @@ struct JournalInspectorView: View {
                         Text(event.title)
                             .font(.custom("Songti SC", size: 10.5))
                             .foregroundStyle(palette.textPrimary.color)
-                            // 检查器行短,长标题(讲话/发布会)允许折两行。
-                            .lineLimit(2)
+                            // 检查器行短,长标题默认折两行,点击可展开全部/收起。
+                            .lineLimit(isExpanded ? nil : 2)
                         Spacer(minLength: 4)
                         Text(macroValues(event))
                             .font(.system(size: 8.5, weight: .medium, design: .monospaced))
@@ -193,6 +196,16 @@ struct JournalInspectorView: View {
                             .lineLimit(1)
                     }
                     .padding(.vertical, 3.5)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            if expandedMacroEventIDs.contains(event.id) {
+                                expandedMacroEventIDs.remove(event.id)
+                            } else {
+                                expandedMacroEventIDs.insert(event.id)
+                            }
+                        }
+                    }
                     .overlay(alignment: .bottom) {
                         Rectangle().fill(palette.divider.color.opacity(0.7)).frame(height: 1)
                     }
@@ -216,6 +229,7 @@ struct JournalInspectorView: View {
             } else {
                 let shown = limit.map { Array(reports.prefix($0)) } ?? reports
                 ForEach(shown) { report in
+                    let isExpanded = expandedEarningsIDs.contains(report.id)
                     HStack(alignment: .firstTextBaseline, spacing: 7) {
                         Text(earningsCallMark(report))
                             .font(.custom("Songti SC", size: 9).weight(.bold))
@@ -231,7 +245,7 @@ struct JournalInspectorView: View {
                         Text(report.companyName)
                             .font(.custom("Songti SC", size: 10.5))
                             .foregroundStyle(palette.textPrimary.color)
-                            .lineLimit(1)
+                            .lineLimit(isExpanded ? nil : 1)
                         Spacer(minLength: 4)
                         if let eps = report.epsEstimate {
                             Text("EPS \(Self.epsFormatter.string(from: NSNumber(value: eps)) ?? "")")
@@ -240,6 +254,16 @@ struct JournalInspectorView: View {
                         }
                     }
                     .padding(.vertical, 3.5)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            if expandedEarningsIDs.contains(report.id) {
+                                expandedEarningsIDs.remove(report.id)
+                            } else {
+                                expandedEarningsIDs.insert(report.id)
+                            }
+                        }
+                    }
                     .overlay(alignment: .bottom) {
                         Rectangle().fill(palette.divider.color.opacity(0.7)).frame(height: 1)
                     }

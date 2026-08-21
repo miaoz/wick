@@ -210,7 +210,6 @@ final class JournalStore: ObservableObject {
         }
 
         journals.append(info)
-        journals.sort { $0.createdAt < $1.createdAt }
         activeJournalID = info.id
         bindPaths(for: info.id)
         resetSessionState()
@@ -224,6 +223,12 @@ final class JournalStore: ObservableObject {
         persistCatalog()
         notifyActiveJournalChanged()
         return info
+    }
+
+    /// Reorders journals in the catalog (e.g. from drag-and-drop) and persists the new order.
+    func moveJournal(from source: IndexSet, to destination: Int) {
+        journals.move(fromOffsets: source, toOffset: destination)
+        persistCatalog()
     }
 
     /// Binds (or clears) the exchange account for one journal. Secrets are
@@ -365,7 +370,6 @@ final class JournalStore: ObservableObject {
         }
 
         journals.append(info)
-        journals.sort { $0.createdAt < $1.createdAt }
         persistCatalog()
         return info
     }
@@ -1119,7 +1123,7 @@ final class JournalStore: ObservableObject {
 
     private func loadOrCreateCatalog() {
         if let catalog = loadCatalogFromDisk() {
-            journals = catalog.journals.sorted { $0.createdAt < $1.createdAt }
+            journals = catalog.journals
             if journals.contains(where: { $0.id == catalog.activeJournalID }) {
                 activeJournalID = catalog.activeJournalID
             } else {
