@@ -493,9 +493,11 @@ private struct CalendarPadStack: View {
     }
 }
 
-/// The stapled binding across the top of the pad. Dragging it moves the pad (macOS);
-/// the close button dismisses the calendar. On a full-bleed pad the strip spans the
-/// notch row so the pad reads as stapled to the very top of the screen.
+/// The stapled binding across the top of the pad. Dragging it moves the pad (macOS).
+/// Desktop has no close control — the journal top bar summons and dismisses the
+/// easter-egg window. On a full-bleed pad the strip spans the notch row so the
+/// pad reads as stapled to the very top of the screen, and a close button is
+/// the only way off the calendar (there is no journal chrome).
 private struct CalendarPadBinding: View {
     let onClose: () -> Void
     let layout: PaperLayout
@@ -539,22 +541,21 @@ private struct CalendarPadBinding: View {
         .shadow(color: .black.opacity(0.18), radius: 2, y: 1.5)
         .windowDragHandle()
         .overlay(alignment: .topTrailing) {
-            closeButton
+            if layout.isFullBleed {
+                closeButton
+            }
         }
     }
 
-    /// 16pt for the mouse-driven desktop pad; a 34pt touch target that stays
-    /// clear of the Dynamic Island on a full-bleed pad.
+    /// 34pt touch target that stays clear of the Dynamic Island.
     private var closeButton: some View {
-        let isFullScreen = layout.isFullBleed
-        let size: CGFloat = isFullScreen ? 34 : 16
-        return Button {
+        Button {
             onClose()
         } label: {
             Image(systemName: "xmark")
-                .font(.system(size: isFullScreen ? 11 : 7, weight: .bold))
+                .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(TradingCalendarTheme.ink.opacity(0.6))
-                .frame(width: size, height: size)
+                .frame(width: 34, height: 34)
                 .background(Circle().fill(Color.white.opacity(0.6)))
                 .overlay(Circle().strokeBorder(TradingCalendarTheme.ink.opacity(0.2), lineWidth: 0.5))
                 .contentShape(Circle())
@@ -562,10 +563,8 @@ private struct CalendarPadBinding: View {
         .buttonStyle(.plain)
         .help("close")
         .offset(
-            x: isFullScreen ? -10 : -6,
-            y: isFullScreen
-                ? layout.bindingSafeTop + (layout.bindingH - layout.bindingSafeTop - 34) / 2
-                : 4
+            x: -10,
+            y: layout.bindingSafeTop + (layout.bindingH - layout.bindingSafeTop - 34) / 2
         )
     }
 

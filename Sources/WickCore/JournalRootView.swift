@@ -8,6 +8,7 @@ import WickCalendarKit
 struct JournalRootView: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: JournalStore
+    @ObservedObject private var calendarWindow = TradingCalendarWindowController.shared
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var exportStatus: String?
@@ -466,9 +467,10 @@ struct JournalRootView: View {
             if settings.physicalCalendarEnabled {
                 InkIconButton(
                     systemName: "calendar",
-                    help: L10n.string(.tradingCalendar, language: settings.language)
+                    help: L10n.string(.tradingCalendar, language: settings.language),
+                    isOn: calendarWindow.isPresented
                 ) {
-                    TradingCalendarWindowController.shared.openCalendar()
+                    calendarWindow.toggleCalendar()
                 }
             } else {
                 InkIconButton(

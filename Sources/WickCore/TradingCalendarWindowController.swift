@@ -35,10 +35,15 @@ final class PassThroughHostingView<Content: View>: NSHostingView<Content> {
 /// Mirrors `JournalWindowController` activation policy; the window itself is a
 /// transparent, click-through pad exactly like himekuri's.
 @MainActor
-final class TradingCalendarWindowController: NSObject, NSWindowDelegate {
+final class TradingCalendarWindowController: NSObject, NSWindowDelegate, ObservableObject {
     static let shared = TradingCalendarWindowController()
 
     private(set) var window: NSWindow?
+    /// True while the pad is on the desk. Drives the journal top-bar toggle.
+    @Published private(set) var isPresented = false
+    /// Bumps on each open/close so a deferred `orderFront` from an earlier
+    /// `openCalendar` cannot resurrect the pad after the user dismissed it.
+    private var presentGeneration = 0
 
     /// Local input monitors translating arrow keys / scroll gestures into
     /// events-page flips. Installed once at window creation; every handler
@@ -67,7 +72,19 @@ final class TradingCalendarWindowController: NSObject, NSWindowDelegate {
         return window.isVisible || window.isMiniaturized
     }
 
+    /// Journal top-bar control: show the pad if it is hidden, dismiss it if it
+    /// is already on the desk. Miniaturized counts as hidden (restore, don't close).
+    func toggleCalendar() {
+        if isPresented || (window?.isVisible == true && window?.isMiniaturized != true) {
+            closeCalendar()
+        } else {
+            openCalendar()
+        }
+    }
+
     func openCalendar() {
+        presentGeneration += 1
+        let generation = presentGeneration
         NSApp.setActivationPolicy(.regular)
 
         let calendarWindow = ensureWindow()
@@ -78,10 +95,11 @@ final class TradingCalendarWindowController: NSObject, NSWindowDelegate {
         }
         calendarWindow.makeKeyAndOrderFront(nil)
         calendarWindow.orderFrontRegardless()
+        isPresented = true
         NSApp.activate(ignoringOtherApps: true)
 
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self, self.presentGeneration == generation, self.isPresented else { return }
             NSApp.setActivationPolicy(.regular)
             if let window = self.window {
                 window.makeKeyAndOrderFront(nil)
@@ -91,7 +109,19 @@ final class TradingCalendarWindowController: NSObject, NSWindowDelegate {
     }
 
     func closeCalendar() {
-        window?.close()
+        // Borderless windows often ignore `close()` once they are not key
+        // (the journal top-bar click keys the journal first). `orderOut`
+        // hides them regardless of key status.
+        presentGeneration += 1
+        window?.orderOut(nil)
+        markDismissed()
+    }
+
+    private func markDismissed() {
+        isPresented = false
+        if !JournalWindowController.shared.hasOpenJournalWindow {
+            NSApp.setActivationPolicy(.accessory)
+        }
     }
 
     private func ensureWindow() -> NSWindow {
@@ -165,10 +195,7 @@ final class TradingCalendarWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        // Back to menu-bar-only presence unless the journal window is still open.
-        if !JournalWindowController.shared.hasOpenJournalWindow {
-            NSApp.setActivationPolicy(.accessory)
-        }
+        markDismissed()
     }
 
     // MARK: - Event-page input
