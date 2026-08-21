@@ -7,3 +7,6 @@ build/
 ios/build/
 xcuserdata/
 .zcode/
+# Installed agent skills (third-party copies, regenerable from skills-lock.json)
+.agents/skills/
+.claude/skills/
