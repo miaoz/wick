@@ -247,9 +247,7 @@ struct JournalEditorPane: View {
                     ForEach(Array(group.items.enumerated()), id: \.element.id) { index, row in
                         itemCard(
                             entryID: row.ref.entryID,
-                            itemID: row.ref.itemID,
-                            isFocused: store.selectedItemID == row.ref.itemID
-                                && store.selectedEntryID == row.ref.entryID
+                            itemID: row.ref.itemID
                         )
                         .id(Self.itemScrollID(row.ref))
                         .onAppear {
@@ -317,8 +315,7 @@ struct JournalEditorPane: View {
                     itemCard(
                         entryID: entryID,
                         itemID: item.id,
-                        itemIndex: index,
-                        isFocused: false
+                        itemIndex: index
                     )
                     if index < draft.items.count - 1 {
                         Rectangle()
@@ -563,8 +560,7 @@ struct JournalEditorPane: View {
     private func itemCard(
         entryID: UUID,
         itemID: UUID,
-        itemIndex: Int? = nil,
-        isFocused: Bool
+        itemIndex: Int? = nil
     ) -> some View {
         let draft = drafts[entryID] ?? store.entries.first(where: { $0.id == entryID }) ?? JournalEntry()
         let index = itemIndex ?? displayIndex(for: itemID, in: draft, fallback: 0)
@@ -599,12 +595,6 @@ struct JournalEditorPane: View {
             },
             onChange: { scheduleSave(for: entryID) }
         )
-        .overlay {
-            if isFocused {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .strokeBorder(palette.accent.color.opacity(0.45), lineWidth: 1.5)
-            }
-        }
     }
 
     // MARK: - Item-scoped grouping
