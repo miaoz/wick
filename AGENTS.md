@@ -7,7 +7,7 @@
 - **Wick**：原生 macOS 菜单栏应用（`LSUIElement`，无 Dock 图标）。蜡烛图标弹出面板，实时展示 日/周/月/年 剩余百分比与结束时间（每秒刷新）。
 - **日记**：一天一篇、篇内多条目（标签+正文+图片），条目级检索、每日本地通知提醒、zip 导入导出。
 - **Dropbox 同步**（可选）：本地为唯一真源，`WickSync` 引擎按「天」双向对账（OAuth PKCE，客户端无 App secret）；删除靠墓碑传播、冲突按条目并集合并并保留败者、远端文件意外消失自动回传。
-- **交易所仓位**（可选，一本日记一个账号）：Binance USDⓈ-M / OKX SWAP / Hyperliquid 永续。凭据按日记本存（打包 `.app` 走 Keychain 一条 JSON；`swift run` 走 `Application Support/Wick/dev-secrets.json` 以免每次重编译弹密码）。`WickTrading` 直连各所 REST 拉成交，归一成 `TradingFill`；窗口下界为该本最早日记日（无日记回退近 180 天；OKX 所侧约 3 个月、HL 约最近 1 万笔）。快照 `Wick/Trading/<journalID>.json` 增量刷新；`PositionAggregator` 聚合成开平仓会话（对冲双 lane、加仓 VWAP、翻仓拆两段、**净值 epsilon 吸附归零**）；按「开仓日 + 宽松标签」挂进卡片（`BTC` 匹配 `BTCUSDT` 与 HL 的 `BTC`）；缺日记时 `PositionEntryPlanner` 补建（**从不改写已有标签**；已处理 ID 随 snapshot，删掉的自动日记不复活）。HL 只填 0x 地址、不收私钥。
+- **交易所仓位**（可选，一本日记一个账号）：Binance USDⓈ-M / OKX SWAP / Hyperliquid 永续。凭据按日记本存（打包 `.app` 走 Keychain 一条 JSON；`swift run` 走 `Application Support/Wick/dev-secrets.json` 以免每次重编译弹密码）。`WickTrading` 直连各所 REST 拉成交，归一成 `TradingFill`；窗口下界为该本最早日记日（无日记时仅从当日开始；OKX 所侧约 3 个月、HL 约最近 1 万笔）。快照 `Wick/Trading/<journalID>.json` 增量刷新；`PositionAggregator` 聚合成开平仓会话（对冲双 lane、加仓 VWAP、翻仓拆两段、**净值 epsilon 吸附归零**）；按「开仓日 + 宽松标签」挂进卡片（`BTC` 匹配 `BTCUSDT` 与 HL 的 `BTC`）；缺日记时 `PositionEntryPlanner` 补建（**从不改写已有标签**；已处理 ID 随 snapshot，删掉的自动日记不复活）。HL 只填 0x 地址、不收私钥。
 - **交易日历**：himekuri「黄历」撕页日历（无边框透明穿透窗、撕纸物理与程序合成音效），内容由 `WickCalendarKit` 直连华尔街见闻（宏观 + 财报，keyless REST，非 WebSocket、不打包 Python）。
 - 其他：登录启动（`SMAppService`）、亮/暗/跟随系统外观（「一日弧光」主题引擎）、中英双语、菜单栏百分比、GitHub Releases 检查更新。
 - macOS 13+ / Universal；Swift 6.1+、SwiftUI + AppKit、SwiftPM，**无第三方依赖**。Bundle ID `com.miaoz.wick`；版本默认值见 `scripts/package_app.sh`。

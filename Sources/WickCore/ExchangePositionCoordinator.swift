@@ -209,9 +209,7 @@ final class ExchangePositionCoordinator: ObservableObject {
         if let earliest = entries.map(\.date).min() {
             return Calendar.current.startOfDay(for: earliest)
         }
-        return Calendar.current.startOfDay(
-            for: now.addingTimeInterval(-BinanceFuturesClient.historyWindow)
-        )
+        return Calendar.current.startOfDay(for: now)
     }
 
     func syncNow() {
@@ -265,8 +263,8 @@ final class ExchangePositionCoordinator: ObservableObject {
                 windowStart = desiredStart
                 ranges = [(desiredStart, now)]
             } else if desiredStart > windowStart {
-                // First journal day is later than a previous empty-book
-                // 180-day fallback. Drop older fills; never fetch further back.
+                // First journal day is later than the previous window start.
+                // Drop older fills; never fetch further back.
                 fills = TradingFill.clipped(fills, from: desiredStart, to: now)
                 windowStart = desiredStart
                 let resumeAt = max(

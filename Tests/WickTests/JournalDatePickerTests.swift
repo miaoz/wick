@@ -25,6 +25,27 @@ final class JournalDatePickerTests: XCTestCase {
         _ = selectedResult
     }
 
+    func testDesiredWindowStart() {
+        let calendar = Calendar.current
+        let now = Date(timeIntervalSince1970: 1755734400) // 2025-08-21 00:00:00 UTC
+
+        // 1. When entries is empty, window start is start of today (now)
+        let emptyStart = ExchangePositionCoordinator.desiredWindowStart(entries: [], now: now)
+        XCTAssertEqual(emptyStart, calendar.startOfDay(for: now))
+
+        // 2. When entries has a 06-25 entry, window start is 06-25
+        let june25 = Date(timeIntervalSince1970: 1750809600) // 2025-06-25
+        let entry1 = JournalEntry(date: june25, items: [])
+        let start1 = ExchangePositionCoordinator.desiredWindowStart(entries: [entry1], now: now)
+        XCTAssertEqual(start1, calendar.startOfDay(for: june25))
+
+        // 3. When user later writes an earlier entry (05-10), window start moves to 05-10
+        let may10 = Date(timeIntervalSince1970: 1746835200) // 2025-05-10
+        let entry2 = JournalEntry(date: may10, items: [])
+        let start2 = ExchangePositionCoordinator.desiredWindowStart(entries: [entry1, entry2], now: now)
+        XCTAssertEqual(start2, calendar.startOfDay(for: may10))
+    }
+
     func testRenderSettingsSnapshot() {
         let settings = AppSettings.shared
         let journalStore = JournalStore.shared
