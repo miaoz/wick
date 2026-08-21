@@ -4,7 +4,7 @@ import WickTrading
 
 /// Month calendar at the top of the journal sidebar. Each day cell is tinted
 /// by its state, in priority order:
-/// - realized PnL for the day (from cached Binance fills): green / red;
+/// - realized PnL attributed to positions opened that day: green / red;
 /// - has a journal entry but no realized-PnL activity: accent tint;
 /// - otherwise: gray.
 /// Tapping a day selects its journal entry when one exists.

@@ -377,8 +377,8 @@ final class ExchangePositionCoordinator: ObservableObject {
     }
 
     private func rebuildDerivedStats() {
-        pnlByDay = DailyRealizedPnl.sumsByDay(
-            fills: snapshot?.fills ?? [],
+        pnlByDay = DailyRealizedPnl.sumsByOpenDay(
+            positions: snapshot?.positions ?? [],
             calendar: .current
         )
         var counts: [String: Int] = [:]

@@ -762,15 +762,14 @@ struct JournalEditorPane: View {
     }
 
     private func flushAllDraftsImmediately() {
-        for (entryID, task) in saveTasks {
-            task.cancel()
-            saveTasks[entryID] = nil
-        }
+        let dirtyEntryIDs = Array(saveTasks.keys)
+        for entryID in dirtyEntryIDs { cancelSave(for: entryID) }
         guard !store.isReadOnlyDueToLoadFailure else { return }
-        for (entryID, draft) in drafts {
-            if store.entries.contains(where: { $0.id == entryID }) {
-                store.updateEntry(draft)
-            }
+        for entryID in dirtyEntryIDs {
+            guard let draft = drafts[entryID],
+                  store.entries.contains(where: { $0.id == entryID })
+            else { continue }
+            store.updateEntry(draft)
         }
     }
 

@@ -607,6 +607,8 @@ final class JournalStore: ObservableObject {
         if !Calendar.current.isDate(updated.date, inSameDayAs: entries[index].date) {
             updated.dayKey = JournalDayKey.make(from: updated.date)
         }
+        guard Self.hasContentChange(from: entries[index], to: updated) else { return }
+
         let structural = Self.isStructuralChange(from: entries[index], to: updated)
         updated.updatedAt = Date()
         entries[index] = updated
@@ -616,6 +618,15 @@ final class JournalStore: ObservableObject {
             objectWillChange.send()
             reconcileSelectionAfterChange()
         }
+    }
+
+    /// Draft timestamps are bookkeeping, not user content. An unchanged draft
+    /// must not become a sync edit merely because a window or journal closed.
+    private static func hasContentChange(from old: JournalEntry, to new: JournalEntry) -> Bool {
+        old.date != new.date
+            || old.dayKey != new.dayKey
+            || old.title != new.title
+            || old.items != new.items
     }
 
     /// True when the change should rebuild the journal UI (list, tags, seals).

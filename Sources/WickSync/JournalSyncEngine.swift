@@ -557,9 +557,17 @@ public final class JournalSyncEngine: ObservableObject {
         let remoteChanged: Bool = remoteFile?.rev != prev?.remoteRev
         let hasNewTombstone = remoteTomb != nil && remoteTomb?.rev != prev?.tombstoneRev
 
-        // Remote tombstone: the only authoritative delete signal.
-        if let remoteTomb, hasNewTombstone {
-            let tombstone = try await downloadTombstone(path: tombPath)
+        // A remote tombstone remains authoritative while it exists. This also
+        // cleans up a day file resurrected beside an already-acknowledged
+        // tombstone by a stale client. A genuine local edit can still restore
+        // the day and explicitly clear the marker.
+        if let remoteTomb {
+            let tombstoneDeletedAt: Date
+            if hasNewTombstone || prev?.tombstoneDeletedAt == nil {
+                tombstoneDeletedAt = try await downloadTombstone(path: tombPath).deletedAt
+            } else {
+                tombstoneDeletedAt = prev!.tombstoneDeletedAt!
+            }
             if let local, localChanged {
                 // Delete vs edit: the actively edited side wins and the
                 // tombstone is cleared (resolution is recorded as a conflict).
@@ -584,7 +592,7 @@ public final class JournalSyncEngine: ObservableObject {
             }
             state.days[dayKey] = DaySyncState(
                 tombstoneRev: remoteTomb.rev,
-                tombstoneDeletedAt: tombstone.deletedAt
+                tombstoneDeletedAt: tombstoneDeletedAt
             )
             return
         }

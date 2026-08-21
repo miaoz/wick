@@ -918,6 +918,31 @@ final class JournalSyncEngineTests: XCTestCase {
         XCTAssertEqual(b.removedDayKeys, ["2026-08-01"])
     }
 
+    func testAcknowledgedTombstoneDeletesAResurrectedRemoteDay() async throws {
+        let source = makeSource()
+        source.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "original")
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        await engine.performSyncCycle()
+
+        source.days.removeValue(forKey: "2026-08-01")
+        await engine.performSyncCycle()
+        let tombPath = JournalSyncLayout.tombstonePath(for: journalID, dayKey: "2026-08-01")
+        XCTAssertTrue(backend.hasFile(tombPath))
+
+        let stale = entry(
+            dayKey: "2026-08-01",
+            body: "stale client copy",
+            updatedAt: t0.addingTimeInterval(100)
+        )
+        backend.seedFile(dayPath("2026-08-01"), data: try JournalSyncEncoding.canonicalData(for: stale))
+
+        await engine.performSyncCycle()
+
+        XCTAssertNil(source.days["2026-08-01"])
+        XCTAssertFalse(backend.hasFile(dayPath("2026-08-01")))
+        XCTAssertTrue(backend.hasFile(tombPath))
+    }
+
     func testDeleteVsRemoteEditResurrectsAndRecordsConflict() async {
         let a = makeSource()
         a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "v1")

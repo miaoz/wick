@@ -312,4 +312,16 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertGreaterThan(mutates, 0)
         _ = cancellable
     }
+
+    func testUnchangedDraftDoesNotBecomeAnEdit() {
+        let entry = store.createEntry()
+        var mutates = 0
+        let cancellable = store.entriesDidMutate.sink { mutates += 1 }
+
+        store.updateEntry(entry)
+
+        XCTAssertEqual(store.entries.first?.updatedAt, entry.updatedAt)
+        XCTAssertEqual(mutates, 0, "flushing an unchanged draft must not notify sync")
+        _ = cancellable
+    }
 }
