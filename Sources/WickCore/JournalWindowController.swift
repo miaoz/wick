@@ -13,6 +13,9 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
     private var languageObserver: NSObjectProtocol?
     private var activeJournalObserver: NSObjectProtocol?
     private var toolbarPin: NSKeyValueObservation?
+    /// Dedupes `UserDefaults.didChangeNotification` (P6): the notification
+    /// does not name the key, so ignore bursts that do not affect chrome.
+    private var lastChromeDefaultsSignature = ""
 
     private override init() {
         super.init()
@@ -153,15 +156,11 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
 
         languageObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
-            object: nil,
+            object: UserDefaults.standard,
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                guard let self, let window = self.window else { return }
-                self.updateTitle(for: window)
-                self.applyWindowTheme(to: window)
-                // 栏位/检查器开关也走 UserDefaults——窗口最小宽跟着变。
-                self.updateMinSize(for: window)
+                self?.applyChromeFromDefaultsIfNeeded()
             }
         }
 
@@ -177,6 +176,25 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         }
 
         return window
+    }
+
+    private func applyChromeFromDefaultsIfNeeded() {
+        guard let window else { return }
+        let settings = AppSettings.shared
+        let signature = [
+            settings.language.rawValue,
+            settings.appearance.rawValue,
+            String(settings.journalColumnMode),
+            settings.journalInspectorVisible ? "1" : "0",
+            settings.physicalCalendarEnabled ? "1" : "0",
+            String(UserDefaults.standard.double(forKey: "wick.journal.navWidth")),
+            String(UserDefaults.standard.double(forKey: "wick.journal.listWidth")),
+        ].joined(separator: "|")
+        guard signature != lastChromeDefaultsSignature else { return }
+        lastChromeDefaultsSignature = signature
+        updateTitle(for: window)
+        applyWindowTheme(to: window)
+        updateMinSize(for: window)
     }
 
     private func updateTitle(for window: NSWindow) {

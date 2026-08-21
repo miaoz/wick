@@ -12,70 +12,114 @@ struct ProgressPanelView: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var settings: AppSettings
     @State private var showsSettings = false
+    /// False while the MenuBarExtra panel is hidden so `TimelineView` unmounts
+    /// (P4: Ventura keeps the scene alive after dismiss).
+    @State private var isPanelVisible = true
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let theme = PanelTheme.resolve(at: DayArcEngine.currentDate(), scheme: colorScheme)
-            let language = settings.language
-
-            ZStack(alignment: .topLeading) {
-                TornSlipShape()
-                    .fill(
-                        LinearGradient(
-                            colors: theme.backgroundColors,
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .overlay(alignment: .topLeading) {
-                        Circle()
-                            .fill(
-                                RadialGradient(
-                                    colors: [theme.ambientGlow, theme.ambientGlow.opacity(0)],
-                                    center: .center,
-                                    startRadius: 4,
-                                    endRadius: 180
-                                )
-                            )
-                            .frame(width: 220, height: 220)
-                            .offset(x: -40, y: -70)
+        let language = settings.language
+        Group {
+            if showsSettings {
+                // Settings must not sit inside TimelineView: the form is large
+                // and does not depend on the clock (P4).
+                let theme = PanelTheme.resolve(at: Self.minuteDate(), scheme: colorScheme)
+                panelChrome(theme: theme) {
+                    settingsHeader(theme: theme, language: language)
+                    settingsDivider(theme: theme)
+                    ScrollView {
+                        SettingsContentView(theme: theme, language: language)
                     }
-                    .overlay {
-                        TornSlipShape()
-                            .stroke(theme.panelStroke, lineWidth: 1)
-                    }
-
-                VStack(alignment: .leading, spacing: 18) {
-                    if showsSettings {
-                        settingsHeader(theme: theme, language: language)
-                        settingsDivider(theme: theme)
-                        ScrollView {
-                            SettingsContentView(theme: theme, language: language)
-                        }
-                        .frame(maxHeight: 520)
-                    } else {
-                        progressHeader(date: context.date, theme: theme, language: language)
-                        settingsDivider(theme: theme)
-
-                        let items = TimeProgressCalculator.allProgress(
-                            at: context.date,
-                            language: language,
-                            calendar: settings.progressCalendar
-                        )
-
-                        ProgressSlipContent(items: items, date: context.date, theme: theme, language: language)
-                    }
+                    .frame(maxHeight: 520)
                 }
-                .padding(PanelViewLayout.contentPadding)
+            } else if isPanelVisible {
+                // Clock and remaining-% only change at minute granularity.
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    progressPanel(date: context.date, language: language)
+                }
+            } else {
+                progressPanel(date: Date(), language: language)
             }
-            .padding(PanelViewLayout.outerPadding)
-            .frame(width: PanelViewLayout.width, alignment: .topLeading)
-            .fixedSize(horizontal: false, vertical: true)
-            // No implicit `.animation` on this root: it re-renders every second
-            // (TimelineView), and on macOS 13 `.animation(value:)` leaks into
-            // those per-second transactions, so every layout change glides
-            // around. Animations are applied explicitly at the mutation sites.
         }
+        .background {
+            WindowVisibilityProbe(isVisible: $isPanelVisible)
+                .frame(width: 0, height: 0)
+                .allowsHitTesting(false)
+        }
+    }
+
+    @ViewBuilder
+    private func progressPanel(date: Date, language: AppLanguage) -> some View {
+        let tickDate = Self.minuteTruncated(date)
+        let theme = PanelTheme.resolve(at: tickDate, scheme: colorScheme)
+        panelChrome(theme: theme) {
+            progressHeader(date: tickDate, theme: theme, language: language)
+            settingsDivider(theme: theme)
+            let items = TimeProgressCalculator.allProgress(
+                at: tickDate,
+                language: language,
+                calendar: settings.progressCalendar
+            )
+            ProgressSlipContent(items: items, date: tickDate, theme: theme, language: language)
+        }
+    }
+
+    /// Paper slip shell. Kept outside the ticking content so settings can reuse
+    /// it without a `TimelineView`. No implicit `.animation` on this root:
+    /// when progress *is* inside TimelineView, macOS 13 `.animation(value:)`
+    /// leaks into those ticks and every layout change glides around.
+    private func panelChrome<Content: View>(
+        theme: PanelTheme,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        ZStack(alignment: .topLeading) {
+            TornSlipShape()
+                .fill(
+                    LinearGradient(
+                        colors: theme.backgroundColors,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(alignment: .topLeading) {
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [theme.ambientGlow, theme.ambientGlow.opacity(0)],
+                                center: .center,
+                                startRadius: 4,
+                                endRadius: 180
+                            )
+                        )
+                        .frame(width: 220, height: 220)
+                        .offset(x: -40, y: -70)
+                }
+                .overlay {
+                    TornSlipShape()
+                        .stroke(theme.panelStroke, lineWidth: 1)
+                }
+
+            VStack(alignment: .leading, spacing: 18) {
+                content()
+            }
+            .padding(PanelViewLayout.contentPadding)
+        }
+        .padding(PanelViewLayout.outerPadding)
+        .frame(width: PanelViewLayout.width, alignment: .topLeading)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// Drop seconds so the day-arc palette is stable between minute ticks.
+    private static func minuteTruncated(_ date: Date) -> Date {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute],
+            from: date
+        )
+        return calendar.date(from: components) ?? date
+    }
+
+    private static func minuteDate() -> Date {
+        minuteTruncated(DayArcEngine.currentDate())
     }
 
     @ViewBuilder
@@ -999,4 +1043,51 @@ struct PanelTheme {
 
     var selectionBackground: Color { palette.accentSoft.color }
     var selectionAccent: Color { palette.accent.color }
+}
+
+// MARK: - Panel visibility (P4)
+
+/// Reports whether this view sits in a visible window. MenuBarExtra `.window`
+/// keeps the SwiftUI scene alive after dismiss; unmounting `TimelineView`
+/// when `isVisible` goes false stops the minute tick (and the flame loop).
+private struct WindowVisibilityProbe: NSViewRepresentable {
+    @Binding var isVisible: Bool
+
+    func makeNSView(context: Context) -> ProbeView {
+        let view = ProbeView()
+        view.onChange = { isVisible = $0 }
+        return view
+    }
+
+    func updateNSView(_ nsView: ProbeView, context: Context) {
+        nsView.onChange = { isVisible = $0 }
+    }
+
+    final class ProbeView: NSView {
+        var onChange: ((Bool) -> Void)?
+        private var observation: NSKeyValueObservation?
+        private var lastReported: Bool?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            observation?.invalidate()
+            observation = nil
+            guard let window else {
+                report(false)
+                return
+            }
+            observation = window.observe(\.isVisible, options: [.initial, .new]) { [weak self] _, change in
+                let visible = change.newValue ?? false
+                DispatchQueue.main.async {
+                    self?.report(visible)
+                }
+            }
+        }
+
+        private func report(_ visible: Bool) {
+            guard lastReported != visible else { return }
+            lastReported = visible
+            onChange?(visible)
+        }
+    }
 }

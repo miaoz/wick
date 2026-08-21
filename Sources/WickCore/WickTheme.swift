@@ -203,12 +203,21 @@ extension WickPalette {
 
 // MARK: - 印刷字态(字态四声部之一:宋体 = 写在纸上的内容)
 
+@MainActor
 enum WickPrintFont {
+    private static var cache: [String: NSFont] = [:]
+
     /// Songti SC,可选粗体;缺字体时回退系统字体。
+    /// Cached so `NSFont` identity is stable across SwiftUI updates (P2):
+    /// `NSFontManager.convert` otherwise returns a new instance every call
+    /// and `updateNSView` keeps re-assigning the font.
     static func songti(_ size: CGFloat, bold: Bool = false) -> NSFont {
+        let key = "\(size)/\(bold ? "b" : "r")"
+        if let cached = cache[key] { return cached }
         let base = NSFont(name: "Songti SC", size: size) ?? NSFont.systemFont(ofSize: size)
-        guard bold else { return base }
-        return NSFontManager.shared.convert(base, toHaveTrait: .boldFontMask)
+        let font = bold ? NSFontManager.shared.convert(base, toHaveTrait: .boldFontMask) : base
+        cache[key] = font
+        return font
     }
 }
 

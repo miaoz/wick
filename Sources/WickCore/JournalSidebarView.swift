@@ -427,27 +427,17 @@ struct JournalDayListColumn: View {
     }
 
     private func monthName(_ month: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = settings.language.locale
-        formatter.setLocalizedDateFormatFromTemplate("MMMM")
-        return formatter.string(from: month)
+        WickDateFormat.string(from: month, template: "MMMM", locale: settings.language.locale)
     }
 
     /// 各日已实现盈亏(与盈亏月历同一来源)。
     private var pnlByDay: [Date: Double] {
-        DailyRealizedPnl.sumsByDay(
-            fills: positionCoordinator.snapshot?.fills ?? [],
-            calendar: .current
-        )
+        positionCoordinator.pnlByDay
     }
 
     /// 开仓日 → 已平仓笔数(对冲双 lane 各自计一笔)。
     private var closedPositionsByDayKey: [String: Int] {
-        var counts: [String: Int] = [:]
-        for position in positionCoordinator.snapshot?.positions ?? [] where position.isClosed {
-            counts[JournalDayKey.make(from: position.openTime), default: 0] += 1
-        }
-        return counts
+        positionCoordinator.closedCountByDayKey
     }
 
     private var itemSections: [ItemSection] {
@@ -563,10 +553,7 @@ struct JournalDayTimelineRow: View {
 
     /// 「8月20日」/ "Aug 20"。
     private var dayText: String {
-        let formatter = DateFormatter()
-        formatter.locale = settings.language.locale
-        formatter.setLocalizedDateFormatFromTemplate("MMMd")
-        return formatter.string(from: entry.date)
+        WickDateFormat.string(from: entry.date, template: "MMMd", locale: settings.language.locale)
     }
 
     private var statsLine: String {

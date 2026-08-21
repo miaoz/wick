@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import UniformTypeIdentifiers
 import WickSync
@@ -56,7 +57,13 @@ final class JournalStore: ObservableObject {
 
     // MARK: - Active journal content
 
-    @Published private(set) var entries: [JournalEntry] = []
+    /// Not `@Published`: body-only autosave must not rebuild the journal window
+    /// (P2). Structural mutations publish via other `@Published` fields
+    /// (`selection`, `journals`) or an explicit `objectWillChange`. Sync
+    /// observes `entriesDidMutate` instead of `$entries`.
+    private(set) var entries: [JournalEntry] = []
+    /// Fires after any in-memory entries change, including body-only persist.
+    let entriesDidMutate = PassthroughSubject<Void, Never>()
     @Published var selection: JournalSelection?
     @Published var selectedTagFilter: String?
     @Published var searchText: String = ""
@@ -98,6 +105,9 @@ final class JournalStore: ObservableObject {
     /// True while switching journals, so `persist()` cannot write the previous
     /// journal's in-memory snapshot into the newly bound folder.
     private var persistBlocked = false
+    /// Serial disk writer so typing does not encode JSON on the main thread (P3).
+    private let persistQueue = DispatchQueue(label: "com.miaoz.wick.journal-persist")
+    private var persistGeneration: UInt64 = 0
 
     // MARK: - Init
 
@@ -531,11 +541,36 @@ final class JournalStore: ObservableObject {
         if !Calendar.current.isDate(updated.date, inSameDayAs: entries[index].date) {
             updated.dayKey = JournalDayKey.make(from: updated.date)
         }
+        let structural = Self.isStructuralChange(from: entries[index], to: updated)
         updated.updatedAt = Date()
         entries[index] = updated
         persist()
-        touchActiveJournalMetadata()
-        reconcileSelectionAfterChange()
+        if structural {
+            touchActiveJournalMetadata()
+            objectWillChange.send()
+            reconcileSelectionAfterChange()
+        }
+    }
+
+    /// True when the change should rebuild the journal UI (list, tags, seals).
+    /// Body-only typing stays in drafts + disk and must not fan out (P2).
+    private static func isStructuralChange(from old: JournalEntry, to new: JournalEntry) -> Bool {
+        if old.date != new.date || old.dayKey != new.dayKey || old.title != new.title {
+            return true
+        }
+        if old.items.count != new.items.count {
+            return true
+        }
+        for (lhs, rhs) in zip(old.items, new.items) {
+            if lhs.id != rhs.id
+                || lhs.tag != rhs.tag
+                || lhs.imageFilenames != rhs.imageFilenames
+                || lhs.review != rhs.review
+            {
+                return true
+            }
+        }
+        return false
     }
 
     func deleteEntry(id: UUID) {
@@ -880,7 +915,14 @@ final class JournalStore: ObservableObject {
 
         // Backup current store before replacing.
         if fileManager.fileExists(atPath: databaseURL.path) {
-            copyDatabaseToSidecarBackup(includeRolling: true)
+            Self.copyDatabaseToSidecarBackup(
+                databaseURL: databaseURL,
+                backupURL: backupURL,
+                backupsDirectory: backupsDirectory,
+                includeRolling: true,
+                maxRollingBackups: maxRollingBackups
+            )
+            lastRollingBackupAt = Date()
         }
 
         // Replace images directory.
@@ -915,6 +957,7 @@ final class JournalStore: ObservableObject {
     func flushPendingWrites() {
         guard !isReadOnlyDueToLoadFailure else { return }
         persist()
+        persistQueue.sync {}
     }
 
     /// Ask editors to commit drafts, then persist the active journal.
@@ -1278,49 +1321,129 @@ final class JournalStore: ObservableObject {
             return
         }
         ensureDirectories()
+        entriesDidMutate.send()
 
-        // Keep a single sidecar `.bak` of the last good on-disk snapshot before overwrite.
-        // Rolling backups are throttled so typing does not flood the backups folder.
-        if fileManager.fileExists(atPath: databaseURL.path),
-           loadSnapshot(from: databaseURL) != nil
-        {
-            let shouldRoll: Bool
-            if let last = lastRollingBackupAt {
-                shouldRoll = Date().timeIntervalSince(last) >= 60 * 30
-            } else {
-                shouldRoll = true
-            }
-            copyDatabaseToSidecarBackup(includeRolling: shouldRoll)
+        persistGeneration += 1
+        let generation = persistGeneration
+        let snapshot = JournalSnapshot(version: JournalSnapshot.currentVersion, entries: entries)
+        let databaseURL = self.databaseURL
+        let backupURL = self.backupURL
+        let backupsDirectory = self.backupsDirectory
+        let maxRollingBackups = self.maxRollingBackups
+        let fileExists = fileManager.fileExists(atPath: databaseURL.path)
+        let shouldRoll: Bool
+        if let last = lastRollingBackupAt {
+            shouldRoll = Date().timeIntervalSince(last) >= 60 * 30
+        } else {
+            shouldRoll = true
+        }
+        if fileExists, shouldRoll {
+            lastRollingBackupAt = Date()
         }
 
-        let snapshot = JournalSnapshot(version: JournalSnapshot.currentVersion, entries: entries)
-        do {
-            let data = try encoder.encode(snapshot)
-            try data.write(to: databaseURL, options: .atomic)
-            lastPersistError = nil
-        } catch {
-            lastPersistError = error.localizedDescription
-            NSLog("Wick journal persist failed: \(error.localizedDescription)")
+        let snapshotCopy = snapshot
+        let copyExistingToBackup = fileExists
+        let includeRolling = fileExists && shouldRoll
+
+        // XCTest reloads the file immediately; keep that path synchronous.
+        if NSClassFromString("XCTestCase") != nil {
+            let error = Self.writeSnapshot(
+                snapshotCopy,
+                to: databaseURL,
+                backupURL: backupURL,
+                backupsDirectory: backupsDirectory,
+                copyExistingToBackup: copyExistingToBackup,
+                includeRolling: includeRolling,
+                maxRollingBackups: maxRollingBackups
+            )
+            applyPersistResult(error, generation: generation)
+            return
+        }
+
+        persistQueue.async { [weak self] in
+            let error = Self.writeSnapshot(
+                snapshotCopy,
+                to: databaseURL,
+                backupURL: backupURL,
+                backupsDirectory: backupsDirectory,
+                copyExistingToBackup: copyExistingToBackup,
+                includeRolling: includeRolling,
+                maxRollingBackups: maxRollingBackups
+            )
+            DispatchQueue.main.async {
+                self?.applyPersistResult(error, generation: generation)
+            }
         }
     }
 
-    private func copyDatabaseToSidecarBackup(includeRolling: Bool) {
+    private func applyPersistResult(_ error: String?, generation: UInt64) {
+        guard generation == persistGeneration else { return }
+        if let error {
+            lastPersistError = error
+            NSLog("Wick journal persist failed: \(error)")
+        } else if lastPersistError != nil {
+            lastPersistError = nil
+        }
+    }
+
+    /// Encode + atomic write off the main thread. Encoding options stay
+    /// `prettyPrinted + sortedKeys` to match `JournalSyncEncoding` (P3).
+    /// Does **not** re-decode the previous file to decide whether to copy `.bak`.
+    private nonisolated static func writeSnapshot(
+        _ snapshot: JournalSnapshot,
+        to databaseURL: URL,
+        backupURL: URL,
+        backupsDirectory: URL,
+        copyExistingToBackup: Bool,
+        includeRolling: Bool,
+        maxRollingBackups: Int
+    ) -> String? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        do {
+            if copyExistingToBackup {
+                Self.copyDatabaseToSidecarBackup(
+                    databaseURL: databaseURL,
+                    backupURL: backupURL,
+                    backupsDirectory: backupsDirectory,
+                    includeRolling: includeRolling,
+                    maxRollingBackups: maxRollingBackups
+                )
+            }
+            let data = try encoder.encode(snapshot)
+            try data.write(to: databaseURL, options: .atomic)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    private nonisolated static func copyDatabaseToSidecarBackup(
+        databaseURL: URL,
+        backupURL: URL,
+        backupsDirectory: URL,
+        includeRolling: Bool,
+        maxRollingBackups: Int
+    ) {
+        let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: databaseURL.path) else { return }
         try? fileManager.removeItem(at: backupURL)
         try? fileManager.copyItem(at: databaseURL, to: backupURL)
 
         guard includeRolling else { return }
+        try? fileManager.createDirectory(at: backupsDirectory, withIntermediateDirectories: true)
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         let name = "journal-\(formatter.string(from: Date())).json"
         let rolling = backupsDirectory.appendingPathComponent(name)
         try? fileManager.copyItem(at: databaseURL, to: rolling)
-        lastRollingBackupAt = Date()
-        pruneRollingBackups()
+        Self.pruneRollingBackups(in: backupsDirectory, keeping: maxRollingBackups)
     }
 
-    private func pruneRollingBackups() {
+    private nonisolated static func pruneRollingBackups(in backupsDirectory: URL, keeping maxRollingBackups: Int) {
+        let fileManager = FileManager.default
         guard let files = try? fileManager.contentsOfDirectory(
             at: backupsDirectory,
             includingPropertiesForKeys: [.contentModificationDateKey],

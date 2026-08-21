@@ -38,12 +38,18 @@ struct ScrollBarHider: NSViewRepresentable {
 
         override func layout() {
             super.layout()
-            // SwiftUI rebuilds or re-enables the scroll view on any pass;
-            // hiding is idempotent and cheap.
+            if let watched, watched.window != nil {
+                hideScrollers(of: watched)
+                return
+            }
             reapply()
         }
 
         func reapply() {
+            if let watched, watched.window != nil {
+                hideScrollers(of: watched)
+                return
+            }
             attachAndHide()
             // The scroll view is often not in the tree yet on the first
             // updateNSView / viewDidMoveToWindow. Retry once; KVO takes

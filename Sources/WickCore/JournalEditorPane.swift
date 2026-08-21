@@ -28,6 +28,9 @@ struct JournalEditorPane: View {
     @State private var imageImportTarget: JournalItemRef?
     @State private var showImageImporter = false
     @State private var pendingScrollID: String?
+    /// Only this item mounts AppKit text views (P1). Nil = all items are `Text`.
+    @State private var editingItemID: UUID?
+    @State private var editingFocus: ItemEditorFocus = .body
 
     private var isItemScoped: Bool { store.isItemScoped }
 
@@ -47,7 +50,6 @@ struct JournalEditorPane: View {
         }
         .background(palette.editorCanvas.color)
         .onAppear {
-            seedDraftsForVisibleTimeline()
             queueScrollToSelection()
         }
         .onChange(of: store.selection) { _ in
@@ -528,10 +530,7 @@ struct JournalEditorPane: View {
 
     /// 各日已实现盈亏(本地日分桶,与盈亏月历同一来源)。
     private var dayPnLs: [Date: Double] {
-        DailyRealizedPnl.sumsByDay(
-            fills: positionCoordinator.snapshot?.fills ?? [],
-            calendar: .current
-        )
+        positionCoordinator.pnlByDay
     }
 
     private static let pnlFormatter: NumberFormatter = {
@@ -550,10 +549,7 @@ struct JournalEditorPane: View {
 
     /// 页眉大日期:中文「8月20日」,英文「Aug 20」。
     private func bigDayDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = settings.language.locale
-        formatter.setLocalizedDateFormatFromTemplate("MMMd")
-        return formatter.string(from: date)
+        WickDateFormat.string(from: date, template: "MMMd", locale: settings.language.locale)
     }
 
     // MARK: - Item card
@@ -594,8 +590,19 @@ struct JournalEditorPane: View {
             onDrop: { providers in
                 handleDrop(providers, itemID: itemID, entryID: entryID)
             },
-            onChange: { scheduleSave(for: entryID) }
+            onChange: { scheduleSave(for: entryID) },
+            isEditing: editingItemID == itemID,
+            initialFocus: editingFocus,
+            onBeginEditing: { focus in
+                editingItemID = itemID
+                editingFocus = focus
+            }
         )
+        .onDisappear {
+            if editingItemID == itemID {
+                editingItemID = nil
+            }
+        }
     }
 
     // MARK: - Item-scoped grouping
@@ -648,15 +655,8 @@ struct JournalEditorPane: View {
     }
 
     private func seedDraftsForVisibleTimeline() {
-        if isItemScoped {
-            let entryIDs = Set(store.filteredTimelineItems.map(\.ref.entryID))
-            for id in entryIDs {
-                ensureDraft(for: id)
-            }
-        } else {
-            for entry in store.filteredEntries {
-                ensureDraft(for: entry.id)
-            }
+        if let id = store.selectedEntryID {
+            ensureDraft(for: id)
         }
     }
 
@@ -716,10 +716,7 @@ struct JournalEditorPane: View {
     }
 
     private func formattedDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = settings.language.locale
-        formatter.setLocalizedDateFormatFromTemplate("yMMMd")
-        return formatter.string(from: date)
+        WickDateFormat.string(from: date, template: "yMMMd", locale: settings.language.locale)
     }
 
     // MARK: - Persistence

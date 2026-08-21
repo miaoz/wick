@@ -65,10 +65,16 @@ final class ExchangePositionCoordinator: ObservableObject {
     private static let handledIDsKey = "wick.binance.handledPositionIDs"
     private static let handledIDsCap = 5000
 
-    @Published private(set) var snapshot: TradingPositionSnapshot?
+    @Published private(set) var snapshot: TradingPositionSnapshot? {
+        didSet { rebuildDerivedStats() }
+    }
     @Published private(set) var isSyncing = false
     @Published private(set) var lastError: ExchangeSyncError?
     @Published private(set) var hasCredentials = false
+    /// Realized PnL per local day; rebuilt when `snapshot` changes (P5).
+    private(set) var pnlByDay: [Date: Double] = [:]
+    /// Closed position count keyed by open-day `yyyy-MM-dd`.
+    private(set) var closedCountByDayKey: [String: Int] = [:]
 
     private let apiKeyStore: KeychainTokenStore
     private let secretStore: KeychainTokenStore
@@ -296,6 +302,18 @@ final class ExchangePositionCoordinator: ObservableObject {
             handledPositionIDs: Set(handledOrdered)
         )
         saveCache()
+    }
+
+    private func rebuildDerivedStats() {
+        pnlByDay = DailyRealizedPnl.sumsByDay(
+            fills: snapshot?.fills ?? [],
+            calendar: .current
+        )
+        var counts: [String: Int] = [:]
+        for position in snapshot?.positions ?? [] where position.isClosed {
+            counts[JournalDayKey.make(from: position.openTime), default: 0] += 1
+        }
+        closedCountByDayKey = counts
     }
 
     private static func loadHandledIDs() -> [String] {

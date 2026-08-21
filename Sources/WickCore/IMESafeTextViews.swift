@@ -31,6 +31,8 @@ struct IMESafeTextField: NSViewRepresentable {
     var onChange: (() -> Void)?
     /// Handles ⌘V when the pasteboard carries an image (text pastes use the default path).
     var onPasteImage: (() -> Bool)?
+    /// Steal first responder once after the field is installed (click-to-edit).
+    var becomeFirstResponder: Bool = false
 
     enum Style {
         case plain
@@ -51,6 +53,7 @@ struct IMESafeTextField: NSViewRepresentable {
         field.cell?.isScrollable = true
         field.maximumNumberOfLines = 1
         applyStyle(field)
+        context.coordinator.appliedStyle = style
         return field
     }
 
@@ -75,7 +78,16 @@ struct IMESafeTextField: NSViewRepresentable {
         if field.textColor != textColor {
             field.textColor = textColor
         }
-        applyStyle(field)
+        if context.coordinator.appliedStyle != style {
+            applyStyle(field)
+            context.coordinator.appliedStyle = style
+        }
+        if becomeFirstResponder, !context.coordinator.didBecomeFirstResponder {
+            context.coordinator.didBecomeFirstResponder = true
+            DispatchQueue.main.async {
+                field.window?.makeFirstResponder(field)
+            }
+        }
     }
 
     private func applyStyle(_ field: NSTextField) {
@@ -97,6 +109,8 @@ struct IMESafeTextField: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var parent: IMESafeTextField
+        var appliedStyle: IMESafeTextField.Style?
+        var didBecomeFirstResponder = false
 
         init(_ parent: IMESafeTextField) {
             self.parent = parent
@@ -208,6 +222,8 @@ struct IMESafeTextEditor: NSViewRepresentable {
     var onChange: (() -> Void)?
     /// Handles ⌘V when the pasteboard carries an image (text pastes use the default path).
     var onPasteImage: (() -> Bool)?
+    /// Steal first responder once after the editor is installed (click-to-edit).
+    var becomeFirstResponder: Bool = false
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -257,6 +273,12 @@ struct IMESafeTextEditor: NSViewRepresentable {
         // and `setFrameSize` posts frame-change notifications that re-enter
         // SwiftUI layout. On macOS 13 a timeline of many editors hangs the
         // main thread in that loop. `updateNSView` measures once width is real.
+        if becomeFirstResponder {
+            context.coordinator.didBecomeFirstResponder = true
+            DispatchQueue.main.async { [weak textView] in
+                textView?.window?.makeFirstResponder(textView)
+            }
+        }
         return scrollView
     }
 
@@ -289,6 +311,13 @@ struct IMESafeTextEditor: NSViewRepresentable {
             textView.textColor = .labelColor
         }
 
+        if becomeFirstResponder, !context.coordinator.didBecomeFirstResponder {
+            context.coordinator.didBecomeFirstResponder = true
+            DispatchQueue.main.async { [weak textView] in
+                textView?.window?.makeFirstResponder(textView)
+            }
+        }
+
         context.coordinator.recomputeHeight()
     }
 
@@ -298,6 +327,12 @@ struct IMESafeTextEditor: NSViewRepresentable {
         weak var textView: NSTextView?
         weak var scrollView: AutoHeightScrollView?
         private var isRecomputingHeight = false
+        var didBecomeFirstResponder = false
+        private var lastHeightWidth: CGFloat = -1
+        private var lastHeightTextHash: Int = 0
+        private var lastHeightTextCount: Int = -1
+        private var lastHeightMin: CGFloat = -1
+        private var lastHeightMax: CGFloat = -1
 
         init(_ parent: IMESafeTextEditor) {
             self.parent = parent
@@ -376,13 +411,30 @@ struct IMESafeTextEditor: NSViewRepresentable {
         func recomputeHeight() {
             guard !isRecomputingHeight else { return }
             guard let textView, let scrollView else { return }
-            isRecomputingHeight = true
-            defer { isRecomputingHeight = false }
 
             let width = scrollView.contentView.bounds.width
             // Width 0 yields a huge usedRect (one glyph per line). Leave the
             // min-height placeholder until the clip view has a real width.
             guard width > 1 else { return }
+
+            let text = textView.string
+            let maxH = parent.maxHeight ?? -1
+            if abs(lastHeightWidth - width) < 0.5,
+               lastHeightTextCount == text.count,
+               lastHeightTextHash == text.hashValue,
+               lastHeightMin == parent.minHeight,
+               lastHeightMax == maxH
+            {
+                return
+            }
+            lastHeightWidth = width
+            lastHeightTextCount = text.count
+            lastHeightTextHash = text.hashValue
+            lastHeightMin = parent.minHeight
+            lastHeightMax = maxH
+
+            isRecomputingHeight = true
+            defer { isRecomputingHeight = false }
 
             if abs(textView.frame.width - width) > 0.5 {
                 textView.setFrameSize(NSSize(width: width, height: textView.frame.height))

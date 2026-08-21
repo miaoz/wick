@@ -3,6 +3,12 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WickSync
 
+/// Which field the user clicked to enter edit mode on an item card (P1).
+enum ItemEditorFocus: Equatable {
+    case tag
+    case body
+}
+
 // MARK: - Item card
 struct JournalItemEditorCard: View {
     @EnvironmentObject private var settings: AppSettings
@@ -23,6 +29,12 @@ struct JournalItemEditorCard: View {
     let onPickImage: () -> Void
     let onDrop: ([NSItemProvider]) -> Bool
     let onChange: () -> Void
+    /// False until the user clicks the tag or body: display uses SwiftUI `Text`
+    /// so off-screen days stay lazy on macOS 13 (P1).
+    let isEditing: Bool
+    /// Which field should take first responder when `isEditing` becomes true.
+    let initialFocus: ItemEditorFocus
+    let onBeginEditing: (ItemEditorFocus) -> Void
 
     @State private var showReviewPopover = false
     /// Pre-verdict note text; merges into the review when one is picked,
@@ -65,44 +77,9 @@ struct JournalItemEditorCard: View {
                 }
             }
 
-            IMESafeTextField(
-                text: Binding(
-                    get: { item.tag },
-                    set: { item.tag = $0 }
-                ),
-                placeholder: L10n.string(.journalItemTagPlaceholder, language: settings.language),
-                font: WickPrintFont.songti(12.5, bold: true),
-                textColor: palette.pnlUp.nsColor,
-                style: .plain,
-                onChange: onChange,
-                onPasteImage: onPasteImage
-            )
-            .frame(height: 22)
+            tagField
 
-            IMESafeTextEditor(
-                text: Binding(
-                    get: { item.body },
-                    set: { item.body = $0 }
-                ),
-                font: WickPrintFont.songti(13.5),
-                // ~2–3 lines empty; grows with content so short notes stay compact.
-                minHeight: 48,
-                maxHeight: nil,
-                onChange: onChange,
-                onPasteImage: onPasteImage
-            )
-            .fixedSize(horizontal: false, vertical: true)
-            .overlay(alignment: .topLeading) {
-                // Aligned with the text view's first line: 0 (no editor
-                // padding) + 5 (NSTextView line fragment padding).
-                if item.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(L10n.string(.journalBodyPlaceholder, language: settings.language))
-                        .font(.custom("Songti SC", size: 13.5))
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 5)
-                        .allowsHitTesting(false)
-                }
-            }
+            bodyField
 
             imagesSection
 
@@ -143,6 +120,90 @@ struct JournalItemEditorCard: View {
         // The whole card is the image drop zone (the images section itself
         // collapses to zero height when the item has no images).
         .onDrop(of: [.image, .fileURL], isTargeted: nil, perform: onDrop)
+    }
+
+    // MARK: Display / edit fields (P1)
+
+    @ViewBuilder
+    private var tagField: some View {
+        if isEditing {
+            IMESafeTextField(
+                text: Binding(
+                    get: { item.tag },
+                    set: { item.tag = $0 }
+                ),
+                placeholder: L10n.string(.journalItemTagPlaceholder, language: settings.language),
+                font: WickPrintFont.songti(12.5, bold: true),
+                textColor: palette.pnlUp.nsColor,
+                style: .plain,
+                onChange: onChange,
+                onPasteImage: onPasteImage,
+                becomeFirstResponder: initialFocus == .tag
+            )
+            .frame(height: 22)
+        } else {
+            let trimmed = item.tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            Text(trimmed.isEmpty ? " " : item.tag)
+                .font(.custom("Songti SC", size: 12.5).weight(.bold))
+                .foregroundStyle(trimmed.isEmpty ? Color.clear : palette.pnlUp.color)
+                .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
+                .overlay(alignment: .leading) {
+                    if trimmed.isEmpty {
+                        Text(L10n.string(.journalItemTagPlaceholder, language: settings.language))
+                            .font(.custom("Songti SC", size: 12.5).weight(.bold))
+                            .foregroundStyle(.tertiary)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { onBeginEditing(.tag) }
+        }
+    }
+
+    @ViewBuilder
+    private var bodyField: some View {
+        if isEditing {
+            IMESafeTextEditor(
+                text: Binding(
+                    get: { item.body },
+                    set: { item.body = $0 }
+                ),
+                font: WickPrintFont.songti(13.5),
+                minHeight: 48,
+                maxHeight: nil,
+                onChange: onChange,
+                onPasteImage: onPasteImage,
+                becomeFirstResponder: initialFocus == .body
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            .overlay(alignment: .topLeading) {
+                if item.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(L10n.string(.journalBodyPlaceholder, language: settings.language))
+                        .font(.custom("Songti SC", size: 13.5))
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 5)
+                        .allowsHitTesting(false)
+                }
+            }
+        } else {
+            let trimmed = item.body.trimmingCharacters(in: .whitespacesAndNewlines)
+            Text(trimmed.isEmpty ? " " : item.body)
+                .font(.custom("Songti SC", size: 13.5))
+                .foregroundStyle(palette.textPrimary.color)
+                .frame(maxWidth: .infinity, minHeight: 48, alignment: .topLeading)
+                .padding(.horizontal, 5)
+                .overlay(alignment: .topLeading) {
+                    if trimmed.isEmpty {
+                        Text(L10n.string(.journalBodyPlaceholder, language: settings.language))
+                            .font(.custom("Songti SC", size: 13.5))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 5)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { onBeginEditing(.body) }
+        }
     }
 
     // MARK: Review

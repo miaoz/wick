@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 import WickSync
 @testable import WickCore
@@ -245,5 +246,55 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: db.path))
         let onDisk = try String(contentsOf: db, encoding: .utf8)
         XCTAssertEqual(onDisk, "{")
+    }
+
+    // MARK: - Persist / publish (P2, P3)
+
+    func testBodyOnlyUpdateDoesNotPublishObjectWillChange() {
+        let entry = store.createEntry()
+        var draft = entry
+        draft.items[0].body = "hello"
+
+        var published = 0
+        let cancellable = store.objectWillChange.sink { published += 1 }
+
+        store.updateEntry(draft)
+        store.flushPendingWrites()
+        XCTAssertEqual(published, 0, "body-only autosave must not rebuild the journal UI")
+        XCTAssertEqual(store.entries.first?.items.first?.body, "hello")
+
+        draft.items[0].tag = "BTC"
+        store.updateEntry(draft)
+        XCTAssertGreaterThan(published, 0, "tag edits are structural and must publish")
+
+        let reloaded = JournalStore(rootDirectory: tempRoot)
+        XCTAssertEqual(reloaded.entries.first?.items.first?.body, "hello")
+        XCTAssertEqual(reloaded.entries.first?.items.first?.tag, "BTC")
+        _ = cancellable
+    }
+
+    func testRapidBodyUpdatesKeepLastWrite() {
+        _ = store.createEntry()
+        for index in 1...20 {
+            var draft = store.entries[0]
+            draft.items[0].body = "v\(index)"
+            store.updateEntry(draft)
+        }
+        store.flushPendingWrites()
+        let reloaded = JournalStore(rootDirectory: tempRoot)
+        XCTAssertEqual(reloaded.entries.first?.items.first?.body, "v20")
+    }
+
+    func testBodyOnlyUpdateStillNotifiesSyncSubscribers() {
+        _ = store.createEntry()
+        var mutates = 0
+        let cancellable = store.entriesDidMutate.sink { mutates += 1 }
+
+        var draft = store.entries[0]
+        draft.items[0].body = "sync me"
+        store.updateEntry(draft)
+
+        XCTAssertGreaterThan(mutates, 0)
+        _ = cancellable
     }
 }

@@ -106,10 +106,7 @@ struct JournalInspectorView: View {
 
     /// 检查器大日期:「8月21日」/ "Aug 21",跟随 App 语言。
     private var inspectorBigDate: String {
-        let formatter = DateFormatter()
-        formatter.locale = settings.language.locale
-        formatter.setLocalizedDateFormatFromTemplate("MMMd")
-        return formatter.string(from: Date())
+        WickDateFormat.string(from: Date(), template: "MMMd", locale: settings.language.locale)
     }
 
     /// 宜忌小印:白文小方章(朱砂/烟墨)+ 宋体短语。

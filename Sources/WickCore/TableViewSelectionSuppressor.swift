@@ -7,15 +7,48 @@ import SwiftUI
 /// without this the system's bright blue pill shows for the whole mouse-down
 /// until SwiftUI's re-render covers it.
 struct TableViewSelectionSuppressor: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        NSView()
+    func makeNSView(context: Context) -> ProbeView {
+        ProbeView()
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {
-        // Defer: the list view is not necessarily in place yet when update
-        // runs for the first time.
-        DispatchQueue.main.async {
-            (nsView.containingListView as? NSTableView)?.selectionHighlightStyle = .none
+    func updateNSView(_ nsView: ProbeView, context: Context) {
+        nsView.applyIfNeeded()
+    }
+
+    final class ProbeView: NSView {
+        private weak var tableView: NSTableView?
+        private var didScheduleRetry = false
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window == nil {
+                tableView = nil
+                didScheduleRetry = false
+            } else {
+                applyIfNeeded()
+            }
+        }
+
+        func applyIfNeeded() {
+            if let tableView, tableView.window != nil {
+                tableView.selectionHighlightStyle = .none
+                return
+            }
+            if let found = containingListView as? NSTableView {
+                tableView = found
+                found.selectionHighlightStyle = .none
+                return
+            }
+            guard !didScheduleRetry else { return }
+            didScheduleRetry = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.didScheduleRetry = false
+                if let found = self.containingListView as? NSTableView {
+                    self.tableView = found
+                    found.selectionHighlightStyle = .none
+                }
+            }
         }
     }
 }

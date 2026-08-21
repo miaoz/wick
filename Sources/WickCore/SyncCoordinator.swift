@@ -88,9 +88,8 @@ final class SyncCoordinator: ObservableObject {
 
         // Edit-driven sync: engine coalesces these into one cycle 15 s after
         // the last change. Remote applies retrigger harmlessly (hash no-op).
-        JournalStore.shared.$entries
-            .dropFirst()
-            .sink { [weak self] _ in self?.engine.requestSync() }
+        JournalStore.shared.entriesDidMutate
+            .sink { [weak self] in self?.engine.requestSync() }
             .store(in: &cancellables)
 
         NotificationCenter.default.addObserver(

@@ -1,13 +1,13 @@
 import Foundation
 
 /// Next-day verdict on a journal item (trade review): was the call right.
-public enum JournalReviewVerdict: String, Codable {
+public enum JournalReviewVerdict: String, Codable, Sendable {
     case correct
     case wrong
 }
 
 /// Structured review attached to a journal item, editable from the next day on.
-public struct JournalReview: Codable, Equatable, Hashable {
+public struct JournalReview: Codable, Equatable, Hashable, Sendable {
     public var verdict: JournalReviewVerdict
     /// Optional one-line annotation shown in italics under the verdict picker.
     public var note: String
@@ -28,7 +28,7 @@ public struct JournalReview: Codable, Equatable, Hashable {
 }
 
 /// One focus block inside a journal day: a tag, notes, and optional images.
-public struct JournalItem: Identifiable, Codable, Equatable, Hashable {
+public struct JournalItem: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var id: UUID
     /// Single free-form tag for this item (e.g. a symbol, topic, or person).
     public var tag: String
@@ -71,7 +71,7 @@ public struct JournalItem: Identifiable, Codable, Equatable, Hashable {
 }
 
 /// A journal document for a calendar day, composed of one or more items.
-public struct JournalEntry: Identifiable, Codable, Equatable, Hashable {
+public struct JournalEntry: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var id: UUID
     /// Calendar day this entry is about (start-of-day in local time when created).
     public var date: Date
@@ -183,7 +183,7 @@ public struct JournalEntry: Identifiable, Codable, Equatable, Hashable {
     }
 }
 
-public struct JournalSnapshot: Codable, Equatable {
+public struct JournalSnapshot: Codable, Equatable, Sendable {
     public var version: Int
     public var entries: [JournalEntry]
 

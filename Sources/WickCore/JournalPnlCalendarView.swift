@@ -187,7 +187,7 @@ struct JournalPnlCalendarView: View {
     private var calendar: Calendar { Calendar.current }
 
     private var pnlByDay: [Date: Double] {
-        DailyRealizedPnl.sumsByDay(fills: coordinator.snapshot?.fills ?? [], calendar: calendar)
+        coordinator.pnlByDay
     }
 
     /// dayKey -> entry id, for the journaled state and tap-to-select.
