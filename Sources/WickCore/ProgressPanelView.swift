@@ -12,6 +12,7 @@ struct ProgressPanelView: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var settings: AppSettings
     @State private var showsSettings = false
+    @State private var layoutWarmupDone = false
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -71,9 +72,29 @@ struct ProgressPanelView: View {
             .padding(PanelViewLayout.outerPadding)
             .frame(width: PanelViewLayout.width)
             .fixedSize(horizontal: false, vertical: true)
-            .animation(.easeInOut(duration: 0.18), value: showsSettings)
-            .animation(.easeInOut(duration: 0.18), value: settings.language)
-            .animation(.easeInOut(duration: 0.18), value: settings.appearance)
+            // No implicit `.animation` on this root: it re-renders every second
+            // (TimelineView), and on macOS 13 `.animation(value:)` leaks into
+            // those per-second transactions, so every layout change glides
+            // around. Animations are applied explicitly at the mutation sites.
+            // One-shot identity flip for the macOS 13 first-layout workaround,
+            // see `warmUpPanelLayoutIfNeeded`.
+            .id(layoutWarmupDone)
+        }
+        .onAppear(perform: warmUpPanelLayoutIfNeeded)
+    }
+
+    /// macOS 13 (Ventura) lays out `MenuBarExtra` `.window` content with garbage
+    /// geometry on the first pass: every `Text` lands at a wrong position and
+    /// keeps drifting with each `TimelineView` tick until the subtree is rebuilt
+    /// (opening settings and going back "fixes" it for the session). Rebuild the
+    /// content once, after the panel has settled on screen, so the layout the
+    /// user sees is computed from the final window geometry. No-op on macOS 14+.
+    private func warmUpPanelLayoutIfNeeded() {
+        guard !layoutWarmupDone else { return }
+        guard #unavailable(macOS 14) else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            layoutWarmupDone = true
         }
     }
 
@@ -117,7 +138,9 @@ struct ProgressPanelView: View {
                     systemName: "gearshape",
                     help: L10n.string(.settings, language: language)
                 ) {
-                    showsSettings = true
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        showsSettings = true
+                    }
                 }
             }
         }
@@ -144,7 +167,9 @@ struct ProgressPanelView: View {
                 systemName: "chevron.left",
                 help: L10n.string(.back, language: language)
             ) {
-                showsSettings = false
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    showsSettings = false
+                }
             }
         }
     }
@@ -184,7 +209,9 @@ private struct SettingsContentView: View {
                             title: option.displayName,
                             isSelected: settings.language == option
                         ) {
-                            settings.language = option
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                settings.language = option
+                            }
                         }
                     }
                 }
@@ -200,7 +227,9 @@ private struct SettingsContentView: View {
                             isSelected: settings.appearance == option,
                             expands: true
                         ) {
-                            settings.appearance = option
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                settings.appearance = option
+                            }
                         }
                     }
                 }

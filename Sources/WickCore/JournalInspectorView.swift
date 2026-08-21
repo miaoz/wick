@@ -88,6 +88,7 @@ struct JournalInspectorView: View {
                         // 盈亏月历收合 → 行区独撑余下高度,全量滚动(事件常有数十项);
                         // 反向(事件收合、盈亏上提)本来就是定高堆叠的天然行为。
                         ScrollView { rowsContent }
+                            .scrollIndicators(.hidden)
                     } else {
                         rowsContent
                     }

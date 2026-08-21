@@ -163,6 +163,8 @@ public enum L10n {
         case syncConflictKeepLocal
         case syncConflictKeepRemote
         case syncConflictKeepMerged
+        case syncConflictKeepAllLocal
+        case syncConflictKeepAllRemote
         case syncConflictEmptyVersion
         case syncConflictMoreItemsFormat
         case syncConflictNoChoiceHint
@@ -393,6 +395,8 @@ public enum L10n {
             case .syncConflictKeepLocal: return "保留本机"
             case .syncConflictKeepRemote: return "保留远端"
             case .syncConflictKeepMerged: return "保留合并"
+            case .syncConflictKeepAllLocal: return "全部保留本机"
+            case .syncConflictKeepAllRemote: return "全部保留远端"
             case .syncConflictEmptyVersion: return "（空）"
             case .syncConflictMoreItemsFormat: return "还有 %d 条…"
             case .syncConflictNoChoiceHint: return "此冲突已自动处理，无需选择。"
@@ -622,6 +626,8 @@ public enum L10n {
             case .syncConflictKeepLocal: return "Keep This Mac"
             case .syncConflictKeepRemote: return "Keep Dropbox"
             case .syncConflictKeepMerged: return "Keep Merged"
+            case .syncConflictKeepAllLocal: return "Keep This Mac for All"
+            case .syncConflictKeepAllRemote: return "Keep Dropbox for All"
             case .syncConflictEmptyVersion: return "(empty)"
             case .syncConflictMoreItemsFormat: return "%d more items…"
             case .syncConflictNoChoiceHint: return "Already handled automatically - nothing to choose."

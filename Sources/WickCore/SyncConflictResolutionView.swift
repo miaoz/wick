@@ -38,6 +38,31 @@ struct SyncConflictResolutionList: View {
                 .foregroundStyle(theme.selectionAccent)
             }
 
+            // Batch settle: most users treat one device as the source of truth,
+            // so offer one-tap "keep this Mac / keep Dropbox" across every
+            // conflict that carries both versions. Structural conflicts (no
+            // meaningful choice) are untouched and stay in the list.
+            let choiceConflicts = engine.pendingConflicts.filter(\.offersChoice)
+            if !choiceConflicts.isEmpty {
+                HStack(spacing: 6) {
+                    batchButton(
+                        title: L10n.string(.syncConflictKeepAllLocal, language: language)
+                    ) {
+                        for conflict in choiceConflicts {
+                            engine.resolveConflict(id: conflict.id, resolution: .local)
+                        }
+                    }
+                    batchButton(
+                        title: L10n.string(.syncConflictKeepAllRemote, language: language)
+                    ) {
+                        for conflict in choiceConflicts {
+                            engine.resolveConflict(id: conflict.id, resolution: .remote)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+
             ForEach(engine.pendingConflicts) { conflict in
                 SyncConflictRow(
                     conflict: conflict,
@@ -52,6 +77,25 @@ struct SyncConflictResolutionList: View {
                 }
             }
         }
+    }
+
+    private func batchButton(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(theme.primaryText)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(theme.controlBackground)
+                )
+                .overlay {
+                    Capsule(style: .continuous)
+                        .strokeBorder(theme.controlBorder, lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
     }
 }
 
