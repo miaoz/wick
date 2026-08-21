@@ -9,12 +9,30 @@ public struct WickApp: App {
 
     public init() {}
 
-    public var body: some Scene {
-        MenuBarExtra {
+    @ViewBuilder
+    private var menuBarPanelRoot: some View {
+        if #available(macOS 14, *) {
             ProgressPanelView()
                 .environmentObject(settings)
                 .environmentObject(journalStore)
                 .preferredColorScheme(settings.preferredColorScheme)
+        } else {
+            MenuBarExtraContentHost {
+                ProgressPanelView()
+            }
+            .environmentObject(settings)
+            .environmentObject(journalStore)
+            .preferredColorScheme(settings.preferredColorScheme)
+        }
+    }
+
+    public var body: some Scene {
+        MenuBarExtra {
+            // macOS 13 lays MenuBarExtra `.window` SwiftUI out against a
+            // placeholder panel frame; Text origins from that pass stick.
+            // Route through our own host so the first in-window layout of
+            // the panel already sees the live bounds (no-op wrapper on 14+).
+            menuBarPanelRoot
         } label: {
             MenuBarLabelView()
                 .environmentObject(settings)
