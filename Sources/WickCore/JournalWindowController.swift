@@ -93,7 +93,7 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         if #available(macOS 13.3, *) {
             hosting.safeAreaRegions = []
         }
-        let window = JournalWindow(
+        let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 980, height: 640),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
@@ -364,52 +364,6 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         }
     }
     #endif
-}
-
-// MARK: - 日记窗口容器 (红绿灯垂直居中)
-
-/// Custom NSWindow for the journal window that centers standard window buttons
-/// (traffic lights) vertically within the custom top bar.
-final class JournalWindow: NSWindow {
-    override func layoutIfNeeded() {
-        super.layoutIfNeeded()
-        layoutTrafficLights()
-    }
-
-    override func displayIfNeeded() {
-        super.displayIfNeeded()
-        layoutTrafficLights()
-    }
-
-    override func setFrame(_ frameRect: NSRect, display displayFlag: Bool) {
-        super.setFrame(frameRect, display: displayFlag)
-        layoutTrafficLights()
-    }
-
-    override func setFrame(_ frameRect: NSRect, display displayFlag: Bool, animate animateFlag: Bool) {
-        super.setFrame(frameRect, display: displayFlag, animate: animateFlag)
-        layoutTrafficLights()
-    }
-
-    private func layoutTrafficLights() {
-        guard !styleMask.contains(.fullScreen),
-              let close = standardWindowButton(.closeButton),
-              let mini = standardWindowButton(.miniaturizeButton),
-              let zoom = standardWindowButton(.zoomButton),
-              let titlebarView = close.superview
-        else { return }
-
-        let buttonHeight = close.bounds.height
-        let targetY = titlebarView.bounds.height - (JournalRootView.topBarHeight / 2) - (buttonHeight / 2)
-
-        for btn in [close, mini, zoom] {
-            if btn.frame.origin.y != targetY {
-                var f = btn.frame
-                f.origin.y = targetY
-                btn.frame = f
-            }
-        }
-    }
 }
 
 
