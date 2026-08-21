@@ -16,9 +16,10 @@ struct JournalRootView: View {
     /// 栏宽(拖分隔条调整,松手才落 UserDefaults;§05 状态记忆)。
     @State private var navWidth: CGFloat
     @State private var listWidth: CGFloat
-    /// 拖拽起始宽度;非 nil 表示对应分隔条正在拖拽。
-    @State private var navDragStart: CGFloat?
-    @State private var listDragStart: CGFloat?
+    /// Active drags freeze their origin and ceiling so layout changes cannot
+    /// feed back into gesture coordinates on macOS 13.
+    @State private var navDragSession: ColumnDragSession?
+    @State private var listDragSession: ColumnDragSession?
     /// DEBUG `-wick-journal-detail-only` 专注态启动(不动持久化档位)。
     private let launchModeOverride: Int?
 
@@ -338,6 +339,10 @@ struct JournalRootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The dividers move as their leading columns resize. Measuring the
+        // gesture in this stationary ancestor avoids Ventura recomputing a
+        // local translation against the divider's new position.
+        .coordinateSpace(name: JournalColumnDragCoordinateSpace.name)
     }
 
     static let navWidthRange: ClosedRange<CGFloat> = 190...280
@@ -366,38 +371,73 @@ struct JournalRootView: View {
     }
 
     private func dragNav(by translation: CGFloat) {
-        let start = navDragStart ?? navWidth
-        navDragStart = start
-        let target = start + translation
+        var session = navDragSession ?? ColumnDragSession(
+            initialWidth: navWidth,
+            maximumWidth: navWidthCeiling()
+        )
+        let target = session.initialWidth + translation
         // 拖过最小宽度再压 24pt = 拖到边缘收起(§05 逃生口)。
-        if target < Self.navWidthRange.lowerBound - 24 {
-            navDragStart = nil
-            setColumnMode(1)
-            return
+        let shouldCollapse = target < Self.navWidthRange.lowerBound - 24
+        if session.shouldCollapse != shouldCollapse {
+            session.shouldCollapse = shouldCollapse
         }
-        navWidth = min(navWidthCeiling(), max(Self.navWidthRange.lowerBound, target))
+        if navDragSession == nil || navDragSession?.shouldCollapse != shouldCollapse {
+            navDragSession = session
+        }
+        setWidth(
+            min(session.maximumWidth, max(Self.navWidthRange.lowerBound, target)),
+            current: navWidth,
+            assign: { navWidth = $0 }
+        )
     }
 
     private func endNavDrag() {
-        navDragStart = nil
+        let shouldCollapse = navDragSession?.shouldCollapse == true
+        navDragSession = nil
+        if shouldCollapse {
+            setColumnMode(1)
+            return
+        }
         UserDefaults.standard.set(Double(navWidth), forKey: Self.navWidthKey)
     }
 
     private func dragList(by translation: CGFloat) {
-        let start = listDragStart ?? listWidth
-        listDragStart = start
-        let target = start + translation
-        if target < Self.listWidthRange.lowerBound - 24 {
-            listDragStart = nil
-            setColumnMode(2)
-            return
+        var session = listDragSession ?? ColumnDragSession(
+            initialWidth: listWidth,
+            maximumWidth: listWidthCeiling()
+        )
+        let target = session.initialWidth + translation
+        let shouldCollapse = target < Self.listWidthRange.lowerBound - 24
+        if session.shouldCollapse != shouldCollapse {
+            session.shouldCollapse = shouldCollapse
         }
-        listWidth = min(listWidthCeiling(), max(Self.listWidthRange.lowerBound, target))
+        if listDragSession == nil || listDragSession?.shouldCollapse != shouldCollapse {
+            listDragSession = session
+        }
+        setWidth(
+            min(session.maximumWidth, max(Self.listWidthRange.lowerBound, target)),
+            current: listWidth,
+            assign: { listWidth = $0 }
+        )
     }
 
     private func endListDrag() {
-        listDragStart = nil
+        let shouldCollapse = listDragSession?.shouldCollapse == true
+        listDragSession = nil
+        if shouldCollapse {
+            setColumnMode(2)
+            return
+        }
         UserDefaults.standard.set(Double(listWidth), forKey: Self.listWidthKey)
+    }
+
+    private func setWidth(
+        _ newWidth: CGFloat,
+        current: CGFloat,
+        assign: (CGFloat) -> Void
+    ) {
+        guard abs(newWidth - current) >= 0.5 else { return }
+        assign(newWidth)
     }
 
     /// Width the inspector currently occupies (1pt rule + 288), factored into
@@ -586,6 +626,16 @@ struct JournalRootView: View {
 
 // MARK: - 栏间分隔条(1pt 印刷界线 + 7pt 命中区)
 
+private enum JournalColumnDragCoordinateSpace {
+    static let name = "wick.journal.columnDrag"
+}
+
+private struct ColumnDragSession {
+    let initialWidth: CGFloat
+    let maximumWidth: CGFloat
+    var shouldCollapse = false
+}
+
 /// 栏间发丝界线:视觉上是 1pt rule,两侧各 3pt 用相邻栏面颜色填满,
 /// 凑出 7pt 拖拽命中区而版面保持平铺无缝。拖拽调宽、双击收起该栏
 /// (§05 逃生口);悬停切换左右 resize 光标。
@@ -597,28 +647,129 @@ private struct JournalColumnDivider: View {
     let onDrag: (CGFloat) -> Void
     let onDragEnd: () -> Void
     let onDoubleClick: () -> Void
+    @State private var isHovering = false
 
     var body: some View {
-        HStack(spacing: 0) {
+        let rule = HStack(spacing: 0) {
             Rectangle().fill(leadingFill).frame(width: 3)
             Rectangle().fill(fill).frame(width: 1)
             Rectangle().fill(trailingFill).frame(width: 3)
         }
         .frame(maxHeight: .infinity)
-        .contentShape(Rectangle())
-        .onHover { inside in
-            if inside {
-                NSCursor.resizeLeftRight.push()
-            } else {
-                NSCursor.pop()
+
+        if #available(macOS 14.0, *) {
+            rule
+                .contentShape(Rectangle())
+                .onHover { inside in
+                    guard inside != isHovering else { return }
+                    isHovering = inside
+                    if inside {
+                        NSCursor.resizeLeftRight.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
+                .gesture(
+                    DragGesture(
+                        minimumDistance: 1,
+                        coordinateSpace: .named(JournalColumnDragCoordinateSpace.name)
+                    )
+                    .onChanged { onDrag($0.translation.width) }
+                    .onEnded { _ in onDragEnd() }
+                )
+                .onTapGesture(count: 2) { onDoubleClick() }
+                .onDisappear {
+                    if isHovering {
+                        NSCursor.pop()
+                        isHovering = false
+                    }
+                }
+        } else {
+            rule.overlay {
+                VenturaColumnDragHandle(
+                    onDrag: onDrag,
+                    onDragEnd: onDragEnd,
+                    onDoubleClick: onDoubleClick
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .gesture(
-            DragGesture(minimumDistance: 1)
-                .onChanged { onDrag($0.translation.width) }
-                .onEnded { _ in onDragEnd() }
+    }
+}
+
+/// Ventura's SwiftUI drag translation can be recalculated after the divider
+/// moves, feeding column width changes back into the gesture. Track in stable
+/// window coordinates at the AppKit layer on macOS 13 to break that cycle.
+private struct VenturaColumnDragHandle: NSViewRepresentable {
+    let onDrag: (CGFloat) -> Void
+    let onDragEnd: () -> Void
+    let onDoubleClick: () -> Void
+
+    func makeNSView(context: Context) -> DragHandleView {
+        DragHandleView(
+            onDrag: onDrag,
+            onDragEnd: onDragEnd,
+            onDoubleClick: onDoubleClick
         )
-        .onTapGesture(count: 2) { onDoubleClick() }
+    }
+
+    func updateNSView(_ nsView: DragHandleView, context: Context) {
+        nsView.onDrag = onDrag
+        nsView.onDragEnd = onDragEnd
+        nsView.onDoubleClick = onDoubleClick
+    }
+
+    final class DragHandleView: NSView {
+        var onDrag: (CGFloat) -> Void
+        var onDragEnd: () -> Void
+        var onDoubleClick: () -> Void
+        private var mouseDownX: CGFloat?
+        private var didDrag = false
+
+        init(
+            onDrag: @escaping (CGFloat) -> Void,
+            onDragEnd: @escaping () -> Void,
+            onDoubleClick: @escaping () -> Void
+        ) {
+            self.onDrag = onDrag
+            self.onDragEnd = onDragEnd
+            self.onDoubleClick = onDoubleClick
+            super.init(frame: .zero)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError() }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .resizeLeftRight)
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            if event.clickCount == 2 {
+                mouseDownX = nil
+                didDrag = false
+                onDoubleClick()
+                return
+            }
+            mouseDownX = event.locationInWindow.x
+            didDrag = false
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            guard let mouseDownX else { return }
+            didDrag = true
+            onDrag(event.locationInWindow.x - mouseDownX)
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            defer {
+                mouseDownX = nil
+                didDrag = false
+            }
+            if didDrag {
+                onDragEnd()
+            }
+        }
     }
 }
 
@@ -686,4 +837,3 @@ private struct TrafficLightProbe: NSViewRepresentable {
         }
     }
 }
-
