@@ -280,6 +280,7 @@ struct JournalDayListColumn: View {
                 .scrollContentBackground(.hidden)
                 .scrollIndicators(.hidden)
                 .background(TableViewSelectionSuppressor())
+                .background(ScrollBarHider())
             }
         }
     }
@@ -332,6 +333,7 @@ struct JournalDayListColumn: View {
                 .scrollContentBackground(.hidden)
                 .scrollIndicators(.hidden)
                 .background(TableViewSelectionSuppressor())
+                .background(ScrollBarHider())
             }
         }
     }

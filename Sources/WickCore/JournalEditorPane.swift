@@ -205,6 +205,7 @@ struct JournalEditorPane: View {
                 .frame(maxWidth: .infinity)
             }
             .scrollIndicators(.hidden)
+            .background(ScrollBarHider())
             .onChange(of: pendingScrollID) { target in
                 guard let target else { return }
                 // Double-pass: first layout pass may not have built LazyVStack rows yet.

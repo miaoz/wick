@@ -89,6 +89,7 @@ struct JournalInspectorView: View {
                         // 反向(事件收合、盈亏上提)本来就是定高堆叠的天然行为。
                         ScrollView { rowsContent }
                             .scrollIndicators(.hidden)
+                            .background(ScrollBarHider())
                     } else {
                         rowsContent
                     }
