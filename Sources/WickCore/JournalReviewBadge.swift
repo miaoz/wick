@@ -1,12 +1,13 @@
 import SwiftUI
 import WickSync
 
-// MARK: - Review seal · 朱砂方章
+// MARK: - Review seal · 对错方章
 
-/// Verdict mark for a reviewed journal item — a square white-on-cinnabar seal
-/// (白文篆刻). Always cinnabar; the character carries the meaning, like a real
-/// chop. Three layers: distressed seal body (silhouette-only wobble), uneven
-/// ink shading, crisp character. Stamps in with a 0.3s slam on appear.
+/// Verdict mark for a reviewed journal item — a square white-character seal
+/// (白文篆刻). The ink follows the 涨跌配色 convention: 对 = the gain color,
+/// 错 = the loss color (red-up: 对 red / 错 green; green-up: reversed).
+/// Three layers: distressed seal body (silhouette-only wobble), uneven ink
+/// shading, crisp character. Stamps in with a 0.3s slam on appear.
 struct JournalReviewBadge: View {
     enum Style {
         case seal
@@ -80,8 +81,11 @@ struct JournalReviewBadge: View {
         return AppFont.ui(size * 0.44, weight: .heavy)
     }
 
-    /// Both verdicts print in cinnabar — a real seal is always red.
-    private var inkColor: WickRGB { palette.reviewCorrect }
+    /// 对/错印章颜色跟随「涨跌配色」配置:对 = 涨色、错 = 跌色
+    /// (红涨则对红错绿,绿涨则对绿错红)。
+    private var inkColor: WickRGB {
+        verdict.inkColor(in: palette, convention: settings.pnlColorConvention)
+    }
     private var charColor: Color { Color(red: 0.97, green: 0.91, blue: 0.84) }
 
     private var accessibilityText: String {
@@ -133,11 +137,12 @@ private struct SealBodyShape: Shape {
 }
 
 extension JournalReviewVerdict {
-    /// Glyph color for custom chrome (e.g. the verdict picker buttons).
-    func color(in palette: WickPalette) -> Color {
+    /// 对 = 涨色、错 = 跌色 —— 印章颜色跟随「涨跌配色」配置。
+    func inkColor(in palette: WickPalette, convention: PnlColorConvention) -> WickRGB {
+        let pair = palette.upDownColors(convention)
         switch self {
-        case .correct: return palette.reviewCorrect.color
-        case .wrong: return palette.reviewWrong.color
+        case .correct: return pair.gain
+        case .wrong: return pair.loss
         }
     }
 }

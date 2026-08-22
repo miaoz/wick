@@ -234,10 +234,9 @@ struct JournalItemEditorCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// In-row "复盘" call-to-action while unreviewed: a dashed chop outline
-    /// waiting to be stamped. It owns a normal row and never overlaps
-    /// content - floating over records/photos is a privilege of the picked
-    /// seal, not the button.
+    /// In-row "复盘" call-to-action while unreviewed. It owns a normal row and
+    /// never overlaps content - floating over records/photos is a privilege of
+    /// the picked seal, not the button.
     private var reviewButton: some View {
         Button {
             showReviewPopover = true
@@ -246,13 +245,6 @@ struct JournalItemEditorCard: View {
                 .font(AppFont.paper(12, weight: .bold))
                 .foregroundStyle(palette.reviewCorrect.color.opacity(0.8))
                 .frame(width: 44, height: 44)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .strokeBorder(
-                            palette.reviewCorrect.color.opacity(0.65),
-                            style: StrokeStyle(lineWidth: 1.5, dash: [4, 3])
-                        )
-                }
                 .rotationEffect(.degrees(-3))
         }
         .buttonStyle(.plain)

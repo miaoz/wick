@@ -332,7 +332,8 @@ enum DayArcEngine {
     // MARK: Anchor palettes — light scheme
     //
     // 「秉烛」锚点:火苗色(ember)跨时段恒定,只调色温;朱砂/黛青/单据纸为颜料,不参与插值漂移。
-    // reviewCorrect/reviewWrong 同色 —— 方章靠字表意。
+    // reviewCorrect/reviewWrong 同色,仅作复盘批注左线/未复盘占位等 accent;
+    // 对/错印章本体颜色跟随 pnlColorConvention(见 JournalReviewBadge)。
 
     /// Rose-dawn paper(玫瑰晨纸)。
     private static let lightDawn = WickPalette(
