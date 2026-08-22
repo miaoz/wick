@@ -94,7 +94,7 @@ make clean                 # rm -rf .build dist
 ```
 
 - 发布一律走 `make`（`swift build` 只产当前架构）；Info.plist 由脚本 heredoc 生成（`LSUIElement=true`）；`.app` **未公证**：本机存在 `Wick Local` 自签名身份时用它签（稳定身份，Keychain ACL 跨构建不失效），否则回退 ad-hoc（CI 即如此）；文档/脚本不得暗示已公证。
-- CI（release.yml）：macos-26 + Xcode 26.6 → `swift test` → 打包 → 仅 tag `v*` 建 GitHub Release（**只留最新 3 个**，不删 git tag）。
+- CI（release.yml）：macos-26 + Xcode 26.6 → `swift test` → 打包 → 仅 tag `v*` 建 GitHub Release（正文由 git log 自动生成：自上一 tag 的改动清单 + 安装说明，**只留最新 10 个**，不删 git tag）。
 - 测试落点：纯计算进可注入 `Date`/`Calendar` 的静态方法（`TimeProgressCalculator`/`DayArcEngine`/`PaperSim` 等）；存储行为进 `JournalStoreTests`；同步分支一律用 `WickSyncTests` 的假后端复现（假后端忠实模拟 Dropbox：分块哈希、增量回声——**不碰网络**）；UI 层无测试。
 
 ## 代码约定

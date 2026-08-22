@@ -113,25 +113,56 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Generate release body
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          PREV="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
+          mkdir -p dist
+          {
+            echo "## Wick ${VERSION}"
+            echo
+            if [[ -n "${PREV}" ]]; then
+              echo "本版改动（自 ${PREV}）："
+              echo
+              git log --no-merges --pretty=format:'- %s' "${PREV}..HEAD" \
+                | grep -v '^- Bump version' || true
+              echo
+            else
+              echo "最近改动："
+              echo
+              git log --no-merges -30 --pretty=format:'- %s' \
+                | grep -v '^- Bump version' || true
+              echo
+            fi
+            echo
+            echo "### 安装"
+            echo
+            echo "下载 \`Wick-macOS-${VERSION}.zip\`，解压后把 \`Wick.app\` 拖入「应用程序」。首次打开若被 Gatekeeper 拦截，请在 Finder 中右键 → 打开，或在「系统设置 → 隐私与安全性」中允许。"
+            echo
+            echo "> 发布包使用 ad-hoc 签名，**尚未**使用 Apple Developer ID 签名或公证。"
+          } > dist/release-body.md
+
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
         with:
           files: dist/Wick-macOS-*.zip
-          generate_release_notes: true
+          body_path: dist/release-body.md
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Keep only the 3 newest releases; older ones are deleted (git tags stay,
+      # Keep only the 10 newest releases; older ones are deleted (git tags stay,
       # so any old version can still be checked out and rebuilt if needed).
-      - name: Prune old releases (keep latest 3)
+      - name: Prune old releases (keep latest 10)
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          keep=3
+          keep=10
           count=0
           while read -r tag; do
             [ -z "$tag" ] && continue
