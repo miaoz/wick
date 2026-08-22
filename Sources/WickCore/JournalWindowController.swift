@@ -10,9 +10,11 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
 
     private var window: NSWindow?
     private var hostingController: NSViewController?
+    private var titlebarAccessoryController: NSTitlebarAccessoryViewController?
+    private var titlebarBackgroundView: NSView?
+    private var titlebarDividerView: NSView?
     private var languageObserver: NSObjectProtocol?
     private var activeJournalObserver: NSObjectProtocol?
-    private var toolbarPin: NSKeyValueObservation?
     /// Dedupes `UserDefaults.didChangeNotification` (P6): the notification
     /// does not name the key, so ignore bursts that do not affect chrome.
     private var lastChromeDefaultsSignature = ""
@@ -87,12 +89,8 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         // The window's size is owned by this controller (autosave + minSize
         // floor), never by the SwiftUI content — see the container note below.
         hosting.sizingOptions = []
-        // Content must reach the window's top edge so the in-view top bar
-        // (JournalRootView.topBar) shares one row with the traffic lights;
-        // the default titlebar safe area would push it into a second row.
-        if #available(macOS 13.3, *) {
-            hosting.safeAreaRegions = []
-        }
+        // Keep the default safe area so the journal content starts below the
+        // native titlebar accessory instead of extending behind it.
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 980, height: 640),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -139,20 +137,20 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
             updateMinSize(for: window)
             window.center()
         }
+        // The content still reaches the titlebar for the native accessory row.
+        // A dedicated background view is installed in the titlebar container
+        // so the traffic-light and accessory regions share Wick's fill.
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+        let toolbar = NSToolbar(identifier: "WickJournalToolbar")
+        toolbar.displayMode = .iconOnly
+        toolbar.sizeMode = .regular
+        toolbar.allowsUserCustomization = false
+        toolbar.showsBaselineSeparator = false
+        window.toolbarStyle = .unified
+        window.toolbar = toolbar
+        installTitlebarAccessory(on: window)
         applyWindowTheme(to: window)
-        // Run toolbar-less on every macOS version: NavigationSplitView (14+)
-        // force-installs a SwiftUI toolbar — an empty band holding only the
-        // system sidebar toggle, and every custom item gets a glass bezel on
-        // macOS 26. The in-content full-width top bar provides the window
-        // controls instead (JournalRootView.topBar). SwiftUI re-installs its
-        // toolbar on layout, so pin window.toolbar to nil.
-        toolbarPin = window.observe(\.toolbar, options: [.initial, .new]) { win, _ in
-            MainActor.assumeIsolated {
-                if win.toolbar != nil { win.toolbar = nil }
-            }
-        }
 
         self.window = window
 
@@ -178,6 +176,60 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         }
 
         return window
+    }
+
+    private func installTitlebarAccessory(on window: NSWindow) {
+        #if DEBUG
+        let columnModeOverride = CommandLine.arguments.contains("-wick-journal-detail-only") ? 2 : nil
+        #else
+        let columnModeOverride: Int? = nil
+        #endif
+        let root = JournalTopBarView(columnModeOverride: columnModeOverride)
+            .environmentObject(AppSettings.shared)
+            .environmentObject(JournalStore.shared)
+        let hosting = NSHostingView(rootView: root)
+        let height = JournalTopBarView.preferredHeight
+        hosting.frame = NSRect(x: 0, y: 0, width: window.frame.width, height: height)
+        hosting.autoresizingMask = [.width]
+
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.layoutAttribute = .top
+        accessory.view = hosting
+        window.addTitlebarAccessoryViewController(accessory)
+        let allocatedWidth = accessory.view.frame.width
+        accessory.preferredContentSize = NSSize(width: allocatedWidth, height: height)
+        accessory.view.setFrameSize(NSSize(width: allocatedWidth, height: height))
+        titlebarAccessoryController = accessory
+
+        installTitlebarBackground(on: window)
+    }
+
+    private func installTitlebarBackground(on window: NSWindow) {
+        guard let contentView = window.contentView,
+              let titlebarContainer = contentView.superview
+        else { return }
+        let height = JournalTopBarView.preferredHeight
+        let background = NSView(
+            frame: NSRect(
+                x: 0,
+                y: titlebarContainer.bounds.maxY - height,
+                width: titlebarContainer.bounds.width,
+                height: height
+            )
+        )
+        background.autoresizingMask = [.width, .minYMargin]
+        background.wantsLayer = true
+        background.layer?.backgroundColor = window.backgroundColor?.cgColor
+        let divider = NSView(frame: NSRect(x: 0, y: 0, width: background.bounds.width, height: 1))
+        divider.autoresizingMask = [.width, .maxYMargin]
+        divider.wantsLayer = true
+        background.addSubview(divider)
+        // Cover full-size SwiftUI content that otherwise bleeds different
+        // column colors into the transparent titlebar. Native titlebar views
+        // remain above this sibling and keep their AppKit-managed geometry.
+        titlebarContainer.addSubview(background, positioned: .above, relativeTo: contentView)
+        titlebarBackgroundView = background
+        titlebarDividerView = divider
     }
 
     private func applyChromeFromDefaultsIfNeeded() {
@@ -236,7 +288,9 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
             at: DayArcEngine.currentDate(),
             scheme: isDark ? .dark : .light
         )
-        window.backgroundColor = palette.backgroundBottom.nsColor
+        window.backgroundColor = palette.cardTop.nsColor
+        titlebarBackgroundView?.layer?.backgroundColor = palette.cardTop.nsColor.cgColor
+        titlebarDividerView?.layer?.backgroundColor = palette.divider.nsColor.cgColor
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
@@ -367,4 +421,3 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
     }
     #endif
 }
-

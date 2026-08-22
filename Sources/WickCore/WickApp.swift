@@ -51,8 +51,6 @@ private struct MenuBarLabelView: View {
     @EnvironmentObject private var settings: AppSettings
     @State private var dayPercentText = ""
 
-    private let tick = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
-
     var body: some View {
         HStack(spacing: 3) {
             Image(nsImage: MenuBarIcon.image)
@@ -64,8 +62,17 @@ private struct MenuBarLabelView: View {
         }
         .accessibilityLabel(accessibilityText)
         .onAppear(perform: refreshPercentIfNeeded)
-        .onReceive(tick) { _ in
-            refreshPercentIfNeeded()
+        // Combine's Timer publisher can outlive the macOS 26 MenuBarExtra
+        // label host. Its next delivery then reaches a released SwiftUI
+        // subscription and crashes in `swift_task_isMainExecutor`. A
+        // view-scoped task is cancelled with the label instead.
+        .task(id: settings.showMenuBarPercentage) {
+            guard settings.showMenuBarPercentage else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                guard !Task.isCancelled else { return }
+                refreshPercentIfNeeded()
+            }
         }
         .onChange(of: settings.showMenuBarPercentage) { enabled in
             if enabled {

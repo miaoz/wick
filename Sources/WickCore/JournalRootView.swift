@@ -1,14 +1,12 @@
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
-import WickCalendarKit
 
 // MARK: - Root
 
 struct JournalRootView: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: JournalStore
-    @ObservedObject private var calendarWindow = TradingCalendarWindowController.shared
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var exportStatus: String?
@@ -48,8 +46,6 @@ struct JournalRootView: View {
     @State private var journalNameDraft = ""
     /// rename/delete 的目标日记本(右键菜单行),nil 回退到当前活跃本。
     @State private var journalActionTargetID: UUID?
-    /// 红绿灯按钮行的垂直中心距内容顶缘的实测距离; 默认 16 (macOS 14+ 标称值)。
-    @State private var trafficLightCenterY: CGFloat = 16
 
     init() {
         #if DEBUG
@@ -90,7 +86,6 @@ struct JournalRootView: View {
                 } else if store.didRestoreFromBackup {
                     restoreBanner(palette: palette)
                 }
-                topBar(palette: palette)
                 splitLayout(palette: palette)
             }
         }
@@ -170,8 +165,8 @@ struct JournalRootView: View {
             .frame(width: 0, height: 0)
             .accessibilityHidden(true)
 
-            // The AppKit toolbar (see JournalWindowController) has no
-            // keyboardShortcut support, so these stay as hidden in-view buttons.
+            // The native titlebar accessory controls have no keyboardShortcut
+            // modifiers, so these stay as hidden in-view buttons.
             Button("") {
                 _ = store.openOrCreateToday()
             }
@@ -203,16 +198,12 @@ struct JournalRootView: View {
             .accessibilityHidden(true)
         }
 
-        // The window runs toolbar-less on every macOS version
-        // (JournalWindowController pins window.toolbar to nil): an empty
-        // toolbar band wastes the titlebar row, and macOS 26 forces a glass
-        // bezel on every toolbar item. The full-width top bar at the top of
-        // the window carries the column toggle / journal name / search /
-        // new-entry / inspector controls instead (see topBar).
+        // The window uses an empty native unified toolbar only to establish
+        // the system titlebar geometry. Wick controls live in the native top
+        // titlebar accessory installed by JournalWindowController.
         if #available(macOS 15.0, *) {
-            // Belt and braces: if SwiftUI's toolbar ever survives the pinning,
-            // don't let it show the window title (macOS 26 ignores
-            // titleVisibility = .hidden).
+            // Keep SwiftUI from synthesizing a title item into the otherwise
+            // empty AppKit toolbar (macOS 26 ignores titleVisibility = .hidden).
             base.toolbar(removing: .title)
         } else {
             base
@@ -276,6 +267,12 @@ struct JournalRootView: View {
         // Best-effort: post a notification; the sidebar search field becomes first responder via window.
         if let window = NSApp.keyWindow {
             window.makeFirstResponder(window.contentView)
+        }
+    }
+
+    private func cycleColumns() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            settings.journalColumnMode = (settings.journalColumnMode + 1) % 3
         }
     }
 
@@ -483,158 +480,6 @@ struct JournalRootView: View {
         )
     }
 
-    // MARK: - 顶栏(全宽,原生红绿灯位)
-
-    /// 全宽顶栏,扮演标题栏角色:三态循环钮(⌃⌘S)、日记名(静态)、
-    /// 选中日小注、搜索、新建、右钮(检查器 ⌥⌘0 / 彩蛋模式召唤物理黄历)。
-    /// 红绿灯浮在左上角,内容左缘让位;内容行垂直中心用实测的红绿灯中心
-    /// 对齐(`TrafficLightProbe`),保证全系统版本红绿灯与顶栏UI绝对水平齐平。
-    private func topBar(palette: WickPalette) -> some View {
-        HStack(spacing: 10) {
-            InkIconButton(
-                systemName: columnModeIcon,
-                help: L10n.string(.journalCycleColumns, language: settings.language)
-            ) {
-                cycleColumns()
-            }
-
-            journalTitle(palette: palette)
-
-            // 标题小注:选中日的「8月20日 · 星期四」(v4 顶栏标题)。
-            Text(selectedDayStamp)
-                .font(AppFont.ui(11))
-                .foregroundStyle(palette.textTertiary.color)
-                .lineLimit(1)
-
-            Spacer(minLength: 8)
-
-            searchField
-
-            InkIconButton(
-                systemName: "square.and.pencil",
-                help: L10n.string(.journalNewEntry, language: settings.language)
-            ) {
-                _ = store.openOrCreateToday()
-            }
-
-            if settings.physicalCalendarEnabled {
-                InkIconButton(
-                    systemName: "calendar",
-                    help: L10n.string(.tradingCalendar, language: settings.language),
-                    isOn: calendarWindow.isPresented
-                ) {
-                    calendarWindow.toggleCalendar()
-                }
-            } else {
-                InkIconButton(
-                    systemName: "sidebar.right",
-                    help: L10n.string(.inspectorToggle, language: settings.language),
-                    isOn: settings.journalInspectorVisible
-                ) {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        settings.journalInspectorVisible.toggle()
-                    }
-                }
-            }
-        }
-        .padding(.leading, 78)
-        .padding(.trailing, 14)
-        .frame(height: 28)
-        .padding(.top, max(0, (trafficLightCenterY > 0 ? trafficLightCenterY : 16) - 14))
-        .padding(.bottom, 8)
-        .background(
-            LinearGradient(
-                colors: [palette.cardTop.color, palette.cardBottom.color],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(palette.divider.color).frame(height: 1)
-        }
-        .background(alignment: .topLeading) {
-            TrafficLightProbe(centerY: $trafficLightCenterY)
-                .frame(width: 0, height: 0)
-        }
-        .windowDragBackground()
-    }
-
-    /// 三态循环钮图标:全导航 / 仅列表 / 专注。
-    private var columnModeIcon: String {
-        switch settings.journalColumnMode {
-        case 1: return "rectangle.split.2x1"
-        case 2: return "rectangle"
-        default: return "sidebar.left"
-        }
-    }
-
-    /// 顶栏标题小注:选中日的「8月20日 · 星期四」,无选中回退到今天。
-    private var selectedDayStamp: String {
-        let date: Date
-        if let id = store.selectedEntryID,
-           let entry = store.entries.first(where: { $0.id == id })
-        {
-            date = entry.date
-        } else {
-            date = Date()
-        }
-        let day = date.formatted(.dateTime.month().day().locale(settings.locale))
-        let weekday = date.formatted(.dateTime.weekday(.wide).locale(settings.locale))
-        return "\(day) · \(weekday)"
-    }
-
-    private func cycleColumns() {
-        withAnimation(.easeInOut(duration: 0.18)) {
-            settings.journalColumnMode = (settings.journalColumnMode + 1) % 3
-        }
-    }
-
-    /// 顶栏标题:静态日记名(切换与管理都在栏一,不在这里重复)。
-    private func journalTitle(palette: WickPalette) -> some View {
-        Text(
-            store.activeJournal?.name
-                ?? L10n.string(.journalLibraryDefaultName, language: settings.language)
-        )
-        .font(AppFont.ui(13, weight: .semibold))
-        .foregroundStyle(palette.textPrimary.color)
-        .lineLimit(1)
-    }
-
-    /// 顶栏搜索框(短文本,沿用原侧栏的 plain TextField 做法)。
-    private var searchField: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .font(AppFont.ui(11))
-                .foregroundStyle(.secondary)
-            TextField(
-                L10n.string(.journalSearchPlaceholder, language: settings.language),
-                text: $store.searchText
-            )
-            .textFieldStyle(.plain)
-            .font(AppFont.ui(12))
-
-            if !store.searchText.isEmpty {
-                Button {
-                    store.clearSearch()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
-        .frame(width: 180, height: 28)
-        .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.primary.opacity(0.05))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
-        }
-    }
 }
 
 // MARK: - 栏间分隔条(1pt 印刷界线 + 7pt 命中区)
@@ -669,6 +514,11 @@ private struct JournalColumnDivider: View {
             Rectangle().fill(trailingFill).frame(width: 3)
         }
         .frame(maxHeight: .infinity)
+        // Column backgrounds expand through the window's top safe area, but
+        // an ordinary shape starts below it and leaves a short 7pt-wide plug
+        // at the titlebar join. Extend the divider too; the AppKit titlebar
+        // background sits above it and clips everything above its hairline.
+        .ignoresSafeArea(.container, edges: .top)
 
         if #available(macOS 14.0, *) {
             rule
@@ -782,71 +632,6 @@ private struct VenturaColumnDragHandle: NSViewRepresentable {
             if didDrag {
                 onDragEnd()
             }
-        }
-    }
-}
-
-// MARK: - 红绿灯位置探针
-
-/// 实测窗口红绿灯(close)按钮行的垂直中心距内容顶缘的距离,写回 binding。
-/// AppKit 对 hidden-title 窗口的红绿灯纵向位置没有公开常量(且随系统版本
-/// 微调),顶栏内容行靠这个实测值与红绿灯保持在绝对同一水平线上。
-private struct TrafficLightProbe: NSViewRepresentable {
-    @Binding var centerY: CGFloat
-
-    func makeNSView(context: Context) -> ProbeView {
-        ProbeView(onChange: { centerY = $0 })
-    }
-
-    func updateNSView(_ nsView: ProbeView, context: Context) {
-        nsView.onChange = { centerY = $0 }
-    }
-
-    final class ProbeView: NSView {
-        var onChange: (CGFloat) -> Void
-        private var lastReported: CGFloat = 0
-
-        init(onChange: @escaping (CGFloat) -> Void) {
-            self.onChange = onChange
-            super.init(frame: .zero)
-        }
-
-        @available(*, unavailable)
-        required init?(coder: NSCoder) { fatalError() }
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            report()
-            DispatchQueue.main.async { [weak self] in self?.report() }
-        }
-
-        override func layout() {
-            super.layout()
-            report()
-        }
-
-        override func resize(withOldSuperviewSize oldSize: NSSize) {
-            super.resize(withOldSuperviewSize: oldSize)
-            report()
-        }
-
-        private func report() {
-            guard let window,
-                  let close = window.standardWindowButton(.closeButton),
-                  close.window == window,
-                  window.frame.size.height > 0
-            else { return }
-            // Measure in window base coordinates. Conversion to contentView is
-            // unreliable here (the hosting view has a stale frame early on);
-            // the titlebar buttons always sit in the window's own coordinate
-            // space, so "window height - button midY" is the true top offset.
-            let inWindow = close.convert(close.bounds, to: nil)
-            guard inWindow != .zero else { return }
-            let fromTop = window.frame.size.height - inWindow.midY
-            // Sanity gate: standard chrome puts the row center at ~14-18pt.
-            guard (6...60).contains(fromTop), fromTop != lastReported else { return }
-            lastReported = fromTop
-            onChange(fromTop)
         }
     }
 }
