@@ -22,10 +22,11 @@ enum TextInputComposition {
 // MARK: - Single-line
 
 /// AppKit-backed single-line field that ignores external string writes while IME is composing.
+@MainActor
 struct IMESafeTextField: NSViewRepresentable {
     @Binding var text: String
     var placeholder: String = ""
-    var font: NSFont = .systemFont(ofSize: NSFont.systemFontSize)
+    var font: NSFont = AppFont.paperNSFont(NSFont.systemFontSize)
     var textColor: NSColor = .labelColor
     var style: Style = .rounded
     var onChange: (() -> Void)?
@@ -214,9 +215,10 @@ final class AutoHeightScrollView: NSScrollView {
 /// Height tracks the laid-out text (clamped to `minHeight`…`maxHeight`). When
 /// content exceeds `maxHeight`, a vertical scroller appears; otherwise the
 /// outer journal timeline scrolls as one continuous surface.
+@MainActor
 struct IMESafeTextEditor: NSViewRepresentable {
     @Binding var text: String
-    var font: NSFont = .systemFont(ofSize: NSFont.systemFontSize)
+    var font: NSFont = AppFont.paperNSFont(NSFont.systemFontSize)
     /// Empty / short bodies still get a couple of lines of breathing room.
     var minHeight: CGFloat = 48
     /// Soft cap; `nil` grows without limit (preferred for timeline cards).

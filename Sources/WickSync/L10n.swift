@@ -53,6 +53,10 @@ public enum L10n {
         case language
         case appearance
         case pnlColorConvention
+        case journalFontStyle
+        case fontDefault
+        case chooseFont
+        case fontSearchPlaceholder
         case dayTitle
         case daySubtitle
         case weekTitle
@@ -307,6 +311,10 @@ public enum L10n {
             case .language: return "语言"
             case .appearance: return "外观"
             case .pnlColorConvention: return "涨跌配色"
+            case .journalFontStyle: return "字体风格"
+            case .fontDefault: return "默认（系统字体）"
+            case .chooseFont: return "选择字体…"
+            case .fontSearchPlaceholder: return "搜索字体"
             case .dayTitle: return "日"
             case .daySubtitle: return "今天"
             case .weekTitle: return "周"
@@ -558,6 +566,10 @@ public enum L10n {
             case .language: return "Language"
             case .appearance: return "Appearance"
             case .pnlColorConvention: return "PnL color"
+            case .journalFontStyle: return "Typeface"
+            case .fontDefault: return "Default (system)"
+            case .chooseFont: return "Choose font…"
+            case .fontSearchPlaceholder: return "Search fonts"
             case .dayTitle: return "Day"
             case .daySubtitle: return "Today"
             case .weekTitle: return "Week"

@@ -20,7 +20,7 @@ struct JournalExchangePositions: View {
         if !matched.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text(L10n.string(.exchangePositionsTitle, language: settings.language))
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .font(AppFont.ui(11, weight: .bold, design: .rounded))
                     .foregroundStyle(palette.textTertiary.color)
                     .textCase(.uppercase)
                     .tracking(0.4)
@@ -67,12 +67,12 @@ private struct ReceiptView: View {
             // Header: symbol + lane + date range
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(headerTitle)
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .font(AppFont.ui(11, weight: .bold, design: .monospaced))
                     .foregroundStyle(palette.receiptInk.color)
                 laneBadge
                 Spacer(minLength: 6)
                 Text(dateRange)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .font(AppFont.ui(9, weight: .medium, design: .monospaced))
                     .foregroundStyle(palette.receiptInk.color.opacity(0.6))
             }
             .padding(.bottom, 5)
@@ -113,7 +113,7 @@ private struct ReceiptView: View {
             Spacer(minLength: 8)
             Text(value)
         }
-        .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+        .font(AppFont.ui(10.5, weight: .medium, design: .monospaced))
         .foregroundStyle(palette.receiptInk.color.opacity(0.78))
         .padding(.vertical, 2.5)
         .overlay(alignment: .bottom) {
@@ -139,16 +139,16 @@ private struct ReceiptView: View {
             } label: {
                 HStack(spacing: 4) {
                     Text(showsBreakdown ? "▾" : "▸")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .font(AppFont.ui(8, weight: .bold, design: .monospaced))
                     Text(L10n.string(.exchangePositionNetPnl, language: settings.language))
-                        .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                        .font(AppFont.ui(10.5, weight: .medium, design: .monospaced))
                 }
                 .foregroundStyle(palette.receiptInk.color.opacity(0.78))
             }
             .buttonStyle(.plain)
             Spacer(minLength: 8)
             Text(netText)
-                .font(.system(size: 12.5, weight: .bold, design: .monospaced))
+                .font(AppFont.ui(12.5, weight: .bold, design: .monospaced))
                 .foregroundStyle(position.netPnl >= 0 ? printGain : printLoss)
         }
     }
@@ -158,11 +158,11 @@ private struct ReceiptView: View {
     private var holdingRow: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(L10n.string(.exchangePositionOpen, language: settings.language))
-                .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                .font(AppFont.ui(10.5, weight: .semibold, design: .monospaced))
                 .foregroundStyle(palette.receiptInk.color)
             Spacer(minLength: 8)
             Text(Self.dateFormatter.string(from: position.openTime))
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .font(AppFont.ui(10, weight: .medium, design: .monospaced))
                 .foregroundStyle(palette.receiptInk.color.opacity(0.6))
         }
     }
@@ -202,7 +202,7 @@ private struct ReceiptView: View {
                     Text(value)
                         .foregroundStyle(valueColor)
                 }
-                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                .font(AppFont.ui(10.5, weight: .medium, design: .monospaced))
                 .foregroundStyle(palette.receiptInk.color.opacity(0.78))
                 .padding(.vertical, 2.5)
                 .overlay(alignment: .bottom) {
@@ -215,7 +215,7 @@ private struct ReceiptView: View {
     private var laneBadge: some View {
         let isLong = position.side == .long
         return Text(L10n.string(isLong ? .exchangePositionLong : .exchangePositionShort, language: settings.language))
-            .font(.system(size: 9, weight: .bold))
+            .font(AppFont.ui(9, weight: .bold))
             .foregroundStyle(isLong ? printUp : printDown)
             .padding(.horizontal, 5)
             .padding(.vertical, 1)

@@ -161,10 +161,10 @@ struct JournalEditorPane: View {
     private var noSelection: some View {
         VStack(spacing: 14) {
             Image(systemName: "text.book.closed")
-                .font(.system(size: 42, weight: .ultraLight))
+                .font(AppFont.ui(42, weight: .ultraLight))
                 .foregroundStyle(.secondary)
             Text(L10n.string(.journalSelectPrompt, language: settings.language))
-                .font(.title3.weight(.medium))
+                .font(AppFont.preset(.title3, weight: .medium))
                 .foregroundStyle(.secondary)
             Button {
                 _ = store.openOrCreateToday()
@@ -179,13 +179,13 @@ struct JournalEditorPane: View {
     private var emptyFilter: some View {
         VStack(spacing: 14) {
             Image(systemName: "line.3.horizontal.decrease.circle")
-                .font(.system(size: 42, weight: .ultraLight))
+                .font(AppFont.ui(42, weight: .ultraLight))
                 .foregroundStyle(.secondary)
             Text(L10n.string(.journalFilterEmptyTitle, language: settings.language))
-                .font(.title3.weight(.medium))
+                .font(AppFont.preset(.title3, weight: .medium))
                 .foregroundStyle(.secondary)
             Text(L10n.string(.journalFilterEmptySubtitle, language: settings.language))
-                .font(.callout)
+                .font(AppFont.preset(.callout))
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -304,7 +304,7 @@ struct JournalEditorPane: View {
     private func itemScopedDayHeader(_ group: ItemDayGroup) -> some View {
         HStack(alignment: .center, spacing: 12) {
             Text(formattedDate(group.day))
-                .font(.system(size: 17, weight: .black, design: .serif))
+                .font(AppFont.ui(17, weight: .black, design: .serif))
                 .foregroundStyle(palette.textPrimary.color)
 
             Spacer(minLength: 8)
@@ -410,7 +410,7 @@ struct JournalEditorPane: View {
             datePickerEntryID = entryID
         } label: {
             Text(bigDayDate(draft.date))
-                .font(.system(size: 28, weight: .black, design: .serif))
+                .font(AppFont.ui(28, weight: .black, design: .serif))
                 .foregroundStyle(palette.textPrimary.color)
                 .lineLimit(1)
                 .fixedSize()
@@ -446,7 +446,7 @@ struct JournalEditorPane: View {
                 Text(lunar)
             }
         }
-        .font(.custom("Songti SC", size: 11))
+        .font(AppFont.paper(11))
         .foregroundStyle(palette.textSecondary.color)
         .lineLimit(1)
         .fixedSize()
@@ -460,10 +460,10 @@ struct JournalEditorPane: View {
         if let pnl = dayPnLs[Calendar.current.startOfDay(for: draft.date)] {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(L10n.string(.exchangePositionNetPnl, language: settings.language))
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .font(AppFont.ui(9, weight: .medium, design: .monospaced))
                     .foregroundStyle(palette.textTertiary.color)
                 Text(Self.format(pnl: pnl) + " USDT")
-                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .font(AppFont.ui(14, weight: .bold, design: .monospaced))
                     .foregroundStyle(pnl >= 0 ? gainLoss.gain : gainLoss.loss)
             }
             .fixedSize()
@@ -476,12 +476,12 @@ struct JournalEditorPane: View {
     private func dayHeaderMeta(isFocused: Bool) -> some View {
         if store.isReadOnlyDueToLoadFailure {
             Text(L10n.string(.journalReadOnly, language: settings.language))
-                .font(.caption)
+                .font(AppFont.preset(.caption))
                 .foregroundStyle(.orange)
                 .padding(.bottom, 5)
         } else if isFocused {
             Text(L10n.string(.journalAutosaved, language: settings.language))
-                .font(.system(size: 9, design: .monospaced))
+                .font(AppFont.ui(9, design: .monospaced))
                 .foregroundStyle(palette.textTertiary.color)
                 .lineLimit(1)
                 .fixedSize()
@@ -518,7 +518,7 @@ struct JournalEditorPane: View {
                     Spacer()
                     Text("00:00 — 24:00")
                 }
-                .font(.system(size: 9.5, design: .monospaced))
+                .font(AppFont.ui(9.5, design: .monospaced))
                 .foregroundStyle(palette.textTertiary.color)
             }
         }
@@ -531,9 +531,9 @@ struct JournalEditorPane: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "plus")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(AppFont.ui(10, weight: .semibold))
                 Text(L10n.string(.journalAddItem, language: settings.language))
-                    .font(.custom("Songti SC", size: 11).weight(.medium))
+                    .font(AppFont.paper(11, weight: .medium))
             }
             .foregroundStyle(palette.textTertiary.color)
             .frame(maxWidth: .infinity)

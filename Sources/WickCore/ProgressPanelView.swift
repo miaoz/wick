@@ -139,7 +139,7 @@ struct ProgressPanelView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(L10n.string(.panelWordmark, language: language))
-                    .font(.system(size: 17, weight: .bold, design: .serif))
+                    .font(AppFont.ui(17, weight: .bold, design: .serif))
                     .foregroundStyle(theme.primaryText)
 
                 TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -155,7 +155,7 @@ struct ProgressPanelView: View {
                             .locale(language.locale)
                         )
                     )
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .font(AppFont.ui(10, weight: .medium, design: .monospaced))
                     .foregroundStyle(theme.tertiaryText)
                 }
             }
@@ -189,11 +189,11 @@ struct ProgressPanelView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(L10n.string(.settingsTitle, language: language))
-                    .font(.system(size: 17, weight: .bold, design: .serif))
+                    .font(AppFont.ui(17, weight: .bold, design: .serif))
                     .foregroundStyle(theme.primaryText)
 
                 Text(L10n.string(.panelWordmark, language: language))
-                    .font(.footnote)
+                    .font(AppFont.preset(.footnote))
                     .foregroundStyle(theme.secondaryText)
             }
 
@@ -290,12 +290,18 @@ struct SettingsContentView: View {
             }
 
             settingsSection(
+                title: L10n.string(.journalFontStyle, language: language)
+            ) {
+                FontPickerSettingRow(theme: theme)
+            }
+
+            settingsSection(
                 title: L10n.string(.generalSection, language: language)
             ) {
                 VStack(alignment: .leading, spacing: 9) {
                     Toggle(isOn: $settings.showMenuBarPercentage) {
                         Text(L10n.string(.menuBarPercentage, language: language))
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .font(AppFont.ui(13, weight: .medium, design: .rounded))
                             .foregroundStyle(theme.primaryText)
                     }
                     .toggleStyle(.switch)
@@ -303,7 +309,7 @@ struct SettingsContentView: View {
 
                     Toggle(isOn: $settings.weekStartsOnMonday) {
                         Text(L10n.string(.weekStartsOnMonday, language: language))
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .font(AppFont.ui(13, weight: .medium, design: .rounded))
                             .foregroundStyle(theme.primaryText)
                     }
                     .toggleStyle(.switch)
@@ -311,7 +317,7 @@ struct SettingsContentView: View {
 
                     Toggle(isOn: $settings.launchAtLoginDesired) {
                         Text(L10n.string(.launchAtLogin, language: language))
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .font(AppFont.ui(13, weight: .medium, design: .rounded))
                             .foregroundStyle(theme.primaryText)
                     }
                     .toggleStyle(.switch)
@@ -319,13 +325,13 @@ struct SettingsContentView: View {
 
                     if settings.launchAtLoginDesired && settings.launchAtLoginNeedsApproval {
                         Text(L10n.string(.launchAtLoginNeedsApproval, language: language))
-                            .font(.caption)
+                            .font(AppFont.preset(.caption))
                             .foregroundStyle(theme.secondaryText)
                         Button {
                             LaunchAtLogin.openSystemLoginItems()
                         } label: {
                             Text(L10n.string(.openLoginItems, language: language))
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .font(AppFont.ui(12, weight: .medium, design: .rounded))
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(theme.selectionAccent)
@@ -346,7 +352,7 @@ struct SettingsContentView: View {
 
                     Toggle(isOn: $settings.journalReminderEnabled) {
                         Text(L10n.string(.journalReminderEnabled, language: language))
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .font(AppFont.ui(13, weight: .medium, design: .rounded))
                             .foregroundStyle(theme.primaryText)
                     }
                     .toggleStyle(.switch)
@@ -355,7 +361,7 @@ struct SettingsContentView: View {
                     if settings.journalReminderEnabled {
                         HStack {
                             Text(L10n.string(.journalReminderTime, language: language))
-                                .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                                .font(AppFont.ui(12.5, weight: .medium, design: .rounded))
                                 .foregroundStyle(theme.secondaryText)
                             Spacer()
                             DatePicker(
@@ -383,10 +389,10 @@ struct SettingsContentView: View {
                     Toggle(isOn: $settings.physicalCalendarEnabled) {
                         HStack(spacing: 6) {
                             Text(L10n.string(.calendarEasterEggTitle, language: language))
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .font(AppFont.ui(13, weight: .semibold, design: .rounded))
                                 .foregroundStyle(theme.primaryText)
                             Text("彩蛋")
-                                .font(.custom("Songti SC", size: 9).weight(.bold))
+                                .font(AppFont.paper(9, weight: .bold))
                                 .foregroundStyle(theme.palette.pnlUp.color)
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 1)
@@ -400,7 +406,7 @@ struct SettingsContentView: View {
                     .tint(theme.selectionAccent)
 
                     Text(L10n.string(.calendarEasterEggNote, language: language))
-                        .font(.custom("Songti SC", size: 10.5))
+                        .font(AppFont.paper(10.5))
                         .foregroundStyle(theme.secondaryText)
                         .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -422,27 +428,27 @@ struct SettingsContentView: View {
                 VStack(alignment: .leading, spacing: 7) {
                     if journalStore.isReadOnlyDueToLoadFailure {
                         Text(L10n.string(.journalLoadFailureTitle, language: language))
-                            .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                            .font(AppFont.ui(12.5, weight: .semibold, design: .rounded))
                             .foregroundStyle(theme.primaryText)
                         Text(L10n.string(.journalLoadFailureBody, language: language))
-                            .font(.caption)
+                            .font(AppFont.preset(.caption))
                             .foregroundStyle(theme.secondaryText)
                         if let detail = journalStore.loadFailureMessage {
                             Text(detail)
-                                .font(.caption2)
+                                .font(AppFont.preset(.caption2))
                                 .foregroundStyle(theme.tertiaryText)
                         }
                         Button {
                             showStartFreshConfirm = true
                         } label: {
                             Text(L10n.string(.journalStartFresh, language: language))
-                                .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                                .font(AppFont.ui(12.5, weight: .medium, design: .rounded))
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(theme.palette.pnlUp.color)
                     } else if journalStore.didRestoreFromBackup {
                         Text(L10n.string(.journalRestoredFromBackup, language: language))
-                            .font(.caption)
+                            .font(AppFont.preset(.caption))
                             .foregroundStyle(theme.secondaryText)
                     }
 
@@ -467,7 +473,7 @@ struct SettingsContentView: View {
 
                     if let dataStatusText {
                         Text(dataStatusText)
-                            .font(.caption)
+                            .font(AppFont.preset(.caption))
                             .foregroundStyle(theme.secondaryText)
                     }
                 }
@@ -486,11 +492,11 @@ struct SettingsContentView: View {
                     if settings.syncEnabled && syncCoordinator.backend.isAuthorized {
                         HStack {
                             Text("Dropbox")
-                                .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                                .font(AppFont.ui(12.5, weight: .medium, design: .rounded))
                                 .foregroundStyle(theme.secondaryText)
                             Spacer()
                             Text(settings.syncAccountEmail.isEmpty ? "—" : settings.syncAccountEmail)
-                                .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                                .font(AppFont.ui(12.5, weight: .semibold, design: .rounded))
                                 .foregroundStyle(theme.primaryText)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
@@ -510,14 +516,14 @@ struct SettingsContentView: View {
                                             manifest.journalName
                                         )
                                     )
-                                    .font(.caption)
+                                    .font(AppFont.preset(.caption))
                                     .foregroundStyle(theme.secondaryText)
                                     Spacer()
                                     Button {
                                         syncCoordinator.adoptRemoteJournal(manifest)
                                     } label: {
                                         Text(L10n.string(.syncImportJournal, language: language))
-                                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                                            .font(AppFont.ui(12, weight: .medium, design: .rounded))
                                     }
                                     .buttonStyle(.plain)
                                     .foregroundStyle(theme.selectionAccent)
@@ -540,7 +546,7 @@ struct SettingsContentView: View {
                         }
                     } else {
                         Text(L10n.string(.syncExplanation, language: language))
-                            .font(.caption)
+                            .font(AppFont.preset(.caption))
                             .foregroundStyle(theme.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
 
@@ -556,7 +562,7 @@ struct SettingsContentView: View {
 
                         if settings.syncEnabled, !syncCoordinator.backend.isAuthorized {
                             Text(L10n.string(.syncStatusNeedsAuth, language: language))
-                                .font(.caption)
+                                .font(AppFont.preset(.caption))
                                 .foregroundStyle(theme.secondaryText)
                         }
                         if let authError = syncCoordinator.lastAuthError {
@@ -580,18 +586,18 @@ struct SettingsContentView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text(L10n.string(.versionLabel, language: language))
-                            .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                            .font(AppFont.ui(12.5, weight: .medium, design: .rounded))
                             .foregroundStyle(theme.secondaryText)
                         Spacer()
                         Text(AppInfo.versionDisplay)
-                            .font(.system(size: 12.5, weight: .semibold, design: .rounded).monospacedDigit())
+                            .font(AppFont.ui(12.5, weight: .semibold, design: .rounded, monospacedDigit: true))
                             .foregroundStyle(theme.primaryText)
                             .textSelection(.enabled)
                     }
 
                     Toggle(isOn: $settings.checkForUpdatesOnLaunch) {
                         Text(L10n.string(.checkUpdatesOnLaunch, language: language))
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .font(AppFont.ui(13, weight: .medium, design: .rounded))
                             .foregroundStyle(theme.primaryText)
                     }
                     .toggleStyle(.switch)
@@ -613,14 +619,14 @@ struct SettingsContentView: View {
                                 NSWorkspace.shared.open(updateOpenURL)
                             } label: {
                                 Text(updateStatusText)
-                                    .font(.caption)
+                                    .font(AppFont.preset(.caption))
                                     .foregroundStyle(theme.selectionAccent)
                                     .multilineTextAlignment(.leading)
                             }
                             .buttonStyle(.plain)
                         } else {
                             Text(updateStatusText)
-                                .font(.caption)
+                                .font(AppFont.preset(.caption))
                                 .foregroundStyle(theme.secondaryText)
                         }
                     } else if !settings.lastKnownRemoteVersion.isEmpty,
@@ -639,7 +645,7 @@ struct SettingsContentView: View {
                                     settings.lastKnownRemoteVersion
                                 )
                             )
-                            .font(.caption)
+                            .font(AppFont.preset(.caption))
                             .foregroundStyle(theme.selectionAccent)
                             .multilineTextAlignment(.leading)
                         }
@@ -690,20 +696,20 @@ struct SettingsContentView: View {
         case .denied:
             VStack(alignment: .leading, spacing: 6) {
                 Text(L10n.string(.notificationDenied, language: language))
-                    .font(.caption)
+                    .font(AppFont.preset(.caption))
                     .foregroundStyle(theme.secondaryText)
                 Button {
                     reminderScheduler.openSystemNotificationSettings()
                 } label: {
                     Text(L10n.string(.openNotificationSettings, language: language))
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .font(AppFont.ui(13, weight: .medium, design: .rounded))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(theme.selectionAccent)
             }
         case .unavailable:
             Text(L10n.string(.notificationUnavailable, language: language))
-                .font(.caption)
+                .font(AppFont.preset(.caption))
                 .foregroundStyle(theme.tertiaryText)
         case .notDetermined, .authorized, .provisional:
             EmptyView()
@@ -719,13 +725,13 @@ struct SettingsContentView: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(AppFont.ui(12, weight: .medium))
                     .frame(width: 16)
                 Text(title)
-                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                    .font(AppFont.ui(12.5, weight: .medium, design: .rounded))
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(AppFont.ui(9, weight: .bold))
                     .foregroundStyle(theme.palette.textTertiary.color)
             }
             .foregroundStyle(
@@ -809,15 +815,15 @@ struct SettingsContentView: View {
         switch syncCoordinator.engine.status {
         case .syncing:
             Text(L10n.string(.syncStatusSyncing, language: language))
-                .font(.caption)
+                .font(AppFont.preset(.caption))
                 .foregroundStyle(theme.secondaryText)
         case .offline:
             Text(L10n.string(.syncStatusOffline, language: language))
-                .font(.caption)
+                .font(AppFont.preset(.caption))
                 .foregroundStyle(theme.secondaryText)
         case .needsAuth:
             Text(L10n.string(.syncStatusNeedsAuth, language: language))
-                .font(.caption)
+                .font(AppFont.preset(.caption))
                 .foregroundStyle(theme.secondaryText)
         case .error(let message):
             let display = message.contains("remote format")
@@ -827,16 +833,16 @@ struct SettingsContentView: View {
         case .idle:
             HStack {
                 Text(L10n.string(.syncLastSync, language: language))
-                    .font(.caption)
+                    .font(AppFont.preset(.caption))
                     .foregroundStyle(theme.secondaryText)
                 Spacer()
                 if let lastSyncAt = syncCoordinator.engine.lastSyncAt {
                     Text(lastSyncAt, style: .relative)
-                        .font(.caption)
+                        .font(AppFont.preset(.caption))
                         .foregroundStyle(theme.primaryText)
                 } else {
                     Text(L10n.string(.syncNeverSynced, language: language))
-                        .font(.caption)
+                        .font(AppFont.preset(.caption))
                         .foregroundStyle(theme.primaryText)
                 }
             }
@@ -858,7 +864,7 @@ struct SettingsContentView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.custom("Songti SC", size: 11.5).weight(.bold))
+                .font(AppFont.paper(11.5, weight: .bold))
                 .foregroundStyle(theme.palette.textSecondary.color)
                 .tracking(0.4)
 
@@ -882,7 +888,7 @@ struct SettingsContentView: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Text(title)
-                    .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular, design: .rounded))
+                    .font(AppFont.ui(12.5, weight: isSelected ? .semibold : .regular, design: .rounded))
                     .foregroundStyle(
                         isSelected ? Color(red: 1, green: 0.95, blue: 0.88)
                             : theme.palette.textPrimary.color
@@ -894,7 +900,7 @@ struct SettingsContentView: View {
 
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(AppFont.ui(10, weight: .bold))
                         .foregroundStyle(Color(red: 1, green: 0.95, blue: 0.88))
                 }
             }
@@ -948,12 +954,12 @@ private struct ProgressSlipContent: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(L10n.string(.panelHeroToday, language: language))
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .font(AppFont.ui(11, weight: .bold, design: .rounded))
                             .tracking(1.4)
                             .foregroundStyle(theme.secondaryText)
                         Spacer()
                         Text(today.percentageText)
-                            .font(.system(size: 32, weight: .black, design: .serif).monospacedDigit())
+                            .font(AppFont.ui(32, weight: .black, design: .serif, monospacedDigit: true))
                             .foregroundStyle(theme.primaryText)
                     }
 
@@ -969,7 +975,7 @@ private struct ProgressSlipContent: View {
                         Spacer()
                         Text(today.endText)
                     }
-                    .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                    .font(AppFont.ui(9.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(theme.tertiaryText)
                 }
             }
@@ -980,7 +986,7 @@ private struct ProgressSlipContent: View {
                     let index = offset + 1
                     HStack(spacing: 10) {
                         Text(item.subtitle)
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .font(AppFont.ui(11, weight: .semibold, design: .rounded))
                             .foregroundStyle(theme.secondaryText)
                             .frame(width: 30, alignment: .leading)
 
@@ -988,7 +994,7 @@ private struct ProgressSlipContent: View {
                             .frame(height: 12)
 
                         Text(item.percentageText)
-                            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                            .font(AppFont.ui(10.5, weight: .medium, design: .monospaced))
                             .foregroundStyle(theme.secondaryText)
                             .frame(width: 44, alignment: .trailing)
                     }
@@ -998,11 +1004,11 @@ private struct ProgressSlipContent: View {
 
             HStack {
                 Text(L10n.string(.motto, language: language))
-                    .font(.custom("Songti SC", size: 11))
+                    .font(AppFont.paper(11))
                     .foregroundStyle(theme.tertiaryText)
                 Spacer()
                 Text(AppInfo.shortVersion)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .font(AppFont.ui(9, weight: .medium, design: .monospaced))
                     .foregroundStyle(theme.tertiaryText.opacity(0.7))
             }
             .padding(.top, 2)

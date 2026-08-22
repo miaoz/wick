@@ -196,7 +196,7 @@ struct InkIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: size * 0.45, weight: .medium))
+                .font(AppFont.ui(size * 0.45, weight: .medium))
                 .foregroundStyle(
                     isOn ? Color(red: 1, green: 0.95, blue: 0.88)
                         : (isHovered ? palette.accent.color : palette.textSecondary.color)
@@ -254,12 +254,12 @@ struct CopyableErrorNotice: View {
         } label: {
             HStack(alignment: .top, spacing: 6) {
                 Image(systemName: isCopied ? "checkmark.circle.fill" : "exclamationmark.circle")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(AppFont.ui(11, weight: .medium))
                     .foregroundStyle(isCopied ? palette.accent.color : palette.pnlUp.color)
                     .padding(.top, 1)
 
                 Text(message)
-                    .font(.system(size: 11, design: .rounded))
+                    .font(AppFont.ui(11, design: .rounded))
                     .foregroundStyle(palette.textPrimary.color)
                     .lineLimit(isHovered ? nil : 3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -269,12 +269,12 @@ struct CopyableErrorNotice: View {
 
                 if isCopied {
                     Text(L10n.string(.copied, language: language))
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .font(AppFont.ui(10, weight: .bold, design: .rounded))
                         .foregroundStyle(palette.accent.color)
                         .padding(.top, 1)
                 } else {
                     Image(systemName: "doc.on.doc")
-                        .font(.system(size: 9.5))
+                        .font(AppFont.ui(9.5))
                         .foregroundStyle(palette.textTertiary.color.opacity(isHovered ? 0.9 : 0.45))
                         .padding(.top, 2)
                 }

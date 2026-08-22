@@ -105,6 +105,9 @@ public struct TradingCalendarRootView: View {
                 switchTab()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .wickCalendarFontStyleChanged)) { _ in
+            refreshPageTexture()
+        }
         #if os(macOS)
         .onExitCommand {
             onClose()
@@ -553,7 +556,7 @@ private struct CalendarPadBinding: View {
             onClose()
         } label: {
             Image(systemName: "xmark")
-                .font(.system(size: 11, weight: .bold))
+                .font(TradingCalendarTheme.control(11, weight: .bold))
                 .foregroundStyle(TradingCalendarTheme.ink.opacity(0.6))
                 .frame(width: 34, height: 34)
                 .background(Circle().fill(Color.white.opacity(0.6)))

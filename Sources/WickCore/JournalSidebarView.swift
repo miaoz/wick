@@ -106,12 +106,12 @@ struct JournalNavigationSidebar: View {
     private func journalRowLabel(_ journal: JournalInfo) -> some View {
         HStack(spacing: 8) {
             Text(journal.name)
-                .font(.system(size: 13, weight: journal.id == store.activeJournalID ? .semibold : .regular, design: .rounded))
+                .font(AppFont.ui(13, weight: journal.id == store.activeJournalID ? .semibold : .regular, design: .rounded))
                 .lineLimit(1)
             Spacer(minLength: 4)
             if journal.id == store.activeJournalID {
                 Text(L10n.string(.sidebarTodayMark, language: settings.language))
-                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                    .font(AppFont.ui(10.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(Color(red: 1, green: 0.95, blue: 0.88).opacity(0.85))
             }
         }
@@ -135,14 +135,14 @@ struct JournalNavigationSidebar: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 4) {
                 Text(title)
-                    .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                    .font(AppFont.ui(10.5, weight: .bold, design: .rounded))
                     .tracking(1)
                     .foregroundStyle(palette.textTertiary.color)
                 Spacer(minLength: 4)
                 if let onAdd {
                     Button(action: onAdd) {
                         Image(systemName: "plus")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(AppFont.ui(10, weight: .semibold))
                             .foregroundStyle(palette.textTertiary.color)
                             .frame(width: 16, height: 16)
                             .contentShape(Rectangle())
@@ -174,7 +174,7 @@ struct JournalNavigationSidebar: View {
             store.setTagFilter(isSelected ? nil : tag)
         } label: {
             Text(tag)
-                .font(.custom("Songti SC", size: 11).weight(isSelected ? .bold : .medium))
+                .font(AppFont.paper(11, weight: isSelected ? .bold : .medium))
                 .lineLimit(1)
                 .foregroundStyle(isSelected ? Color(red: 0.98, green: 0.92, blue: 0.85) : palette.pnlUp.color)
                 .padding(.horizontal, 8)
@@ -269,11 +269,11 @@ struct JournalDayListColumn: View {
     private var listHeader: some View {
         HStack {
             Text(store.selectedTagFilter ?? L10n.string(.inspectorEntriesSection, language: settings.language))
-                .font(.custom("Songti SC", size: 12).weight(.bold))
+                .font(AppFont.paper(12, weight: .bold))
                 .foregroundStyle(palette.textPrimary.color)
             Spacer()
             Text("\(store.filteredEntries.count)")
-                .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                .font(AppFont.ui(9.5, weight: .medium, design: .monospaced))
                 .foregroundStyle(palette.textTertiary.color)
         }
         .padding(.horizontal, 14)
@@ -372,12 +372,12 @@ struct JournalDayListColumn: View {
         VStack(spacing: 12) {
             Spacer()
             Image(systemName: "book.closed")
-                .font(.system(size: 36, weight: .light))
+                .font(AppFont.ui(36, weight: .light))
                 .foregroundStyle(.secondary)
             Text(L10n.string(.journalEmptyTitle, language: settings.language))
-                .font(.headline)
+                .font(AppFont.preset(.headline))
             Text(L10n.string(.journalEmptySubtitle, language: settings.language))
-                .font(.callout)
+                .font(AppFont.preset(.callout))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
@@ -397,12 +397,12 @@ struct JournalDayListColumn: View {
         VStack(spacing: 12) {
             Spacer()
             Image(systemName: "line.3.horizontal.decrease.circle")
-                .font(.system(size: 36, weight: .light))
+                .font(AppFont.ui(36, weight: .light))
                 .foregroundStyle(.secondary)
             Text(L10n.string(.journalFilterEmptyTitle, language: settings.language))
-                .font(.headline)
+                .font(AppFont.preset(.headline))
             Text(L10n.string(.journalFilterEmptySubtitle, language: settings.language))
-                .font(.callout)
+                .font(AppFont.preset(.callout))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
@@ -447,10 +447,10 @@ struct JournalDayListColumn: View {
     private func monthSectionHeader(_ section: DaySection) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(section.month)
-                .font(.custom("Songti SC", size: 12).weight(.bold))
+                .font(AppFont.paper(12, weight: .bold))
                 .foregroundStyle(palette.textPrimary.color)
             Text(section.year)
-                .font(.system(size: 9.5, design: .monospaced))
+                .font(AppFont.ui(9.5, design: .monospaced))
                 .foregroundStyle(palette.textTertiary.color)
         }
         .padding(.top, 8)
@@ -561,14 +561,14 @@ struct JournalDayTimelineRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text(dayText)
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .font(AppFont.ui(13, weight: .bold, design: .rounded))
                         .foregroundStyle(palette.textPrimary.color)
                     Text(entry.date.formatted(.dateTime.weekday(.abbreviated).locale(settings.locale)))
-                        .font(.system(size: 11))
+                        .font(AppFont.ui(11))
                         .foregroundStyle(palette.textTertiary.color)
                 }
                 Text(statsLine)
-                    .font(.system(size: 10.5, design: .monospaced))
+                    .font(AppFont.ui(10.5, design: .monospaced))
                     .foregroundStyle(palette.textTertiary.color)
             }
 
@@ -577,11 +577,11 @@ struct JournalDayTimelineRow: View {
             VStack(alignment: .trailing, spacing: 4) {
                 if let dayPnL {
                     Text(Self.format(pnl: dayPnL))
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(AppFont.ui(11, weight: .bold, design: .monospaced))
                         .foregroundStyle(dayPnL >= 0 ? gainLoss.gain : gainLoss.loss)
                 } else {
                     Text("—")
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(AppFont.ui(11, design: .monospaced))
                         .foregroundStyle(palette.textTertiary.color)
                 }
                 if let verdict = entry.items.compactMap(\.review).last?.verdict {
@@ -650,7 +650,7 @@ struct JournalItemTimelineRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(tagTitle)
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(AppFont.ui(13, weight: .semibold, design: .rounded))
                     .foregroundStyle(palette.accentText.color)
                     .lineLimit(1)
                 if let review = row.item.review {
@@ -659,7 +659,7 @@ struct JournalItemTimelineRow: View {
                 Spacer(minLength: 8)
                 if !row.item.imageFilenames.isEmpty {
                     Label("\(row.item.imageFilenames.count)", systemImage: "photo")
-                        .font(.caption2)
+                        .font(AppFont.preset(.caption2))
                         .foregroundStyle(.secondary)
                         .labelStyle(.titleAndIcon)
                 }
@@ -667,12 +667,12 @@ struct JournalItemTimelineRow: View {
 
             if !row.item.previewText.isEmpty {
                 Text(row.item.previewText)
-                    .font(.caption)
+                    .font(AppFont.preset(.caption))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             } else if !row.entryTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(row.entryTitle)
-                    .font(.caption)
+                    .font(AppFont.preset(.caption))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }

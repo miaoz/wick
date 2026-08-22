@@ -52,7 +52,7 @@ struct JournalItemEditorCard: View {
                         index + 1
                     )
                 )
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .font(AppFont.ui(10, weight: .medium, design: .monospaced))
                 .foregroundStyle(palette.textTertiary.color)
 
                 Spacer()
@@ -144,13 +144,13 @@ struct JournalItemEditorCard: View {
         } else {
             let trimmed = item.tag.trimmingCharacters(in: .whitespacesAndNewlines)
             Text(trimmed.isEmpty ? " " : item.tag)
-                .font(.custom("Songti SC", size: 12.5).weight(.bold))
+                .font(AppFont.paper(12.5, weight: .bold))
                 .foregroundStyle(trimmed.isEmpty ? Color.clear : palette.pnlUp.color)
                 .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
                 .overlay(alignment: .leading) {
                     if trimmed.isEmpty {
                         Text(L10n.string(.journalItemTagPlaceholder, language: settings.language))
-                            .font(.custom("Songti SC", size: 12.5).weight(.bold))
+                            .font(AppFont.paper(12.5, weight: .bold))
                             .foregroundStyle(.tertiary)
                             .allowsHitTesting(false)
                     }
@@ -179,7 +179,7 @@ struct JournalItemEditorCard: View {
             .overlay(alignment: .topLeading) {
                 if item.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(L10n.string(.journalBodyPlaceholder, language: settings.language))
-                        .font(.custom("Songti SC", size: 13.5))
+                        .font(AppFont.paper(13.5))
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 5)
                         .allowsHitTesting(false)
@@ -188,14 +188,14 @@ struct JournalItemEditorCard: View {
         } else {
             let trimmed = item.body.trimmingCharacters(in: .whitespacesAndNewlines)
             Text(trimmed.isEmpty ? " " : item.body)
-                .font(.custom("Songti SC", size: 13.5))
+                .font(AppFont.paper(13.5))
                 .foregroundStyle(palette.textPrimary.color)
                 .frame(maxWidth: .infinity, minHeight: 48, alignment: .topLeading)
                 .padding(.horizontal, 5)
                 .overlay(alignment: .topLeading) {
                     if trimmed.isEmpty {
                         Text(L10n.string(.journalBodyPlaceholder, language: settings.language))
-                            .font(.custom("Songti SC", size: 13.5))
+                            .font(AppFont.paper(13.5))
                             .foregroundStyle(.tertiary)
                             .padding(.horizontal, 5)
                             .allowsHitTesting(false)
@@ -223,7 +223,7 @@ struct JournalItemEditorCard: View {
                 .fill(palette.reviewCorrect.color)
                 .frame(width: 2)
             Text(noteText)
-                .font(.custom("Songti SC", size: 11.5))
+                .font(AppFont.paper(11.5))
                 .foregroundStyle(palette.textSecondary.color)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -238,7 +238,7 @@ struct JournalItemEditorCard: View {
             showReviewPopover = true
         } label: {
             Text(L10n.string(.journalReview, language: settings.language))
-                .font(.custom("Songti SC", size: 12).weight(.bold))
+                .font(AppFont.paper(12, weight: .bold))
                 .foregroundStyle(palette.reviewCorrect.color.opacity(0.8))
                 .frame(width: 44, height: 44)
                 .overlay {
@@ -294,7 +294,7 @@ struct JournalItemEditorCard: View {
                     Spacer(minLength: 4)
                     Button(action: clearReview) {
                         Text(L10n.string(.journalReviewClear, language: settings.language))
-                            .font(.system(size: 12, weight: .medium))
+                            .font(AppFont.ui(12, weight: .medium))
                             .foregroundStyle(palette.textTertiary.color)
                     }
                     .buttonStyle(.plain)
@@ -315,7 +315,7 @@ struct JournalItemEditorCard: View {
                     }
                 ),
                 placeholder: L10n.string(.journalReviewNotePlaceholder, language: settings.language),
-                font: .systemFont(ofSize: 13),
+                font: AppFont.paperNSFont(13),
                 textColor: palette.textSecondary.nsColor,
                 style: .plain,
                 onChange: {
@@ -476,7 +476,7 @@ private struct JournalQuietIconButtonBody: View {
     var body: some View {
         let active = isHovered || configuration.isPressed
         configuration.label
-            .font(.system(size: fontSize, weight: .medium))
+            .font(AppFont.ui(fontSize, weight: .medium))
             .symbolRenderingMode(.monochrome)
             // Themed glyph stays the same; only the mask below reacts to hover.
             .foregroundStyle(glyphColor)

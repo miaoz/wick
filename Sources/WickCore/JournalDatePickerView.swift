@@ -54,7 +54,7 @@ struct JournalDatePickerView: View {
                 shiftMonth(by: -1)
             } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(AppFont.ui(10, weight: .semibold))
                     .foregroundStyle(palette.textSecondary.color)
                     .frame(width: 22, height: 22)
                     .contentShape(Rectangle())
@@ -64,7 +64,7 @@ struct JournalDatePickerView: View {
             Spacer(minLength: 4)
 
             Text(displayedMonth.formatted(.dateTime.year().month().locale(settings.locale)))
-                .font(.custom("Songti SC", size: 13).weight(.bold))
+                .font(AppFont.paper(13, weight: .bold))
                 .foregroundStyle(palette.textPrimary.color)
 
             Spacer(minLength: 4)
@@ -73,7 +73,7 @@ struct JournalDatePickerView: View {
                 shiftMonth(by: 1)
             } label: {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(AppFont.ui(10, weight: .semibold))
                     .foregroundStyle(palette.textSecondary.color)
                     .frame(width: 22, height: 22)
                     .contentShape(Rectangle())
@@ -98,7 +98,7 @@ struct JournalDatePickerView: View {
         return LazyVGrid(columns: Self.columns, spacing: 4) {
             ForEach(ordered, id: \.self) { symbol in
                 Text(symbol)
-                    .font(.system(size: 9.5, weight: .medium))
+                    .font(AppFont.ui(9.5, weight: .medium))
                     .foregroundStyle(palette.textTertiary.color)
                     .frame(maxWidth: .infinity)
             }
@@ -140,7 +140,7 @@ struct JournalDatePickerView: View {
         let isHovered = hoveredDay.map { calendar.isDate($0, inSameDayAs: day) } ?? false
 
         return Text("\(calendar.component(.day, from: day))")
-            .font(.system(size: 11, weight: (isSelected || isToday) ? .bold : .medium, design: .rounded))
+            .font(AppFont.ui(11, weight: (isSelected || isToday) ? .bold : .medium, design: .rounded))
             .monospacedDigit()
             .foregroundStyle(
                 isSelected ? Color(red: 1, green: 0.95, blue: 0.88)
@@ -193,9 +193,9 @@ struct JournalDatePickerView: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 9.5))
+                        .font(AppFont.ui(9.5))
                     Text(L10n.string(.journalToday, language: settings.language))
-                        .font(.custom("Songti SC", size: 11))
+                        .font(AppFont.paper(11))
                 }
                 .foregroundStyle(palette.accent.color)
                 .padding(.horizontal, 8)

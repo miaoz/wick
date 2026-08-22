@@ -8,4 +8,9 @@ extension Notification.Name {
     /// the macOS window (poster) can reference it without a cross-target
     /// dependency.
     public static let wickCalendarFlipEventsPage = Notification.Name("wick.calendarFlipEventsPage")
+
+    /// The font preference changed while a pad is on the desk; re-snapshots the
+    /// top page so the new face set applies without reopening the window.
+    /// Posted by the macOS host (`AppSettings`), observed by `TradingCalendarRootView`.
+    public static let wickCalendarFontStyleChanged = Notification.Name("wick.calendarFontStyleChanged")
 }

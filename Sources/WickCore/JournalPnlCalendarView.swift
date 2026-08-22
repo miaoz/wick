@@ -51,7 +51,7 @@ struct JournalPnlCalendarView: View {
             Spacer(minLength: 8)
 
             Text(displayedMonth.formatted(.dateTime.year().month().locale(settings.locale)))
-                .font(.custom("Songti SC", size: 12).weight(.bold))
+                .font(AppFont.paper(12, weight: .bold))
                 .foregroundStyle(palette.textPrimary.color)
 
             Spacer(minLength: 8)
@@ -66,7 +66,7 @@ struct JournalPnlCalendarView: View {
             .disabled(!canGoForward)
             .opacity(canGoForward ? 1 : 0.3)
         }
-        .font(.system(size: 11, weight: .semibold))
+        .font(AppFont.ui(11, weight: .semibold))
     }
 
     /// 「已实现合计 +1,204.6」(单据等宽数字,红盈黛亏;全零不占版)。
@@ -75,11 +75,11 @@ struct JournalPnlCalendarView: View {
         if let total = monthTotal {
             HStack {
                 Text(L10n.string(.inspectorMonthTotal, language: settings.language))
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(AppFont.ui(10, design: .monospaced))
                     .foregroundStyle(palette.textTertiary.color)
                 Spacer()
                 Text(Self.format(pnl: total))
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .font(AppFont.ui(13, weight: .bold, design: .monospaced))
                     .foregroundStyle(total >= 0 ? gainLoss.gain : gainLoss.loss)
             }
         }
@@ -114,7 +114,7 @@ struct JournalPnlCalendarView: View {
         return LazyVGrid(columns: Self.columns, spacing: 4) {
             ForEach(ordered, id: \.self) { symbol in
                 Text(symbol)
-                    .font(.system(size: 9, weight: .medium))
+                    .font(AppFont.ui(9, weight: .medium))
                     .foregroundStyle(palette.textTertiary.color)
                     .frame(maxWidth: .infinity)
             }
@@ -158,7 +158,7 @@ struct JournalPnlCalendarView: View {
         let isToday = calendar.isDateInToday(day)
         let isFuture = day > Date()
         return Text("\(calendar.component(.day, from: day))")
-            .font(.system(size: 10, weight: isToday ? .heavy : .medium, design: .rounded))
+            .font(AppFont.ui(10, weight: isToday ? .heavy : .medium, design: .rounded))
             .monospacedDigit()
             .foregroundStyle(textColor(for: state, isToday: isToday))
             .opacity(isFuture ? 0.4 : 1)

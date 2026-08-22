@@ -196,20 +196,66 @@ public enum TradingCalendarTheme {
 
     // MARK: - Type
 
-    /// Heavy gothic kanji (HiraginoSans-W7).
+    /// Which face set the pad prints with. The host sets this before the pad
+    /// opens (macOS mirrors the user's installed-font choice; iOS keeps default).
+    @MainActor
+    public static var fontStyle: TradingCalendarFontStyle = .default
+
+    /// Heavy gothic kanji (HiraginoSans-W7), or the chosen face.
+    @MainActor
     public static func kanji(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
-        .custom("HiraginoSans-W7", size: size)
+        switch fontStyle {
+        case .default:
+            return .custom("HiraginoSans-W7", size: size)
+        case .custom(let postScriptName):
+            return .custom(postScriptName, size: size).weight(weight)
+        }
     }
 
-    /// Serif mincho for small traditional text (HiraMinProN-W6).
+    /// Serif mincho for small traditional text (HiraMinProN-W6), or the chosen face.
+    @MainActor
     public static func mincho(_ size: CGFloat) -> Font {
-        .custom("HiraMinProN-W6", size: size)
+        switch fontStyle {
+        case .default:
+            return .custom("HiraMinProN-W6", size: size)
+        case .custom(let postScriptName):
+            return .custom(postScriptName, size: size)
+        }
     }
 
-    /// The fat slab day numeral.
+    /// The fat slab day numeral (system serif), or the chosen face.
+    @MainActor
     public static func numeral(_ size: CGFloat) -> Font {
-        .system(size: size, weight: .black, design: .serif)
+        switch fontStyle {
+        case .default:
+            return .system(size: size, weight: .black, design: .serif)
+        case .custom(let postScriptName):
+            return .custom(postScriptName, size: size).weight(.bold)
+        }
     }
+
+    /// UI/control face (buttons, SF Symbol glyphs) — system by default, the
+    /// chosen face otherwise. Symbols themselves still render from the system
+    /// symbol font; the family only affects weight/size.
+    @MainActor
+    public static func control(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        switch fontStyle {
+        case .default:
+            return .system(size: size, weight: weight)
+        case .custom(let postScriptName):
+            return .custom(postScriptName, size: size).weight(weight)
+        }
+    }
+}
+
+/// Selects the face set the trading calendar prints with. `default` is the
+/// shipped Hiragino/system look; `custom` swaps every face — headers and the day
+/// numeral included — for the host-provided installed-font PostScript name. The
+/// kit never loads fonts itself; a name that is not registered on the system
+/// simply falls back to the default face.
+public enum TradingCalendarFontStyle: Sendable {
+    case `default`
+    case custom(postScriptName: String)
 }
 
 extension Color {

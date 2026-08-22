@@ -1,4 +1,5 @@
 import SwiftUI
+import WickCalendarKit
 
 enum AppAppearance: String, CaseIterable, Identifiable {
     case light
@@ -73,6 +74,8 @@ extension WickPalette {
     }
 }
 
+/// The app's font is chosen from the user's installed fonts (a PostScript name)
+/// or left empty for the shipped Songti/system look. See `AppFont`.
 @MainActor
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
@@ -81,6 +84,9 @@ final class AppSettings: ObservableObject {
         static let language = "wick.language"
         static let appearance = "wick.appearance"
         static let pnlColorConvention = "wick.pnlColorConvention"
+        static let journalFontName = "wick.journal.fontName"
+        /// Pre-2026-08-22 two-choice enum (default/classicalMing); migrated once.
+        static let legacyJournalFontStyle = "wick.journal.fontStyle"
         static let journalReminderEnabled = "wick.journal.reminderEnabled"
         static let journalReminderHour = "wick.journal.reminderHour"
         static let journalReminderMinute = "wick.journal.reminderMinute"
@@ -122,6 +128,14 @@ final class AppSettings: ObservableObject {
     @Published var pnlColorConvention: PnlColorConvention {
         didSet {
             UserDefaults.standard.set(pnlColorConvention.rawValue, forKey: Keys.pnlColorConvention)
+        }
+    }
+
+    /// 字体: 所选设备字体的 PostScript 名;空字符串 = 默认(系统宋体/UI)。
+    @Published var journalFontName: String {
+        didSet {
+            UserDefaults.standard.set(journalFontName, forKey: Keys.journalFontName)
+            applyJournalFontStyle()
         }
     }
 
@@ -283,6 +297,15 @@ final class AppSettings: ObservableObject {
         let conventionRaw = UserDefaults.standard.string(forKey: Keys.pnlColorConvention) ?? PnlColorConvention.greenUp.rawValue
         pnlColorConvention = PnlColorConvention(rawValue: conventionRaw) ?? .greenUp
 
+        // Font name, with a one-time migration from the old two-choice enum.
+        var fontName = UserDefaults.standard.string(forKey: Keys.journalFontName) ?? ""
+        if fontName.isEmpty, let legacyRaw = UserDefaults.standard.string(forKey: Keys.legacyJournalFontStyle) {
+            fontName = (legacyRaw == "classicalMing") ? AppFont.classicalMingName : ""
+            UserDefaults.standard.set(fontName, forKey: Keys.journalFontName)
+            UserDefaults.standard.removeObject(forKey: Keys.legacyJournalFontStyle)
+        }
+        journalFontName = fontName
+
         if UserDefaults.standard.object(forKey: Keys.journalReminderEnabled) == nil {
             journalReminderEnabled = true
         } else {
@@ -356,6 +379,20 @@ final class AppSettings: ObservableObject {
         }
 
         isLoading = false
+        applyJournalFontStyle()
+    }
+
+    /// Mirrors the font preference into the trading calendar theme (the calendar
+    /// resolves its faces at render time from `TradingCalendarTheme.fontStyle`).
+    /// A pad that is already open re-snapshots on `.wickCalendarFontStyleChanged`.
+    private func applyJournalFontStyle() {
+        guard !isLoading else { return }
+        if journalFontName.isEmpty {
+            TradingCalendarTheme.fontStyle = .default
+        } else {
+            TradingCalendarTheme.fontStyle = .custom(postScriptName: journalFontName)
+        }
+        NotificationCenter.default.post(name: .wickCalendarFontStyleChanged, object: nil)
     }
 
     private func notifyReminderSettingsChanged() {

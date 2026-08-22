@@ -75,9 +75,9 @@ struct JournalReviewBadge: View {
 
     private var glyphFont: Font {
         if settings.language == .chinese {
-            return .custom("Songti SC", size: size * 0.46).weight(.bold)
+            return AppFont.paper(size * 0.46, weight: .bold)
         }
-        return .system(size: size * 0.44, weight: .heavy)
+        return AppFont.ui(size * 0.44, weight: .heavy)
     }
 
     /// Both verdicts print in cinnabar — a real seal is always red.

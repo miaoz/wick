@@ -59,7 +59,7 @@ private struct MenuBarLabelView: View {
                 .renderingMode(.template)
             if settings.showMenuBarPercentage, !dayPercentText.isEmpty {
                 Text(dayPercentText)
-                    .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+                    .font(AppFont.ui(11, weight: .semibold, design: .rounded, monospacedDigit: true))
             }
         }
         .accessibilityLabel(accessibilityText)

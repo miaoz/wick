@@ -53,11 +53,11 @@ struct JournalInspectorView: View {
                     // Text(date, format:) 不吃注入 locale,走 DateFormatter)。
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(inspectorBigDate)
-                            .font(.system(size: 24, weight: .black, design: .serif))
+                            .font(AppFont.ui(24, weight: .black, design: .serif))
                             .foregroundStyle(palette.textPrimary.color)
                         if let lunar = LunarLine.string(for: Date()) {
                             Text(lunar)
-                                .font(.custom("Songti SC", size: 10))
+                                .font(AppFont.paper(10))
                                 .foregroundStyle(palette.textSecondary.color)
                                 .lineLimit(1)
                         }
@@ -115,14 +115,14 @@ struct JournalInspectorView: View {
     private func yijiChip(mark: String, text: String, markBackground: Color, markInk: Color) -> some View {
         HStack(spacing: 4) {
             Text(mark)
-                .font(.custom("Songti SC", size: 8.5).weight(.bold))
+                .font(AppFont.paper(8.5, weight: .bold))
                 .foregroundStyle(markInk)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
                 .background(markBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
             Text(text)
-                .font(.custom("Songti SC", size: 9.5))
+                .font(AppFont.paper(9.5))
                 .foregroundStyle(palette.textSecondary.color)
         }
     }
@@ -132,7 +132,7 @@ struct JournalInspectorView: View {
             self.tab = tab
         } label: {
             Text(title)
-                .font(.custom("Songti SC", size: 10).weight(self.tab == tab ? .bold : .medium))
+                .font(AppFont.paper(10, weight: self.tab == tab ? .bold : .medium))
                 .foregroundStyle(self.tab == tab ? Color(red: 0.98, green: 0.92, blue: 0.85) : palette.pnlUp.color)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 3)
@@ -150,7 +150,7 @@ struct JournalInspectorView: View {
     private var rowsContent: some View {
         if calendarStore.isLoading(for: Date()) {
             Text(L10n.string(.macroLoading, language: settings.language))
-                .font(.caption)
+                .font(AppFont.preset(.caption))
                 .foregroundStyle(palette.textTertiary.color)
                 .padding(.vertical, 6)
         } else if tab == .macro {
@@ -176,22 +176,22 @@ struct JournalInspectorView: View {
                     let isExpanded = expandedMacroEventIDs.contains(event.id)
                     HStack(alignment: .firstTextBaseline, spacing: 7) {
                         Text(Self.eventTimeFormatter.string(from: event.time))
-                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                            .font(AppFont.ui(9.5, weight: .bold, design: .monospaced))
                             .foregroundStyle(palette.pnlUp.color)
                             .frame(width: 34, alignment: .leading)
                         Text(event.country)
-                            .font(.custom("Songti SC", size: 10))
+                            .font(AppFont.paper(10))
                             .foregroundStyle(palette.textSecondary.color)
                             .lineLimit(1)
                             .frame(width: 32, alignment: .leading)
                         Text(event.title)
-                            .font(.custom("Songti SC", size: 10.5))
+                            .font(AppFont.paper(10.5))
                             .foregroundStyle(palette.textPrimary.color)
                             // 检查器行短,长标题默认折两行,点击可展开全部/收起。
                             .lineLimit(isExpanded ? nil : 2)
                         Spacer(minLength: 4)
                         Text(macroValues(event))
-                            .font(.system(size: 8.5, weight: .medium, design: .monospaced))
+                            .font(AppFont.ui(8.5, weight: .medium, design: .monospaced))
                             .foregroundStyle(palette.textTertiary.color)
                             .lineLimit(1)
                     }
@@ -212,7 +212,7 @@ struct JournalInspectorView: View {
                 }
                 if events.count > shown.count {
                     Text(String(format: L10n.string(.macroMoreEventsFormat, language: settings.language), events.count - shown.count) + " ›")
-                        .font(.custom("Songti SC", size: 10))
+                        .font(AppFont.paper(10))
                         .foregroundStyle(palette.pnlUp.color)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .padding(.top, 2)
@@ -232,24 +232,24 @@ struct JournalInspectorView: View {
                     let isExpanded = expandedEarningsIDs.contains(report.id)
                     HStack(alignment: .firstTextBaseline, spacing: 7) {
                         Text(earningsCallMark(report))
-                            .font(.custom("Songti SC", size: 9).weight(.bold))
+                            .font(AppFont.paper(9, weight: .bold))
                             .foregroundStyle(palette.pnlUp.color)
                             .frame(width: 30, alignment: .leading)
                         Text(report.code)
-                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                            .font(AppFont.ui(9.5, weight: .bold, design: .monospaced))
                             .foregroundStyle(palette.textPrimary.color)
                             // 代码永不折行(溢出两行比参差不齐更难看),公司名让位。
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
                             .frame(minWidth: 52, alignment: .leading)
                         Text(report.companyName)
-                            .font(.custom("Songti SC", size: 10.5))
+                            .font(AppFont.paper(10.5))
                             .foregroundStyle(palette.textPrimary.color)
                             .lineLimit(isExpanded ? nil : 1)
                         Spacer(minLength: 4)
                         if let eps = report.epsEstimate {
                             Text("EPS \(Self.epsFormatter.string(from: NSNumber(value: eps)) ?? "")")
-                                .font(.system(size: 8.5, weight: .medium, design: .monospaced))
+                                .font(AppFont.ui(8.5, weight: .medium, design: .monospaced))
                                 .foregroundStyle(palette.textTertiary.color)
                         }
                     }
@@ -270,7 +270,7 @@ struct JournalInspectorView: View {
                 }
                 if reports.count > shown.count {
                     Text(String(format: L10n.string(.macroMoreEventsFormat, language: settings.language), reports.count - shown.count) + " ›")
-                        .font(.custom("Songti SC", size: 10))
+                        .font(AppFont.paper(10))
                         .foregroundStyle(palette.pnlUp.color)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .padding(.top, 2)
@@ -284,7 +284,7 @@ struct JournalInspectorView: View {
         let isWeekend = Calendar.current.isDateInWeekend(Date())
         let text = L10n.string(isWeekend ? .calendarIdleWeekend : .calendarIdleWeekday, language: settings.language)
         return Text(text)
-            .font(.custom("Songti SC", size: 11).weight(.bold))
+            .font(AppFont.paper(11, weight: .bold))
             .tracking(2)
             .foregroundStyle(palette.pnlUp.color.opacity(0.85))
             .padding(.horizontal, 12)
@@ -325,16 +325,16 @@ struct JournalInspectorView: View {
         } label: {
             HStack(spacing: 8) {
                 Text(title)
-                    .font(.custom("Songti SC", size: 12).weight(.bold))
+                    .font(AppFont.paper(12, weight: .bold))
                     .foregroundStyle(palette.textPrimary.color)
                 if let detail {
                     Text(detail)
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .font(AppFont.ui(9, weight: .medium, design: .monospaced))
                         .foregroundStyle(palette.textTertiary.color)
                 }
                 Spacer()
                 Image(systemName: collapsed.wrappedValue ? "chevron.right" : "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(AppFont.ui(9, weight: .semibold))
                     .foregroundStyle(palette.textTertiary.color)
             }
             .padding(.horizontal, 14)

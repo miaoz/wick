@@ -21,7 +21,7 @@ struct SyncConflictResolutionList: View {
                         engine.pendingConflicts.count
                     )
                 )
-                .font(.caption)
+                .font(AppFont.preset(.caption))
                 .foregroundStyle(theme.secondaryText)
 
                 Spacer(minLength: 4)
@@ -32,7 +32,7 @@ struct SyncConflictResolutionList: View {
                     }
                 } label: {
                     Text(L10n.string(.syncConflictDismissAll, language: language))
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .font(AppFont.ui(12, weight: .medium, design: .rounded))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(theme.selectionAccent)
@@ -82,7 +82,7 @@ struct SyncConflictResolutionList: View {
     private func batchButton(title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 11.5, weight: .medium, design: .rounded))
+                .font(AppFont.ui(11.5, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.primaryText)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
@@ -112,18 +112,18 @@ private struct SyncConflictRow: View {
             Button(action: onToggle) {
                 HStack(spacing: 6) {
                     Text(conflict.dayKey)
-                        .font(.system(size: 12.5, weight: .semibold, design: .rounded).monospacedDigit())
+                        .font(AppFont.ui(12.5, weight: .semibold, design: .rounded, monospacedDigit: true))
                         .foregroundStyle(theme.primaryText)
 
                     Text(kindText)
-                        .font(.caption)
+                        .font(AppFont.preset(.caption))
                         .foregroundStyle(theme.secondaryText)
                         .lineLimit(1)
 
                     Spacer(minLength: 4)
 
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(AppFont.ui(9, weight: .semibold))
                         .foregroundStyle(theme.tertiaryText)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
@@ -165,7 +165,7 @@ private struct SyncConflictRow: View {
                     }
                 } else {
                     Text(L10n.string(.syncConflictNoChoiceHint, language: language))
-                        .font(.caption)
+                        .font(AppFont.preset(.caption))
                         .foregroundStyle(theme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -210,7 +210,7 @@ private struct SyncConflictRow: View {
     private func versionPreview(title: String, entry: JournalEntry?) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.custom("Songti SC", size: 10.5).weight(.bold))
+                .font(AppFont.paper(10.5, weight: .bold))
                 .foregroundStyle(theme.tertiaryText)
                 .tracking(0.4)
 
@@ -218,7 +218,7 @@ private struct SyncConflictRow: View {
                 let title = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !title.isEmpty {
                     Text(title)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(AppFont.ui(12, weight: .medium))
                         .foregroundStyle(theme.primaryText)
                         .lineLimit(1)
                 }
@@ -226,12 +226,12 @@ private struct SyncConflictRow: View {
                 let items = entry.items.filter { !$0.isEmpty }
                 if items.isEmpty {
                     Text(L10n.string(.syncConflictEmptyVersion, language: language))
-                        .font(.caption2)
+                        .font(AppFont.preset(.caption2))
                         .foregroundStyle(theme.tertiaryText)
                 } else {
                     ForEach(Array(items.prefix(3).enumerated()), id: \.offset) { _, item in
                         Text(itemPreview(item))
-                            .font(.caption2)
+                            .font(AppFont.preset(.caption2))
                             .foregroundStyle(theme.secondaryText)
                             .lineLimit(1)
                     }
@@ -242,13 +242,13 @@ private struct SyncConflictRow: View {
                                 items.count - 3
                             )
                         )
-                        .font(.caption2)
+                        .font(AppFont.preset(.caption2))
                         .foregroundStyle(theme.tertiaryText)
                     }
                 }
             } else {
                 Text("-")
-                    .font(.caption2)
+                    .font(AppFont.preset(.caption2))
                     .foregroundStyle(theme.tertiaryText)
             }
         }
@@ -270,7 +270,7 @@ private struct SyncConflictRow: View {
     private func choiceButton(title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 11.5, weight: .medium, design: .rounded))
+                .font(AppFont.ui(11.5, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.primaryText)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)

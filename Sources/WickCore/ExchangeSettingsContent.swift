@@ -70,7 +70,7 @@ struct ExchangeSettingsContent: View {
     private var journalPicker: some View {
         HStack(spacing: 8) {
             Text(L10n.string(.exchangeJournal, language: language))
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(AppFont.ui(13, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.secondaryText)
                 .frame(width: 88, alignment: .leading)
             Picker("", selection: Binding(
@@ -91,7 +91,7 @@ struct ExchangeSettingsContent: View {
     private var setupContent: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(L10n.string(.exchangeExplanation, language: language))
-                .font(.caption)
+                .font(AppFont.preset(.caption))
                 .foregroundStyle(theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -104,7 +104,7 @@ struct ExchangeSettingsContent: View {
                     text: $addressDraft
                 )
                 Text(L10n.string(.exchangeHyperliquidHint, language: language))
-                    .font(.caption2)
+                    .font(AppFont.preset(.caption2))
                     .foregroundStyle(theme.tertiaryText)
                     .fixedSize(horizontal: false, vertical: true)
             case .okx:
@@ -123,7 +123,7 @@ struct ExchangeSettingsContent: View {
                     secure: true
                 )
                 Text(L10n.string(.exchangeOKXHint, language: language))
-                    .font(.caption2)
+                    .font(AppFont.preset(.caption2))
                     .foregroundStyle(theme.tertiaryText)
                     .fixedSize(horizontal: false, vertical: true)
             case .binance:
@@ -141,7 +141,7 @@ struct ExchangeSettingsContent: View {
             saveButton
 
             Text(L10n.string(.exchangeReadonlyHint, language: language))
-                .font(.caption2)
+                .font(AppFont.preset(.caption2))
                 .foregroundStyle(theme.tertiaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -157,7 +157,7 @@ struct ExchangeSettingsContent: View {
                     venue = option
                 } label: {
                     Text(venueTitle(option))
-                        .font(.system(size: 12, weight: selected ? .semibold : .regular, design: .rounded))
+                        .font(AppFont.ui(12, weight: selected ? .semibold : .regular, design: .rounded))
                         .foregroundStyle(
                             selected ? Color(red: 1, green: 0.95, blue: 0.88)
                                 : theme.palette.textPrimary.color
@@ -232,10 +232,10 @@ struct ExchangeSettingsContent: View {
                         ? L10n.string(.exchangeSyncing, language: language)
                         : L10n.string(.exchangeSaveAndSync, language: language)
                 )
-                .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                .font(AppFont.ui(12.5, weight: .medium, design: .rounded))
                 Spacer(minLength: 8)
                 Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(AppFont.ui(10, weight: .bold))
                     .foregroundStyle(theme.palette.textTertiary.color)
             }
             .foregroundStyle(theme.primaryText)
@@ -262,7 +262,7 @@ struct ExchangeSettingsContent: View {
     ) -> some View {
         HStack(spacing: 8) {
             Text(title)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .font(AppFont.ui(12, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.secondaryText)
                 .frame(width: 80, alignment: .leading)
             Group {
@@ -273,7 +273,7 @@ struct ExchangeSettingsContent: View {
                 }
             }
             .textFieldStyle(.plain)
-            .font(.system(size: 11.5, design: .monospaced))
+            .font(AppFont.ui(11.5, design: .monospaced))
             .padding(.horizontal, 8)
             .padding(.vertical, 4.5)
             .background(
@@ -295,11 +295,11 @@ struct ExchangeSettingsContent: View {
             if let binding = targetJournal?.exchangeBinding {
                 HStack {
                     Text(venueTitle(binding.venue))
-                        .font(.custom("Songti SC", size: 12).weight(.bold))
+                        .font(AppFont.paper(12, weight: .bold))
                         .foregroundStyle(theme.primaryText)
                     Spacer()
                     Text(binding.accountLabel)
-                        .font(.system(size: 11.5, design: .monospaced))
+                        .font(AppFont.ui(11.5, design: .monospaced))
                         .foregroundStyle(theme.secondaryText)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -307,7 +307,7 @@ struct ExchangeSettingsContent: View {
             }
 
             Text(windowHint)
-                .font(.caption)
+                .font(AppFont.preset(.caption))
                 .foregroundStyle(theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -353,13 +353,13 @@ struct ExchangeSettingsContent: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(AppFont.ui(12, weight: .medium))
                     .frame(width: 16)
                 Text(title)
-                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                    .font(AppFont.ui(12.5, weight: .medium, design: .rounded))
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(AppFont.ui(9, weight: .bold))
                     .foregroundStyle(theme.palette.textTertiary.color)
             }
             .foregroundStyle(
@@ -387,7 +387,7 @@ struct ExchangeSettingsContent: View {
     private var statusFooter: some View {
         if coordinator.isSyncing {
             Text(L10n.string(.exchangeSyncing, language: language))
-                .font(.caption)
+                .font(AppFont.preset(.caption))
                 .foregroundStyle(theme.secondaryText)
         } else if let error = coordinator.lastError {
             CopyableErrorNotice(message: error.text(language: language), language: language)
@@ -395,11 +395,11 @@ struct ExchangeSettingsContent: View {
                   let fetchedAt = coordinator.lastFetchedAt(for: id) {
             HStack {
                 Text(L10n.string(.exchangeLastSync, language: language))
-                    .font(.caption)
+                    .font(AppFont.preset(.caption))
                     .foregroundStyle(theme.secondaryText)
                 Spacer()
                 Text(fetchedAt, style: .relative)
-                    .font(.caption)
+                    .font(AppFont.preset(.caption))
                     .foregroundStyle(theme.primaryText)
             }
         }

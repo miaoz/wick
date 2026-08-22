@@ -242,9 +242,9 @@ struct JournalRootView: View {
     private var loadFailureBanner: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(L10n.string(.journalLoadFailureTitle, language: settings.language))
-                .font(.headline)
+                .font(AppFont.preset(.headline))
             Text(L10n.string(.journalLoadFailureBody, language: settings.language))
-                .font(.callout)
+                .font(AppFont.preset(.callout))
             HStack {
                 Button(L10n.string(.journalImport, language: settings.language)) {
                     importJournal()
@@ -255,7 +255,7 @@ struct JournalRootView: View {
                 }
                 Spacer()
                 if let exportStatus {
-                    Text(exportStatus).font(.caption).foregroundStyle(.secondary)
+                    Text(exportStatus).font(AppFont.preset(.caption)).foregroundStyle(.secondary)
                 }
             }
         }
@@ -266,7 +266,7 @@ struct JournalRootView: View {
 
     private func restoreBanner(palette: WickPalette) -> some View {
         Text(L10n.string(.journalRestoredFromBackup, language: settings.language))
-            .font(.callout)
+            .font(AppFont.preset(.callout))
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(palette.accentSoft.color)
@@ -502,7 +502,7 @@ struct JournalRootView: View {
 
             // 标题小注:选中日的「8月20日 · 星期四」(v4 顶栏标题)。
             Text(selectedDayStamp)
-                .font(.system(size: 11))
+                .font(AppFont.ui(11))
                 .foregroundStyle(palette.textTertiary.color)
                 .lineLimit(1)
 
@@ -595,7 +595,7 @@ struct JournalRootView: View {
             store.activeJournal?.name
                 ?? L10n.string(.journalLibraryDefaultName, language: settings.language)
         )
-        .font(.system(size: 13, weight: .semibold))
+        .font(AppFont.ui(13, weight: .semibold))
         .foregroundStyle(palette.textPrimary.color)
         .lineLimit(1)
     }
@@ -604,14 +604,14 @@ struct JournalRootView: View {
     private var searchField: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 11))
+                .font(AppFont.ui(11))
                 .foregroundStyle(.secondary)
             TextField(
                 L10n.string(.journalSearchPlaceholder, language: settings.language),
                 text: $store.searchText
             )
             .textFieldStyle(.plain)
-            .font(.system(size: 12))
+            .font(AppFont.ui(12))
 
             if !store.searchText.isEmpty {
                 Button {
