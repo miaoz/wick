@@ -52,6 +52,7 @@ public enum L10n {
         case ok
         case language
         case appearance
+        case pnlColorConvention
         case dayTitle
         case daySubtitle
         case weekTitle
@@ -305,6 +306,7 @@ public enum L10n {
             case .ok: return "好"
             case .language: return "语言"
             case .appearance: return "外观"
+            case .pnlColorConvention: return "涨跌配色"
             case .dayTitle: return "日"
             case .daySubtitle: return "今天"
             case .weekTitle: return "周"
@@ -555,6 +557,7 @@ public enum L10n {
             case .ok: return "OK"
             case .language: return "Language"
             case .appearance: return "Appearance"
+            case .pnlColorConvention: return "PnL color"
             case .dayTitle: return "Day"
             case .daySubtitle: return "Today"
             case .weekTitle: return "Week"

@@ -272,6 +272,24 @@ struct SettingsContentView: View {
             }
 
             settingsSection(
+                title: L10n.string(.pnlColorConvention, language: language)
+            ) {
+                HStack(spacing: 6) {
+                    ForEach(PnlColorConvention.allCases) { option in
+                        settingsOptionButton(
+                            title: option.displayName(language: language),
+                            isSelected: settings.pnlColorConvention == option,
+                            expands: true
+                        ) {
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                settings.pnlColorConvention = option
+                            }
+                        }
+                    }
+                }
+            }
+
+            settingsSection(
                 title: L10n.string(.generalSection, language: language)
             ) {
                 VStack(alignment: .leading, spacing: 9) {

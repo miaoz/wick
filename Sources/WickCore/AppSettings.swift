@@ -36,6 +36,43 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     }
 }
 
+/// Which of the two existing palette colors marks a gain.
+/// Only the assignment swaps — no color values are changed.
+enum PnlColorConvention: String, CaseIterable, Identifiable {
+    /// 红涨绿跌: red = gain, green = loss.
+    case redUp
+    /// 绿涨红跌: green = gain, red = loss (default).
+    case greenUp
+
+    var id: String { rawValue }
+
+    func displayName(language: AppLanguage) -> String {
+        switch (self, language) {
+        case (.redUp, .chinese):
+            return "红涨绿跌"
+        case (.redUp, .english):
+            return "Red up"
+        case (.greenUp, .chinese):
+            return "绿涨红跌"
+        case (.greenUp, .english):
+            return "Green up"
+        }
+    }
+}
+
+extension WickPalette {
+    /// (gain, loss) colors under a convention — picks which existing palette
+    /// color is used for each; the color values themselves are untouched.
+    func upDownColors(_ convention: PnlColorConvention) -> (gain: WickRGB, loss: WickRGB) {
+        switch convention {
+        case .redUp:
+            return (pnlUp, pnlDown)
+        case .greenUp:
+            return (pnlDown, pnlUp)
+        }
+    }
+}
+
 @MainActor
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
@@ -43,6 +80,7 @@ final class AppSettings: ObservableObject {
     private enum Keys {
         static let language = "wick.language"
         static let appearance = "wick.appearance"
+        static let pnlColorConvention = "wick.pnlColorConvention"
         static let journalReminderEnabled = "wick.journal.reminderEnabled"
         static let journalReminderHour = "wick.journal.reminderHour"
         static let journalReminderMinute = "wick.journal.reminderMinute"
@@ -77,6 +115,13 @@ final class AppSettings: ObservableObject {
     @Published var appearance: AppAppearance {
         didSet {
             UserDefaults.standard.set(appearance.rawValue, forKey: Keys.appearance)
+        }
+    }
+
+    /// 涨跌配色: which of the two palette colors marks a gain.
+    @Published var pnlColorConvention: PnlColorConvention {
+        didSet {
+            UserDefaults.standard.set(pnlColorConvention.rawValue, forKey: Keys.pnlColorConvention)
         }
     }
 
@@ -234,6 +279,9 @@ final class AppSettings: ObservableObject {
 
         let appearanceRaw = UserDefaults.standard.string(forKey: Keys.appearance) ?? AppAppearance.system.rawValue
         appearance = AppAppearance(rawValue: appearanceRaw) ?? .system
+
+        let conventionRaw = UserDefaults.standard.string(forKey: Keys.pnlColorConvention) ?? PnlColorConvention.greenUp.rawValue
+        pnlColorConvention = PnlColorConvention(rawValue: conventionRaw) ?? .greenUp
 
         if UserDefaults.standard.object(forKey: Keys.journalReminderEnabled) == nil {
             journalReminderEnabled = true

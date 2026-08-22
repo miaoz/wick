@@ -54,6 +54,14 @@ private struct ReceiptView: View {
     private let printUp = Color(red: 0.69, green: 0.20, blue: 0.12)   // #B0341E
     private let printDown = Color(red: 0.24, green: 0.36, blue: 0.31) // #3E5C50
 
+    /// 涨跌配色下的盈/亏色 —— 只在上面两个纸面墨色里互换，不改墨色值本身。
+    private var printGain: Color {
+        settings.pnlColorConvention == .redUp ? printUp : printDown
+    }
+    private var printLoss: Color {
+        settings.pnlColorConvention == .redUp ? printDown : printUp
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header: symbol + lane + date range
@@ -141,7 +149,7 @@ private struct ReceiptView: View {
             Spacer(minLength: 8)
             Text(netText)
                 .font(.system(size: 12.5, weight: .bold, design: .monospaced))
-                .foregroundStyle(position.netPnl >= 0 ? printUp : printDown)
+                .foregroundStyle(position.netPnl >= 0 ? printGain : printLoss)
         }
     }
 
@@ -167,19 +175,19 @@ private struct ReceiptView: View {
             breakdownRow(
                 label: L10n.string(.exchangePositionRealizedPnl, language: settings.language),
                 value: signedText(position.realizedPnl),
-                valueColor: position.realizedPnl >= 0 ? printUp : printDown,
+                valueColor: position.realizedPnl >= 0 ? printGain : printLoss,
                 shows: abs(position.realizedPnl) > 1e-9
             )
             breakdownRow(
                 label: L10n.string(.exchangePositionCommission, language: settings.language),
                 value: "−" + Self.format(pnl: position.commissionTotal) + quoteSuffix,
-                valueColor: printDown,
+                valueColor: printLoss,
                 shows: position.commissionTotal > 1e-9
             )
             breakdownRow(
                 label: L10n.string(.exchangePositionFunding, language: settings.language),
                 value: signedText(position.fundingPnl),
-                valueColor: position.fundingPnl >= 0 ? printUp : printDown,
+                valueColor: position.fundingPnl >= 0 ? printGain : printLoss,
                 shows: abs(position.fundingPnl) > 1e-9
             )
         }

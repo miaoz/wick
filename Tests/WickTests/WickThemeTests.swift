@@ -143,4 +143,20 @@ final class WickThemeTests: XCTestCase {
             .map { String(format: "%.3f", $0) }
             .joined(separator: ",")
     }
+
+    // MARK: PnL color convention
+
+    /// The convention only swaps WHICH existing palette color is used for
+    /// gain/loss — the underlying color values are untouched.
+    func testUpDownColorsSwapsAssignmentNotValues() {
+        let palette = DayArcEngine.anchorPalette(.day, scheme: .light)
+
+        let redUp = palette.upDownColors(.redUp)     // 红涨绿跌
+        XCTAssertEqual(redUp.gain, palette.pnlUp)
+        XCTAssertEqual(redUp.loss, palette.pnlDown)
+
+        let greenUp = palette.upDownColors(.greenUp) // 绿涨红跌
+        XCTAssertEqual(greenUp.gain, palette.pnlDown)
+        XCTAssertEqual(greenUp.loss, palette.pnlUp)
+    }
 }

@@ -550,6 +550,12 @@ struct JournalDayTimelineRow: View {
     /// 交易所快照在场时才显示「· 无持仓 / N 笔已平仓」段。
     let showsPositionStats: Bool
 
+    /// 涨跌配色下的盈/亏色（只换用哪个已有色值，不改色值本身）。
+    private var gainLoss: (gain: Color, loss: Color) {
+        let pair = palette.upDownColors(settings.pnlColorConvention)
+        return (pair.gain.color, pair.loss.color)
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
@@ -572,7 +578,7 @@ struct JournalDayTimelineRow: View {
                 if let dayPnL {
                     Text(Self.format(pnl: dayPnL))
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundStyle(dayPnL >= 0 ? palette.pnlUp.color : palette.pnlDown.color)
+                        .foregroundStyle(dayPnL >= 0 ? gainLoss.gain : gainLoss.loss)
                 } else {
                     Text("—")
                         .font(.system(size: 11, design: .monospaced))

@@ -29,6 +29,12 @@ struct JournalEditorPane: View {
     @State private var pendingDeleteItem: JournalItemRef?
     @State private var datePickerEntryID: UUID?
     @State private var imageImportTarget: JournalItemRef?
+
+    /// 涨跌配色下的盈/亏色（只换用哪个已有色值，不改色值本身）。
+    private var gainLoss: (gain: Color, loss: Color) {
+        let pair = palette.upDownColors(settings.pnlColorConvention)
+        return (pair.gain.color, pair.loss.color)
+    }
     @State private var showImageImporter = false
     @State private var pendingScrollID: String?
     /// Only this item mounts AppKit text views (P1). Nil = all items are `Text`.
@@ -451,7 +457,7 @@ struct JournalEditorPane: View {
                     .foregroundStyle(palette.textTertiary.color)
                 Text(Self.format(pnl: pnl) + " USDT")
                     .font(.system(size: 14, weight: .bold, design: .monospaced))
-                    .foregroundStyle(pnl >= 0 ? palette.pnlUp.color : palette.pnlDown.color)
+                    .foregroundStyle(pnl >= 0 ? gainLoss.gain : gainLoss.loss)
             }
             .fixedSize()
             .padding(.bottom, 2)

@@ -16,6 +16,12 @@ struct JournalPnlCalendarView: View {
 
     @State private var displayedMonth: Date = monthStart(of: Date(), calendar: .current)
 
+    /// 涨跌配色下的盈/亏色（只换用哪个已有色值，不改色值本身）。
+    private var gainLoss: (gain: Color, loss: Color) {
+        let pair = palette.upDownColors(settings.pnlColorConvention)
+        return (pair.gain.color, pair.loss.color)
+    }
+
     private static let columns = Array(
         repeating: GridItem(.flexible(), spacing: 4),
         count: 7
@@ -74,7 +80,7 @@ struct JournalPnlCalendarView: View {
                 Spacer()
                 Text(Self.format(pnl: total))
                     .font(.system(size: 13, weight: .bold, design: .monospaced))
-                    .foregroundStyle(total >= 0 ? palette.pnlUp.color : palette.pnlDown.color)
+                    .foregroundStyle(total >= 0 ? gainLoss.gain : gainLoss.loss)
             }
         }
     }
@@ -209,8 +215,8 @@ struct JournalPnlCalendarView: View {
     /// 软填充对应 tokens 的 cinnabar-soft / dai-soft(约 14%)。
     private func fillColor(for state: CellState) -> Color {
         switch state {
-        case .profit: return palette.pnlUp.color.opacity(0.14)
-        case .loss: return palette.pnlDown.color.opacity(0.14)
+        case .profit: return gainLoss.gain.opacity(0.14)
+        case .loss: return gainLoss.loss.opacity(0.14)
         case .journaled: return palette.stain1.color
         case .empty: return .clear
         }
@@ -219,8 +225,8 @@ struct JournalPnlCalendarView: View {
     private func textColor(for state: CellState, isToday: Bool) -> Color {
         if isToday { return palette.textPrimary.color }
         switch state {
-        case .profit: return palette.pnlUp.color
-        case .loss: return palette.pnlDown.color
+        case .profit: return gainLoss.gain
+        case .loss: return gainLoss.loss
         case .journaled: return palette.textSecondary.color
         case .empty: return palette.textTertiary.color
         }
