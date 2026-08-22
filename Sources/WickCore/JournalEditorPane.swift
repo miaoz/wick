@@ -209,10 +209,6 @@ struct JournalEditorPane: View {
     private var timelineChrome: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                Color.clear
-                    .frame(height: 0)
-                    .id(Self.timelineTopScrollID)
-
                 LazyVStack(alignment: .leading, spacing: 30) {
                     if isItemScoped {
                         itemScopedSections
@@ -224,6 +220,10 @@ struct JournalEditorPane: View {
                 .padding(.horizontal, 28)
                 .frame(maxWidth: 880, alignment: .leading)
                 .frame(maxWidth: .infinity)
+                // Keep the top target on a real-sized view. Animating to the
+                // previous zero-height sentinel could mirror the first lazy
+                // row's display list during initial layout on macOS 26.
+                .id(Self.timelineTopScrollID)
             }
             .scrollIndicators(.never)
             .hidesAppKitScrollers()
@@ -231,6 +231,13 @@ struct JournalEditorPane: View {
                 guard let target else { return }
                 // Double-pass: first layout pass may not have built LazyVStack rows yet.
                 DispatchQueue.main.async {
+                    if target == Self.timelineTopScrollID {
+                        proxy.scrollTo(target, anchor: .top)
+                        if pendingScrollID == target {
+                            pendingScrollID = nil
+                        }
+                        return
+                    }
                     withAnimation(.easeInOut(duration: 0.25)) {
                         proxy.scrollTo(target, anchor: .top)
                     }
