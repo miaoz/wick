@@ -56,8 +56,7 @@ final class PositionEntryPlannerTests: XCTestCase {
                 position("b", symbol: "BTCUSDC", openTime: date(2026, 8, 1, hour: 9)),
                 position("c", symbol: "ETHUSDT", openTime: date(2026, 8, 2))
             ],
-            existingDayKeys: [],
-            handledPositionIDs: [],
+            existingTagsByDay: [:],
             dayKey: dayKey,
             startOfDay: startOfDay
         )
@@ -65,32 +64,31 @@ final class PositionEntryPlannerTests: XCTestCase {
         XCTAssertEqual(plan.count, 2)
         XCTAssertEqual(plan[0].dayKey, "2026-08-01")
         XCTAssertEqual(plan[0].symbols, ["BTCUSDC", "BTCUSDT"])
-        XCTAssertEqual(Set(plan[0].positionIDs), ["a", "b"])
         XCTAssertEqual(plan[0].day, startOfDay(Date(timeIntervalSince1970: date(2026, 8, 1))))
         XCTAssertEqual(plan[1].dayKey, "2026-08-02")
         XCTAssertEqual(plan[1].symbols, ["ETHUSDT"])
     }
 
-    func testSkipsDaysThatAlreadyHaveAnEntry() {
+    func testSkipsPositionWhenExistingDayHasMatchingTag() {
         let plan = PositionEntryPlanner.plan(
             positions: [position("a", symbol: "BTCUSDT", openTime: date(2026, 8, 1))],
-            existingDayKeys: ["2026-08-01"],
-            handledPositionIDs: [],
+            existingTagsByDay: ["2026-08-01": ["BTC"]],
             dayKey: dayKey,
             startOfDay: startOfDay
         )
         XCTAssertTrue(plan.isEmpty)
     }
 
-    func testSkipsHandledPositionsEvenWhenTheirEntryWasDeleted() {
+    func testPlansMissingTagForExistingDay() {
         let plan = PositionEntryPlanner.plan(
             positions: [position("a", symbol: "BTCUSDT", openTime: date(2026, 8, 1))],
-            existingDayKeys: [],
-            handledPositionIDs: ["a"],
+            existingTagsByDay: ["2026-08-01": ["ETH"]],
             dayKey: dayKey,
             startOfDay: startOfDay
         )
-        XCTAssertTrue(plan.isEmpty)
+        XCTAssertEqual(plan.count, 1)
+        XCTAssertEqual(plan[0].dayKey, "2026-08-01")
+        XCTAssertEqual(plan[0].symbols, ["BTCUSDT"])
     }
 
     func testMultipleSessionsSameSymbolSameDayCollapseToOneItem() {
@@ -99,14 +97,12 @@ final class PositionEntryPlannerTests: XCTestCase {
                 position("a", symbol: "BTCUSDT", openTime: date(2026, 8, 1, hour: 1)),
                 position("b", symbol: "BTCUSDT", openTime: date(2026, 8, 1, hour: 22))
             ],
-            existingDayKeys: [],
-            handledPositionIDs: [],
+            existingTagsByDay: [:],
             dayKey: dayKey,
             startOfDay: startOfDay
         )
         XCTAssertEqual(plan.count, 1)
         XCTAssertEqual(plan[0].symbols, ["BTCUSDT"])
-        XCTAssertEqual(Set(plan[0].positionIDs), ["a", "b"])
     }
 
     func testPlansSortedByDayAscending() {
@@ -115,11 +111,42 @@ final class PositionEntryPlannerTests: XCTestCase {
                 position("late", symbol: "BTCUSDT", openTime: date(2026, 8, 5)),
                 position("early", symbol: "BTCUSDT", openTime: date(2026, 7, 20))
             ],
-            existingDayKeys: [],
-            handledPositionIDs: [],
+            existingTagsByDay: [:],
             dayKey: dayKey,
             startOfDay: startOfDay
         )
         XCTAssertEqual(plan.map(\.dayKey), ["2026-07-20", "2026-08-05"])
+    }
+
+    func testStableItemIDConvergesAcrossDevices() {
+        let journalID = UUID(uuidString: "449E4948-DA92-4DC6-9317-0E49CFEFD7D0")!
+        let first = PositionEntryPlanner.stableItemID(
+            journalID: journalID,
+            dayKey: "2026-08-09",
+            symbol: "BTC"
+        )
+        let second = PositionEntryPlanner.stableItemID(
+            journalID: journalID,
+            dayKey: "2026-08-09",
+            symbol: " btc "
+        )
+
+        XCTAssertEqual(first, second)
+        XCTAssertNotEqual(
+            first,
+            PositionEntryPlanner.stableItemID(
+                journalID: journalID,
+                dayKey: "2026-08-10",
+                symbol: "BTC"
+            )
+        )
+        XCTAssertNotEqual(
+            first,
+            PositionEntryPlanner.stableItemID(
+                journalID: journalID,
+                dayKey: "2026-08-09",
+                symbol: "ETH"
+            )
+        )
     }
 }

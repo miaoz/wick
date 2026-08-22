@@ -205,11 +205,8 @@ public struct TradingPosition: Codable, Identifiable, Equatable, Sendable {
 /// Raw fills are cached alongside the derived positions so refreshes can be
 /// incremental (past fills are immutable): each sync only fetches from the
 /// last successful fetch forward, plus a backward extension when the journal's
-/// earliest day moves before `windowStart`. `handledPositionIDs` records
-/// positions whose "needs an entry?" question was already decided, so a day
-/// entry the user deleted is never resurrected by later syncs.
+/// earliest day moves before `windowStart`.
 public struct TradingPositionSnapshot: Codable, Equatable, Sendable {
-    public var version: Int
     public var fetchedAt: Date
     /// Lower bound of the covered history (start of the earliest journal day,
     /// or the fallback window when the journal is empty).
@@ -221,50 +218,22 @@ public struct TradingPositionSnapshot: Codable, Equatable, Sendable {
     /// Funding-fee settlements in the same window, matched onto positions at
     /// display time.
     public var funding: [FundingEvent]
-    /// Whether the funding history has been backfilled once across the whole
-    /// window. Caches written before funding support have fills but no funding,
-    /// so the first post-upgrade sync backfills the full window instead of only
-    /// the incremental tail.
+    /// Whether the funding history has been fetched across the whole window.
     public var fundingBackfilled: Bool
-    /// Position ids already considered for journal auto-creation.
-    public var handledPositionIDs: Set<String>
-
-    public static let currentVersion = 2
 
     public init(
-        version: Int = TradingPositionSnapshot.currentVersion,
         fetchedAt: Date,
         windowStart: Date,
         positions: [TradingPosition],
         fills: [TradingFill] = [],
         funding: [FundingEvent] = [],
-        fundingBackfilled: Bool = false,
-        handledPositionIDs: Set<String> = []
+        fundingBackfilled: Bool = false
     ) {
-        self.version = version
         self.fetchedAt = fetchedAt
         self.windowStart = windowStart
         self.positions = positions
         self.fills = fills
         self.funding = funding
         self.fundingBackfilled = fundingBackfilled
-        self.handledPositionIDs = handledPositionIDs
-    }
-
-    public enum CodingKeys: String, CodingKey {
-        case version, fetchedAt, windowStart, positions, fills, funding
-        case fundingBackfilled, handledPositionIDs
-    }
-
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
-        fetchedAt = try container.decode(Date.self, forKey: .fetchedAt)
-        windowStart = try container.decode(Date.self, forKey: .windowStart)
-        positions = try container.decode([TradingPosition].self, forKey: .positions)
-        fills = try container.decodeIfPresent([TradingFill].self, forKey: .fills) ?? []
-        funding = try container.decodeIfPresent([FundingEvent].self, forKey: .funding) ?? []
-        fundingBackfilled = try container.decodeIfPresent(Bool.self, forKey: .fundingBackfilled) ?? false
-        handledPositionIDs = try container.decodeIfPresent(Set<String>.self, forKey: .handledPositionIDs) ?? []
     }
 }

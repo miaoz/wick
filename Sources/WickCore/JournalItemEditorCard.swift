@@ -17,8 +17,8 @@ struct JournalItemEditorCard: View {
 
     /// Owning day entry — required so image deletion stays correct in multi-day timelines.
     let entryID: UUID
-    /// Owning entry's day key ("yyyy-MM-dd") — matches exchange positions by open date.
-    let entryDayKey: String
+    /// The displayed calendar date used to match exchange position open dates.
+    let entryDate: Date
     let index: Int
     @Binding var item: JournalItem
     let canDelete: Bool
@@ -83,7 +83,12 @@ struct JournalItemEditorCard: View {
 
             imagesSection
 
-            JournalExchangePositions(entryDayKey: entryDayKey, tag: item.tag)
+            JournalExchangePositions(
+                entryID: entryID,
+                entryDate: entryDate,
+                itemID: item.id,
+                tag: item.tag
+            )
 
             // The unreviewed call-to-action (and the note) keep a row of
             // their own - only the picked seal gets to float over content.
@@ -520,4 +525,3 @@ private struct JournalQuietIconButtonBody: View {
         }
     }
 }
-

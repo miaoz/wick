@@ -408,8 +408,7 @@ final class TradingModelTests: XCTestCase {
                     qty: 0.5,
                     time: 1000
                 )
-            ],
-            handledPositionIDs: ["BTCUSDT|BOTH|1000|1"]
+            ]
         )
 
         let data = try JSONEncoder().encode(snapshot)
@@ -417,18 +416,14 @@ final class TradingModelTests: XCTestCase {
         XCTAssertEqual(decoded, snapshot)
     }
 
-    func testSnapshotDecodesLegacyShapeWithoutFills() throws {
-        // windowStart missing => legacy cache discarded by caller (nil on
-        // decode), so only the soft-defaulted fields need to stay decodable
-        // when the key exists. Verify fills/handled default when absent.
+    func testSnapshotRejectsIncompleteCache() throws {
         let json = """
-        {"version":1,"fetchedAt":1700000000,"windowStart":1699000000,
-         "positions":[]}
+        {"fetchedAt":1700000000,"windowStart":1699000000,"positions":[]}
         """.data(using: .utf8)!
 
-        let decoded = try JSONDecoder().decode(TradingPositionSnapshot.self, from: json)
-        XCTAssertEqual(decoded.fills, [])
-        XCTAssertEqual(decoded.handledPositionIDs, [])
+        XCTAssertThrowsError(
+            try JSONDecoder().decode(TradingPositionSnapshot.self, from: json)
+        )
     }
 
     func testQuoteAssetInference() {

@@ -132,6 +132,196 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
         }
     }
 
+    func testEquivalentTagsRenderEachPositionOnlyOnce() {
+        let first = JournalItem(tag: "BTC")
+        let duplicate = JournalItem(tag: "BTC")
+        let position = TradingPosition(
+            id: "btc-1",
+            symbol: "BTC",
+            side: .long,
+            openTime: Date(),
+            closeTime: nil,
+            entryPrice: 100,
+            exitPrice: nil,
+            peakSize: 1,
+            realizedPnl: 0
+        )
+
+        XCTAssertEqual(
+            ExchangePositionCoordinator.positions(
+                [position],
+                ownedBy: first.id,
+                currentTag: first.tag,
+                items: [first, duplicate]
+            ).map(\.id),
+            [position.id]
+        )
+        XCTAssertTrue(
+            ExchangePositionCoordinator.positions(
+                [position],
+                ownedBy: duplicate.id,
+                currentTag: duplicate.tag,
+                items: [first, duplicate]
+            ).isEmpty
+        )
+    }
+
+    func testSyncAddsOnlyMissingSymbolItemToExistingDay() async {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = bindActiveJournal()
+        let now = Date()
+        var entry = store.createEntry(on: now)
+        entry.items = [JournalItem(tag: "BTC", body: "keep this note")]
+        store.updateEntry(entry)
+        let fills = [
+            TradingFill(
+                id: 1,
+                symbol: "BTCUSDT",
+                side: "BUY",
+                price: 100,
+                qty: 1,
+                time: Self.ms(now.addingTimeInterval(-120))
+            ),
+            TradingFill(
+                id: 2,
+                symbol: "SKHYNIXUSDT",
+                side: "BUY",
+                price: 200,
+                qty: 1,
+                time: Self.ms(now.addingTimeInterval(-60))
+            ),
+        ]
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in
+            StubTradeClient(fills: fills)
+        }
+
+        coordinator.syncNow(journalID: journalID)
+        await awaitRunCompletion(coordinator)
+
+        let updated = store.entries.first { $0.id == entry.id }
+        XCTAssertEqual(updated?.items.map(\.tag), ["BTC", "SKHYNIX"])
+        XCTAssertEqual(updated?.items.first?.body, "keep this note")
+    }
+
+    func testSyncCollapsesPairsCoveredBySamePreferredBaseTag() async {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = bindActiveJournal()
+        let now = Date()
+        let fills = [
+            TradingFill(
+                id: 1,
+                symbol: "BTCUSDT",
+                side: "BUY",
+                price: 100,
+                qty: 1,
+                time: Self.ms(now.addingTimeInterval(-120))
+            ),
+            TradingFill(
+                id: 2,
+                symbol: "BTCUSDC",
+                side: "BUY",
+                price: 100,
+                qty: 1,
+                time: Self.ms(now.addingTimeInterval(-60))
+            ),
+        ]
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in
+            StubTradeClient(fills: fills)
+        }
+
+        coordinator.syncNow(journalID: journalID)
+        await awaitRunCompletion(coordinator)
+
+        XCTAssertEqual(store.entries.count, 1)
+        XCTAssertEqual(store.entries.first?.items.map(\.tag), ["BTC"])
+    }
+
+    func testCacheLoadCreatesMissingPositionDay() async throws {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = bindActiveJournal()
+        let now = Date()
+        let fills = [TradingFill(
+            id: 7,
+            symbol: "XAUUSDT",
+            side: "BUY",
+            price: 100,
+            qty: 1,
+            time: Self.ms(now.addingTimeInterval(-60))
+        )]
+        let position = try XCTUnwrap(PositionAggregator.aggregate(fills: fills).first)
+        let cached = TradingPositionSnapshot(
+            fetchedAt: now,
+            windowStart: Calendar.current.startOfDay(for: now),
+            positions: [position],
+            fills: fills,
+            fundingBackfilled: true
+        )
+        try JSONEncoder().encode(cached).write(to: cacheFile(for: journalID))
+        coordinator.activeJournalDidChange()
+        XCTAssertEqual(store.entries.first?.items.map(\.tag), ["XAU"])
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in
+            StubTradeClient(fills: fills)
+        }
+
+        coordinator.syncNow(journalID: journalID)
+        await awaitRunCompletion(coordinator)
+
+        XCTAssertEqual(store.entries.count, 1)
+        XCTAssertEqual(store.entries.first?.items.map(\.tag), ["XAU"])
+    }
+
+    func testCacheLoadMatchesDisplayedDateWhenStableDayKeyDiffers() throws {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = bindActiveJournal()
+        let calendar = Calendar.current
+        let day = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026,
+            month: 8,
+            day: 7,
+            hour: 10
+        )))
+        var entry = store.createEntry(on: day)
+        let xau = JournalItem(tag: "XAU", body: "keep the original note")
+        entry.items = [xau]
+        entry.dayKey = JournalDayKey.make(
+            from: try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: day))
+        )
+        store.updateEntry(entry)
+
+        let fills = [TradingFill(
+            id: 7,
+            symbol: "XAUUSDT",
+            side: "BUY",
+            price: 100,
+            qty: 1,
+            time: Self.ms(day)
+        )]
+        let position = try XCTUnwrap(PositionAggregator.aggregate(fills: fills).first)
+        let cached = TradingPositionSnapshot(
+            fetchedAt: day.addingTimeInterval(60),
+            windowStart: calendar.startOfDay(for: day),
+            positions: [position],
+            fills: fills,
+            fundingBackfilled: true
+        )
+        try JSONEncoder().encode(cached).write(to: cacheFile(for: journalID))
+
+        coordinator.activeJournalDidChange()
+        coordinator.activeJournalDidChange()
+
+        let updated = try XCTUnwrap(store.entries.first(where: { $0.id == entry.id }))
+        XCTAssertEqual(updated.items, [xau])
+        XCTAssertEqual(
+            coordinator.positions(
+                entryID: updated.id,
+                entryDate: updated.date,
+                itemID: xau.id,
+                tag: xau.tag
+            ).map(\.id),
+            [position.id]
+        )
+    }
+
     func testDisconnectMidFlightDiscardsStaleResult() async {
         let coordinator = ExchangePositionCoordinator()
         let journalID = bindActiveJournal()

@@ -676,28 +676,36 @@ final class JournalStore: ObservableObject {
         createEntry(on: Date())
     }
 
-    /// Quiet batch creation for exchange auto-population: creates one entry
-    /// per day that has none yet, without touching selection/filters (unlike
-    /// `createEntry`, which also selects). One persist for the whole batch.
-    /// Returns the days actually created; existing days are skipped.
+    /// Ensures exchange-planned items exist without rewriting any existing
+    /// tag or content. Missing days are created; existing days receive only
+    /// items whose deterministic ids are not already present. One persist for
+    /// the whole batch, without changing selection or filters.
     @discardableResult
-    func autoCreateEntries(_ skeletons: [(day: Date, items: [JournalItem])]) -> [Date] {
+    func ensurePositionEntries(_ skeletons: [(day: Date, items: [JournalItem])]) -> [Date] {
         guard !isReadOnlyDueToLoadFailure, !skeletons.isEmpty else { return [] }
 
-        let calendar = Calendar.current
-        var created: [Date] = []
-        for skeleton in skeletons {
-            let day = calendar.startOfDay(for: skeleton.day)
-            guard entry(on: day) == nil else { continue }
-            let items = skeleton.items.isEmpty ? [JournalItem()] : skeleton.items
-            entries.insert(JournalEntry(date: day, items: items), at: 0)
-            created.append(day)
-        }
-        guard !created.isEmpty else { return [] }
+        let changed = Self.applyPositionSkeletons(
+            skeletons,
+            to: &entries,
+            calendar: .current,
+            now: Date()
+        )
+        guard !changed.isEmpty else { return [] }
 
         persist()
         touchActiveJournalMetadata()
-        return created
+        objectWillChange.send()
+        guard let activeJournalID else { return changed.map(\.day) }
+        for change in changed {
+            remoteEntryDidApply.send(
+                JournalRemoteApply(
+                    journalID: activeJournalID,
+                    dayKey: change.entry.dayKey,
+                    entryID: change.entry.id
+                )
+            )
+        }
+        return changed.map(\.day)
     }
 
     /// Entries of any journal. The active book's in-memory copy wins; others
@@ -710,17 +718,17 @@ final class JournalStore: ObservableObject {
         return loadEntriesFromDisk(journalID: journalID)
     }
 
-    /// Same as `autoCreateEntries`, but can target a journal that is not open.
+    /// Same as `ensurePositionEntries`, but can target a journal that is not open.
     /// Only runs on a loaded journal or a legitimately new one; corrupt,
     /// newer-format, and deleted-from-catalog journals are skipped without
     /// touching the file on disk.
     @discardableResult
-    func autoCreateEntries(
+    func ensurePositionEntries(
         _ skeletons: [(day: Date, items: [JournalItem])],
         in journalID: UUID
     ) -> [Date] {
         if journalID == activeJournalID {
-            return autoCreateEntries(skeletons)
+            return ensurePositionEntries(skeletons)
         }
         guard !isCatalogReadOnly else { return [] }
         guard !skeletons.isEmpty else { return [] }
@@ -745,17 +753,13 @@ final class JournalStore: ObservableObject {
             return []
         }
 
-        let calendar = Calendar.current
-        var created: [Date] = []
-        for skeleton in skeletons {
-            let day = calendar.startOfDay(for: skeleton.day)
-            let exists = stored.contains { calendar.isDate($0.date, inSameDayAs: day) }
-            guard !exists else { continue }
-            let items = skeleton.items.isEmpty ? [JournalItem()] : skeleton.items
-            stored.insert(JournalEntry(date: day, items: items), at: 0)
-            created.append(day)
-        }
-        guard !created.isEmpty else { return [] }
+        let changed = Self.applyPositionSkeletons(
+            skeletons,
+            to: &stored,
+            calendar: .current,
+            now: Date()
+        )
+        guard !changed.isEmpty else { return [] }
         do {
             try persistEntries(stored, journalID: journalID)
         } catch {
@@ -763,7 +767,42 @@ final class JournalStore: ObservableObject {
             NSLog("Wick exchange: auto-create persist failed for %@: %@", journalID.uuidString, error.localizedDescription)
             return []
         }
-        return created
+        return changed.map(\.day)
+    }
+
+    private static func applyPositionSkeletons(
+        _ skeletons: [(day: Date, items: [JournalItem])],
+        to stored: inout [JournalEntry],
+        calendar: Calendar,
+        now: Date
+    ) -> [(day: Date, entry: JournalEntry)] {
+        var changed: [(day: Date, entry: JournalEntry)] = []
+        for skeleton in skeletons where !skeleton.items.isEmpty {
+            let day = calendar.startOfDay(for: skeleton.day)
+            if let index = stored.firstIndex(where: {
+                calendar.isDate($0.date, inSameDayAs: day)
+            }) {
+                let existingIDs = Set(stored[index].items.map(\.id))
+                let additions = skeleton.items.filter { !existingIDs.contains($0.id) }
+                guard !additions.isEmpty else { continue }
+                if stored[index].items.allSatisfy(\.isEmpty) {
+                    stored[index].items = []
+                }
+                stored[index].items.append(contentsOf: additions)
+                stored[index].updatedAt = now
+                changed.append((day, stored[index]))
+            } else {
+                let entry = JournalEntry(
+                    date: day,
+                    items: skeleton.items,
+                    createdAt: now,
+                    updatedAt: now
+                )
+                stored.insert(entry, at: 0)
+                changed.append((day, entry))
+            }
+        }
+        return changed
     }
 
     private func loadEntriesFromDisk(journalID: UUID) -> JournalEntriesLoadResult {

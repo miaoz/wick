@@ -9,11 +9,18 @@ struct JournalExchangePositions: View {
     @ObservedObject private var coordinator = ExchangePositionCoordinator.shared
     @Environment(\.wickPalette) private var palette
 
-    let entryDayKey: String
+    let entryID: UUID
+    let entryDate: Date
+    let itemID: UUID
     let tag: String
 
     private var matched: [TradingPosition] {
-        coordinator.positions(entryDayKey: entryDayKey, tag: tag)
+        coordinator.positions(
+            entryID: entryID,
+            entryDate: entryDate,
+            itemID: itemID,
+            tag: tag
+        )
     }
 
     var body: some View {

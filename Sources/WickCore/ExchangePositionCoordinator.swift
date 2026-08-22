@@ -12,7 +12,10 @@ protocol ExchangeJournalStore: AnyObject {
     var journals: [JournalInfo] { get }
     func setExchangeBinding(_ binding: JournalExchangeBinding?, for id: UUID)
     func entries(for journalID: UUID) -> JournalEntriesLoadResult
-    func autoCreateEntries(_ skeletons: [(day: Date, items: [JournalItem])], in journalID: UUID) -> [Date]
+    func ensurePositionEntries(
+        _ skeletons: [(day: Date, items: [JournalItem])],
+        in journalID: UUID
+    ) -> [Date]
 }
 
 extension JournalStore: ExchangeJournalStore {}
@@ -76,10 +79,7 @@ final class ExchangePositionCoordinator: ObservableObject {
 
     static let refreshInterval: TimeInterval = 30 * 60
     private static let fetchOverlap: TimeInterval = 5 * 60
-    private static let handledIDsCap = 5000
     private static let exchangeService = "com.miaoz.wick.exchange"
-    private static let legacyBinanceService = "com.miaoz.wick.binance"
-    private static let legacyHandledIDsKey = "wick.binance.handledPositionIDs"
     private static let log = Logger(subsystem: "com.miaoz.wick", category: "exchange")
 
     @Published private(set) var snapshot: TradingPositionSnapshot? {
@@ -163,7 +163,6 @@ final class ExchangePositionCoordinator: ObservableObject {
     // MARK: - Lifecycle
 
     func start() {
-        migrateLegacyBinanceIfNeeded()
         observeJournalChanges()
         loadCacheForActiveJournal()
         updateHasCredentials()
@@ -172,12 +171,40 @@ final class ExchangePositionCoordinator: ObservableObject {
         refreshIfStale()
     }
 
-    func positions(entryDayKey: String, tag: String) -> [TradingPosition] {
+    func positions(entryID: UUID, entryDate: Date, itemID: UUID, tag: String) -> [TradingPosition] {
         guard let all = snapshot?.positions else { return [] }
-        return SymbolTagMatcher
+        let tradingDayKey = JournalDayKey.make(from: entryDate)
+        let matched = SymbolTagMatcher
             .filter(all, matchingTag: tag)
-            .filter { JournalDayKey.make(from: $0.openTime) == entryDayKey }
+            .filter { JournalDayKey.make(from: $0.openTime) == tradingDayKey }
             .sorted { $0.openTime < $1.openTime }
+        guard !matched.isEmpty,
+              let journalID = store.activeJournalID,
+              let entry = loadableEntries(for: journalID).entries.first(where: { $0.id == entryID })
+        else {
+            return matched
+        }
+        return Self.positions(
+            matched,
+            ownedBy: itemID,
+            currentTag: tag,
+            items: entry.items
+        )
+    }
+
+    /// A position is a day-level entity and appears under only one matching item.
+    static func positions(
+        _ positions: [TradingPosition],
+        ownedBy itemID: UUID,
+        currentTag: String,
+        items: [JournalItem]
+    ) -> [TradingPosition] {
+        positions.filter { position in
+            items.first(where: { item in
+                let candidateTag = item.id == itemID ? currentTag : item.tag
+                return SymbolTagMatcher.matches(tag: candidateTag, symbol: position.symbol)
+            })?.id == itemID
+        }
     }
 
     func refreshIfStale() {
@@ -535,22 +562,10 @@ final class ExchangePositionCoordinator: ObservableObject {
         }
 
         let journalID = token.journalID
-        let prior = journalID == store.activeJournalID
-            ? snapshot
-            : loadSnapshot(at: Self.cacheURL(for: journalID))
-        var handledOrdered = Array(prior?.handledPositionIDs ?? [])
-        autoCreateEntriesIfNeeded(
+        ensurePositionEntriesIfNeeded(
             positions: positions,
-            handled: Set(handledOrdered),
             journalID: journalID
         )
-
-        for position in positions where !handledOrdered.contains(position.id) {
-            handledOrdered.append(position.id)
-        }
-        if handledOrdered.count > Self.handledIDsCap {
-            handledOrdered = Array(handledOrdered.suffix(Self.handledIDsCap))
-        }
 
         let next = TradingPositionSnapshot(
             fetchedAt: Date(),
@@ -558,8 +573,7 @@ final class ExchangePositionCoordinator: ObservableObject {
             positions: positions,
             fills: fills,
             funding: funding ?? [],
-            fundingBackfilled: fundingBackfilled,
-            handledPositionIDs: Set(handledOrdered)
+            fundingBackfilled: fundingBackfilled
         )
         saveCache(next, for: journalID)
         if journalID == store.activeJournalID {
@@ -593,18 +607,26 @@ final class ExchangePositionCoordinator: ObservableObject {
         }
     }
 
-    private func autoCreateEntriesIfNeeded(
+    private func ensurePositionEntriesIfNeeded(
         positions: [TradingPosition],
-        handled: Set<String>,
         journalID: UUID
     ) {
+        if journalID == store.activeJournalID {
+            NotificationCenter.default.post(name: .wickWillFlushJournalDrafts, object: nil)
+        }
         let loaded = loadableEntries(for: journalID)
         guard loaded.canAutoCreate else { return }
         let journalEntries = loaded.entries
+        var existingTagsByDay: [String: [String]] = [:]
+        for entry in journalEntries {
+            let tradingDayKey = JournalDayKey.make(from: entry.date)
+            existingTagsByDay[tradingDayKey, default: []].append(
+                contentsOf: entry.items.map(\.tag)
+            )
+        }
         let plan = PositionEntryPlanner.plan(
             positions: positions,
-            existingDayKeys: Set(journalEntries.map(\.dayKey)),
-            handledPositionIDs: handled,
+            existingTagsByDay: existingTagsByDay,
             dayKey: { JournalDayKey.make(from: $0) },
             startOfDay: { Calendar.current.startOfDay(for: $0) }
         )
@@ -623,15 +645,46 @@ final class ExchangePositionCoordinator: ObservableObject {
                 ?? SymbolTagMatcher.baseAsset(of: symbol)
         }
 
-        let skeletons = plan.map { planned in
-            (
+        var reservedItemIDs = Set(journalEntries.flatMap { $0.items.map(\.id) })
+        func itemID(dayKey: String, symbol: String) -> UUID {
+            let stable = PositionEntryPlanner.stableItemID(
+                journalID: journalID,
+                dayKey: dayKey,
+                symbol: symbol
+            )
+            if reservedItemIDs.insert(stable).inserted {
+                return stable
+            }
+            let fallback = UUID()
+            reservedItemIDs.insert(fallback)
+            return fallback
+        }
+
+        let skeletons: [(day: Date, items: [JournalItem])] = plan.compactMap { planned in
+            var coveredTags = existingTagsByDay[planned.dayKey] ?? []
+            var items: [JournalItem] = []
+            for symbol in planned.symbols {
+                guard !coveredTags.contains(where: {
+                    SymbolTagMatcher.matches(tag: $0, symbol: symbol)
+                }) else { continue }
+                let tag = tagForSymbol(symbol)
+                items.append(
+                    JournalItem(
+                        id: itemID(dayKey: planned.dayKey, symbol: symbol),
+                        tag: tag
+                    )
+                )
+                coveredTags.append(tag)
+            }
+            guard !items.isEmpty else { return nil }
+            return (
                 day: planned.day,
-                items: planned.symbols.map { JournalItem(tag: tagForSymbol($0)) }
+                items: items
             )
         }
-        let created = store.autoCreateEntries(skeletons, in: journalID)
-        if !created.isEmpty {
-            NSLog("Wick exchange: auto-created %ld journal day(s)", created.count)
+        let changedDays = store.ensurePositionEntries(skeletons, in: journalID)
+        if !changedDays.isEmpty {
+            NSLog("Wick exchange: ensured position items on %ld journal day(s)", changedDays.count)
         }
     }
 
@@ -795,52 +848,6 @@ final class ExchangePositionCoordinator: ObservableObject {
         hasCredentials = isEnabled
     }
 
-    // MARK: - Legacy migration (global Binance → active journal)
-
-    private func migrateLegacyBinanceIfNeeded() {
-        guard let journalID = store.activeJournalID else { return }
-        if store.activeJournal?.exchangeBinding != nil { return }
-        if loadSecrets(for: journalID) != nil { return }
-
-        let legacyKey = KeychainTokenStore(service: Self.legacyBinanceService, account: "apiKey")
-        let legacySecret = KeychainTokenStore(service: Self.legacyBinanceService, account: "apiSecret")
-        guard let apiKey = legacyKey.load(), let secret = legacySecret.load() else { return }
-
-        saveSecrets(
-            ExchangeSecretBlob(venue: .binance, apiKey: apiKey, secret: secret, passphrase: nil),
-            for: journalID
-        )
-        store.setExchangeBinding(
-            JournalExchangeBinding(venue: .binance, accountLabel: "Binance"),
-            for: journalID
-        )
-        legacyKey.clear()
-        legacySecret.clear()
-
-        let legacyCache = Self.legacyCacheURL
-        let newCache = Self.cacheURL(for: journalID)
-        if FileManager.default.fileExists(atPath: legacyCache.path),
-           !FileManager.default.fileExists(atPath: newCache.path)
-        {
-            try? FileManager.default.createDirectory(
-                at: newCache.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try? FileManager.default.moveItem(at: legacyCache, to: newCache)
-        }
-
-        if let handled = UserDefaults.standard.stringArray(forKey: Self.legacyHandledIDsKey),
-           var snapshot = loadSnapshot(at: newCache)
-        {
-            snapshot.handledPositionIDs.formUnion(handled)
-            if let data = try? JSONEncoder().encode(snapshot) {
-                try? data.write(to: newCache, options: .atomic)
-            }
-        }
-        UserDefaults.standard.removeObject(forKey: Self.legacyHandledIDsKey)
-        AppSettings.shared.binancePositionsEnabled = false
-    }
-
     // MARK: - Timer
 
     private func scheduleTimer() {
@@ -875,18 +882,15 @@ final class ExchangePositionCoordinator: ObservableObject {
         tradingDirectory().appendingPathComponent("\(journalID.uuidString).json")
     }
 
-    private static var legacyCacheURL: URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return support.appendingPathComponent("Wick/TradingPositions.json")
-    }
-
     private func loadCacheForActiveJournal() {
         guard let journalID = store.activeJournalID else {
             snapshot = nil
             return
         }
         snapshot = loadSnapshot(at: Self.cacheURL(for: journalID))
+        if let positions = snapshot?.positions, !positions.isEmpty {
+            ensurePositionEntriesIfNeeded(positions: positions, journalID: journalID)
+        }
     }
 
     private func loadSnapshot(at url: URL) -> TradingPositionSnapshot? {

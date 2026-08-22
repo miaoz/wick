@@ -102,7 +102,6 @@ final class AppSettings: ObservableObject {
         static let deviceID = "wick.deviceID"
         static let syncEnabled = "wick.sync.enabled"
         static let syncAccountEmail = "wick.sync.accountEmail"
-        static let binancePositionsEnabled = "wick.binance.positionsEnabled"
     }
 
     /// Suppresses reminder rescheduling while loading defaults in `init`.
@@ -195,14 +194,6 @@ final class AppSettings: ObservableObject {
     @Published var syncEnabled: Bool {
         didSet {
             UserDefaults.standard.set(syncEnabled, forKey: Keys.syncEnabled)
-        }
-    }
-
-    /// Legacy Binance master switch. New bindings live on `JournalInfo`;
-    /// this flag is only read during one-shot migration.
-    @Published var binancePositionsEnabled: Bool {
-        didSet {
-            UserDefaults.standard.set(binancePositionsEnabled, forKey: Keys.binancePositionsEnabled)
         }
     }
 
@@ -351,7 +342,6 @@ final class AppSettings: ObservableObject {
 
         syncEnabled = UserDefaults.standard.bool(forKey: Keys.syncEnabled)
         syncAccountEmail = UserDefaults.standard.string(forKey: Keys.syncAccountEmail) ?? ""
-        binancePositionsEnabled = UserDefaults.standard.bool(forKey: Keys.binancePositionsEnabled)
 
         physicalCalendarEnabled = UserDefaults.standard.bool(forKey: Keys.physicalCalendar)
 

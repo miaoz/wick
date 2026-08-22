@@ -288,12 +288,12 @@ final class JournalStoreTests: XCTestCase {
         }
     }
 
-    func testAutoCreateOnCorruptNonActiveJournalLeavesFileUntouched() throws {
+    func testEnsurePositionEntriesOnCorruptNonActiveJournalLeavesFileUntouched() throws {
         let second = makeNonActiveJournal()
         let corrupt = Data("{".utf8)
         try corrupt.write(to: journalJSONURL(second.id), options: .atomic)
 
-        let created = store.autoCreateEntries(
+        let created = store.ensurePositionEntries(
             [(day: Date(), items: [JournalItem(tag: "BTC")])],
             in: second.id
         )
@@ -301,12 +301,12 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: journalJSONURL(second.id)), corrupt)
     }
 
-    func testAutoCreateOnNewerVersionNonActiveJournalLeavesFileUntouched() throws {
+    func testEnsurePositionEntriesOnNewerVersionNonActiveJournalLeavesFileUntouched() throws {
         let second = makeNonActiveJournal()
         let payload = Data(#"{"version":99,"entries":[]}"#.utf8)
         try payload.write(to: journalJSONURL(second.id), options: .atomic)
 
-        let created = store.autoCreateEntries(
+        let created = store.ensurePositionEntries(
             [(day: Date(), items: [JournalItem(tag: "BTC")])],
             in: second.id
         )
@@ -314,13 +314,13 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: journalJSONURL(second.id)), payload)
     }
 
-    func testAutoCreateOnDeletedJournalDoesNotRecreateDirectory() {
+    func testEnsurePositionEntriesOnDeletedJournalDoesNotRecreateDirectory() {
         let second = store.createJournal(name: "Second")
         XCTAssertTrue(store.deleteJournal(id: second.id))
         let dir = tempRoot.appendingPathComponent(second.id.uuidString, isDirectory: true)
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.path))
 
-        let created = store.autoCreateEntries(
+        let created = store.ensurePositionEntries(
             [(day: Date(), items: [JournalItem(tag: "BTC")])],
             in: second.id
         )
@@ -331,7 +331,7 @@ final class JournalStoreTests: XCTestCase {
         )
     }
 
-    func testAutoCreateOnHealthyNonActiveJournalSucceedsWithBackup() throws {
+    func testEnsurePositionEntriesOnHealthyNonActiveJournalSucceedsWithBackup() throws {
         let second = makeNonActiveJournal()
         let past = Calendar.current.date(byAdding: .day, value: -10, to: Date())!
         let seed = JournalSnapshot(
@@ -340,7 +340,7 @@ final class JournalStoreTests: XCTestCase {
         )
         try JournalSyncEncoding.encoder.encode(seed).write(to: journalJSONURL(second.id), options: .atomic)
 
-        let created = store.autoCreateEntries(
+        let created = store.ensurePositionEntries(
             [(day: Date(), items: [JournalItem(tag: "BTC")])],
             in: second.id
         )
@@ -355,6 +355,72 @@ final class JournalStoreTests: XCTestCase {
             from: Data(contentsOf: backupURL)
         )
         XCTAssertEqual(backed.entries.first?.title, "existing")
+    }
+
+    func testEnsurePositionEntriesAppendsToExistingDayWithoutChangingContent() {
+        let day = Calendar.current.startOfDay(for: Date())
+        var existing = store.createEntry(on: day)
+        existing.items = [JournalItem(tag: "DRAM", body: "keep this note")]
+        store.updateEntry(existing)
+        let planned = JournalItem(tag: "SKHYNIX")
+
+        let changed = store.ensurePositionEntries(
+            [(day: day, items: [planned])],
+            in: store.activeJournalID!
+        )
+
+        XCTAssertEqual(changed, [day])
+        let updated = store.entries.first { $0.dayKey == existing.dayKey }
+        XCTAssertEqual(updated?.items.map(\.tag), ["DRAM", "SKHYNIX"])
+        XCTAssertEqual(updated?.items.first?.body, "keep this note")
+    }
+
+    func testEnsurePositionEntriesReplacesOnlyEmptyPlaceholderAndIsIdempotent() {
+        let day = Calendar.current.startOfDay(for: Date())
+        let existing = store.createEntry(on: day)
+        let planned = JournalItem(tag: "XAU")
+
+        XCTAssertEqual(
+            store.ensurePositionEntries(
+                [(day: day, items: [planned])],
+                in: store.activeJournalID!
+            ),
+            [day]
+        )
+        XCTAssertEqual(store.entries.first { $0.id == existing.id }?.items, [planned])
+        XCTAssertTrue(
+            store.ensurePositionEntries(
+                [(day: day, items: [planned])],
+                in: store.activeJournalID!
+            ).isEmpty
+        )
+        XCTAssertEqual(store.entries.first { $0.id == existing.id }?.items, [planned])
+    }
+
+    func testEnsurePositionEntriesAppendsToExistingNonActiveJournal() throws {
+        let second = makeNonActiveJournal()
+        let day = Calendar.current.startOfDay(for: Date())
+        let seed = JournalEntry(
+            date: day,
+            items: [JournalItem(tag: "BTC", body: "existing")]
+        )
+        let snapshot = JournalSnapshot(version: 1, entries: [seed])
+        try JournalSyncEncoding.encoder.encode(snapshot).write(
+            to: journalJSONURL(second.id),
+            options: .atomic
+        )
+
+        let changed = store.ensurePositionEntries(
+            [(day: day, items: [JournalItem(tag: "CRCL")])],
+            in: second.id
+        )
+
+        XCTAssertEqual(changed, [day])
+        guard case .loaded(let entries) = store.entries(for: second.id) else {
+            return XCTFail("expected non-active journal to remain loadable")
+        }
+        XCTAssertEqual(entries.first?.items.map(\.tag), ["BTC", "CRCL"])
+        XCTAssertEqual(entries.first?.items.first?.body, "existing")
     }
 
     // MARK: - SY-01 remote journal deletion

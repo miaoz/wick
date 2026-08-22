@@ -7,7 +7,7 @@
 - **Wick**：原生 macOS 菜单栏应用（`LSUIElement`，无 Dock 图标）。蜡烛图标弹出面板，实时展示 日/周/月/年 剩余百分比与结束时间（每秒刷新）。
 - **日记**：一天一篇、篇内多条目（标签+正文+图片），条目级检索、每日本地通知提醒、zip 导入导出。
 - **Dropbox 同步**（可选）：本地为唯一真源，`WickSync` 引擎按「天」双向对账（OAuth PKCE，客户端无 App secret）；删除靠墓碑传播、冲突按条目并集合并并保留败者、远端文件意外消失自动回传。
-- **交易所仓位**（可选，一本日记一个账号）：Binance USDⓈ-M / OKX SWAP / Hyperliquid 永续。凭据按日记本存（打包 `.app` 走 Keychain 一条 JSON；`swift run` 走 `Application Support/Wick/dev-secrets.json` 以免每次重编译弹密码）。`WickTrading` 直连各所 REST 拉成交，归一成 `TradingFill`；窗口下界为该本最早日记日（无日记时仅从当日开始；OKX 所侧约 3 个月、HL 约最近 1 万笔）。快照 `Wick/Trading/<journalID>.json` 增量刷新；`PositionAggregator` 聚合成开平仓会话（对冲双 lane、加仓 VWAP、翻仓拆两段、**净值 epsilon 吸附归零**）；按「开仓日 + 宽松标签」挂进卡片（`BTC` 匹配 `BTCUSDT` 与 HL 的 `BTC`）；缺日记时 `PositionEntryPlanner` 补建（**从不改写已有标签**；已处理 ID 随 snapshot，删掉的自动日记不复活）。HL 只填 0x 地址、不收私钥。
+- **交易所仓位**（可选，一本日记一个账号）：Binance USDⓈ-M / OKX SWAP / Hyperliquid 永续。凭据按日记本存（打包 `.app` 走 Keychain 一条 JSON；`swift run` 走 `Application Support/Wick/dev-secrets.json` 以免每次重编译弹密码）。`WickTrading` 直连各所 REST 拉成交，归一成 `TradingFill`；窗口下界为该本最早日记日（无日记时仅从当日开始；OKX 所侧约 3 个月、HL 约最近 1 万笔）。快照 `Wick/Trading/<journalID>.json` 增量刷新；`PositionAggregator` 聚合成开平仓会话（对冲双 lane、加仓 VWAP、翻仓拆两段、**净值 epsilon 吸附归零**）；按「开仓日 + 宽松标签」挂进卡片（`BTC` 匹配 `BTCUSDT` 与 HL 的 `BTC`）；`PositionEntryPlanner` 持续补齐缺失的开仓日日记或匹配标签（**从不改写已有标签或内容**）。HL 只填 0x 地址、不收私钥。
 - **交易日历**：himekuri「黄历」撕页日历（无边框透明穿透窗、撕纸物理与程序合成音效），内容由 `WickCalendarKit` 直连华尔街见闻（宏观 + 财报，keyless REST，非 WebSocket、不打包 Python）。
 - **字体**：可从设备已安装字体里任选一套，全局换用（日记、设置、日历、编辑器输入），不内置任何字体文件；不选即默认 Songti/系统外观。见 `AppFont`/`FontPickerView`。
 - 其他：登录启动（`SMAppService`）、亮/暗/跟随系统外观（「一日弧光」主题引擎）、中英双语、菜单栏百分比、GitHub Releases 检查更新。
@@ -49,7 +49,7 @@ SwiftPM target（package 声明 macOS 13+ / iOS 16+，macOS 专属 target 不参
 | `JournalImageProcessing.swift` / `MenuBarIcon.swift` | 图片导入（≤2048px，无 alpha → JPEG(0.82)）；代码绘制蜡烛模板图标（只创建一次） |
 | `AppSettings.swift` | 设置单例：`@Published` + `didSet` 写 `UserDefaults`（`wick.` 前缀），`init` 用 `isLoading` 抑制加载期副作用；`journalFontName` 存所选字体 PostScript 名（空 = 默认），旧 `wick.journal.fontStyle`（default/classicalMing 枚举）init 一次性迁移 |
 | `SyncCoordinator.swift` | 同步生命周期单例：防抖/切本/失活触发、连接断开、远端日记本自动导入与**删除传播**（队列存设备级 `device.json`）、导入前必须 `resetSyncState`、退出前一次限时最终同步；设置页冲突对比弹层见 `SyncConflictResolutionView.swift` |
-| `ExchangePositionCoordinator.swift` | 交易所仓位单例：按日记本绑定（一本一所）；打包走 Keychain 一条 JSON（`com.miaoz.wick.exchange`），`swift run` 走 `dev-secrets.json`；快照 `Wick/Trading/<journalID>.json`；切本加载；30 分钟定时；`PositionEntryPlanner` 补建开仓日条目；已实现盈亏按聚合仓位 `openTime` 归入开仓日（不按平仓 fill 日期） |
+| `ExchangePositionCoordinator.swift` | 交易所仓位单例：按日记本绑定（一本一所）；打包走 Keychain 一条 JSON（`com.miaoz.wick.exchange`），`swift run` 走 `dev-secrets.json`；快照 `Wick/Trading/<journalID>.json`；切本加载；30 分钟定时；`PositionEntryPlanner` 补齐开仓日缺失的匹配条目；仓位挂载/补条目按 `entry.date` 的显示日匹配（**不能直接用稳定 `dayKey`**——跨时区旧数据允许二者不同）；已实现盈亏按聚合仓位 `openTime` 归入开仓日（不按平仓 fill 日期） |
 | `ExchangeSettingsContent.swift` / `JournalExchangePositions.swift` | 设置页「交易所」区块;条目卡片内仓位 = 撕边胶带「交易所单据」(`ReceiptShape` + `TapeStrip`,等宽数字,红盈黛亏为物理纸上的印刷常量;无命中整块隐藏) |
 | `DropboxAuthSession.swift` | `ASWebAuthenticationSession` 包装；回调 scheme 只在打包 `.app` 内注册（`swift run` 收不到回调） |
 | `LaunchAtLogin.swift` / `UpdateChecker.swift` / `AppInfo.swift` / `AppNotifications.swift` / `Exports.swift` / `JournalReminderScheduler.swift` | 小工具集：登录项 / 检查更新 / 版本比较 / 共享通知名 / `@_exported` / 每日通知（含包形态门控） |
@@ -103,6 +103,7 @@ make clean                 # rm -rf .build dist
 ## 代码约定
 
 - 面向用户的文档（README 等）用简体中文；**代码注释、commit message 用英文**。
+- 当前为单用户开发阶段：对交易快照等可从源头重建的派生数据，schema 变化默认硬切并重建，**不保留旧字段、旧路径或一次性迁移分支**；日记正文、图片与 Dropbox 同步状态仍遵守数据安全约束。
 - 4 空格缩进、`// MARK: -` 分节、一个文件一个主类型；无 SwiftLint/格式化配置，遵循周边既有风格。
 - UI 文案一律走 `L10n`（加 case + 中英双实现，不硬编码）；设置项一律进 `AppSettings`（`wick.` 前缀键）；全局单例经 `.environmentObject` 注入。
 - 触及 UI/AppKit 的类型标 `@MainActor`（Swift 6 严格并发检查）；平台能力封装为小工具类型（`LaunchAtLogin`、`UpdateChecker` 等），别把 AppKit 细节散进视图。
