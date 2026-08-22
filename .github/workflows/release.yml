@@ -22,6 +22,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # The release-body step lists commits since the previous tag, so the
+          # shallow default (single tag commit, no tags) will not do.
+          fetch-depth: 0
 
       # Match local Xcode when available (this machine: 26.6 / 17F113).
       # Falls back to the newest installed 26.x if 26.6 is missing on a future image.
