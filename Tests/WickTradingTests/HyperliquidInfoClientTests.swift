@@ -109,4 +109,35 @@ final class HyperliquidInfoClientTests: XCTestCase {
         )
         XCTAssertEqual(fills.map(\.id), [2])
     }
+
+    func testFetchFundingMapsUserFunding() async throws {
+        let captured = Box<Data?>(nil)
+        let client = HyperliquidInfoClient(
+            user: "0xabcdef0123456789abcdef0123456789abcdef01",
+            baseURL: URL(string: "https://hl.example.com")!,
+            transport: { request in
+                captured.value = request.httpBody
+                let body = #"""
+                [{"delta":{"coin":"BTC","fundingRate":"0.0000417","szi":"1.0","type":"funding","usdc":" -0.25"},"hash":"h1","time":1700000000000},
+                 {"delta":{"coin":"ETH","fundingRate":"0.00001","szi":"-2.0","type":"funding","usdc":"0.12"},"hash":"h2","time":1700000001000}]
+                """#
+                return (Data(body.utf8), Self.http(200))
+            }
+        )
+        let events = try await client.fetchFunding(
+            from: Date(timeIntervalSince1970: 1_700_000_000),
+            to: Date(timeIntervalSince1970: 1_700_100_000)
+        )
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(events[0].symbol, "BTC")
+        XCTAssertEqual(events[0].amount, -0.25, accuracy: 1e-12)
+        XCTAssertEqual(events[0].time, 1_700_000_000_000)
+        XCTAssertEqual(events[1].symbol, "ETH")
+        XCTAssertEqual(events[1].amount, 0.12, accuracy: 1e-12)
+        XCTAssertEqual(events[1].time, 1_700_000_001_000)
+
+        let object = try JSONSerialization.jsonObject(with: captured.value!) as? [String: Any]
+        XCTAssertEqual(object?["type"] as? String, "userFunding")
+        XCTAssertEqual(object?["user"] as? String, "0xabcdef0123456789abcdef0123456789abcdef01")
+    }
 }

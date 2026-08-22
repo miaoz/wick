@@ -13,20 +13,25 @@ final class DailyRealizedPnlTests: XCTestCase {
 
     private func position(
         id: String,
+        symbol: String = "BTCUSDT",
         realizedPnl: Double,
         openedAt: TimeInterval,
-        closedAt: TimeInterval? = nil
+        closedAt: TimeInterval? = nil,
+        commissions: [String: Double] = [:],
+        fundingPnl: Double = 0
     ) -> TradingPosition {
         TradingPosition(
             id: id,
-            symbol: "BTCUSDT",
+            symbol: symbol,
             side: .long,
             openTime: Date(timeIntervalSince1970: openedAt),
             closeTime: closedAt.map(Date.init(timeIntervalSince1970:)),
             entryPrice: 50_000,
             exitPrice: closedAt == nil ? nil : 51_000,
             peakSize: 1,
-            realizedPnl: realizedPnl
+            realizedPnl: realizedPnl,
+            commissions: commissions,
+            fundingPnl: fundingPnl
         )
     }
 
@@ -98,6 +103,101 @@ final class DailyRealizedPnlTests: XCTestCase {
     func testEmptyInputYieldsEmptyResult() {
         XCTAssertTrue(
             DailyRealizedPnl.sumsByOpenDay(positions: [], calendar: Self.gmt).isEmpty
+        )
+    }
+
+    // MARK: - Net PnL (realized − commission − funding)
+
+    func testNetSumsSubtractQuoteCommissionAndFunding() {
+        let base = TimeInterval(17_000) * Self.day
+        let sums = DailyRealizedPnl.netSumsByOpenDay(
+            positions: [
+                position(
+                    id: "one",
+                    realizedPnl: 10,
+                    openedAt: base + 3600,
+                    commissions: ["USDT": 0.5],
+                    fundingPnl: -1.5 // paid out → reduces net
+                )
+            ],
+            calendar: Self.gmt
+        )
+        XCTAssertEqual(sums[dayStart(base)] ?? 0, 8.0, accuracy: 1e-12)
+    }
+
+    func testNetIgnoresNonQuoteCommission() {
+        let base = TimeInterval(17_000) * Self.day
+        let sums = DailyRealizedPnl.netSumsByOpenDay(
+            positions: [
+                position(
+                    id: "one",
+                    realizedPnl: 10,
+                    openedAt: base + 3600,
+                    commissions: ["BNB": 2.0]
+                )
+            ],
+            calendar: Self.gmt
+        )
+        // BNB commission is not the quote asset, so it is not netted.
+        XCTAssertEqual(sums[dayStart(base)] ?? 0, 10.0, accuracy: 1e-12)
+    }
+
+    func testNetFallsBackToAllCommissionsWhenQuoteUnknown() {
+        let base = TimeInterval(17_000) * Self.day
+        let sums = DailyRealizedPnl.netSumsByOpenDay(
+            positions: [
+                position(
+                    id: "one",
+                    symbol: "FOO",
+                    realizedPnl: 10,
+                    openedAt: base + 3600,
+                    commissions: ["USDT": 3.0, "USDC": 2.0]
+                )
+            ],
+            calendar: Self.gmt
+        )
+        XCTAssertEqual(sums[dayStart(base)] ?? 0, 5.0, accuracy: 1e-12)
+    }
+
+    func testNetSkipsDayWhenNetIsZero() {
+        let base = TimeInterval(17_000) * Self.day
+        let sums = DailyRealizedPnl.netSumsByOpenDay(
+            positions: [
+                position(
+                    id: "one",
+                    realizedPnl: 1.0,
+                    openedAt: base + 3600,
+                    commissions: ["USDT": 1.0]
+                )
+            ],
+            calendar: Self.gmt
+        )
+        XCTAssertTrue(sums.isEmpty)
+    }
+
+    func testNetIsAttributedToOpenDay() {
+        let openDay = TimeInterval(17_000) * Self.day
+        let closeDay = openDay + 2 * Self.day
+        let sums = DailyRealizedPnl.netSumsByOpenDay(
+            positions: [
+                position(
+                    id: "multi-day",
+                    realizedPnl: 100,
+                    openedAt: openDay + 3 * 3600,
+                    closedAt: closeDay + 16 * 3600,
+                    commissions: ["USDT": 1],
+                    fundingPnl: -2 // paid out → reduces net
+                )
+            ],
+            calendar: Self.gmt
+        )
+        XCTAssertEqual(sums[dayStart(openDay)] ?? 0, 97.0, accuracy: 1e-12)
+        XCTAssertNil(sums[dayStart(closeDay)])
+    }
+
+    func testNetEmptyInputYieldsEmptyResult() {
+        XCTAssertTrue(
+            DailyRealizedPnl.netSumsByOpenDay(positions: [], calendar: Self.gmt).isEmpty
         )
     }
 }

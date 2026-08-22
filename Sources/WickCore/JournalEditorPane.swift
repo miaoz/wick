@@ -446,7 +446,7 @@ struct JournalEditorPane: View {
     private func dayHeaderPnL(draft: JournalEntry) -> some View {
         if let pnl = dayPnLs[Calendar.current.startOfDay(for: draft.date)] {
             VStack(alignment: .trailing, spacing: 2) {
-                Text(L10n.string(.exchangePositionRealizedPnl, language: settings.language))
+                Text(L10n.string(.exchangePositionNetPnl, language: settings.language))
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .foregroundStyle(palette.textTertiary.color)
                 Text(Self.format(pnl: pnl) + " USDT")

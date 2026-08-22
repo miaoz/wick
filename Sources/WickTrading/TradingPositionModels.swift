@@ -85,6 +85,21 @@ public struct TradingFill: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+/// One funding-fee settlement from a venue's income/bills history.
+/// `amount` is signed: negative means the user paid funding out.
+public struct FundingEvent: Codable, Equatable, Hashable, Sendable {
+    public var symbol: String
+    public var amount: Double
+    /// Settlement time, milliseconds since the Unix epoch (UTC).
+    public var time: Int64
+
+    public init(symbol: String, amount: Double, time: Int64) {
+        self.symbol = symbol
+        self.amount = amount
+        self.time = time
+    }
+}
+
 /// A reconstructed position session: from flat back to flat (or still open)
 /// on one symbol + hedge lane.
 public struct TradingPosition: Codable, Identifiable, Equatable, Sendable {
@@ -108,6 +123,9 @@ public struct TradingPosition: Codable, Identifiable, Equatable, Sendable {
     public var realizedPnl: Double
     /// Commissions by asset (usually one quote-asset entry).
     public var commissions: [String: Double]
+    /// Funding fees paid or received while this position was open, matched
+    /// from the venue's funding history (negative = paid out).
+    public var fundingPnl: Double
 
     public var isClosed: Bool { closeTime != nil }
 
@@ -121,7 +139,8 @@ public struct TradingPosition: Codable, Identifiable, Equatable, Sendable {
         exitPrice: Double?,
         peakSize: Double,
         realizedPnl: Double,
-        commissions: [String: Double] = [:]
+        commissions: [String: Double] = [:],
+        fundingPnl: Double = 0
     ) {
         self.id = id
         self.symbol = symbol
@@ -133,12 +152,51 @@ public struct TradingPosition: Codable, Identifiable, Equatable, Sendable {
         self.peakSize = peakSize
         self.realizedPnl = realizedPnl
         self.commissions = commissions
+        self.fundingPnl = fundingPnl
+    }
+
+    public enum CodingKeys: String, CodingKey {
+        case id, symbol, side, openTime, closeTime, entryPrice, exitPrice
+        case peakSize, realizedPnl, commissions, fundingPnl
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        symbol = try container.decode(String.self, forKey: .symbol)
+        side = try container.decode(TradingPositionSide.self, forKey: .side)
+        openTime = try container.decode(Date.self, forKey: .openTime)
+        closeTime = try container.decodeIfPresent(Date.self, forKey: .closeTime)
+        entryPrice = try container.decode(Double.self, forKey: .entryPrice)
+        exitPrice = try container.decodeIfPresent(Double.self, forKey: .exitPrice)
+        peakSize = try container.decode(Double.self, forKey: .peakSize)
+        realizedPnl = try container.decode(Double.self, forKey: .realizedPnl)
+        commissions = try container.decodeIfPresent([String: Double].self, forKey: .commissions) ?? [:]
+        fundingPnl = try container.decodeIfPresent(Double.self, forKey: .fundingPnl) ?? 0
     }
 
     /// Quote asset inferred from the symbol suffix (display only; no
     /// exchangeInfo round-trip for v1).
     public var quoteAsset: String? {
         SymbolTagMatcher.quoteAsset(of: symbol)
+    }
+
+    /// Commission in the quote asset as a positive magnitude. Venue sign
+    /// conventions differ (Binance/OKX report fees negative, Hyperliquid
+    /// positive), so the stored value is normalized here; falls back to the
+    /// sum over all assets when the quote asset can't be resolved.
+    public var commissionTotal: Double {
+        if let quote = quoteAsset {
+            return abs(commissions[quote] ?? 0)
+        }
+        return commissions.values.reduce(0) { $0 + abs($1) }
+    }
+
+    /// Realized PnL net of quote-asset commission and funding — the number the
+    /// journal surfaces as "Net PnL". `fundingPnl` is signed (negative = paid
+    /// out), so it is added rather than subtracted.
+    public var netPnl: Double {
+        realizedPnl - commissionTotal + fundingPnl
     }
 }
 
@@ -160,10 +218,18 @@ public struct TradingPositionSnapshot: Codable, Equatable, Sendable {
     public var positions: [TradingPosition]
     /// All fills in `[windowStart, fetchedAt)` - the source of truth.
     public var fills: [TradingFill]
+    /// Funding-fee settlements in the same window, matched onto positions at
+    /// display time.
+    public var funding: [FundingEvent]
+    /// Whether the funding history has been backfilled once across the whole
+    /// window. Caches written before funding support have fills but no funding,
+    /// so the first post-upgrade sync backfills the full window instead of only
+    /// the incremental tail.
+    public var fundingBackfilled: Bool
     /// Position ids already considered for journal auto-creation.
     public var handledPositionIDs: Set<String>
 
-    public static let currentVersion = 1
+    public static let currentVersion = 2
 
     public init(
         version: Int = TradingPositionSnapshot.currentVersion,
@@ -171,6 +237,8 @@ public struct TradingPositionSnapshot: Codable, Equatable, Sendable {
         windowStart: Date,
         positions: [TradingPosition],
         fills: [TradingFill] = [],
+        funding: [FundingEvent] = [],
+        fundingBackfilled: Bool = false,
         handledPositionIDs: Set<String> = []
     ) {
         self.version = version
@@ -178,11 +246,14 @@ public struct TradingPositionSnapshot: Codable, Equatable, Sendable {
         self.windowStart = windowStart
         self.positions = positions
         self.fills = fills
+        self.funding = funding
+        self.fundingBackfilled = fundingBackfilled
         self.handledPositionIDs = handledPositionIDs
     }
 
     public enum CodingKeys: String, CodingKey {
-        case version, fetchedAt, windowStart, positions, fills, handledPositionIDs
+        case version, fetchedAt, windowStart, positions, fills, funding
+        case fundingBackfilled, handledPositionIDs
     }
 
     public init(from decoder: Decoder) throws {
@@ -192,6 +263,8 @@ public struct TradingPositionSnapshot: Codable, Equatable, Sendable {
         windowStart = try container.decode(Date.self, forKey: .windowStart)
         positions = try container.decode([TradingPosition].self, forKey: .positions)
         fills = try container.decodeIfPresent([TradingFill].self, forKey: .fills) ?? []
+        funding = try container.decodeIfPresent([FundingEvent].self, forKey: .funding) ?? []
+        fundingBackfilled = try container.decodeIfPresent(Bool.self, forKey: .fundingBackfilled) ?? false
         handledPositionIDs = try container.decodeIfPresent(Set<String>.self, forKey: .handledPositionIDs) ?? []
     }
 }

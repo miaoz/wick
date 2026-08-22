@@ -141,6 +141,40 @@ final class OKXSwapClientTests: XCTestCase {
         XCTAssertEqual(fills.map(\.id), [2])
     }
 
+    func testFetchFundingMapsBills() async throws {
+        let calls = Box(0)
+        let captured = Box<String?>(nil)
+        let client = makeClient { request in
+            calls.value += 1
+            captured.value = request.url?.absoluteString
+            if calls.value == 1 {
+                let body = #"""
+                {"code":"0","data":[
+                  {"billId":"b1","instId":"BTC-USDT-SWAP","ts":"1600000000000","type":"8","subType":"8","pnl":"-0.5","fee":"0","ccy":"USDT"},
+                  {"billId":"b2","instId":"ETH-USDT-SWAP","ts":"1600000001000","type":"8","subType":"8","pnl":"0","fee":"-0.25","ccy":"USDT"}
+                ]}
+                """#
+                return (Data(body.utf8), Self.http(200))
+            }
+            return (Data(#"{"code":"0","data":[]}"#.utf8), Self.http(200))
+        }
+        let events = try await client.fetchFunding(
+            from: Date(timeIntervalSince1970: 1_600_000_000),
+            to: Date(timeIntervalSince1970: 1_600_100_000)
+        )
+        XCTAssertEqual(calls.value, 2)
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(events[0].symbol, "BTCUSDT")
+        XCTAssertEqual(events[0].amount, -0.5, accuracy: 1e-12)
+        XCTAssertEqual(events[0].time, 1_600_000_000_000)
+        XCTAssertEqual(events[1].symbol, "ETHUSDT")
+        XCTAssertEqual(events[1].amount, -0.25, accuracy: 1e-12)
+        XCTAssertTrue(
+            captured.value?.contains("type=8") == true,
+            "query must filter funding bills (type=8), got \(captured.value ?? "nil")"
+        )
+    }
+
     func testInvalidKeyCode() async {
         let client = makeClient { _ in
             (Data(#"{"code":"50111","msg":"Invalid API Key","data":[]}"#.utf8), Self.http(200))

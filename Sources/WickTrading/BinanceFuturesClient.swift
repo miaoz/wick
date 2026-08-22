@@ -115,6 +115,33 @@ public struct BinanceFuturesClient: Sendable {
         return result
     }
 
+    /// Funding-fee settlements (`incomeType=FUNDING_FEE`) in `[start, end)`,
+    /// walked in the same time-chunked pagination as fills.
+    public func fetchFunding(from start: Date, to end: Date) async throws -> [FundingEvent] {
+        guard start < end else { return [] }
+        let offset = try await serverTimeOffsetMs()
+
+        var result: [FundingEvent] = []
+        var chunkStart = start
+        while chunkStart < end {
+            let chunkEnd = min(end, chunkStart.addingTimeInterval(chunkInterval))
+            var cursor = chunkStart
+            var pageCount = 0
+            while cursor < chunkEnd && pageCount < 200 {
+                pageCount += 1
+                let page = try await incomePage(from: cursor, to: chunkEnd, offsetMs: offset)
+                result.append(contentsOf: page)
+                guard page.count >= pageLimit,
+                      let lastTime = page.map(\.time).max()
+                else { break }
+                let nextCursor = Date(timeIntervalSince1970: Double(lastTime + 1) / 1000)
+                cursor = max(nextCursor, cursor.addingTimeInterval(1))
+            }
+            chunkStart = chunkEnd
+        }
+        return result
+    }
+
     // MARK: - Requests
 
     struct ServerTimeResponse: Decodable {
@@ -149,6 +176,40 @@ public struct BinanceFuturesClient: Sendable {
             return try JSONDecoder().decode([TradingFill].self, from: data)
         } catch {
             throw BinanceError.malformedResponse
+        }
+    }
+
+    func incomePage(from: Date, to: Date, offsetMs: Int64) async throws -> [FundingEvent] {
+        let params: [(String, String)] = [
+            ("incomeType", "FUNDING_FEE"),
+            ("startTime", String(milliseconds(from))),
+            ("endTime", String(milliseconds(to))),
+            ("limit", String(pageLimit)),
+            ("recvWindow", "5000"),
+            ("timestamp", String(milliseconds(now()) + offsetMs))
+        ]
+        let request = try signedRequest(path: "fapi/v1/income", params: params)
+        let (data, response) = try await transport(request)
+        try checkResponse(data: data, response: response)
+        do {
+            return try JSONDecoder().decode([IncomeRow].self, from: data).map { $0.asFundingEvent() }
+        } catch {
+            throw BinanceError.malformedResponse
+        }
+    }
+
+    /// A `GET /fapi/v1/income` row; only the fields funding needs are kept.
+    struct IncomeRow: Decodable {
+        var symbol: String?
+        var income: String?
+        var time: Int64?
+
+        func asFundingEvent() -> FundingEvent {
+            FundingEvent(
+                symbol: symbol ?? "",
+                amount: Double(income ?? "") ?? 0,
+                time: time ?? 0
+            )
         }
     }
 

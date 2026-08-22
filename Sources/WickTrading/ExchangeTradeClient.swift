@@ -15,10 +15,12 @@ public enum ExchangeClientError: Error, Equatable, Sendable {
     }
 }
 
-/// Read-only fill history. Implementations talk to one venue; the coordinator
-/// owns windowing, cache merge, and aggregation.
+/// Read-only fill + funding history. Implementations talk to one venue; the
+/// coordinator owns windowing, cache merge, and aggregation.
 public protocol ExchangeTradeClient: Sendable {
     func fetchFills(from start: Date, to end: Date) async throws -> [TradingFill]
+    /// Funding-fee settlements in `[start, end)`, signed (negative = paid).
+    func fetchFunding(from start: Date, to end: Date) async throws -> [FundingEvent]
 }
 
 extension BinanceError {

@@ -258,6 +258,52 @@ final class BinanceFuturesClientTests: XCTestCase {
         XCTAssertTrue(positions[0].isClosed)
     }
 
+    // MARK: - Funding fees
+
+    func testFetchFundingMapsIncomeRowsAndFiltersType() async throws {
+        let capturedQuery = Box<String?>(nil)
+        let client = BinanceFuturesClient(
+            apiKey: "key-1",
+            secret: "secret",
+            baseURL: URL(string: "https://fapi.example.com")!,
+            transport: { request in
+                if request.url!.path.hasSuffix("/time") {
+                    return (Self.serverTimePayload(0), Self.http(200))
+                }
+                capturedQuery.value = request.url?.query
+                let queryItems = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
+                let start = Int64(queryItems.first { $0.name == "startTime" }!.value!)!
+                guard start <= 1_700_000_000_000 else {
+                    return (Data("[]".utf8), Self.http(200))
+                }
+                let body = #"""
+                [{"symbol":"BTCUSDT","incomeType":"FUNDING_FEE","income":"-0.0023","asset":"USDT","time":1700000000000},
+                 {"symbol":"ETHUSDT","incomeType":"FUNDING_FEE","income":"0.0011","asset":"USDT","time":1700000100000}]
+                """#
+                return (Data(body.utf8), Self.http(200))
+            },
+            now: { Date(timeIntervalSince1970: 2000) },
+            chunkInterval: 3600,
+            pageLimit: 1000
+        )
+
+        let events = try await client.fetchFunding(
+            from: Date(timeIntervalSince1970: 1_700_000_000),
+            to: Date(timeIntervalSince1970: 1_700_100_000)
+        )
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(events[0].symbol, "BTCUSDT")
+        XCTAssertEqual(events[0].amount, -0.0023, accuracy: 1e-12)
+        XCTAssertEqual(events[0].time, 1_700_000_000_000)
+        XCTAssertEqual(events[1].symbol, "ETHUSDT")
+        XCTAssertEqual(events[1].amount, 0.0011, accuracy: 1e-12)
+        XCTAssertEqual(events[1].time, 1_700_000_100_000)
+        XCTAssertTrue(
+            capturedQuery.value?.contains("incomeType=FUNDING_FEE") == true,
+            "query must request FUNDING_FEE income, got \(capturedQuery.value ?? "nil")"
+        )
+    }
+
     private static func http(_ status: Int) -> HTTPURLResponse {
         HTTPURLResponse(
             url: URL(string: "https://fapi.example.com")!,

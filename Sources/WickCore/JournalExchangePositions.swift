@@ -47,6 +47,9 @@ private struct ReceiptView: View {
     let position: TradingPosition
     let tilt: Double
 
+    /// Whether the realized / commission / funding breakdown is expanded.
+    @State private var showsBreakdown = false
+
     /// Print inks on receipt paper (constant across schemes — the paper is).
     private let printUp = Color(red: 0.69, green: 0.20, blue: 0.12)   // #B0341E
     private let printDown = Color(red: 0.24, green: 0.36, blue: 0.31) // #3E5C50
@@ -73,6 +76,7 @@ private struct ReceiptView: View {
                 .padding(.top, 5)
             row(label: sizeLabel, value: sizeText)
             totalRow
+            breakdown
         }
         .padding(.horizontal, 12)
         .padding(.top, 11)
@@ -110,16 +114,94 @@ private struct ReceiptView: View {
     }
 
     private var totalRow: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(L10n.string(.exchangePositionRealizedPnl, language: settings.language))
-                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                .foregroundStyle(palette.receiptInk.color.opacity(0.78))
-            Spacer(minLength: 8)
-            Text(pnlText)
-                .font(.system(size: 12.5, weight: .bold, design: .monospaced))
-                .foregroundStyle(position.realizedPnl >= 0 ? printUp : printDown)
+        Group {
+            if position.isClosed {
+                closedTotalRow
+            } else {
+                holdingRow
+            }
         }
         .padding(.top, 5)
+    }
+
+    private var closedTotalRow: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { showsBreakdown.toggle() }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(showsBreakdown ? "▾" : "▸")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    Text(L10n.string(.exchangePositionNetPnl, language: settings.language))
+                        .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                }
+                .foregroundStyle(palette.receiptInk.color.opacity(0.78))
+            }
+            .buttonStyle(.plain)
+            Spacer(minLength: 8)
+            Text(netText)
+                .font(.system(size: 12.5, weight: .bold, design: .monospaced))
+                .foregroundStyle(position.netPnl >= 0 ? printUp : printDown)
+        }
+    }
+
+    /// Open positions have no realized result yet — a net PnL figure would be
+    /// misleading, so the receipt carries a "holding" note instead.
+    private var holdingRow: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(L10n.string(.exchangePositionOpen, language: settings.language))
+                .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                .foregroundStyle(palette.receiptInk.color)
+            Spacer(minLength: 8)
+            Text(Self.dateFormatter.string(from: position.openTime))
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(palette.receiptInk.color.opacity(0.6))
+        }
+    }
+
+    /// Expanded fee breakdown: realized / commission / funding. Rows with a
+    /// zero value are omitted so the paper stays clean.
+    @ViewBuilder
+    private var breakdown: some View {
+        if showsBreakdown {
+            breakdownRow(
+                label: L10n.string(.exchangePositionRealizedPnl, language: settings.language),
+                value: signedText(position.realizedPnl),
+                valueColor: position.realizedPnl >= 0 ? printUp : printDown,
+                shows: abs(position.realizedPnl) > 1e-9
+            )
+            breakdownRow(
+                label: L10n.string(.exchangePositionCommission, language: settings.language),
+                value: "−" + Self.format(pnl: position.commissionTotal) + quoteSuffix,
+                valueColor: printDown,
+                shows: position.commissionTotal > 1e-9
+            )
+            breakdownRow(
+                label: L10n.string(.exchangePositionFunding, language: settings.language),
+                value: signedText(position.fundingPnl),
+                valueColor: position.fundingPnl >= 0 ? printUp : printDown,
+                shows: abs(position.fundingPnl) > 1e-9
+            )
+        }
+    }
+
+    private func breakdownRow(label: String, value: String, valueColor: Color, shows: Bool) -> some View {
+        Group {
+            if shows {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(label)
+                    Spacer(minLength: 8)
+                    Text(value)
+                        .foregroundStyle(valueColor)
+                }
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(palette.receiptInk.color.opacity(0.78))
+                .padding(.vertical, 2.5)
+                .overlay(alignment: .bottom) {
+                    DashedRule().opacity(0.5)
+                }
+            }
+        }
     }
 
     private var laneBadge: some View {
@@ -167,13 +249,18 @@ private struct ReceiptView: View {
         Self.format(quantity: position.peakSize)
     }
 
-    private var pnlText: String {
-        var text = position.realizedPnl >= 0 ? "+" : "−"
-        text += Self.format(pnl: position.realizedPnl.magnitude)
-        if let quote = position.quoteAsset {
-            text += " \(quote)"
-        }
-        return text
+    private var netText: String {
+        signedText(position.netPnl)
+    }
+
+    private var quoteSuffix: String {
+        position.quoteAsset.map { " \($0)" } ?? ""
+    }
+
+    private func signedText(_ value: Double) -> String {
+        var text = value >= 0 ? "+" : "−"
+        text += Self.format(pnl: value.magnitude)
+        return text + quoteSuffix
     }
 
     // MARK: Formatters

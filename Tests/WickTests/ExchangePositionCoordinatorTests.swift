@@ -31,6 +31,10 @@ actor BlockingTradeClient: ExchangeTradeClient {
         return []
     }
 
+    func fetchFunding(from start: Date, to end: Date) async throws -> [FundingEvent] {
+        []
+    }
+
     func waitUntilFetchStarted() async {
         while fetchCount == 0 {
             try? await Task.sleep(nanoseconds: 5_000_000)
@@ -40,6 +44,33 @@ actor BlockingTradeClient: ExchangeTradeClient {
     func release() {
         releaseContinuation?.resume()
         releaseContinuation = nil
+    }
+}
+
+/// A client that returns fixed fills/funding immediately (or throws on funding),
+/// for exercising the coordinator's funding cache and net-PnL path.
+actor StubTradeClient: ExchangeTradeClient {
+    private let fills: [TradingFill]
+    private let funding: [FundingEvent]
+    private let throwOnFunding: Bool
+    private(set) var recordedFundingRanges: [(Date, Date)] = []
+
+    init(fills: [TradingFill] = [], funding: [FundingEvent] = [], throwOnFunding: Bool = false) {
+        self.fills = fills
+        self.funding = funding
+        self.throwOnFunding = throwOnFunding
+    }
+
+    func fetchFills(from start: Date, to end: Date) async throws -> [TradingFill] {
+        fills
+    }
+
+    func fetchFunding(from start: Date, to end: Date) async throws -> [FundingEvent] {
+        recordedFundingRanges.append((start, end))
+        if throwOnFunding {
+            throw ExchangeClientError.network("funding unavailable")
+        }
+        return funding
     }
 }
 
@@ -58,6 +89,7 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
         cacheRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("WickExchangeCache-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: cacheRoot, withIntermediateDirectories: true)
         store = JournalStore(rootDirectory: tempRoot)
         ExchangePositionCoordinator.skipKeychainAccess = false
         ExchangePositionCoordinator.clientFactoryOverride = nil
@@ -344,5 +376,135 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
         let cancelled = await client.cancelledWhileBlocked
         XCTAssertTrue(cancelled, "the in-flight client must observe task cancellation")
         XCTAssertNil(coordinator.snapshot)
+    }
+
+    // MARK: - Funding fees
+
+    private static func ms(_ date: Date) -> Int64 {
+        Int64((date.timeIntervalSince1970 * 1000).rounded())
+    }
+
+    func testFundingFlowsIntoSnapshotAndNetsDayPnl() async throws {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = bindActiveJournal()
+        let now = Date()
+        let fills = [
+            TradingFill(
+                id: 1, symbol: "BTCUSDT", side: "BUY", price: 100, qty: 1,
+                time: Self.ms(now.addingTimeInterval(-60))
+            ),
+            TradingFill(
+                id: 2, symbol: "BTCUSDT", side: "SELL", price: 110, qty: 1,
+                commission: 1, commissionAsset: "USDT", realizedPnl: 10,
+                time: Self.ms(now.addingTimeInterval(-30))
+            ),
+        ]
+        let funding = [FundingEvent(
+            symbol: "BTCUSDT", amount: -0.5,
+            time: Self.ms(now.addingTimeInterval(-45))
+        )]
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in
+            StubTradeClient(fills: fills, funding: funding)
+        }
+
+        coordinator.syncNow(journalID: journalID)
+        await awaitRunCompletion(coordinator)
+
+        let snapshot = try XCTUnwrap(coordinator.snapshot)
+        XCTAssertEqual(snapshot.funding.count, 1)
+        let position = try XCTUnwrap(snapshot.positions.first)
+        XCTAssertEqual(position.fundingPnl, -0.5, accuracy: 1e-12)
+        // 10 realized − 1 commission − 0.5 funding = 8.5 net on the open day.
+        XCTAssertEqual(position.netPnl, 8.5, accuracy: 1e-12)
+        let openDay = Calendar.current.startOfDay(for: position.openTime)
+        XCTAssertEqual(coordinator.pnlByDay[openDay] ?? 0, 8.5, accuracy: 1e-12)
+        XCTAssertTrue(snapshot.fundingBackfilled)
+    }
+
+    func testFundingFailureDoesNotBlockPositionSync() async throws {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = bindActiveJournal()
+        let now = Date()
+        let fills = [
+            TradingFill(
+                id: 1, symbol: "BTCUSDT", side: "BUY", price: 100, qty: 1,
+                time: Self.ms(now.addingTimeInterval(-60))
+            ),
+            TradingFill(
+                id: 2, symbol: "BTCUSDT", side: "SELL", price: 110, qty: 1,
+                realizedPnl: 10, time: Self.ms(now.addingTimeInterval(-30))
+            ),
+        ]
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in
+            StubTradeClient(fills: fills, throwOnFunding: true)
+        }
+
+        coordinator.syncNow(journalID: journalID)
+        await awaitRunCompletion(coordinator)
+
+        let snapshot = try XCTUnwrap(coordinator.snapshot)
+        XCTAssertEqual(snapshot.positions.count, 1, "positions must sync even when funding fails")
+        XCTAssertTrue(snapshot.funding.isEmpty)
+        XCTAssertNil(coordinator.lastError, "a funding failure must not surface as a sync error")
+    }
+
+    func testFirstFundingSyncBackfillsFullWindow() async throws {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = bindActiveJournal()
+        let now = Date()
+        let todayStart = Calendar.current.startOfDay(for: now)
+        let fills = [
+            TradingFill(
+                id: 1, symbol: "BTCUSDT", side: "BUY", price: 100, qty: 1,
+                time: Self.ms(now.addingTimeInterval(-120))
+            ),
+            TradingFill(
+                id: 2, symbol: "BTCUSDT", side: "SELL", price: 110, qty: 1,
+                commission: 1, commissionAsset: "USDT", realizedPnl: 10,
+                time: Self.ms(now.addingTimeInterval(-60))
+            ),
+        ]
+        // A cache written before funding support: fills present, funding empty.
+        let cached = TradingPositionSnapshot(
+            fetchedAt: now.addingTimeInterval(-300),
+            windowStart: todayStart,
+            positions: [],
+            fills: fills,
+            funding: [],
+            fundingBackfilled: false
+        )
+        try JSONEncoder().encode(cached).write(to: cacheFile(for: journalID))
+
+        let client = StubTradeClient(
+            fills: fills,
+            funding: [FundingEvent(
+                symbol: "BTCUSDT", amount: -0.5,
+                time: Self.ms(now.addingTimeInterval(-90))
+            )]
+        )
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in client }
+
+        // Load the seeded cache into the coordinator, then sync.
+        coordinator.activeJournalDidChange()
+        coordinator.syncNow(journalID: journalID)
+        await awaitRunCompletion(coordinator)
+
+        // The first funding sync must backfill the WHOLE window, not just the
+        // incremental tail ([fetchedAt - overlap, now]), or funding stays empty.
+        let ranges = await client.recordedFundingRanges
+        XCTAssertEqual(ranges.count, 1)
+        XCTAssertEqual(
+            ranges[0].0.timeIntervalSince1970,
+            todayStart.timeIntervalSince1970,
+            accuracy: 1.0,
+            "funding backfill must reach back to windowStart"
+        )
+
+        let snapshot = try XCTUnwrap(coordinator.snapshot)
+        XCTAssertTrue(snapshot.fundingBackfilled, "a successful backfill must be remembered")
+        XCTAssertEqual(snapshot.funding.count, 1)
+        let position = try XCTUnwrap(snapshot.positions.first)
+        XCTAssertEqual(position.fundingPnl, -0.5, accuracy: 1e-12)
+        XCTAssertEqual(position.netPnl, 8.5, accuracy: 1e-12)
     }
 }

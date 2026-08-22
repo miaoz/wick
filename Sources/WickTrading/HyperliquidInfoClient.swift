@@ -56,6 +56,27 @@ public struct HyperliquidInfoClient: ExchangeTradeClient, Sendable {
         return TradingFill.clipped(results, from: start, to: end)
     }
 
+    /// Funding-fee settlements via `userFunding`. The amount is the `usdc`
+    /// delta of each funding record (signed; negative = paid out).
+    public func fetchFunding(from start: Date, to end: Date) async throws -> [FundingEvent] {
+        guard start < end else { return [] }
+        let startMs = milliseconds(start)
+        let endMs = milliseconds(end)
+        var results: [FundingEvent] = []
+        var cursor = startMs
+        var pages = 0
+        while cursor < endMs, pages < 8 {
+            pages += 1
+            let page = try await fundingPage(startMs: cursor, endMs: endMs)
+            results.append(contentsOf: page)
+            guard page.count >= min(pageLimit, 2000), let last = page.last else { break }
+            let next = last.time + 1
+            if next <= cursor { break }
+            cursor = next
+        }
+        return results.filter { $0.time >= startMs && $0.time < endMs }
+    }
+
     private func fillsPage(startMs: Int64, endMs: Int64) async throws -> [TradingFill] {
         let body: [String: Any] = [
             "type": "userFillsByTime",
@@ -112,6 +133,52 @@ public struct HyperliquidInfoClient: ExchangeTradeClient, Sendable {
                 commission: Double(fee ?? "") ?? 0,
                 commissionAsset: feeToken ?? "USDC",
                 realizedPnl: Double(closedPnl ?? "") ?? 0,
+                time: time
+            )
+        }
+    }
+
+    private func fundingPage(startMs: Int64, endMs: Int64) async throws -> [FundingEvent] {
+        let body: [String: Any] = [
+            "type": "userFunding",
+            "user": user,
+            "startTime": startMs,
+            "endTime": endMs,
+        ]
+        let payload = try JSONSerialization.data(withJSONObject: body)
+        var request = URLRequest(url: baseURL.appendingPathComponent("info"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 20
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = payload
+        let (data, response) = try await transport(request)
+        if response.statusCode == 429 {
+            throw ExchangeClientError.rateLimited
+        }
+        guard (200...299).contains(response.statusCode) else {
+            throw ExchangeClientError.http(response.statusCode, "")
+        }
+        guard let rows = try? JSONDecoder().decode([FundingRow].self, from: data) else {
+            throw ExchangeClientError.malformedResponse
+        }
+        return rows.compactMap { $0.asFundingEvent() }
+    }
+
+    struct FundingRow: Decodable {
+        var delta: Delta
+        var time: Int64
+
+        struct Delta: Decodable {
+            var coin: String?
+            var usdc: String?
+        }
+
+        func asFundingEvent() -> FundingEvent? {
+            guard let coin = delta.coin, !coin.isEmpty else { return nil }
+            return FundingEvent(
+                symbol: coin,
+                // The API pads `usdc` with a leading space; trim before parsing.
+                amount: Double(delta.usdc?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") ?? 0,
                 time: time
             )
         }

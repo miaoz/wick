@@ -442,5 +442,8 @@ final class TradingModelTests: XCTestCase {
         XCTAssertEqual(position("BTCUSDT").quoteAsset, "USDT")
         XCTAssertEqual(position("BTCUSDC").quoteAsset, "USDC")
         XCTAssertNil(position("SUPERSTRANGE").quoteAsset)
+        // Bare coins (Hyperliquid) and cross pairs must not resolve to a quote.
+        XCTAssertNil(position("BTC").quoteAsset)
+        XCTAssertNil(position("ETHBTC").quoteAsset)
     }
 }

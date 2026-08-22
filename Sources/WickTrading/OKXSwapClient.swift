@@ -63,6 +63,30 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
         return results
     }
 
+    /// Funding-fee bills (`type=8`) in `[start, end)`. History is capped at
+    /// roughly three months, the same as fills.
+    public func fetchFunding(from start: Date, to end: Date) async throws -> [FundingEvent] {
+        guard start < end else { return [] }
+        let startMs = Int64((start.timeIntervalSince1970 * 1000).rounded())
+        let endMs = Int64((end.timeIntervalSince1970 * 1000).rounded())
+        var results: [FundingEvent] = []
+        var after: String?
+        var pages = 0
+        while pages < 200 {
+            pages += 1
+            let (page, lastBillID) = try await billsPage(
+                from: start,
+                to: end,
+                after: after
+            )
+            results.append(contentsOf: page.filter { $0.time >= startMs && $0.time < endMs })
+            if page.contains(where: { $0.time < startMs }) { break }
+            guard page.count >= pageLimit, let lastBillID else { break }
+            after = lastBillID
+        }
+        return results
+    }
+
     // MARK: - Signing
 
     /// ISO-8601 UTC with milliseconds, as OKX requires on `OK-ACCESS-TIMESTAMP`.
@@ -121,6 +145,30 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
         let decoded = try decodeEnvelope(data)
         let fills = decoded.data.map { $0.asTradingFill() }
         return (fills, decoded.data.last?.billId)
+    }
+
+    private func billsPage(
+        from: Date,
+        to: Date,
+        after: String?
+    ) async throws -> ([FundingEvent], String?) {
+        var query: [(String, String)] = [
+            ("instType", "SWAP"),
+            ("type", "8"),
+            ("begin", String(milliseconds(from))),
+            ("end", String(milliseconds(to))),
+            ("limit", String(pageLimit)),
+        ]
+        if let after {
+            query.append(("after", after))
+        }
+        let path = "/api/v5/account/bills-history?" + query.map { "\($0.0)=\($0.1)" }.joined(separator: "&")
+        let request = try signedRequest(method: "GET", requestPath: path, body: "")
+        let (data, response) = try await transport(request)
+        try checkResponse(data: data, response: response)
+        let decoded = try decodeBillEnvelope(data)
+        let events = decoded.data.map { $0.asFundingEvent() }
+        return (events, decoded.data.last?.billId)
     }
 
     func signedRequest(method: String, requestPath: String, body: String) throws -> URLRequest {
@@ -197,11 +245,47 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
         }
     }
 
+    /// A funding-fee bill from `bills-history`. The exact field carrying the
+    /// funding amount (`pnl` vs `fee`) is venue-dependent; prefer `pnl` and
+    /// fall back to `fee` defensively.
+    struct BillRow: Decodable {
+        var billId: String?
+        var instId: String?
+        var pnl: String?
+        var fee: String?
+        var ts: String?
+
+        func asFundingEvent() -> FundingEvent {
+            let amount: Double = {
+                if let pnl = Double(pnl ?? ""), pnl != 0 { return pnl }
+                return Double(fee ?? "") ?? 0
+            }()
+            return FundingEvent(
+                symbol: OKXSwapClient.symbol(fromInstID: instId ?? ""),
+                amount: amount,
+                time: Int64(ts ?? "0") ?? 0
+            )
+        }
+    }
+
     private func decodeEnvelope(_ data: Data) throws -> Envelope {
         guard let decoded = try? JSONDecoder().decode(Envelope.self, from: data) else {
             throw ExchangeClientError.malformedResponse
         }
         return decoded
+    }
+
+    private func decodeBillEnvelope(_ data: Data) throws -> BillEnvelope {
+        guard let decoded = try? JSONDecoder().decode(BillEnvelope.self, from: data) else {
+            throw ExchangeClientError.malformedResponse
+        }
+        return decoded
+    }
+
+    struct BillEnvelope: Decodable {
+        var code: String
+        var msg: String?
+        var data: [BillRow]
     }
 
     private func checkResponse(data: Data, response: HTTPURLResponse) throws {

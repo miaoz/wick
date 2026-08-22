@@ -231,6 +231,9 @@ public enum L10n {
         case exchangePositionVwap
         case exchangePositionSize
         case exchangePositionRealizedPnl
+        case exchangePositionCommission
+        case exchangePositionFunding
+        case exchangePositionNetPnl
         case exchangePositionLong
         case exchangePositionShort
         case exchangePositionOpen
@@ -478,6 +481,9 @@ public enum L10n {
             case .exchangePositionVwap: return "开仓 → 平仓 VWAP"
             case .exchangePositionSize: return "数量 · 峰值"
             case .exchangePositionRealizedPnl: return "已实现盈亏"
+            case .exchangePositionCommission: return "手续费"
+            case .exchangePositionFunding: return "资金费"
+            case .exchangePositionNetPnl: return "净盈亏"
             case .exchangePositionLong: return "多"
             case .exchangePositionShort: return "空"
             case .exchangePositionOpen: return "持仓中"
@@ -725,6 +731,9 @@ public enum L10n {
             case .exchangePositionVwap: return "Open → Close VWAP"
             case .exchangePositionSize: return "Size · Peak"
             case .exchangePositionRealizedPnl: return "Realized PnL"
+            case .exchangePositionCommission: return "Commission"
+            case .exchangePositionFunding: return "Funding"
+            case .exchangePositionNetPnl: return "Net PnL"
             case .exchangePositionLong: return "Long"
             case .exchangePositionShort: return "Short"
             case .exchangePositionOpen: return "Open"

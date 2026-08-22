@@ -66,9 +66,11 @@ public enum SymbolTagMatcher {
     }
 
     /// Quote asset of a pair inferred from its suffix (display only; no
-    /// exchangeInfo round-trip for v1).
+    /// exchangeInfo round-trip for v1). Only *stable* quote suffixes qualify —
+    /// bare coins like Hyperliquid's `BTC` have no quote suffix and must not
+    /// resolve to themselves (a `BTC` perp settles in USDC, not BTC).
     public static func quoteAsset(of symbol: String) -> String? {
-        quoteAssets.first { symbol.hasSuffix($0) }
+        stableQuotes.first { symbol.hasSuffix($0) }
     }
 
     /// Base asset of a pair: strips the derivative notional prefix and the

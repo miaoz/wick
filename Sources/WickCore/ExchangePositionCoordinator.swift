@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import os
 
 /// The slice of `JournalStore` the exchange coordinator reads/writes. Kept as
 /// a protocol so lifecycle tests can substitute a temp-root store instead of
@@ -79,6 +80,7 @@ final class ExchangePositionCoordinator: ObservableObject {
     private static let exchangeService = "com.miaoz.wick.exchange"
     private static let legacyBinanceService = "com.miaoz.wick.binance"
     private static let legacyHandledIDsKey = "wick.binance.handledPositionIDs"
+    private static let log = Logger(subsystem: "com.miaoz.wick", category: "exchange")
 
     @Published private(set) var snapshot: TradingPositionSnapshot? {
         didSet { rebuildDerivedStats() }
@@ -372,6 +374,7 @@ final class ExchangePositionCoordinator: ObservableObject {
         do {
             let now = Date()
             var fills = cached?.fills ?? []
+            var funding = cached?.funding ?? []
             var windowStart = cached?.windowStart ?? desiredStart
             var ranges: [(Date, Date)] = []
 
@@ -409,21 +412,54 @@ final class ExchangePositionCoordinator: ObservableObject {
                 fetched += try await client.fetchFills(from: range.0, to: range.1)
             }
 
+            // Funding is supplementary: a failure must never block positions,
+            // so it is fetched best-effort and the last known good set is kept.
+            // A cache written before funding support has fills but no funding
+            // history — backfill the whole covered window once so funding isn't
+            // stuck at the incremental tail forever.
+            var fetchedFunding: [FundingEvent] = []
+            var fundingBackfilled = cached?.fundingBackfilled == true
+            let fundingRanges = fundingBackfilled ? ranges : [(windowStart, now)]
+            if !fundingRanges.isEmpty {
+                do {
+                    for range in fundingRanges {
+                        fetchedFunding += try await client.fetchFunding(from: range.0, to: range.1)
+                    }
+                    fundingBackfilled = true
+                } catch {
+                    fetchedFunding = []
+                    Self.log.error("funding fetch failed: \(String(describing: error), privacy: .public)")
+                }
+            }
+
             if !ranges.isEmpty {
                 var seen = Set(fills.map { "\($0.symbol)#\($0.id)" })
                 for fill in fetched where seen.insert("\(fill.symbol)#\(fill.id)").inserted {
                     fills.append(fill)
                 }
                 fills.sort { ($0.time, $0.id) < ($1.time, $1.id) }
+
+                var fundingSeen = Set(funding.map { "\($0.symbol)#\($0.time)" })
+                for event in fetchedFunding where fundingSeen.insert("\(event.symbol)#\(event.time)").inserted {
+                    funding.append(event)
+                }
+                funding.sort { ($0.time, $0.symbol) < ($1.time, $1.symbol) }
             }
             fills = TradingFill.clipped(fills, from: windowStart, to: now)
+            let startMs = Int64((windowStart.timeIntervalSince1970 * 1000).rounded())
+            let endMs = Int64((now.timeIntervalSince1970 * 1000).rounded())
+            funding = funding.filter { $0.time >= startMs && $0.time < endMs }
 
             // CPU-heavy aggregation runs off the main actor (snapshot the
             // fills into an immutable value so the detached task never races
             // the mutable local).
             let fillsSnapshot = fills
+            let fundingSnapshot = funding
             let positions = await Task.detached(priority: .utility) {
-                PositionAggregator.aggregate(fills: fillsSnapshot)
+                FundingAttributor.attach(
+                    positions: PositionAggregator.aggregate(fills: fillsSnapshot),
+                    funding: fundingSnapshot
+                )
             }.value
             let emptyWindow = fills.isEmpty
             finishSync(
@@ -431,7 +467,9 @@ final class ExchangePositionCoordinator: ObservableObject {
                 positions: positions,
                 windowStart: windowStart,
                 token: token,
-                error: emptyWindow ? .emptyWindow : nil
+                error: emptyWindow ? .emptyWindow : nil,
+                funding: funding,
+                fundingBackfilled: fundingBackfilled
             )
         } catch let error as ExchangeClientError {
             finishSync(
@@ -456,7 +494,9 @@ final class ExchangePositionCoordinator: ObservableObject {
         positions: [TradingPosition]?,
         windowStart: Date?,
         token: JobToken,
-        error: ExchangeSyncError?
+        error: ExchangeSyncError?,
+        funding: [FundingEvent]? = nil,
+        fundingBackfilled: Bool = false
     ) {
         defer {
             // Only clear the per-journal mapping when this run is STILL the
@@ -517,6 +557,8 @@ final class ExchangePositionCoordinator: ObservableObject {
             windowStart: windowStart,
             positions: positions,
             fills: fills,
+            funding: funding ?? [],
+            fundingBackfilled: fundingBackfilled,
             handledPositionIDs: Set(handledOrdered)
         )
         saveCache(next, for: journalID)
@@ -526,7 +568,7 @@ final class ExchangePositionCoordinator: ObservableObject {
     }
 
     private func rebuildDerivedStats() {
-        pnlByDay = DailyRealizedPnl.sumsByOpenDay(
+        pnlByDay = DailyRealizedPnl.netSumsByOpenDay(
             positions: snapshot?.positions ?? [],
             calendar: .current
         )
