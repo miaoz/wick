@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import WickSync
 
 /// Sync settings sheet: connect/disconnect Dropbox, status, conflicts.
@@ -9,6 +10,8 @@ struct SettingsView: View {
 
     @State private var isConnecting = false
     @State private var showDisconnectConfirm = false
+    @State private var showJournalImporter = false
+    @State private var recoveryErrorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -67,6 +70,31 @@ struct SettingsView: View {
                             .foregroundStyle(.red)
                     }
                 }
+
+                if store.isCatalogReadOnly {
+                    Section {
+                        Text("日记库无法读取，已进入只读保护。请先尝试恢复备份或导入日记；清空重建会丢失原目录信息。")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                        Button("从 catalog 备份恢复") {
+                            do {
+                                try store.restoreCatalogFromBackup()
+                            } catch {
+                                recoveryErrorMessage = error.localizedDescription
+                            }
+                        }
+                        Button("导入 journal.json") {
+                            showJournalImporter = true
+                        }
+                        Button("清空并重新开始", role: .destructive) {
+                            do {
+                                try store.abandonCatalogAndStartFresh()
+                            } catch {
+                                recoveryErrorMessage = error.localizedDescription
+                            }
+                        }
+                    }
+                }
             }
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
@@ -74,6 +102,31 @@ struct SettingsView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("完成") { dismiss() }
                 }
+            }
+            .fileImporter(
+                isPresented: $showJournalImporter,
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    guard let url = urls.first else { return }
+                    do {
+                        try store.importJournalJSON(from: url)
+                    } catch {
+                        recoveryErrorMessage = error.localizedDescription
+                    }
+                case .failure(let error):
+                    recoveryErrorMessage = error.localizedDescription
+                }
+            }
+            .alert("恢复失败", isPresented: Binding(
+                get: { recoveryErrorMessage != nil },
+                set: { if !$0 { recoveryErrorMessage = nil } }
+            )) {
+                Button("好", role: .cancel) { recoveryErrorMessage = nil }
+            } message: {
+                Text(recoveryErrorMessage ?? "")
             }
             .confirmationDialog(
                 "断开 Dropbox？",

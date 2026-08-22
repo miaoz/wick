@@ -99,6 +99,19 @@ struct JournalRootView: View {
         .frame(minWidth: Self.editorMinWidth, minHeight: 480)
         .preferredColorScheme(settings.preferredColorScheme)
         .background(palette.backgroundBottom.color)
+        .alert(
+            L10n.string(.journalRecoveryFailedTitle, language: settings.language),
+            isPresented: Binding(
+                get: { store.recoveryErrorMessage != nil },
+                set: { if !$0 { store.dismissRecoveryError() } }
+            )
+        ) {
+            Button(L10n.string(.ok, language: settings.language), role: .cancel) {
+                store.dismissRecoveryError()
+            }
+        } message: {
+            Text(store.recoveryErrorMessage ?? "")
+        }
         .confirmationDialog(
             journalConfirmDialog == .deleteJournal
                 ? L10n.string(.journalLibraryDeleteConfirm, language: settings.language)

@@ -178,25 +178,37 @@ final class PhoneSyncCoordinator: ObservableObject {
     }
 
     /// Applies journal deletions made on another device: record the UUID,
-    /// drop the local copy (if any), and acknowledge.
+    /// drop the local copy (if any), and acknowledge. Only `deleted`/`notFound`
+    /// acknowledge; failures keep the tombstone pending for the next cycle.
     private func applyRemoteJournalDeletions(_ journalIDs: [UUID]) {
-        var applied = false
-        for id in journalIDs where !remotelyDeletedJournalIDs.contains(id) {
+        var acknowledged: [UUID] = []
+        for id in journalIDs {
+            if !PhoneJournalStore.shared.journals.contains(where: { $0.id == id }) {
+                remotelyDeletedJournalIDs.insert(id)
+                ignoredRemoteJournalIDs.insert(id)
+                acknowledged.append(id)
+                continue
+            }
+            // Mark BEFORE the catalog mutation so `$journals` tracking cannot
+            // re-queue this peer deletion as a local one.
             remotelyDeletedJournalIDs.insert(id)
             ignoredRemoteJournalIDs.insert(id)
-            applied = true
-            if PhoneJournalStore.shared.journals.contains(where: { $0.id == id }) {
-                PhoneJournalStore.shared.deleteJournal(id: id)
+            switch PhoneJournalStore.shared.deleteJournalFromRemote(id: id) {
+            case .deleted, .notFound:
+                acknowledged.append(id)
+            case .refusedReadOnly, .ioFailure:
+                remotelyDeletedJournalIDs.remove(id)
+                ignoredRemoteJournalIDs.remove(id)
             }
         }
-        if applied {
+        if !acknowledged.isEmpty {
             persistIgnoredJournals()
             UserDefaults.standard.set(
                 remotelyDeletedJournalIDs.map(\.uuidString),
                 forKey: Self.remotelyDeletedJournalsKey
             )
+            for id in acknowledged { engine.acknowledgeRemoteJournalDeletion(id) }
         }
-        for id in journalIDs { engine.acknowledgeRemoteJournalDeletion(id) }
     }
 
     /// Journals deleted locally before deletion propagation existed keep

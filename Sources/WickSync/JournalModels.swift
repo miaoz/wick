@@ -1,5 +1,42 @@
 import Foundation
 
+/// Single source of truth for journal image filename safety, shared by the
+/// macOS store, the iOS store, and the sync engine.
+///
+/// A safe name is a non-empty single-level relative filename: no path
+/// separators, no `.`/`..`, no NUL, and no name that changes when normalized.
+/// Rejecting the whole input (rather than cleaning it) means an unsafe
+/// reference can never be silently downgraded to a different file.
+public enum JournalImageFilename: Sendable {
+    /// The named file reference is unsafe (traversal, path separator, or empty).
+    public struct InvalidReference: Error, Equatable, Sendable {
+        public let filename: String
+        public init(filename: String) { self.filename = filename }
+    }
+
+    /// True when `filename` is safe to resolve inside an images directory.
+    public static func isValid(_ filename: String) -> Bool {
+        guard !filename.isEmpty else { return false }
+        guard !filename.contains("\0") else { return false }
+        guard !filename.contains("/"), !filename.contains("\\") else { return false }
+        guard filename != ".", filename != ".." else { return false }
+        // Must be a single path component: resolving it against the root must
+        // not split it (`a/b.png`) or normalize it away (`../x`, `.`, `..`).
+        let url = URL(fileURLWithPath: filename, relativeTo: URL(fileURLWithPath: "/"))
+        guard url.lastPathComponent == filename else { return false }
+        guard url.standardizedFileURL.path == "/" + filename else { return false }
+        return true
+    }
+
+    /// Throws when any name is unsafe — used at decode time so a snapshot or
+    /// remote entry with an unsafe reference is rejected wholesale.
+    public static func validateAll(_ filenames: [String]) throws {
+        for filename in filenames {
+            guard isValid(filename) else { throw InvalidReference(filename: filename) }
+        }
+    }
+}
+
 /// Next-day verdict on a journal item (trade review): was the call right.
 public enum JournalReviewVerdict: String, Codable, Sendable {
     case correct
@@ -50,6 +87,26 @@ public struct JournalItem: Identifiable, Codable, Equatable, Hashable, Sendable 
         self.body = body
         self.imageFilenames = imageFilenames
         self.review = review
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, tag, body, imageFilenames, review
+    }
+
+    /// Image references are validated at decode time: an entry whose snapshot
+    /// or remote payload carries an unsafe filename fails to decode wholesale
+    /// (no partial cleaning, no silent drop). The store turns that into its
+    /// read-only load-failure protection; the sync engine reports the day as
+    /// failed without touching local data.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        tag = try container.decode(String.self, forKey: .tag)
+        body = try container.decode(String.self, forKey: .body)
+        let filenames = try container.decode([String].self, forKey: .imageFilenames)
+        try JournalImageFilename.validateAll(filenames)
+        imageFilenames = filenames
+        review = try container.decodeIfPresent(JournalReview.self, forKey: .review)
     }
 
     public var isEmpty: Bool {
@@ -258,5 +315,111 @@ public struct JournalCatalogSnapshot: Codable, Equatable {
         self.version = version
         self.activeJournalID = activeJournalID
         self.journals = journals
+    }
+}
+
+/// Shared catalog file-load matrix, used by both the macOS and iOS stores so
+/// identical fixtures produce identical conclusions (acceptance AC-P1-02 /
+/// AC-P0-01). The primary wins when usable; the sidecar backup is consulted
+/// only when the primary is missing or corrupt.
+public enum JournalCatalogLoader {
+    public enum Outcome: Equatable {
+        /// Neither primary nor backup exists — the only case that may
+        /// first-create a library.
+        case missing
+        case loaded(JournalCatalogSnapshot)
+        case restoredFromBackup(JournalCatalogSnapshot)
+        case corrupt
+        case unsupportedVersion(Int)
+    }
+
+    private enum FileOutcome {
+        case valid(JournalCatalogSnapshot)
+        case unsupportedVersion(Int)
+        case corrupt
+        case absent
+    }
+
+    private static func decodeFile(at url: URL, currentVersion: Int) -> FileOutcome {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else { return .absent }
+        do {
+            let data = try Data(contentsOf: url)
+            let catalog = try JournalCatalogCodec.decode(data, currentVersion: currentVersion)
+            return .valid(catalog)
+        } catch let error as JournalCatalogCodec.LoadError {
+            switch error {
+            case .corrupt, .empty:
+                return .corrupt
+            case .unsupportedVersion(let version):
+                return .unsupportedVersion(version)
+            }
+        } catch {
+            return .corrupt
+        }
+    }
+
+    public static func load(primaryURL: URL, backupURL: URL, currentVersion: Int) -> Outcome {
+        switch decodeFile(at: primaryURL, currentVersion: currentVersion) {
+        case .valid(let catalog):
+            return .loaded(catalog)
+        case .unsupportedVersion(let version):
+            // Future format: never rewrite the primary or consult the backup.
+            return .unsupportedVersion(version)
+        case .corrupt:
+            // Primary corrupt: restore from a valid, supported backup.
+            switch decodeFile(at: backupURL, currentVersion: currentVersion) {
+            case .valid(let catalog):
+                return .restoredFromBackup(catalog)
+            case .unsupportedVersion(let version):
+                return .unsupportedVersion(version)
+            case .corrupt, .absent:
+                return .corrupt
+            }
+        case .absent:
+            // Primary missing: recover from a valid backup (AC-P1-02).
+            switch decodeFile(at: backupURL, currentVersion: currentVersion) {
+            case .valid(let catalog):
+                return .restoredFromBackup(catalog)
+            case .unsupportedVersion(let version):
+                return .unsupportedVersion(version)
+            case .corrupt:
+                return .corrupt
+            case .absent:
+                return .missing
+            }
+        }
+    }
+}
+
+/// Shared catalog decode + version validation, used by both the macOS and iOS
+/// stores so identical fixtures produce identical load conclusions.
+public enum JournalCatalogCodec {
+    public enum LoadError: Error, Equatable {
+        /// Not decodable (truncated JSON, missing required fields, garbage).
+        case corrupt
+        /// Decodable but declares no journals — an empty library is not a
+        /// "missing" one and must never be silently re-seeded.
+        case empty
+        /// Written by a newer app; old clients must not rewrite known fields
+        /// or drop unknown ones.
+        case unsupportedVersion(Int)
+    }
+
+    public static func decode(_ data: Data, currentVersion: Int) throws -> JournalCatalogSnapshot {
+        guard !data.isEmpty else { throw LoadError.corrupt }
+        let catalog: JournalCatalogSnapshot
+        do {
+            catalog = try JournalSyncEncoding.decoder.decode(JournalCatalogSnapshot.self, from: data)
+        } catch {
+            throw LoadError.corrupt
+        }
+        guard catalog.version <= currentVersion else {
+            throw LoadError.unsupportedVersion(catalog.version)
+        }
+        guard !catalog.journals.isEmpty else {
+            throw LoadError.empty
+        }
+        return catalog
     }
 }

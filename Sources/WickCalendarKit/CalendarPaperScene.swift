@@ -11,6 +11,11 @@ final class CalendarPaperScene: SKScene {
     private var sprite: SKSpriteNode?
     private var sourcePositions: [vector_float2] = []
     private var lastTime: TimeInterval = 0
+    /// Last `PaperSim.geometryRevision` we built a warp for; unchanged means
+    /// the page is asleep and no `SKWarpGeometryGrid` is rebuilt (PF-02).
+    private var lastWarpRevision = -1
+    /// Test-observable count of `SKWarpGeometryGrid` constructions.
+    private(set) var warpBuildCount = 0
 
     init(layout: PaperLayout) {
         self.layout = layout
@@ -33,6 +38,14 @@ final class CalendarPaperScene: SKScene {
         } else {
             sprite?.texture = texture
         }
+        // A texture swap is a render change even if the geometry is asleep.
+        markDirty()
+    }
+
+    /// Forces the next frame to rebuild the warp grid regardless of the sim's
+    /// geometry revision (texture replace / layout change).
+    func markDirty() {
+        lastWarpRevision = -1
     }
 
     override func update(_ currentTime: TimeInterval) {
@@ -41,6 +54,11 @@ final class CalendarPaperScene: SKScene {
         lastTime = currentTime
         sim.step(Float(dt))
 
+        // While the page sleeps the revision is frozen, so no target arrays
+        // and no `SKWarpGeometryGrid` are allocated for it.
+        guard sim.geometryRevision != lastWarpRevision else { return }
+        lastWarpRevision = sim.geometryRevision
+        warpBuildCount += 1
         sprite.warpGeometry = SKWarpGeometryGrid(
             columns: PaperSim.cols - 1,
             rows: PaperSim.rows - 1,

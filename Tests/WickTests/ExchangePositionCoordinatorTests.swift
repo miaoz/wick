@@ -1,0 +1,348 @@
+import Combine
+import XCTest
+import WickSync
+import WickTrading
+@testable import WickCore
+
+/// A client that blocks each fetch until the test releases it, so a run can be
+/// observed mid-flight and then cancelled/invalidated.
+actor BlockingTradeClient: ExchangeTradeClient {
+    private let errorToThrow: ExchangeClientError?
+    private var fetchCount = 0
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+    private(set) var cancelledWhileBlocked = false
+
+    init(error: ExchangeClientError? = nil) {
+        errorToThrow = error
+    }
+
+    func fetchFills(from start: Date, to end: Date) async throws -> [TradingFill] {
+        fetchCount += 1
+        await withCheckedContinuation { cont in
+            releaseContinuation = cont
+        }
+        if Task.isCancelled {
+            cancelledWhileBlocked = true
+            throw CancellationError()
+        }
+        if let errorToThrow {
+            throw errorToThrow
+        }
+        return []
+    }
+
+    func waitUntilFetchStarted() async {
+        while fetchCount == 0 {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+    }
+
+    func release() {
+        releaseContinuation?.resume()
+        releaseContinuation = nil
+    }
+}
+
+/// Lifecycle tests for the exchange coordinator's per-journal run identity:
+/// stale results (after disconnect / journal deletion / binding change) must be
+/// discarded without touching cache, journal, or error state.
+@MainActor
+final class ExchangePositionCoordinatorTests: XCTestCase {
+    private var tempRoot: URL!
+    private var cacheRoot: URL!
+    private var store: JournalStore!
+
+    override func setUp() async throws {
+        tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WickExchangeTests-\(UUID().uuidString)", isDirectory: true)
+        cacheRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WickExchangeCache-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        store = JournalStore(rootDirectory: tempRoot)
+        ExchangePositionCoordinator.skipKeychainAccess = false
+        ExchangePositionCoordinator.clientFactoryOverride = nil
+        ExchangePositionCoordinator.configuredOverride = nil
+        ExchangePositionCoordinator.storeOverride = store
+        ExchangePositionCoordinator.cacheDirectoryOverride = cacheRoot
+    }
+
+    override func tearDown() async throws {
+        ExchangePositionCoordinator.clientFactoryOverride = nil
+        ExchangePositionCoordinator.configuredOverride = nil
+        ExchangePositionCoordinator.storeOverride = nil
+        ExchangePositionCoordinator.cacheDirectoryOverride = nil
+        try? FileManager.default.removeItem(at: tempRoot)
+        try? FileManager.default.removeItem(at: cacheRoot)
+        store = nil
+        tempRoot = nil
+        cacheRoot = nil
+    }
+
+    private func bindActiveJournal() -> UUID {
+        let id = store.activeJournalID!
+        store.setExchangeBinding(
+            JournalExchangeBinding(venue: .binance, accountLabel: "Binance"),
+            for: id
+        )
+        ExchangePositionCoordinator.configuredOverride = { _ in true }
+        return id
+    }
+
+    private func cacheFile(for journalID: UUID) -> URL {
+        cacheRoot.appendingPathComponent("\(journalID.uuidString).json", isDirectory: false)
+    }
+
+    private func awaitRunCompletion(_ coordinator: ExchangePositionCoordinator) async {
+        // Poll until the coordinator has no in-flight run for the active journal.
+        for _ in 0..<200 {
+            if !coordinator.isSyncing { return }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
+    func testDisconnectMidFlightDiscardsStaleResult() async {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = bindActiveJournal()
+        let client = BlockingTradeClient()
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in client }
+
+        coordinator.syncNow(journalID: journalID)
+        await client.waitUntilFetchStarted()
+        XCTAssertTrue(coordinator.isSyncing)
+
+        coordinator.disconnect(journalID: journalID)
+        await client.release()
+        await awaitRunCompletion(coordinator)
+
+        XCTAssertNil(coordinator.snapshot, "a stale result after disconnect must not be committed")
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: cacheFile(for: journalID).path),
+            "a stale result must not write the trading cache"
+        )
+    }
+
+    func testJournalDeletionMidFlightDoesNotRecreateAnything() async {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = bindActiveJournal()
+        let second = store.createJournal(name: "Second")
+        let client = BlockingTradeClient()
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in client }
+
+        coordinator.syncNow(journalID: journalID)
+        await client.waitUntilFetchStarted()
+
+        // Delete the syncing journal while its request is in flight.
+        store.deleteJournal(id: journalID)
+        await client.release()
+        await awaitRunCompletion(coordinator)
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: cacheFile(for: journalID).path),
+            "a stale result for a deleted journal must not write the cache"
+        )
+        let journalDir = tempRoot.appendingPathComponent(journalID.uuidString, isDirectory: true)
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: journalDir.path),
+            "a stale result must not recreate the deleted journal folder"
+        )
+        XCTAssertEqual(store.journals.map(\.id), [second.id])
+    }
+
+    func testBindingChangeMidFlightDiscardsStaleResult() async {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = bindActiveJournal()
+        let client = BlockingTradeClient()
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in client }
+
+        coordinator.syncNow(journalID: journalID)
+        await client.waitUntilFetchStarted()
+
+        // Change the binding (simulate re-saving different credentials).
+        store.setExchangeBinding(
+            JournalExchangeBinding(venue: .okx, accountLabel: "OKX"),
+            for: journalID
+        )
+        await client.release()
+        await awaitRunCompletion(coordinator)
+
+        XCTAssertNil(coordinator.snapshot, "a stale result for the old binding must not be committed")
+    }
+
+    func testParallelRunsOnDifferentJournalsAreIndependent() async {
+        let coordinator = ExchangePositionCoordinator()
+        let firstID = store.activeJournalID!
+        let second = store.createJournal(name: "Second")
+        store.setExchangeBinding(
+            JournalExchangeBinding(venue: .binance, accountLabel: "Binance"),
+            for: firstID
+        )
+        store.setExchangeBinding(
+            JournalExchangeBinding(venue: .okx, accountLabel: "OKX"),
+            for: second.id
+        )
+        ExchangePositionCoordinator.configuredOverride = { _ in true }
+        let failingClient = BlockingTradeClient(error: .invalidCredentials("bad key"))
+        let okClient = BlockingTradeClient()
+        ExchangePositionCoordinator.clientFactoryOverride = { binding, _ in
+            binding?.venue == .okx ? okClient : failingClient
+        }
+
+        // A (active) fails; B succeeds concurrently.
+        coordinator.syncNow(journalID: firstID)
+        await failingClient.waitUntilFetchStarted()
+        coordinator.syncNow(journalID: second.id)
+        await okClient.waitUntilFetchStarted()
+
+        await failingClient.release()
+        await okClient.release()
+
+        // A's failure surfaces while A is active (drive the PRODUCTION change
+        // handler — no manual refreshPublishedState call).
+        store.switchToJournal(id: firstID)
+        coordinator.activeJournalDidChange()
+        for _ in 0..<200 {
+            if coordinator.lastError == .invalidKey { break }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(coordinator.lastError, .invalidKey)
+        XCTAssertFalse(coordinator.isSyncing)
+
+        // B's settings must not show A's failure — only B's own outcome.
+        store.switchToJournal(id: second.id)
+        coordinator.activeJournalDidChange()
+        for _ in 0..<200 {
+            if coordinator.lastError == .emptyWindow { break }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(coordinator.lastError, .emptyWindow, "B shares no error with A in an independent run")
+        XCTAssertFalse(coordinator.isSyncing)
+    }
+
+    // MARK: - AC-P1-06 interleaving
+
+    func testSwitchToIdleJournalShowsIdleWithoutManualRefresh() async {
+        let coordinator = ExchangePositionCoordinator()
+        let firstID = store.activeJournalID!
+        let second = store.createJournal(name: "Second")
+        store.switchToJournal(id: firstID) // A active again for the test
+        store.setExchangeBinding(
+            JournalExchangeBinding(venue: .binance, accountLabel: "Binance"),
+            for: firstID
+        )
+        store.setExchangeBinding(
+            JournalExchangeBinding(venue: .okx, accountLabel: "OKX"),
+            for: second.id
+        )
+        ExchangePositionCoordinator.configuredOverride = { _ in true }
+        let client = BlockingTradeClient()
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in client }
+
+        // First journal (active) is syncing.
+        coordinator.syncNow(journalID: firstID)
+        await client.waitUntilFetchStarted()
+        XCTAssertTrue(coordinator.isSyncing)
+
+        // Switch straight to B; the production change handler must derive B's
+        // idle state WITHOUT any manual refresh call.
+        store.switchToJournal(id: second.id)
+        coordinator.activeJournalDidChange()
+        XCTAssertFalse(coordinator.isSyncing, "B must show idle right after the switch")
+        XCTAssertNil(coordinator.lastError)
+
+        // B is idle and can start a refresh (no stale isSyncing gate).
+        let bClient = BlockingTradeClient()
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in bClient }
+        coordinator.syncNow(journalID: second.id)
+        await bClient.waitUntilFetchStarted()
+        XCTAssertTrue(coordinator.isSyncing, "B must be able to start its own refresh")
+        await bClient.release()
+        await client.release()
+        await awaitRunCompletion(coordinator)
+    }
+
+    func testOldRunFinishDoesNotClearNewRun() async {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = bindActiveJournal()
+        let client1 = BlockingTradeClient()
+        let client2 = BlockingTradeClient()
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in client1 }
+
+        // Run 1 starts and blocks.
+        coordinator.syncNow(journalID: journalID)
+        await client1.waitUntilFetchStarted()
+
+        // Cancel run 1, immediately start run 2 (new credentials path).
+        coordinator.cancelTasks(for: journalID)
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in client2 }
+        coordinator.syncNow(journalID: journalID)
+        await client2.waitUntilFetchStarted()
+
+        // Release run 1: its finish must NOT wipe run 2's identity.
+        await client1.release()
+        for _ in 0..<100 {
+            if coordinator.isSyncing { break }  // still syncing = run 2 alive
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(coordinator.isSyncing, "run 2 must survive run 1's late finish")
+
+        // Run 2 commits its result.
+        await client2.release()
+        await awaitRunCompletion(coordinator)
+        XCTAssertFalse(coordinator.isSyncing)
+    }
+
+    func testDeleteNoCacheJournalMidRequestCancelsClient() async {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = store.activeJournalID!
+        _ = store.createJournal(name: "Second") // second becomes active
+        store.setExchangeBinding(
+            JournalExchangeBinding(venue: .binance, accountLabel: "Binance"),
+            for: journalID
+        )
+        ExchangePositionCoordinator.configuredOverride = { _ in true }
+        let client = BlockingTradeClient()
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in client }
+
+        // First sync of a journal with NO cache file, blocked mid-request.
+        coordinator.syncNow(journalID: journalID)
+        await client.waitUntilFetchStarted()
+
+        // Delete the journal; pruneDeletedJournals must cancel via runningJobs
+        // even though no cache file exists.
+        store.deleteJournal(id: journalID)
+        coordinator.pruneDeletedJournals(store.journals)
+        await client.release()
+
+        for _ in 0..<200 {
+            let cancelled = await client.cancelledWhileBlocked
+            if cancelled { break }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let cancelled = await client.cancelledWhileBlocked
+        XCTAssertTrue(cancelled, "a deleted journal with no cache must still cancel its in-flight client")
+    }
+
+    func testCancelledClientReceivesCancellationAndStateIsUntouched() async {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = bindActiveJournal()
+        let client = BlockingTradeClient()
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in client }
+
+        coordinator.syncNow(journalID: journalID)
+        await client.waitUntilFetchStarted()
+
+        // Cancel the run (same path disconnect uses); the blocked fetch sees
+        // the cancellation when released.
+        coordinator.disconnect(journalID: journalID)
+        await client.release()
+
+        for _ in 0..<200 {
+            let cancelled = await client.cancelledWhileBlocked
+            if cancelled { break }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let cancelled = await client.cancelledWhileBlocked
+        XCTAssertTrue(cancelled, "the in-flight client must observe task cancellation")
+        XCTAssertNil(coordinator.snapshot)
+    }
+}

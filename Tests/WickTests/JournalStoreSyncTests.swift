@@ -57,6 +57,251 @@ final class JournalStoreSyncTests: XCTestCase {
         XCTAssertEqual(reloaded.entries.count, 1)
     }
 
+    // MARK: - DS-01 image path safety
+
+    func testImageURLRejectsTraversalAndAnythingOutsideImagesDirectory() throws {
+        let sentinel = tempRoot.appendingPathComponent("sentinel.txt")
+        try Data("keep me".utf8).write(to: sentinel)
+
+        XCTAssertNil(store.imageURL(for: "../outside.png"))
+        XCTAssertNil(store.imageURL(for: "../../sentinel.txt"))
+        XCTAssertNil(store.imageURL(for: "a/b.png"))
+        XCTAssertNil(store.imageURL(for: "a\\b.png"))
+        XCTAssertNil(store.imageURL(for: ".."))
+        XCTAssertNil(store.imageURL(for: "."))
+        XCTAssertNil(store.imageURL(for: ""))
+
+        let safe = store.imageURL(for: "abc 1.png")
+        XCTAssertNotNil(safe)
+        XCTAssertTrue(safe!.path.hasPrefix(store.imagesDirectory.path + "/"))
+    }
+
+    func testUnsafeImageReferenceInSnapshotGoesReadOnlyAndSentinelsSurvive() throws {
+        // A traversal delete would target this file outside the journal folder.
+        let sentinel = tempRoot.appendingPathComponent("sentinel.txt")
+        try Data("keep me".utf8).write(to: sentinel)
+
+        let entryID = UUID().uuidString
+        let itemID = UUID().uuidString
+        let json = """
+        {"version":1,"entries":[{"id":"\(entryID)","date":"2026-01-15T00:00:00Z","title":"t",\
+        "items":[{"id":"\(itemID)","tag":"","body":"b","imageFilenames":["../sentinel.txt"]}],\
+        "createdAt":"2026-01-15T00:00:00Z","updatedAt":"2026-01-15T00:00:00Z"}]}
+        """
+        try Data(json.utf8).write(to: store.databaseURL, options: .atomic)
+
+        let reloaded = JournalStore(rootDirectory: tempRoot)
+        XCTAssertTrue(reloaded.isReadOnlyDueToLoadFailure)
+        XCTAssertTrue(reloaded.entries.isEmpty)
+        XCTAssertEqual(try Data(contentsOf: sentinel), Data("keep me".utf8))
+        XCTAssertEqual(try Data(contentsOf: reloaded.databaseURL), Data(json.utf8))
+    }
+
+    func testDeletePathsNeverTouchFilesOutsideImagesDirectory() throws {
+        // Sentinel next to the journal folder - a traversal delete must miss it.
+        let sentinel = tempRoot.appendingPathComponent("sentinel.txt")
+        try Data("keep me".utf8).write(to: sentinel)
+
+        let entry = store.createEntry()
+        let itemID = entry.items[0].id
+        if let filename = store.addImage(
+            from: Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+            to: entry.id,
+            itemID: itemID,
+            preferredExtension: "png"
+        ) {
+            // Remove image, then delete the entry and the day.
+            store.removeImage(filename: filename, from: entry.id, itemID: itemID)
+            store.deleteItem(itemID: itemID, from: entry.id)
+            store.removeSyncedDay(dayKey: entry.dayKey)
+        } else {
+            store.deleteItem(itemID: itemID, from: entry.id)
+        }
+        XCTAssertEqual(try Data(contentsOf: sentinel), Data("keep me".utf8))
+    }
+
+    // MARK: - PF-01 batch apply
+
+    func testApplySyncedChangesPersistsOnceForWholeBatch() throws {
+        let startCount = store.persistCount
+        var changes: [JournalSyncMutation] = []
+        for day in 1...50 {
+            changes.append(
+                .upsert(
+                    JournalEntry(dayKey: String(format: "2026-03-%02d", day), title: "d\(day)"),
+                    expectedLocalHash: nil
+                )
+            )
+        }
+        store.applySyncedChanges(changes, journalID: store.activeJournalID!)
+        XCTAssertEqual(store.persistCount, startCount + 1, "one batch apply must persist exactly once")
+        XCTAssertEqual(store.entries.count, 50)
+
+        let reloaded = JournalStore(rootDirectory: tempRoot)
+        XCTAssertEqual(reloaded.entries.count, 50)
+        XCTAssertEqual(reloaded.entries.first { $0.dayKey == "2026-03-25" }?.title, "d25")
+    }
+
+    func testApplySyncedChangesBatchRemove() throws {
+        let a = JournalEntry(dayKey: "2026-03-01", title: "a")
+        let b = JournalEntry(dayKey: "2026-03-02", title: "b")
+        store.applySyncedChanges(
+            [.upsert(a, expectedLocalHash: nil), .upsert(b, expectedLocalHash: nil)],
+            journalID: store.activeJournalID!
+        )
+        XCTAssertEqual(store.entries.count, 2)
+
+        let aHash = try JournalSyncEncoding.contentHash(for: a)
+        store.applySyncedChanges(
+            [.remove(dayKey: "2026-03-01", expectedLocalHash: aHash)],
+            journalID: store.activeJournalID!
+        )
+        XCTAssertEqual(store.entries.count, 1)
+        XCTAssertEqual(store.entries.first?.dayKey, "2026-03-02")
+    }
+
+    func testApplySyncedChangesIgnoresNonActiveJournal() {
+        let original = store.activeJournalID!
+        let second = store.createJournal(name: "Second")
+        store.switchToJournal(id: original)
+        let before = store.persistCount
+
+        store.applySyncedChanges(
+            [.upsert(JournalEntry(dayKey: "2026-09-01", title: "no"), expectedLocalHash: nil)],
+            journalID: second.id
+        )
+        XCTAssertEqual(store.persistCount, before)
+        XCTAssertTrue(store.entries.isEmpty)
+    }
+
+    // MARK: - AC-P1-05 final freshness re-verification
+
+    func testApplySyncedChangesSkipsEditedDay() throws {
+        let entry = JournalEntry(dayKey: "2026-04-01", title: "local v1")
+        store.applySyncedEntry(entry)
+        let staleHash = try JournalSyncEncoding.contentHash(for: entry)
+        var edited = entry
+        edited.title = "local v2"
+        store.applySyncedEntry(edited)
+
+        let remote = JournalEntry(dayKey: "2026-04-01", title: "remote")
+        let applied = store.applySyncedChanges(
+            [.upsert(remote, expectedLocalHash: staleHash)],
+            journalID: store.activeJournalID!
+        )
+        XCTAssertTrue(applied.isEmpty, "a stale mutation must be skipped")
+        XCTAssertEqual(store.entries.first?.title, "local v2", "the edit must not be clobbered")
+
+        // A matching mutation (fresh hash) commits.
+        let freshHash = try JournalSyncEncoding.contentHash(for: edited)
+        let applied2 = store.applySyncedChanges(
+            [.upsert(remote, expectedLocalHash: freshHash)],
+            journalID: store.activeJournalID!
+        )
+        XCTAssertEqual(applied2, ["2026-04-01"])
+        XCTAssertEqual(store.entries.first?.title, "remote")
+    }
+
+    // MARK: - DS-04 consistent export
+
+    private func unzipArchive(_ zipURL: URL, to dir: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.arguments = ["-x", "-k", zipURL.path, dir.path]
+        try process.run()
+        process.waitUntilExit()
+    }
+
+    private func decodedExport(at dest: URL) throws -> JournalSnapshot {
+        let unzipDir = tempRoot.appendingPathComponent("unzip-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: unzipDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: unzipDir) }
+        try unzipArchive(dest, to: unzipDir)
+        let jsonURL = unzipDir.appendingPathComponent("Wick-Journal/journal.json", isDirectory: false)
+        return try JournalSyncEncoding.decoder.decode(JournalSnapshot.self, from: Data(contentsOf: jsonURL))
+    }
+
+    func testExportEncodesLatestInMemorySnapshotNotStaleDiskFile() throws {
+        let entry = store.createEntry()
+        var draft = entry
+        draft.title = "Exported Latest"
+        draft.items[0].body = "fresh body"
+        store.updateEntry(draft)
+
+        // Make the on-disk main file stale: export must use the frozen
+        // in-memory snapshot, not copy databaseURL.
+        let stale = JournalSnapshot(
+            version: 1,
+            entries: [JournalEntry(dayKey: "2026-01-01", title: "STALE")]
+        )
+        try JournalSyncEncoding.encoder.encode(stale).write(to: store.databaseURL, options: .atomic)
+
+        let dest = tempRoot.appendingPathComponent("export.zip", isDirectory: false)
+        try store.exportArchive(to: dest)
+
+        let decoded = try decodedExport(at: dest)
+        XCTAssertEqual(decoded.entries.first?.title, "Exported Latest")
+        XCTAssertEqual(decoded.entries.first?.items.first?.body, "fresh body")
+    }
+
+    func testEditThenExportImmediatelyIsLatest() throws {
+        let entry = store.createEntry()
+        var draft = entry
+        draft.items[0].body = "typed now"
+        store.updateEntry(draft)
+
+        let dest = tempRoot.appendingPathComponent("export2.zip", isDirectory: false)
+        try store.exportArchive(to: dest)
+
+        let decoded = try decodedExport(at: dest)
+        XCTAssertEqual(decoded.entries.first?.items.first?.body, "typed now")
+    }
+
+    func testExportFailureKeepsPreviousDestination() throws {
+        _ = store.createEntry()
+        let dest = tempRoot.appendingPathComponent("backup.zip", isDirectory: false)
+        try store.exportArchive(to: dest)
+        let oldBytes = try Data(contentsOf: dest)
+        XCTAssertFalse(oldBytes.isEmpty)
+
+        // The temp archive is built successfully, then the FINAL replace fails
+        // (the exact window the old remove-then-move implementation lost data).
+        JournalStore.failExportReplaceOverride = true
+        defer { JournalStore.failExportReplaceOverride = false }
+
+        XCTAssertThrowsError(try store.exportArchive(to: dest))
+        XCTAssertEqual(
+            try Data(contentsOf: dest),
+            oldBytes,
+            "a failed replace must keep the previous archive byte-for-byte"
+        )
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: tempRoot.path)
+            .filter { $0.hasPrefix(".Wick-export-") }
+        XCTAssertTrue(leftovers.isEmpty, "the temp archive must be cleaned up on failure")
+    }
+
+    func testExportOnlyContainsActiveJournal() throws {
+        let firstID = store.activeJournalID!
+        _ = store.createEntry()
+        var draft = store.entries[0]
+        draft.title = "Only From First"
+        store.updateEntry(draft)
+
+        _ = store.createJournal(name: "Second")
+        _ = store.createEntry()
+        var draft2 = store.entries[0]
+        draft2.title = "From Second"
+        store.updateEntry(draft2)
+
+        // Export while the SECOND journal is active — must not leak the first.
+        let dest = tempRoot.appendingPathComponent("export3.zip", isDirectory: false)
+        try store.exportArchive(to: dest)
+        let decoded = try decodedExport(at: dest)
+        XCTAssertEqual(decoded.entries.first?.title, "From Second")
+        XCTAssertFalse(decoded.entries.contains { $0.title == "Only From First" })
+        _ = firstID
+    }
+
     // MARK: - applySyncedEntry
 
     func testApplySyncedEntryInsertsThenReplacesByDayKey() {
@@ -113,7 +358,7 @@ final class JournalStoreSyncTests: XCTestCase {
         let entry = store.createEntry()
         let filename = store.addImage(from: Data([0x89, 0x50, 0x4E, 0x47]), to: entry.id, itemID: entry.items[0].id)
         XCTAssertNotNil(filename)
-        let imagePath = store.imageURL(for: filename!).path
+        let imagePath = store.imageURL(for: filename!)!.path
         XCTAssertTrue(FileManager.default.fileExists(atPath: imagePath))
 
         store.removeSyncedDay(dayKey: entry.dayKey)

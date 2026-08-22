@@ -3,12 +3,18 @@ import UIKit
 import WickSync
 
 /// Day editor: title + item cards (tag, body, images). Edits a local draft and
-/// saves debounced; flush on disappear/background comes from the app scene.
+/// saves debounced; the draft commits on flush (remote apply / journal switch),
+/// on disappear, and on scenePhase transition so the app-level Store flush
+/// never sees uncommitted view state.
 struct EditorView: View {
     @EnvironmentObject private var store: PhoneJournalStore
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var draft: JournalEntry
     @State private var saveTask: Task<Void, Never>?
+    /// True while the draft differs from the store — a dirty draft is never
+    /// rebased by a remote apply (it commits/merges on its own later).
+    @State private var isDirty = false
 
     init(entry: JournalEntry) {
         _draft = State(initialValue: entry)
@@ -43,10 +49,26 @@ struct EditorView: View {
         .navigationTitle(Self.headerText(for: draft.date))
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.interactively)
+        .onReceive(NotificationCenter.default.publisher(for: .wickWillFlushJournalDrafts)) { _ in
+            saveNow()
+        }
+        .onReceive(store.remoteEntryDidApply) { apply in
+            rebaseIfClean(apply)
+        }
+        .onChange(of: scenePhase) { newPhase in
+            switch newPhase {
+            case .inactive, .background:
+                saveNow()
+                store.flushPendingWrites()
+            default:
+                break
+            }
+        }
         .onDisappear(perform: saveNow)
     }
 
     private func scheduleSave() {
+        isDirty = true
         saveTask?.cancel()
         saveTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 800_000_000)
@@ -57,7 +79,18 @@ struct EditorView: View {
 
     private func saveNow() {
         saveTask?.cancel()
+        guard !store.isReadOnlyDueToLoadFailure else { return }
         store.updateEntry(draft)
+        isDirty = false
+    }
+
+    /// A remote apply replaced this day: only rebase a CLEAN draft so the
+    /// user's typing is never overwritten by the fresh store value.
+    private func rebaseIfClean(_ apply: JournalRemoteApply) {
+        guard apply.dayKey == draft.dayKey, !isDirty else { return }
+        if let fresh = store.entries.first(where: { $0.dayKey == apply.dayKey }) {
+            draft = fresh
+        }
     }
 
     private static func headerText(for date: Date) -> String {
@@ -73,7 +106,7 @@ struct EditorView: View {
 
 private struct ItemCard: View {
     @Binding var item: JournalItem
-    let imageURL: (String) -> URL
+    let imageURL: (String) -> URL?
     let onChange: () -> Void
 
     var body: some View {
@@ -92,7 +125,8 @@ private struct ItemCard: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(item.imageFilenames, id: \.self) { filename in
-                            if let image = UIImage(contentsOfFile: imageURL(filename).path) {
+                            if let url = imageURL(filename),
+                               let image = UIImage(contentsOfFile: url.path) {
                                 Image(uiImage: image)
                                     .resizable()
                                     .scaledToFill()

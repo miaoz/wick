@@ -20,6 +20,9 @@ struct JournalEditorPane: View {
     /// Per-entry drafts so multi-day editing survives LazyVStack recycling.
     @State private var drafts: [UUID: JournalEntry] = [:]
     @State private var saveTasks: [UUID: Task<Void, Never>] = [:]
+    /// Entries whose draft differs from the store (uncommitted typing). This is
+    /// the real dirty set — `saveTasks` only tracks pending debounced saves.
+    @State private var dirtyEntryIDs: Set<UUID> = []
     @State private var showDeleteDayConfirm = false
     @State private var showDeleteItemConfirm = false
     @State private var pendingDeleteDayID: UUID?
@@ -70,6 +73,9 @@ struct JournalEditorPane: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .wickWillFlushJournalDrafts)) { _ in
             flushAllDraftsImmediately()
+        }
+        .onReceive(store.remoteEntryDidApply) { apply in
+            rebaseDraftIfClean(apply)
         }
         .onDisappear {
             flushAllDraftsImmediately()
@@ -134,6 +140,7 @@ struct JournalEditorPane: View {
                     } else {
                         drafts[ref.entryID] = nil
                     }
+                    dirtyEntryIDs.remove(ref.entryID)
                 }
                 pendingDeleteItem = nil
             }
@@ -690,6 +697,7 @@ struct JournalEditorPane: View {
         for key in drafts.keys where !live.contains(key) {
             cancelSave(for: key)
             drafts[key] = nil
+            dirtyEntryIDs.remove(key)
         }
     }
 
@@ -698,6 +706,7 @@ struct JournalEditorPane: View {
         guard var draft = drafts[entryID] else { return }
         body(&draft)
         drafts[entryID] = draft
+        dirtyEntryIDs.insert(entryID)
     }
 
     private func binding(entryID: UUID, itemID: UUID) -> Binding<JournalItem> {
@@ -749,6 +758,7 @@ struct JournalEditorPane: View {
                 }
                 if let draft = drafts[entryID] {
                     store.updateEntry(draft)
+                    dirtyEntryIDs.remove(entryID)
                 }
                 saveTasks[entryID] = nil
                 return
@@ -762,15 +772,31 @@ struct JournalEditorPane: View {
     }
 
     private func flushAllDraftsImmediately() {
-        let dirtyEntryIDs = Array(saveTasks.keys)
-        for entryID in dirtyEntryIDs { cancelSave(for: entryID) }
+        let dirty = Array(dirtyEntryIDs)
+        for entryID in dirty { cancelSave(for: entryID) }
         guard !store.isReadOnlyDueToLoadFailure else { return }
-        for entryID in dirtyEntryIDs {
+        for entryID in dirty {
             guard let draft = drafts[entryID],
                   store.entries.contains(where: { $0.id == entryID })
             else { continue }
             store.updateEntry(draft)
+            dirtyEntryIDs.remove(entryID)
         }
+    }
+
+    /// A remote apply replaced the store entry for `apply.dayKey`. Rebasing the
+    /// local draft is only safe when it is clean (no uncommitted typing); a
+    /// dirty draft stays put and commits/merges on its own later.
+    private func rebaseDraftIfClean(_ apply: JournalRemoteApply) {
+        guard apply.journalID == store.activeJournalID else { return }
+        guard let fresh = store.entries.first(where: { $0.id == apply.entryID }) else { return }
+        // The draft may still be keyed by the pre-merge entry id on the same day.
+        guard let draftKey = drafts.first(where: { $0.value.dayKey == apply.dayKey })?.key,
+              !dirtyEntryIDs.contains(draftKey)
+        else { return }
+        cancelSave(for: draftKey)
+        drafts[draftKey] = nil
+        drafts[fresh.id] = fresh
     }
 
     private func mergeImagesFromStore(entryID: UUID) {

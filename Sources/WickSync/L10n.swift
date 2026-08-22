@@ -49,6 +49,7 @@ public enum L10n {
         case settings
         case back
         case cancel
+        case ok
         case language
         case appearance
         case dayTitle
@@ -137,6 +138,8 @@ public enum L10n {
         case journalLoadFailureBody
         case journalStartFresh
         case journalNewerVersionRequired
+        case journalUnsafeImageReferences
+        case journalRecoveryFailedTitle
 
         // Sync
         case syncSection
@@ -296,6 +299,7 @@ public enum L10n {
             case .settings: return "设置"
             case .back: return "返回"
             case .cancel: return "取消"
+            case .ok: return "好"
             case .language: return "语言"
             case .appearance: return "外观"
             case .dayTitle: return "日"
@@ -383,6 +387,8 @@ public enum L10n {
             case .journalLoadFailureBody: return "已阻止覆盖，以免丢失数据。可尝试导入备份，或在确认后清空并重新开始。"
             case .journalStartFresh: return "清空并重新开始"
             case .journalNewerVersionRequired: return "日记数据由更新版本的 Wick 写入，请升级 App 后再编辑"
+            case .journalUnsafeImageReferences: return "日记数据包含不安全的图片引用，已阻止编辑以防文件被误删；请导入备份恢复"
+            case .journalRecoveryFailedTitle: return "恢复失败"
 
             case .syncSection: return "同步"
             case .syncConnect: return "连接 Dropbox"
@@ -540,6 +546,7 @@ public enum L10n {
             case .settings: return "Settings"
             case .back: return "Back"
             case .cancel: return "Cancel"
+            case .ok: return "OK"
             case .language: return "Language"
             case .appearance: return "Appearance"
             case .dayTitle: return "Day"
@@ -627,6 +634,8 @@ public enum L10n {
             case .journalLoadFailureBody: return "Writes are blocked so your file won’t be overwritten. Import a backup, or start fresh after confirming."
             case .journalStartFresh: return "Start Fresh"
             case .journalNewerVersionRequired: return "Journal data was written by a newer version of Wick — update the app to edit"
+            case .journalUnsafeImageReferences: return "This journal contains unsafe image references. Editing is blocked to protect your files — import a backup to recover."
+            case .journalRecoveryFailedTitle: return "Recovery Failed"
 
             case .syncSection: return "Sync"
             case .syncConnect: return "Connect Dropbox"

@@ -78,13 +78,14 @@ SwiftPM target（package 声明 macOS 13+ / iOS 16+，macOS 专属 target 不参
 | `JournalSyncState.swift` | 远端布局 `/journals/<uuid>/{manifest,days,images,tombstones,conflicts,settlements}` + `/journal-tombstones/<uuid>.json`（日记本墓碑在文件夹外）；每设备状态（cursor、远端 rev 视图、`DaySyncState`（`pushedHashes` 自合并保护、`DaySettlement` 待决）、冲突清理队列、`manifestName` 基线；**自定义解码全字段带默认值**）；设备级 `device.json` 承载删除队列（日记本删除时其自身状态文件即被清除） |
 | `JournalSyncEngine.swift` | 对账引擎（`@MainActor`）。三条不变量：**①rev 回声抑制**（只比 rev）；**②拉取即固定点**（基线 = 下载字节本地重算哈希）；**③绝不和自己冲突**（`pushedHashes` 命中直接重推，不归档不弹冲突）。另有新鲜度守卫（快照后又编辑的天本轮跳过）、**切本隔离**（周期开始即冻结 journalID/名字/天快照；落盘/改名必须带 journalID，对不上当前活跃本则 no-op，否则一本的远端日子会灌进刚打开的另一本）、日记本删除传播（墓碑存在期间持续权威，旧客户端在墓碑旁回传日文件仍会被清掉；真实本地编辑可清墓碑恢复；30 天 GC）、冲突三版记录 + 结算标记跨端自动收敛、远端文件无墓碑消失自动回传（绝不镜像删除）；60s 周期 + 15s 防抖 + `syncOnce()` + `resetSyncState()` |
 
-其他目录：`assets/`（图标，iconset 为中间产物）、`ios/`（iPhone 客户端 v0，仅中文 UI：手写 xcodeproj 用文件系统同步组、`Info.plist` 在 `ios/` 根而非同步组内；链接 `WickSync`+`WickCalendarKit`；`CalendarView` 满屏承载 kit 根视图并构造 `PaperLayout.fullScreen`；DEBUG 启动参数 `-wick-open-calendar` 直接弹日历便于截图；CLI 校验 `xcodebuild -project ios/WickPhone.xcodeproj -target WickPhone build CODE_SIGNING_ALLOWED=NO`）、`scripts/`（`package_app.sh`/`package_zip.sh`/图标生成）、`.github/workflows/release.yml`（唯一 CI）、`dist/`（产物，已 gitignore）。
+其他目录：`assets/`（图标，iconset 为中间产物）、`ios/`（iPhone 客户端 v0，仅中文 UI：手写 xcodeproj 用文件系统同步组、`Info.plist` 在 `ios/` 根而非同步组内；链接 `WickSync`+`WickCalendarKit`；`CalendarView` 满屏承载 kit 根视图并构造 `PaperLayout.fullScreen`；DEBUG 启动参数 `-wick-open-calendar` 直接弹日历便于截图；CLI 校验走 **scheme**：`xcodebuild -project ios/WickPhone.xcodeproj -scheme WickPhone -destination 'generic/platform=iOS' build CODE_SIGNING_ALLOWED=NO`（**勿用** `-target WickPhone`，App target 无法解析 `WickCalendarKit`/`WickSync`）；iOS Store 回归测试 target 为 `WickPhoneTests`，模拟器命令：`xcodebuild test -project ios/WickPhone.xcodeproj -scheme WickPhone -destination 'platform=iOS Simulator,id=<device-id>' CODE_SIGNING_ALLOWED=NO`、`scripts/`（`package_app.sh`/`package_zip.sh`/图标生成）、`.github/workflows/release.yml`（唯一 CI）、`dist/`（产物，已 gitignore）。
 
 ## 构建与测试
 
 ```bash
 swift build && swift run   # 开发（仅宿主架构；非 .app 形态下本地通知被跳过）
 swift test                 # 单元测试（CI 打包前执行）
+xcodebuild test -project ios/WickPhone.xcodeproj -scheme WickPhone -destination 'platform=iOS Simulator,id=<device-id>' CODE_SIGNING_ALLOWED=NO  # iOS Store 回归
 make                       # 正式打包：arm64+x86_64 lipo 成 Universal → dist/Wick.app
 make package               # 可分发 zip → dist/Wick-macOS[-<VERSION>].zip
 VERSION=1.3.1 BUILD=6 ./scripts/package_zip.sh   # 注入版本号
@@ -106,9 +107,11 @@ make clean                 # rm -rf .build dist
 
 ## 注意事项（安全与数据保护）
 
-- **日记数据安全是核心约束**：多日记布局 `Wick/Journals/catalog.json` + `<uuid>/{journal.json,.bak,backups/,images/}`；加载失败进 `isReadOnlyDueToLoadFailure` 且**禁止任何写盘**（坏文件移存 `journal.corrupt-<ts>.json`）；覆盖前先写 `.bak`（滚动备份 ≤5 份、间隔 ≥30 分钟）；退出/关日记窗/切换日记本前发 `wickWillFlushJournalDrafts` 并 `flushPendingWrites()`。
+- **日记数据安全是核心约束**：多日记布局 `Wick/Journals/catalog.json` + `<uuid>/{journal.json,.bak,backups/,images/}`；加载失败进 `isReadOnlyDueToLoadFailure` 且**禁止任何写盘**（坏文件移存 `journal.corrupt-<ts>.json`）；覆盖前先写 `.bak`（滚动备份 ≤5 份、间隔 ≥30 分钟）；退出/关日记窗/切换日记本前发 `wickWillFlushJournalDrafts` 并 `flushPendingWrites()`。**catalog 保护 ≥ journal.json**：`catalog.json` 也有 `catalog.json.bak` 与版本门（`JournalCatalogCodec.decode`，macOS/iOS 共享）；只有显式 `.missing` 才 `seedDefaultJournal()`；损坏/未来版本/空库进 `isCatalogReadOnly`，禁用新建/重命名/重排/删除/绑定写入（`CatalogLoadResult`）。
+- **图片路径唯一规则来源 `WickSync.JournalImageFilename`**：`JournalItem` 解码即校验非法引用（含 `/`、`\`、`.`、`..`、NUL、规范化漂移者整体拒绝，不做清洗）；macOS/iOS Store 的 `imageURL(for:)` 是**唯一**图片 URL 构造器（返回可选，再做 `standardizedFileURL` 落在 `imagesDirectory` 内的第二道边界）；所有读/缩略图/删除/同步上传下载都经它。
 - **UserNotifications 只在正式 `.app` 包内可用**（`swift run`/裸二进制下调用会 abort）；`JournalReminderScheduler.notificationsAvailable` 的包形态门控必须维持。
-- **Dropbox 同步**：回调 scheme `db-hm5yscsy9a11g0q` 只在打包 `.app` 内注册；**App secret 永不入仓库/二进制**（PKCE 公共客户端只需 App key）；同步仅针对当前活跃日记本；只读/版本门命中时引擎一律只读拒写。**删除日记本 = 全端删除**（本地删除上传墓碑 + 清远端文件夹，所有设备同步删除；无「仅本机移除」选项）。
+- **Dropbox 同步**：回调 scheme `db-hm5yscsy9a11g0q` 只在打包 `.app` 内注册；**App secret 永不入仓库/二进制**（PKCE 公共客户端只需 App key）；同步仅针对当前活跃日记本；只读/版本门命中时引擎一律只读拒写。**删除日记本 = 全端删除**（本地删除上传墓碑 + 清远端文件夹，所有设备同步删除；无「仅本机移除」选项）。远端删除走 Store 专用事务 `deleteJournalFromRemote(id:) -> RemoteJournalDeleteResult`（**最后一本也删除**并播种新 UUID 纯本地默认本，不继承绑定/同步状态）；Coordinator 只对 deleted/notFound 调 `acknowledgeRemoteJournalDeletion`，ioFailure/refusedReadOnly 保留墓碑下轮重试。
+- **同步批量提交（PF-01）**：引擎把一轮的远端变更收集为 `[JournalSyncMutation]`，日期阶段结束后一次 `applySyncedChanges`（一次 persist/catalog touch/selection reconcile/UI publish），再跑图片对账；失败日不进 batch、保留 first-error 语义。**草稿协调（ED-01）**：引擎在下发前先 `prepareForRemoteApply(dayKey:)` 触发编辑器 flush，freshness guard 在 flush 后重读哈希，草稿改动则该轮跳过、下轮正常合并；成功 apply 后发 `JournalRemoteApply` typed event，编辑器仅对**干净** draft 做 rebase（dirty 由数据表示，不用 `saveTasks.keys` 近似）。
 - **`MenuBarExtra` 的 label 禁止放 `TimelineView` 等高频失效源**（会触发 `requestUpdate`→`setImage` 死循环占满 CPU；当前 label 用 30s `Timer` 且仅文本变化时更新）。
 - **macOS 13（Ventura）下 `MenuBarExtra` `.window` 内容首版布局会拿到错误几何**：系统 `NSHostingView` 先对着占位 frame 排 SwiftUI，面板再按 fitting size 收缩，`Text` 原点留在第一次的错位上（曾表现为每秒漂移；`.id` 翻转能修好但用户会看到一跳）。13.x 因此走 `MenuBarExtraContentHost`：先离屏量出本征尺寸让面板以正确大小出现，再把真正的 SwiftUI 树装进**我们自己的** `NSHostingView`（不是 window 的直接 contentView），文字的第一次布局就是对的。高度变化（进度→设置）不能靠 `invalidateIntrinsicContentSize`（MenuBarExtra 不听），要按无约束 `sizeThatFits` 回写 SwiftUI `.frame`。macOS 14+ 仍直接放 `ProgressPanelView`。**面板根部禁止挂隐式 `.animation(value:)`**（根部每秒随 TimelineView 重渲染，Ventura 会把这些事务卷进动画），动画一律在状态变更点显式 `withAnimation`。
 - 日记编辑必须用 `IMESafeTextViews`，原生 SwiftUI `TextField` 在中文 IME 下吞字。

@@ -45,6 +45,163 @@ final class JournalSyncModelTests: XCTestCase {
         XCTAssertTrue(decoded.dayKey.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil)
     }
 
+    // MARK: - JournalImageFilename
+
+    func testImageFilenameAcceptsSafeNames() {
+        let safe = [
+            "\(UUID().uuidString).png",
+            "\(UUID().uuidString).JPG",
+            "\(UUID().uuidString).PNG",
+            "a b.png",
+            "photo 1.heic",
+            "image-2026.png",
+            "01234567-89AB-CDEF-0123-456789ABCDEF.jpg"
+        ]
+        for name in safe {
+            XCTAssertTrue(JournalImageFilename.isValid(name), "expected safe: \(name)")
+        }
+    }
+
+    func testImageFilenameRejectsUnsafeNames() {
+        let unsafe = [
+            "../x",
+            "../../catalog.json",
+            "a/b.png",
+            "a\\b.png",
+            ".",
+            "..",
+            "",
+            "x\0.png",
+            "..\\x",
+            "/etc/passwd",
+            "images/../escape.png"
+        ]
+        for name in unsafe {
+            XCTAssertFalse(JournalImageFilename.isValid(name), "expected unsafe: \(name)")
+        }
+    }
+
+    func testImageFilenameValidationIsSharedRuleSource() {
+        // Both stores must agree: the rule lives here in WickSync so macOS and
+        // iOS share exactly one implementation (compile-time guarantee).
+        XCTAssertEqual(JournalImageFilename.isValid("ok.png"), true)
+        XCTAssertEqual(JournalImageFilename.isValid("../escape.png"), false)
+        XCTAssertThrowsError(try JournalImageFilename.validateAll(["ok.png", "../escape.png"]))
+    }
+
+    func testDecodeRejectsEntryWithUnsafeImageReference() throws {
+        let json = """
+        {"id":"\(UUID().uuidString)","date":"2026-01-15T00:00:00Z","title":"t",\
+        "items":[{"id":"\(UUID().uuidString)","tag":"","body":"b","imageFilenames":["../escape.png"]}],\
+        "createdAt":"2026-01-15T00:00:00Z","updatedAt":"2026-01-15T00:00:00Z"}
+        """
+        XCTAssertThrowsError(try decoder.decode(JournalEntry.self, from: Data(json.utf8))) { error in
+            XCTAssertTrue(error is JournalImageFilename.InvalidReference)
+        }
+    }
+
+    func testDecodeAcceptsEntryWithSafeImageReference() throws {
+        let json = """
+        {"id":"\(UUID().uuidString)","date":"2026-01-15T00:00:00Z","title":"t",\
+        "items":[{"id":"\(UUID().uuidString)","tag":"","body":"b","imageFilenames":["abc 1.png"]}],\
+        "createdAt":"2026-01-15T00:00:00Z","updatedAt":"2026-01-15T00:00:00Z"}
+        """
+        let entry = try decoder.decode(JournalEntry.self, from: Data(json.utf8))
+        XCTAssertEqual(entry.items.first?.imageFilenames, ["abc 1.png"])
+    }
+
+    // MARK: - JournalCatalogLoader matrix (AC-P1-02 / AC-P0-01)
+
+    private func writeCatalog(_ json: String, to url: URL) throws {
+        try Data(json.utf8).write(to: url, options: .atomic)
+    }
+
+    private func makeCatalogLoaderDir() throws -> (root: URL, primary: URL, backup: URL) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WickCatalogLoader-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return (
+            root,
+            root.appendingPathComponent("catalog.json", isDirectory: false),
+            root.appendingPathComponent("catalog.json.bak", isDirectory: false)
+        )
+    }
+
+    private func validCatalogJSON() -> String {
+        let info = journalInfoJSON()
+        return "{\"version\":1,\"activeJournalID\":\"\(UUID().uuidString)\",\"journals\":[\(info)]}"
+    }
+
+    private func journalInfoJSON() -> String {
+        "{\"id\":\"\(UUID().uuidString)\",\"name\":\"Diary\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"updatedAt\":\"2026-01-01T00:00:00Z\"}"
+    }
+
+    func testCatalogLoaderMatrix() throws {
+        func load(_ p: URL?, _ b: URL?) -> JournalCatalogLoader.Outcome {
+            JournalCatalogLoader.load(
+                primaryURL: p ?? URL(fileURLWithPath: "/nonexistent-primary"),
+                backupURL: b ?? URL(fileURLWithPath: "/nonexistent-backup"),
+                currentVersion: 1
+            )
+        }
+        let dir = try makeCatalogLoaderDir()
+        defer { try? FileManager.default.removeItem(at: dir.root) }
+
+        // Neither exists -> missing (only case that may first-create).
+        var result = load(nil, nil)
+        XCTAssertEqual(result, .missing)
+
+        // Primary missing + valid backup -> restoredFromBackup.
+        try writeCatalog(validCatalogJSON(), to: dir.backup)
+        result = load(nil, dir.backup)
+        if case .restoredFromBackup = result {} else { XCTFail("expected restoredFromBackup, got \(result)") }
+
+        // Primary missing + corrupt backup -> corrupt (not fresh install).
+        try writeCatalog("{", to: dir.backup)
+        result = load(nil, dir.backup)
+        XCTAssertEqual(result, .corrupt)
+
+        // Primary missing + future backup -> unsupportedVersion.
+        try writeCatalog("{\"version\":99,\"activeJournalID\":\"\(UUID().uuidString)\",\"journals\":[]}", to: dir.backup)
+        result = load(nil, dir.backup)
+        XCTAssertEqual(result, .unsupportedVersion(99))
+
+        // Valid primary wins regardless of backup.
+        try writeCatalog(validCatalogJSON(), to: dir.primary)
+        result = load(dir.primary, dir.backup)
+        if case .loaded = result {} else { XCTFail("expected loaded, got \(result)") }
+
+        // Corrupt primary + valid backup -> restoredFromBackup.
+        try writeCatalog("{", to: dir.primary)
+        try writeCatalog(validCatalogJSON(), to: dir.backup)
+        result = load(dir.primary, dir.backup)
+        if case .restoredFromBackup = result {} else { XCTFail("expected restoredFromBackup, got \(result)") }
+
+        // Corrupt primary + corrupt backup -> corrupt (never degrade to fresh).
+        try writeCatalog("{", to: dir.primary)
+        try writeCatalog("{", to: dir.backup)
+        result = load(dir.primary, dir.backup)
+        XCTAssertEqual(result, .corrupt)
+
+        // Future primary is authoritative even with a valid backup.
+        try writeCatalog("{\"version\":99,\"activeJournalID\":\"\(UUID().uuidString)\",\"journals\":[]}", to: dir.primary)
+        try writeCatalog(validCatalogJSON(), to: dir.backup)
+        result = load(dir.primary, dir.backup)
+        XCTAssertEqual(result, .unsupportedVersion(99))
+    }
+
+    func testCatalogLoaderClassifiesEmptyAsCorruptNotMissing() throws {
+        let dir = try makeCatalogLoaderDir()
+        defer { try? FileManager.default.removeItem(at: dir.root) }
+        try writeCatalog("{\"version\":1,\"activeJournalID\":\"\(UUID().uuidString)\",\"journals\":[]}", to: dir.primary)
+        let result = JournalCatalogLoader.load(
+            primaryURL: dir.primary,
+            backupURL: dir.backup,
+            currentVersion: 1
+        )
+        XCTAssertEqual(result, .corrupt, "an empty library must not degrade into a fresh install")
+    }
+
     // MARK: - Canonical encoding / content hash
 
     func testCanonicalEncodingIsDeterministicAcrossRoundTrip() throws {

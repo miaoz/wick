@@ -210,29 +210,46 @@ final class SyncCoordinator: ObservableObject {
 
     /// Applies journal deletions made on another device: record the UUID,
     /// drop the local copy (if any), and acknowledge so the engine stops
-    /// re-publishing the tombstone.
+    /// re-publishing the tombstone. Only `deleted`/`notFound` acknowledge; a
+    /// read-only or I/O failure leaves the tombstone pending so the next cycle
+    /// retries and the user sees the error.
     private func applyRemoteJournalDeletions(_ journalIDs: [UUID]) {
-        var applied = false
-        for id in journalIDs where !remotelyDeletedJournalIDs.contains(id) {
+        var acknowledged: [UUID] = []
+        var pendingRetry: [UUID] = []
+        for id in journalIDs {
+            if !JournalStore.shared.journals.contains(where: { $0.id == id }) {
+                // Never had it locally (or already applied): just ack.
+                remotelyDeletedJournalIDs.insert(id)
+                ignoredRemoteJournalIDs.insert(id)
+                acknowledged.append(id)
+                continue
+            }
+            // Mark BEFORE the catalog mutation so `$journals` tracking cannot
+            // re-queue this peer deletion as a local one.
             remotelyDeletedJournalIDs.insert(id)
             ignoredRemoteJournalIDs.insert(id)
-            applied = true
-            if JournalStore.shared.journals.contains(where: { $0.id == id }) {
-                JournalStore.shared.deleteJournal(id: id)
+            switch JournalStore.shared.deleteJournalFromRemote(id: id) {
+            case .deleted, .notFound:
+                acknowledged.append(id)
+            case .refusedReadOnly, .ioFailure:
+                // Roll back so the next cycle genuinely retries, and keep the
+                // tombstone pending (no acknowledge).
+                remotelyDeletedJournalIDs.remove(id)
+                ignoredRemoteJournalIDs.remove(id)
+                pendingRetry.append(id)
             }
         }
-        guard applied else {
-            // Still ack unapplied entries (e.g. the journal was never here) -
-            // the tombstone has been noted either way.
-            for id in journalIDs { engine.acknowledgeRemoteJournalDeletion(id) }
-            return
+        if !acknowledged.isEmpty {
+            persistIgnoredJournals()
+            UserDefaults.standard.set(
+                remotelyDeletedJournalIDs.map(\.uuidString),
+                forKey: Self.remotelyDeletedJournalsKey
+            )
+            for id in acknowledged { engine.acknowledgeRemoteJournalDeletion(id) }
         }
-        persistIgnoredJournals()
-        UserDefaults.standard.set(
-            remotelyDeletedJournalIDs.map(\.uuidString),
-            forKey: Self.remotelyDeletedJournalsKey
-        )
-        for id in journalIDs { engine.acknowledgeRemoteJournalDeletion(id) }
+        if !pendingRetry.isEmpty {
+            NSLog("Wick sync: remote journal deletions pending retry: %@", pendingRetry.map(\.uuidString))
+        }
     }
 
     /// Journals deleted locally before deletion propagation existed have no

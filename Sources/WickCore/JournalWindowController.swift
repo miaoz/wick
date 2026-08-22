@@ -149,7 +149,9 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         // controls instead (JournalRootView.topBar). SwiftUI re-installs its
         // toolbar on layout, so pin window.toolbar to nil.
         toolbarPin = window.observe(\.toolbar, options: [.initial, .new]) { win, _ in
-            if win.toolbar != nil { win.toolbar = nil }
+            MainActor.assumeIsolated {
+                if win.toolbar != nil { win.toolbar = nil }
+            }
         }
 
         self.window = window
@@ -365,5 +367,4 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
     }
     #endif
 }
-
 

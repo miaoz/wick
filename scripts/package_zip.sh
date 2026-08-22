@@ -26,4 +26,14 @@ fi
 
 ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$ZIP_FILE"
 
+# Unzip into a temp dir and re-verify the signature + Universal arch on the
+# extracted .app, so a bad zip can never be uploaded or released (CI-01).
+VERIFY_DIR="$(mktemp -d)"
+trap 'rm -rf "$VERIFY_DIR"' EXIT
+ditto -x -k "$ZIP_FILE" "$VERIFY_DIR"
+if command -v codesign >/dev/null 2>&1; then
+    codesign --verify --deep --strict --verbose=2 "$VERIFY_DIR/$APP_NAME.app"
+fi
+lipo -info "$VERIFY_DIR/$APP_NAME.app/Contents/MacOS/$APP_NAME"
+
 printf 'Created %s\n' "$ZIP_FILE"

@@ -56,6 +56,21 @@ jobs:
       - name: Unit tests
         run: swift test
 
+      - name: Build iOS app (generic device scheme)
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project ios/WickPhone.xcodeproj \
+            -scheme WickPhone \
+            -destination 'generic/platform=iOS' \
+            build CODE_SIGNING_ALLOWED=NO
+
+      - name: Build iOS SwiftPM targets (fast shared-target gate)
+        run: |
+          set -euo pipefail
+          IPHONE_SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          swift build --target WickCalendarKit --triple arm64-apple-ios16.0 --sdk "$IPHONE_SDK"
+
       - name: Resolve version
         id: version
         run: |
@@ -77,12 +92,17 @@ jobs:
           BUILD: ${{ steps.version.outputs.build }}
         run: ./scripts/package_zip.sh
 
-      - name: Verify binary
+      - name: Verify binary + signature + Universal arch
         run: |
+          set -euo pipefail
           APP="dist/Wick.app/Contents/MacOS/Wick"
           test -x "$APP"
           lipo -info "$APP"
+          codesign --verify --deep --strict --verbose=2 dist/Wick.app
           plutil -p dist/Wick.app/Contents/Info.plist
+          # The zip was already unzipped and re-verified by package_zip.sh;
+          # confirm the artifact exists and is non-trivial.
+          test -s dist/Wick-macOS-*.zip
           ls -lh dist/*.zip
 
       - name: Upload build artifact

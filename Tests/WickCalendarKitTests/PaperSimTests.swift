@@ -1,3 +1,4 @@
+import SpriteKit
 import XCTest
 @testable import WickCalendarKit
 
@@ -44,6 +45,87 @@ final class PaperSimTests: XCTestCase {
             let shouldBeBroken = abs(x - Float(center)) < Float(front)
             XCTAssertEqual(sim.fiberIntact[c], !shouldBeBroken, "column \(c)")
         }
+    }
+
+    // MARK: - PF-02 sleeping / dirty warp
+
+    @MainActor
+    func testSleepingSceneBuildsNoWarpAfterInitialFrame() {
+        let sim = PaperSim(layout: .desktop)
+        let scene = CalendarPaperScene(layout: .desktop)
+        scene.sim = sim
+        scene.setPageTexture(SKTexture())
+
+        // First frame renders the initial (rest) geometry.
+        scene.update(1.0 / 60.0)
+        XCTAssertEqual(scene.warpBuildCount, 1)
+        let baseline = scene.warpBuildCount
+        let revision = sim.geometryRevision
+
+        // 120 consecutive sleeping frames: revision frozen, zero warp builds.
+        for _ in 0..<120 {
+            scene.update(1.0 / 60.0)
+        }
+        XCTAssertEqual(sim.geometryRevision, revision, "sleeping must freeze the geometry revision")
+        XCTAssertEqual(scene.warpBuildCount, baseline, "sleeping frames must not rebuild warp")
+    }
+
+    @MainActor
+    func testGrabAndSeamWakeSceneAndRebuildWarp() {
+        let sim = PaperSim(layout: .desktop)
+        let scene = CalendarPaperScene(layout: .desktop)
+        scene.sim = sim
+        scene.setPageTexture(SKTexture())
+
+        sim.setGrab(at: CGPoint(x: 10, y: 10))
+        scene.update(1.0 / 60.0)
+        XCTAssertGreaterThan(scene.warpBuildCount, 0, "a grab must wake the first frame")
+
+        // Settle back to sleep, then tear: the first frame after wakes again.
+        for _ in 0..<200 { scene.update(1.0 / 60.0) }
+        let settled = scene.warpBuildCount
+        sim.setSeam(centerX: 150, front: 40)
+        scene.update(1.0 / 60.0)
+        XCTAssertGreaterThan(scene.warpBuildCount, settled, "a tear must wake the first frame")
+    }
+
+    @MainActor
+    func testResetBumpsRevisionAndRebuildsWarp() {
+        let sim = PaperSim(layout: .desktop)
+        let scene = CalendarPaperScene(layout: .desktop)
+        scene.sim = sim
+        scene.setPageTexture(SKTexture())
+
+        sim.setGrab(at: CGPoint(x: 10, y: 10))
+        scene.update(1.0 / 60.0)
+        let buildsBefore = scene.warpBuildCount
+        let revisionBefore = sim.geometryRevision
+
+        // Dynamic page -> reset: the next frame must redraw rest geometry even
+        // if the solver would otherwise be asleep (AC-P2-01).
+        sim.reset()
+        XCTAssertGreaterThan(sim.geometryRevision, revisionBefore, "reset must bump the geometry revision")
+        scene.update(1.0 / 60.0)
+        XCTAssertGreaterThan(scene.warpBuildCount, buildsBefore, "reset must trigger a warp rebuild")
+        // After the reset rebuild, the page returns to sleep (revision frozen).
+        let settledRevision = sim.geometryRevision
+        for _ in 0..<60 { scene.update(1.0 / 60.0) }
+        XCTAssertEqual(sim.geometryRevision, settledRevision, "the reset page settles back to sleep")
+    }
+
+    @MainActor
+    func testTextureReplaceMarksDirtyEvenWhileSleeping() {
+        let sim = PaperSim(layout: .desktop)
+        let scene = CalendarPaperScene(layout: .desktop)
+        scene.sim = sim
+        scene.setPageTexture(SKTexture())
+        scene.update(1.0 / 60.0) // initial build
+        for _ in 0..<60 { scene.update(1.0 / 60.0) } // settle into sleep
+        let settled = scene.warpBuildCount
+
+        scene.setPageTexture(SKTexture()) // texture replace while asleep
+        scene.update(1.0 / 60.0)
+        XCTAssertGreaterThan(scene.warpBuildCount, settled, "texture replace must mark dirty")
     }
 
     func testTornColumnsDroopBelowTeerUnderGravity() {

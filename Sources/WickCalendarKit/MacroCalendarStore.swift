@@ -19,20 +19,49 @@ enum MacroCalendarFormat {
 /// keeps them in memory, and persists a JSON cache under
 /// `~/Library/Application Support/Wick/MacroCalendarCache/` so past days stay readable offline.
 /// Cached data is shown immediately while a background refresh updates it.
+///
+/// Freshness (CA-01): each feed tracks its own `fetchedAt`; today uses a short
+/// TTL, historical dates a long one. Expired feeds refresh in the background
+/// (never permanently returning stale data), and the same date+feed is
+/// single-flight so page turns and multiple windows share one request.
 @MainActor
 public final class MacroCalendarStore: ObservableObject {
     public static let shared = MacroCalendarStore()
 
+    /// Short TTL for today's feeds; historical days can stay cached far longer.
+    static var todayTTL: TimeInterval = 30 * 60
+    static var historicalTTL: TimeInterval = 7 * 24 * 3600
+
     private struct DayState {
         var events: [MacroCalendarEvent] = []
         var earnings: [EarningsReport] = []
-        var isLoading = false
         var error: String?
         var earningsError: String?
+        var macroFetchedAt: Date?
+        var earningsFetchedAt: Date?
+    }
+
+    private enum Feed: String {
+        case macro
+        case earnings
     }
 
     private var days: [String: DayState] = [:]
+    /// Single-flight keys: `"<dayKey>|<feed>"` for in-flight fetches.
+    private var inFlight: Set<String> = []
     private let cacheDirectory: URL
+
+    #if DEBUG
+    /// Test seams substituting the network fetches.
+    static var eventsFetcher: (@Sendable (Date) async throws -> [MacroCalendarEvent])?
+    static var earningsFetcher: (@Sendable (Date) async throws -> [EarningsReport])?
+
+    /// Test-only: build a store with an isolated cache directory.
+    init(cacheDirectory: URL) {
+        self.cacheDirectory = cacheDirectory
+        try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+    }
+    #endif
 
     private init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -51,7 +80,9 @@ public final class MacroCalendarStore: ObservableObject {
     }
 
     public func isLoading(for date: Date) -> Bool {
-        days[dayKey(for: date)]?.isLoading ?? false
+        let key = dayKey(for: date)
+        return inFlight.contains("\(key)|\(Feed.macro.rawValue)")
+            || inFlight.contains("\(key)|\(Feed.earnings.rawValue)")
     }
 
     public func errorText(for date: Date) -> String? {
@@ -62,71 +93,123 @@ public final class MacroCalendarStore: ObservableObject {
         days[dayKey(for: date)]?.earningsError
     }
 
-    /// Loads a day's events and earnings if they are not already cached in
-    /// memory. Cached disk data is shown immediately and a background network
-    /// refresh tops it up.
+    /// Loads a day's events and earnings: seeds from disk cache, then refreshes
+    /// whichever feed is stale in the background. Not-expired feeds are left
+    /// untouched (no network).
     public func loadIfNeeded(for date: Date) {
         let key = dayKey(for: date)
-        guard days[key] == nil else { return }
-
-        var state = DayState(isLoading: true)
-        if let cached = readCache(key: key), !cached.isEmpty {
-            state.events = cached
-        }
-        if let cachedEarnings = readEarningsCache(key: key), !cachedEarnings.isEmpty {
-            state.earnings = cachedEarnings
-        }
-        days[key] = state
-
-        Task { [weak self] in
-            await self?.fetch(key: key, for: date)
-        }
-        objectWillChange.send()
-    }
-
-    /// The two feeds are independent: one may fail (or be empty) without
-    /// affecting the other, and `isLoading` clears only when both settle.
-    private func fetch(key: String, for date: Date) async {
-        async let macroFetch = MacroCalendarClient.events(for: date, calendar: .current)
-        async let earningsFetch = EarningsCalendarClient.reports(for: date, calendar: .current)
-
-        do {
-            let result = try await macroFetch
-            if var state = days[key] {
-                state.events = result
-                state.error = nil
-                days[key] = state
-                writeCache(result, key: key)
+        if days[key] == nil {
+            var state = DayState()
+            if let cached = readCache(key: key), !cached.isEmpty {
+                state.events = cached
             }
-        } catch {
-            if var state = days[key] {
-                // Keep already-cached data; only surface the error when there's nothing to show.
-                state.error = state.events.isEmpty ? error.localizedDescription : nil
-                days[key] = state
+            if let cachedEarnings = readEarningsCache(key: key), !cachedEarnings.isEmpty {
+                state.earnings = cachedEarnings
             }
-        }
-
-        do {
-            let result = try await earningsFetch
-            if var state = days[key] {
-                state.earnings = result
-                state.earningsError = nil
-                days[key] = state
-                writeEarningsCache(result, key: key)
-            }
-        } catch {
-            if var state = days[key] {
-                state.earningsError = state.earnings.isEmpty ? error.localizedDescription : nil
-                days[key] = state
-            }
-        }
-
-        if var state = days[key] {
-            state.isLoading = false
             days[key] = state
         }
+        if feedIsStale(.macro, key: key, date: date) {
+            startFetch(.macro, key: key, date: date)
+        }
+        if feedIsStale(.earnings, key: key, date: date) {
+            startFetch(.earnings, key: key, date: date)
+        }
         objectWillChange.send()
     }
+
+    /// Explicit refresh of both feeds for a day, bypassing the TTL.
+    public func reload(for date: Date) {
+        let key = dayKey(for: date)
+        if days[key] == nil {
+            days[key] = DayState()
+        }
+        startFetch(.macro, key: key, date: date)
+        startFetch(.earnings, key: key, date: date)
+        objectWillChange.send()
+    }
+
+    // MARK: - Freshness / single-flight
+
+    private func feedIsStale(_ feed: Feed, key: String, date: Date) -> Bool {
+        guard let state = days[key] else { return true }
+        let fetchedAt: Date?
+        switch feed {
+        case .macro: fetchedAt = state.macroFetchedAt
+        case .earnings: fetchedAt = state.earningsFetchedAt
+        }
+        guard let fetchedAt else { return true }
+        let ttl = Calendar.current.isDateInToday(date) ? Self.todayTTL : Self.historicalTTL
+        return Date().timeIntervalSince(fetchedAt) >= ttl
+    }
+
+    private func startFetch(_ feed: Feed, key: String, date: Date) {
+        let flightKey = "\(key)|\(feed.rawValue)"
+        guard !inFlight.contains(flightKey) else { return }
+        inFlight.insert(flightKey)
+        Task { [weak self] in
+            defer { self?.inFlight.remove(flightKey) }
+            await self?.fetch(feed: feed, key: key, for: date)
+        }
+    }
+
+    /// Fetches ONE feed. Success updates that feed's cache and `fetchedAt`;
+    /// failure keeps any existing disk cache and only surfaces an error when
+    /// there is nothing to show.
+    private func fetch(feed: Feed, key: String, for date: Date) async {
+        do {
+            switch feed {
+            case .macro:
+                let result = try await fetchMacroEvents(for: date)
+                if var state = days[key] {
+                    state.events = result
+                    state.error = nil
+                    state.macroFetchedAt = Date()
+                    days[key] = state
+                    writeCache(result, key: key)
+                }
+            case .earnings:
+                let result = try await fetchEarningsReports(for: date)
+                if var state = days[key] {
+                    state.earnings = result
+                    state.earningsError = nil
+                    state.earningsFetchedAt = Date()
+                    days[key] = state
+                    writeEarningsCache(result, key: key)
+                }
+            }
+        } catch {
+            if var state = days[key] {
+                switch feed {
+                case .macro:
+                    state.error = state.events.isEmpty ? error.localizedDescription : nil
+                case .earnings:
+                    state.earningsError = state.earnings.isEmpty ? error.localizedDescription : nil
+                }
+                days[key] = state
+            }
+        }
+        objectWillChange.send()
+    }
+
+    private func fetchMacroEvents(for date: Date) async throws -> [MacroCalendarEvent] {
+        #if DEBUG
+        if let fetcher = Self.eventsFetcher {
+            return try await fetcher(date)
+        }
+        #endif
+        return try await MacroCalendarClient.events(for: date, calendar: .current)
+    }
+
+    private func fetchEarningsReports(for date: Date) async throws -> [EarningsReport] {
+        #if DEBUG
+        if let fetcher = Self.earningsFetcher {
+            return try await fetcher(date)
+        }
+        #endif
+        return try await EarningsCalendarClient.reports(for: date, calendar: .current)
+    }
+
+    // MARK: - Disk cache
 
     private func dayKey(for date: Date) -> String {
         JournalDayKey.make(from: date)

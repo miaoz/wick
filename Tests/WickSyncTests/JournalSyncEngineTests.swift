@@ -47,6 +47,18 @@ final class FakeSyncBackend: JournalSyncBackend {
     /// Fires once at the start of `listChanges`, so a test can switch the
     /// active journal mid-cycle after the engine has already captured an id.
     var onListChanges: (() -> Void)?
+    /// When a path matches, `download` suspends until `resumeBlockedDownloads()`
+    /// — lets a test edit an already-enqueued day mid-cycle (AC-P1-05).
+    var downloadBlocker: ((String) -> Bool)?
+    private var blockedContinuations: [CheckedContinuation<Void, Never>] = []
+    private(set) var blockedDownloadPaths: [String] = []
+
+    func resumeBlockedDownloads() {
+        for continuation in blockedContinuations {
+            continuation.resume()
+        }
+        blockedContinuations = []
+    }
 
     var isAuthorized: Bool { authorized }
     var accountEmail: String? { authorized ? "fake@example.com" : nil }
@@ -74,6 +86,10 @@ final class FakeSyncBackend: JournalSyncBackend {
 
     func download(path: String) async throws -> (data: Data, rev: String) {
         downloadCount += 1
+        if downloadBlocker?(path) == true {
+            blockedDownloadPaths.append(path)
+            await withCheckedContinuation { blockedContinuations.append($0) }
+        }
         guard let file = files[path.lowercased()] else {
             throw SyncBackendError.server(status: 409, message: "path/not_found/")
         }
@@ -137,12 +153,19 @@ final class FakeLocalSource: JournalLocalSource {
     var days: [String: JournalEntry] = [:]
     var images: [String: Data] = [:]
     var removedDayKeys: [String] = []
+    /// Batch counters for PF-01: how many times `applySyncedChanges` ran and
+    /// how many mutations it carried.
+    private(set) var applyBatchCount = 0
+    private(set) var applyMutationCount = 0
     /// Fires on the engine's freshness re-check - the even-numbered
     /// `syncDaySnapshots()` call (each cycle takes one decision snapshot at
     /// start, then at most one freshness check before applying). Simulates a
     /// user edit landing mid-cycle, after the decision snapshot but before
     /// remote content applies.
     var mutateOnFreshnessCheck: ((inout [String: JournalEntry]) -> Void)?
+    /// An in-flight editor draft, committed into `days` when the engine calls
+    /// `prepareForRemoteApply` for that day (mirrors the macOS editor flush).
+    var pendingDraft: (dayKey: String, entry: JournalEntry)?
     private var snapshotCount = 0
 
     init(journalID: UUID, name: String = "Test Journal") {
@@ -161,6 +184,38 @@ final class FakeLocalSource: JournalLocalSource {
             mutate(&days)
         }
         return days
+    }
+    func prepareForRemoteApply(dayKey: String) {
+        if let pending = pendingDraft, pending.dayKey == dayKey {
+            pendingDraft = nil
+            days[dayKey] = pending.entry
+        }
+    }
+    func applySyncedChanges(_ changes: [JournalSyncMutation], journalID: UUID) -> Set<String> {
+        guard journalID == self.journalID else { return [] }
+        applyBatchCount += 1
+        applyMutationCount += changes.count
+        var applied: Set<String> = []
+        for change in changes {
+            let dayKey = change.dayKey
+            guard localDayStillMatches(dayKey: dayKey, expectedHash: change.expectedLocalHash) else { continue }
+            switch change {
+            case .upsert(let entry, _):
+                days[entry.dayKey] = entry
+            case .remove(_, _):
+                days.removeValue(forKey: dayKey)
+                removedDayKeys.append(dayKey)
+            }
+            applied.insert(dayKey)
+        }
+        return applied
+    }
+
+    private func localDayStillMatches(dayKey: String, expectedHash: String?) -> Bool {
+        let current = days[dayKey]
+        guard let expectedHash else { return current == nil }
+        guard let current else { return false }
+        return (try? JournalSyncEncoding.contentHash(for: current)) == expectedHash
     }
     func applySyncedEntry(_ entry: JournalEntry, journalID: UUID) {
         guard journalID == self.journalID else { return }
@@ -307,6 +362,182 @@ final class JournalSyncEngineTests: XCTestCase {
         await engineB.performSyncCycle()
 
         XCTAssertEqual(b.days["2026-08-01"]?.items.first?.body, "from A")
+    }
+
+    // MARK: DS-01 remote unsafe image references
+
+    func testRemoteDayWithUnsafeImageReferenceFailsWithoutTouchingLocal() async throws {
+        // Device A publishes a day whose entry carries a traversal image name.
+        let a = makeSource()
+        let poisoned = JournalEntry(
+            date: t0,
+            dayKey: "2026-08-01",
+            items: [JournalItem(body: "safe looking", imageFilenames: ["../sentinel.txt"])],
+            createdAt: t0,
+            updatedAt: t0
+        )
+        a.days["2026-08-01"] = poisoned
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+        // The poisoned payload still reaches the remote (A's canonical encoder
+        // does not validate) - the defense is on the receiving side.
+        XCTAssertTrue(backend.hasFile(dayPath("2026-08-01")))
+
+        // Device B must reject the day wholesale: no local apply, reported failure.
+        let b = makeSource()
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+
+        XCTAssertNil(b.days["2026-08-01"], "unsafe remote day must not apply locally")
+        XCTAssertTrue(b.images.isEmpty, "no image writes for unsafe names")
+        guard case .error = engineB.status else {
+            return XCTFail("expected .error status, got \(engineB.status)")
+        }
+    }
+
+    // MARK: PF-01 batch apply
+
+    func testFirstPullOfManyDaysAppliesOneBatch() async {
+        let b = makeSource()
+        let calendar = Calendar(identifier: .gregorian)
+        var keys: [String] = []
+        for offset in 0..<300 {
+            let day = calendar.date(byAdding: .day, value: -offset, to: t0)!
+            let key = JournalDayKey.make(from: day, timeZone: .gmt)
+            keys.append(key)
+            b.days[key] = entry(dayKey: key, body: "day \(offset)")
+        }
+        await makeEngine(source: b, stateDir: "b", device: "B").performSyncCycle()
+
+        let a = makeSource()
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        XCTAssertEqual(a.applyBatchCount, 1, "a first pull of N days must apply as ONE batch")
+        XCTAssertEqual(a.applyMutationCount, 300)
+        XCTAssertEqual(a.days.count, 300)
+        for key in keys {
+            XCTAssertNotNil(a.days[key], "every pulled day must be present")
+        }
+    }
+
+    func testPartialDayFailureStillAppliesSuccessfulDays() async {
+        // One of the three remote days is undecodable (unsafe image name);
+        // the other two must still apply in the same batch.
+        let b = makeSource()
+        b.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "ok")
+        b.days["2026-08-02"] = JournalEntry(
+            date: t0,
+            dayKey: "2026-08-02",
+            items: [JournalItem(body: "poisoned", imageFilenames: ["../evil.png"])],
+            createdAt: t0,
+            updatedAt: t0
+        )
+        b.days["2026-08-03"] = entry(dayKey: "2026-08-03", body: "ok too")
+        await makeEngine(source: b, stateDir: "b", device: "B").performSyncCycle()
+
+        let a = makeSource()
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        XCTAssertEqual(a.days["2026-08-01"]?.items.first?.body, "ok")
+        XCTAssertEqual(a.days["2026-08-03"]?.items.first?.body, "ok too")
+        XCTAssertNil(a.days["2026-08-02"], "the poisoned day must not apply")
+        XCTAssertEqual(a.applyBatchCount, 1, "successful days still land in one batch")
+        guard case .error = engineA.status else {
+            return XCTFail("expected .error for the failed day, got \(engineA.status)")
+        }
+
+        // Fix the poisoned day upstream; the next cycle applies it.
+        b.days["2026-08-02"] = entry(dayKey: "2026-08-02", body: "fixed")
+        await makeEngine(source: b, stateDir: "b", device: "B").performSyncCycle()
+        await engineA.performSyncCycle()
+        XCTAssertEqual(a.days["2026-08-02"]?.items.first?.body, "fixed")
+    }
+
+    // MARK: AC-P1-05 final-commit freshness
+
+    func testEditDuringEnqueuedMutationIsNotClobberedAndConvergesNextRound() async throws {
+        // A pushes two days.
+        let a = makeSource()
+        a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "remote1")
+        a.days["2026-08-02"] = entry(dayKey: "2026-08-02", body: "remote2")
+        await makeEngine(source: a, stateDir: "a", device: "A").performSyncCycle()
+
+        // B blocks the SECOND day's download, so day1's mutation is already
+        // enqueued when day2's download is in flight.
+        let b = makeSource()
+        backend.downloadBlocker = { $0.hasSuffix("days/2026-08-02.json") }
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        let cycleTask = Task { await engineB.performSyncCycle() }
+
+        for _ in 0..<300 {
+            if backend.blockedDownloadPaths.contains(where: { $0.hasSuffix("days/2026-08-02.json") }) {
+                break
+            }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        // The user edits day1 while day2 is still downloading.
+        b.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "local edit", updatedAt: t0.addingTimeInterval(500))
+        backend.resumeBlockedDownloads()
+        await cycleTask.value
+
+        // This round must NOT clobber the edit; day2 still applies.
+        XCTAssertEqual(
+            b.days["2026-08-01"]?.items.first?.body,
+            "local edit",
+            "an edit landing after day1's mutation was enqueued must not be overwritten"
+        )
+        XCTAssertEqual(b.days["2026-08-02"]?.items.first?.body, "remote2")
+
+        // Next round the edited day converges (merge or push reaches the remote).
+        await engineB.performSyncCycle()
+        let remoteDay1 = try JournalSyncEncoding.decoder.decode(
+            JournalEntry.self,
+            from: try XCTUnwrap(backend.fileData(dayPath("2026-08-01")))
+        )
+        XCTAssertTrue(
+            remoteDay1.items.contains { $0.body == "local edit" },
+            "the edit must converge onto the remote on the next round"
+        )
+        XCTAssertEqual(
+            b.days["2026-08-01"]?.items.first?.body,
+            "local edit",
+            "the local edit survives after convergence"
+        )
+    }
+
+    // MARK: ED-01 draft / freshness coordination
+
+    func testInFlightDraftCommittedByPrepareForRemoteApplyIsNotClobbered() async {
+        // A pushes v1 then v2.
+        let a = makeSource()
+        a.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "v1")
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+        var edited = a.days["2026-08-01"]!
+        edited.items[0].body = "v2"
+        edited.updatedAt = t0.addingTimeInterval(100)
+        a.days["2026-08-01"] = edited
+        await engineA.performSyncCycle()
+
+        // B holds stale v1 plus an uncommitted draft; the draft only reaches
+        // the source when the engine calls prepareForRemoteApply.
+        let b = makeSource()
+        b.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "v1")
+        var draft = b.days["2026-08-01"]!
+        draft.items[0].body = "my draft"
+        draft.updatedAt = t0.addingTimeInterval(50)
+        b.pendingDraft = (dayKey: "2026-08-01", entry: draft)
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+
+        XCTAssertEqual(
+            b.days["2026-08-01"]?.items.first?.body,
+            "my draft",
+            "a mid-cycle draft committed before the freshness check must not be clobbered by the remote apply"
+        )
     }
 
     func testLocalEditPushesToOtherDevice() async {

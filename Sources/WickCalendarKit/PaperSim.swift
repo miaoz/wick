@@ -62,8 +62,11 @@ final class PaperSim {
         }
     }
 
-    /// Rest state: a flat page hanging on the pad.
+    /// Rest state: a flat page hanging on the pad. Bumps the geometry revision
+    /// so a renderer that skipped warps while the page slept redraws the rest
+    /// geometry on the next frame (AC-P2-01).
     func reset() {
+        geometryRevision += 1
         pos = Self.restLayout(for: layout)
         // A hair of z noise so in-plane compression buckles OUT (toward the viewer)
         // instead of fighting a perfect plane.
@@ -145,8 +148,14 @@ final class PaperSim {
 
     // MARK: - Stepping
 
+    /// Monotonic revision of the grid, bumped only when a step actually moves
+    /// it. Rendering uses this to skip rebuilding warp geometry while the page
+    /// is asleep (PF-02).
+    private(set) var geometryRevision = 0
+
     func step(_ dt: Float) {
         guard !sleeping else { return }
+        geometryRevision += 1
         let sub = 2
         let h = min(dt, 1.0 / 30.0) / Float(sub)
         for _ in 0..<sub { substep(h) }

@@ -140,13 +140,15 @@ struct IMESafeTextField: NSViewRepresentable {
             if selector == #selector(NSTextView.paste(_:)) {
                 return true
             }
-            guard selector == NSSelectorFromString("noop:"),
-                  let event = NSApp.currentEvent,
-                  event.type == .keyDown,
-                  event.modifierFlags.contains(.command),
-                  event.charactersIgnoringModifiers?.lowercased() == "v"
-            else { return false }
-            return true
+            guard selector == NSSelectorFromString("noop:") else { return false }
+            return MainActor.assumeIsolated {
+                guard let event = NSApp.currentEvent,
+                      event.type == .keyDown,
+                      event.modifierFlags.contains(.command),
+                      event.charactersIgnoringModifiers?.lowercased() == "v"
+                else { return false }
+                return true
+            }
         }
     }
 }

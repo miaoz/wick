@@ -1,6 +1,21 @@
 import Combine
 import Foundation
 
+/// The slice of `JournalStore` the exchange coordinator reads/writes. Kept as
+/// a protocol so lifecycle tests can substitute a temp-root store instead of
+/// touching Application Support / the real singleton.
+@MainActor
+protocol ExchangeJournalStore: AnyObject {
+    var activeJournalID: UUID? { get }
+    var activeJournal: JournalInfo? { get }
+    var journals: [JournalInfo] { get }
+    func setExchangeBinding(_ binding: JournalExchangeBinding?, for id: UUID)
+    func entries(for journalID: UUID) -> JournalEntriesLoadResult
+    func autoCreateEntries(_ skeletons: [(day: Date, items: [JournalItem])], in journalID: UUID) -> [Date]
+}
+
+extension JournalStore: ExchangeJournalStore {}
+
 /// Sync failure translated for display; views map these to localized UI text.
 enum ExchangeSyncError: Error, Equatable {
     case invalidKey
@@ -68,7 +83,9 @@ final class ExchangePositionCoordinator: ObservableObject {
     @Published private(set) var snapshot: TradingPositionSnapshot? {
         didSet { rebuildDerivedStats() }
     }
+    /// Busy state derived from the CURRENT active journal's in-flight run.
     @Published private(set) var isSyncing = false
+    /// Error derived from the CURRENT active journal's last run.
     @Published private(set) var lastError: ExchangeSyncError?
     @Published private(set) var hasCredentials = false
 
@@ -79,14 +96,55 @@ final class ExchangePositionCoordinator: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var observedJournalID: UUID?
 
+    // MARK: - Per-journal run identity (EX-01)
+
+    /// Identity frozen at request time; a result is committed only while its
+    /// token is still the latest for the journal AND the binding is unchanged.
+    private struct JobToken: Equatable {
+        let runID: UUID
+        let journalID: UUID
+        let bindingFingerprint: String
+        let generation: Int
+    }
+
+    /// journalID → runID of the single in-flight run (one run per journal).
+    private var runningJobs: [UUID: UUID] = [:]
+    private var runningTasks: [UUID: Task<Void, Never>] = [:]
+    /// runID → frozen token for the still-current run.
+    private var jobTokens: [UUID: JobToken] = [:]
+    /// Bumped on disconnect / binding change / journal deletion so an in-flight
+    /// result for the old binding is discarded.
+    private var generationByJournal: [UUID: Int] = [:]
+    /// Last run outcome per journal (the published `lastError` mirrors the
+    /// active journal's value so other journals' errors never leak in).
+    private var errorsByJournal: [UUID: ExchangeSyncError?] = [:]
+
     #if DEBUG
     static var skipKeychainAccess = false
+    /// Test seam: substitutes client construction so lifecycle tests run
+    /// without Keychain or network. `nil` binding means "no binding".
+    static var clientFactoryOverride: ((JournalExchangeBinding?, UUID) -> (any ExchangeTradeClient)?)?
+    /// Test seam: substitutes the configured check (secrets availability).
+    static var configuredOverride: ((UUID) -> Bool)?
+    /// Test seam: substitutes the journal store so lifecycle tests use a
+    /// temp-root store instead of the Application Support singleton.
+    static var storeOverride: (any ExchangeJournalStore)?
+    /// Test seam: redirects the trading cache directory away from
+    /// Application Support.
+    static var cacheDirectoryOverride: URL?
     #endif
+
+    private var store: any ExchangeJournalStore {
+        #if DEBUG
+        if let override = Self.storeOverride { return override }
+        #endif
+        return JournalStore.shared
+    }
 
     init() {}
 
     var activeBinding: JournalExchangeBinding? {
-        JournalStore.shared.activeJournal?.exchangeBinding
+        store.activeJournal?.exchangeBinding
     }
 
     var isEnabled: Bool {
@@ -97,7 +155,7 @@ final class ExchangePositionCoordinator: ObservableObject {
         if binding.venue == .hyperliquid {
             return HyperliquidInfoClient.normalizedAddress(binding.accountLabel) != nil
         }
-        return loadSecrets(for: JournalStore.shared.activeJournalID) != nil
+        return loadSecrets(for: store.activeJournalID) != nil
     }
 
     // MARK: - Lifecycle
@@ -159,35 +217,44 @@ final class ExchangePositionCoordinator: ObservableObject {
             lastError = .invalidKey
             return
         }
-        JournalStore.shared.setExchangeBinding(
+        // A binding change invalidates any in-flight run for the old binding.
+        cancelTasks(for: journalID)
+        store.setExchangeBinding(
             JournalExchangeBinding(venue: .hyperliquid, accountLabel: normalized),
             for: journalID
         )
         lastError = nil
+        errorsByJournal[journalID] = nil
         updateHasCredentials()
         scheduleTimer()
         syncNow(journalID: journalID)
     }
 
     func disconnect(journalID: UUID) {
+        cancelTasks(for: journalID)
         secretStore(for: journalID).clear()
-        JournalStore.shared.setExchangeBinding(nil, for: journalID)
+        store.setExchangeBinding(nil, for: journalID)
         try? FileManager.default.removeItem(at: Self.cacheURL(for: journalID))
-        if journalID == JournalStore.shared.activeJournalID {
+        if journalID == store.activeJournalID {
             snapshot = nil
         }
         lastError = nil
+        errorsByJournal[journalID] = nil
         updateHasCredentials()
+        refreshPublishedState()
         if !isEnabled { stopTimer() }
     }
 
     func binding(for journalID: UUID) -> JournalExchangeBinding? {
-        JournalStore.shared.journals.first(where: { $0.id == journalID })?.exchangeBinding
+        store.journals.first(where: { $0.id == journalID })?.exchangeBinding
     }
 
     func isConfigured(for journalID: UUID) -> Bool {
         #if DEBUG
         if Self.skipKeychainAccess { return false }
+        if let override = Self.configuredOverride {
+            return override(journalID)
+        }
         #endif
         guard let binding = binding(for: journalID) else { return false }
         if binding.venue == .hyperliquid {
@@ -197,7 +264,7 @@ final class ExchangePositionCoordinator: ObservableObject {
     }
 
     func lastFetchedAt(for journalID: UUID) -> Date? {
-        if journalID == JournalStore.shared.activeJournalID {
+        if journalID == store.activeJournalID {
             return snapshot?.fetchedAt
         }
         return loadSnapshot(at: Self.cacheURL(for: journalID))?.fetchedAt
@@ -213,45 +280,94 @@ final class ExchangePositionCoordinator: ObservableObject {
     }
 
     func syncNow() {
-        guard let journalID = JournalStore.shared.activeJournalID else { return }
+        guard let journalID = store.activeJournalID else { return }
         syncNow(journalID: journalID)
     }
 
     func syncNow(journalID: UUID) {
-        guard !isSyncing else { return }
+        guard runningJobs[journalID] == nil else { return }
         guard isConfigured(for: journalID),
               let binding = binding(for: journalID),
               let client = makeClient(binding: binding, journalID: journalID)
         else {
-            if journalID == JournalStore.shared.activeJournalID {
+            if journalID == store.activeJournalID {
                 hasCredentials = false
             }
             return
         }
 
-        isSyncing = true
-        lastError = nil
-        let cached = journalID == JournalStore.shared.activeJournalID
+        let token = JobToken(
+            runID: UUID(),
+            journalID: journalID,
+            bindingFingerprint: Self.bindingFingerprint(for: binding, journalID: journalID),
+            generation: generationByJournal[journalID, default: 0]
+        )
+        runningJobs[journalID] = token.runID
+        jobTokens[token.runID] = token
+        errorsByJournal[journalID] = nil
+        refreshPublishedState()
+
+        let cached = journalID == store.activeJournalID
             ? snapshot
             : loadSnapshot(at: Self.cacheURL(for: journalID))
         let desiredStart = Self.desiredWindowStart(
-            entries: JournalStore.shared.entries(for: journalID)
+            entries: loadableEntries(for: journalID).entries
         )
-        Task { [weak self] in
-            await self?.runSync(
+        let task = Task { [weak self] in
+            _ = await self?.runSync(
                 client: client,
                 cached: cached,
                 desiredStart: desiredStart,
-                journalID: journalID
+                token: token
             )
         }
+        runningTasks[token.runID] = task
+    }
+
+    /// Cancels the in-flight run for a journal and bumps its generation, so a
+    /// stale result can never be committed after a disconnect, a binding
+    /// change, or a journal deletion.
+    func cancelTasks(for journalID: UUID) {
+        guard let runID = runningJobs[journalID] else { return }
+        runningTasks[runID]?.cancel()
+        runningTasks.removeValue(forKey: runID)
+        jobTokens.removeValue(forKey: runID)
+        runningJobs.removeValue(forKey: journalID)
+        generationByJournal[journalID, default: 0] += 1
+        refreshPublishedState()
+    }
+
+    /// Recomputes the published busy/error state from the ACTIVE journal so a
+    /// background run for another journal never leaks its status into the UI.
+    func refreshPublishedState() {
+        guard let activeID = store.activeJournalID else {
+            isSyncing = false
+            lastError = nil
+            return
+        }
+        isSyncing = runningJobs[activeID] != nil
+        lastError = errorsByJournal[activeID] ?? nil
+    }
+
+    private static func bindingFingerprint(
+        for binding: JournalExchangeBinding,
+        journalID: UUID
+    ) -> String {
+        "\(journalID.uuidString)|\(binding.venue.rawValue)|\(binding.accountLabel)"
+    }
+
+    private func bindingFingerprint(for journalID: UUID) -> String {
+        guard let binding = binding(for: journalID) else {
+            return "none|\(journalID.uuidString)"
+        }
+        return Self.bindingFingerprint(for: binding, journalID: journalID)
     }
 
     private func runSync(
         client: any ExchangeTradeClient,
         cached: TradingPositionSnapshot?,
         desiredStart: Date,
-        journalID: UUID
+        token: JobToken
     ) async {
         do {
             let now = Date()
@@ -302,28 +418,34 @@ final class ExchangePositionCoordinator: ObservableObject {
             }
             fills = TradingFill.clipped(fills, from: windowStart, to: now)
 
-            let positions = PositionAggregator.aggregate(fills: fills)
+            // CPU-heavy aggregation runs off the main actor (snapshot the
+            // fills into an immutable value so the detached task never races
+            // the mutable local).
+            let fillsSnapshot = fills
+            let positions = await Task.detached(priority: .utility) {
+                PositionAggregator.aggregate(fills: fillsSnapshot)
+            }.value
             let emptyWindow = fills.isEmpty
             finishSync(
                 fills: fills,
                 positions: positions,
                 windowStart: windowStart,
-                journalID: journalID,
+                token: token,
                 error: emptyWindow ? .emptyWindow : nil
             )
         } catch let error as ExchangeClientError {
             finishSync(
-                fills: nil, positions: nil, windowStart: nil, journalID: journalID,
+                fills: nil, positions: nil, windowStart: nil, token: token,
                 error: ExchangeSyncError(error)
             )
         } catch let error as BinanceError {
             finishSync(
-                fills: nil, positions: nil, windowStart: nil, journalID: journalID,
+                fills: nil, positions: nil, windowStart: nil, token: token,
                 error: ExchangeSyncError(error)
             )
         } catch {
             finishSync(
-                fills: nil, positions: nil, windowStart: nil, journalID: journalID,
+                fills: nil, positions: nil, windowStart: nil, token: token,
                 error: .other
             )
         }
@@ -333,20 +455,47 @@ final class ExchangePositionCoordinator: ObservableObject {
         fills: [TradingFill]?,
         positions: [TradingPosition]?,
         windowStart: Date?,
-        journalID: UUID,
+        token: JobToken,
         error: ExchangeSyncError?
     ) {
-        isSyncing = false
-        lastError = error
+        defer {
+            // Only clear the per-journal mapping when this run is STILL the
+            // latest — an old cancelled task finishing after a newer run started
+            // must never wipe the newer run's identity (AC-P1-06).
+            if runningJobs[token.journalID] == token.runID {
+                runningJobs.removeValue(forKey: token.journalID)
+            }
+            runningTasks.removeValue(forKey: token.runID)
+            jobTokens.removeValue(forKey: token.runID)
+            refreshPublishedState()
+        }
+
+        // Verify the result is still the one the caller asked for: same run is
+        // still the latest for the journal, the journal is still in the
+        // catalog, the binding fingerprint is unchanged, and the generation
+        // was not bumped by a cancel. A stale result is discarded entirely —
+        // no cache write, no auto-creation, no error state.
+        guard jobTokens[token.runID] == token,
+              runningJobs[token.journalID] == token.runID,
+              store.journals.contains(where: { $0.id == token.journalID }),
+              bindingFingerprint(for: token.journalID) == token.bindingFingerprint,
+              generationByJournal[token.journalID, default: 0] == token.generation,
+              !Task.isCancelled
+        else {
+            return
+        }
+
+        errorsByJournal[token.journalID] = error
         let accepted = (error == nil || error == .emptyWindow)
         guard accepted, let fills, let positions, let windowStart else {
-            if error == .invalidKey, journalID == JournalStore.shared.activeJournalID {
+            if error == .invalidKey, token.journalID == store.activeJournalID {
                 stopTimer()
             }
             return
         }
 
-        let prior = journalID == JournalStore.shared.activeJournalID
+        let journalID = token.journalID
+        let prior = journalID == store.activeJournalID
             ? snapshot
             : loadSnapshot(at: Self.cacheURL(for: journalID))
         var handledOrdered = Array(prior?.handledPositionIDs ?? [])
@@ -371,7 +520,7 @@ final class ExchangePositionCoordinator: ObservableObject {
             handledPositionIDs: Set(handledOrdered)
         )
         saveCache(next, for: journalID)
-        if journalID == JournalStore.shared.activeJournalID {
+        if journalID == store.activeJournalID {
             snapshot = next
         }
     }
@@ -388,12 +537,28 @@ final class ExchangePositionCoordinator: ObservableObject {
         closedCountByDayKey = counts
     }
 
+    /// Loads a journal's entries for windowing / auto-creation. Corrupt or
+    /// newer-format journals yield no entries and must NOT be auto-created
+    /// (their file stays byte-for-byte untouched).
+    private func loadableEntries(for journalID: UUID) -> (entries: [JournalEntry], canAutoCreate: Bool) {
+        switch store.entries(for: journalID) {
+        case .active(let entries), .loaded(let entries):
+            return (entries, true)
+        case .missing:
+            return ([], true)
+        case .corrupt, .unsupportedVersion:
+            return ([], false)
+        }
+    }
+
     private func autoCreateEntriesIfNeeded(
         positions: [TradingPosition],
         handled: Set<String>,
         journalID: UUID
     ) {
-        let journalEntries = JournalStore.shared.entries(for: journalID)
+        let loaded = loadableEntries(for: journalID)
+        guard loaded.canAutoCreate else { return }
+        let journalEntries = loaded.entries
         let plan = PositionEntryPlanner.plan(
             positions: positions,
             existingDayKeys: Set(journalEntries.map(\.dayKey)),
@@ -422,7 +587,7 @@ final class ExchangePositionCoordinator: ObservableObject {
                 items: planned.symbols.map { JournalItem(tag: tagForSymbol($0)) }
             )
         }
-        let created = JournalStore.shared.autoCreateEntries(skeletons, in: journalID)
+        let created = store.autoCreateEntries(skeletons, in: journalID)
         if !created.isEmpty {
             NSLog("Wick exchange: auto-created %ld journal day(s)", created.count)
         }
@@ -431,7 +596,7 @@ final class ExchangePositionCoordinator: ObservableObject {
     // MARK: - Journal switching
 
     private func observeJournalChanges() {
-        observedJournalID = JournalStore.shared.activeJournalID
+        observedJournalID = store.activeJournalID
         NotificationCenter.default.publisher(for: .wickActiveJournalDidChange)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -447,15 +612,20 @@ final class ExchangePositionCoordinator: ObservableObject {
             .store(in: &cancellables)
     }
 
-    private func activeJournalDidChange() {
-        let newID = JournalStore.shared.activeJournalID
+    func activeJournalDidChange() {
+        let newID = store.activeJournalID
         guard newID != observedJournalID else {
             updateHasCredentials()
+            refreshPublishedState()
             return
         }
         observedJournalID = newID
         loadCacheForActiveJournal()
         updateHasCredentials()
+        // Re-derive busy/error for the CURRENT journal immediately: switching
+        // away from a syncing journal must not leave stale `isSyncing`/error,
+        // and `refreshIfStale()` must see the fresh state (AC-P1-06).
+        refreshPublishedState()
         if isEnabled {
             scheduleTimer()
             refreshIfStale()
@@ -464,8 +634,13 @@ final class ExchangePositionCoordinator: ObservableObject {
         }
     }
 
-    private func pruneDeletedJournals(_ journals: [JournalInfo]) {
+    func pruneDeletedJournals(_ journals: [JournalInfo]) {
         let live = Set(journals.map(\.id))
+        // Cancel every in-flight run whose journal left the catalog, even if it
+        // never produced a cache file (first sync deleted mid-request).
+        for id in runningJobs.keys where !live.contains(id) {
+            cancelTasks(for: id)
+        }
         let dir = Self.tradingDirectory()
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: dir,
@@ -474,8 +649,11 @@ final class ExchangePositionCoordinator: ObservableObject {
         for file in files where file.pathExtension == "json" {
             let name = file.deletingPathExtension().lastPathComponent
             guard let id = UUID(uuidString: name), !live.contains(id) else { continue }
+            // A deleted journal must never be resurrected by a stale run.
+            cancelTasks(for: id)
             secretStore(for: id).clear()
             try? FileManager.default.removeItem(at: file)
+            errorsByJournal.removeValue(forKey: id)
         }
     }
 
@@ -501,12 +679,16 @@ final class ExchangePositionCoordinator: ObservableObject {
             secret: trimmedSecret,
             passphrase: venue == .okx ? trimmedPass : nil
         )
+        // Saving new credentials invalidates any in-flight run using the old
+        // secret, so its result can never be committed after the change.
+        cancelTasks(for: journalID)
         saveSecrets(blob, for: journalID)
-        JournalStore.shared.setExchangeBinding(
+        store.setExchangeBinding(
             JournalExchangeBinding(venue: venue, accountLabel: label),
             for: journalID
         )
         lastError = nil
+        errorsByJournal[journalID] = nil
         updateHasCredentials()
         scheduleTimer()
         syncNow(journalID: journalID)
@@ -516,6 +698,11 @@ final class ExchangePositionCoordinator: ObservableObject {
         binding: JournalExchangeBinding,
         journalID: UUID
     ) -> (any ExchangeTradeClient)? {
+        #if DEBUG
+        if let override = Self.clientFactoryOverride {
+            return override(binding, journalID)
+        }
+        #endif
         switch binding.venue {
         case .hyperliquid:
             guard let address = HyperliquidInfoClient.normalizedAddress(binding.accountLabel) else {
@@ -569,8 +756,8 @@ final class ExchangePositionCoordinator: ObservableObject {
     // MARK: - Legacy migration (global Binance → active journal)
 
     private func migrateLegacyBinanceIfNeeded() {
-        guard let journalID = JournalStore.shared.activeJournalID else { return }
-        if JournalStore.shared.activeJournal?.exchangeBinding != nil { return }
+        guard let journalID = store.activeJournalID else { return }
+        if store.activeJournal?.exchangeBinding != nil { return }
         if loadSecrets(for: journalID) != nil { return }
 
         let legacyKey = KeychainTokenStore(service: Self.legacyBinanceService, account: "apiKey")
@@ -581,7 +768,7 @@ final class ExchangePositionCoordinator: ObservableObject {
             ExchangeSecretBlob(venue: .binance, apiKey: apiKey, secret: secret, passphrase: nil),
             for: journalID
         )
-        JournalStore.shared.setExchangeBinding(
+        store.setExchangeBinding(
             JournalExchangeBinding(venue: .binance, accountLabel: "Binance"),
             for: journalID
         )
@@ -634,6 +821,9 @@ final class ExchangePositionCoordinator: ObservableObject {
     // MARK: - Cache
 
     private static func tradingDirectory() -> URL {
+        #if DEBUG
+        if let override = Self.cacheDirectoryOverride { return override }
+        #endif
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         return support.appendingPathComponent("Wick/Trading", isDirectory: true)
@@ -650,7 +840,7 @@ final class ExchangePositionCoordinator: ObservableObject {
     }
 
     private func loadCacheForActiveJournal() {
-        guard let journalID = JournalStore.shared.activeJournalID else {
+        guard let journalID = store.activeJournalID else {
             snapshot = nil
             return
         }
