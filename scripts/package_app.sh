@@ -8,8 +8,8 @@ BUNDLE_ID="com.miaoz.wick"
 MIN_SYSTEM_VERSION="13.0"
 # Optional overrides for CI / tagged releases:
 #   VERSION=1.4.0 BUILD=42 ./scripts/package_app.sh
-VERSION="${VERSION:-1.10.12}"
-BUILD="${BUILD:-51}"
+VERSION="${VERSION:-1.10.13}"
+BUILD="${BUILD:-52}"
 DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/$APP_NAME.app"
 LEGACY_APP_DIR="$DIST_DIR/$LEGACY_APP_NAME.app"
@@ -117,12 +117,14 @@ if command -v codesign >/dev/null 2>&1; then
     # A stable local identity keeps Keychain item ACLs valid across rebuilds
     # (ad-hoc re-signing changes the cdhash every build, so macOS re-prompts
     # for every keychain item). CI machines without the identity still get
-    # ad-hoc signatures.
+    # ad-hoc signatures. A real signing FAILURE must fail the build — no
+    # `|| true` here (CI-01).
     if security find-identity -v -p codesigning 2>/dev/null | grep -q "Wick Local"; then
-        codesign --force --deep --sign "Wick Local" "$APP_DIR" >/dev/null 2>&1 || true
+        codesign --force --deep --sign "Wick Local" "$APP_DIR"
     else
-        codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
+        codesign --force --deep --sign - "$APP_DIR"
     fi
+    codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 fi
 
 plutil -lint "$CONTENTS_DIR/Info.plist" >/dev/null
