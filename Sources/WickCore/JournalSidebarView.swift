@@ -538,7 +538,7 @@ private struct JournalListRowButtonStyle: ButtonStyle {
 // MARK: - 列表行
 
 /// 日期行(秉烛 v4 day-row):「8月20日 周四 / 4 条 · 2 笔已平仓」,
-/// 右缘等宽盈亏(红盈黛亏,无成交「—」)+ 复盘小章。
+/// 右缘等宽盈亏(红盈黛亏,无成交「—」)+ 复盘小章(当日有对有错时并列两个)。
 struct JournalDayTimelineRow: View {
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.wickPalette) private var palette
@@ -584,8 +584,12 @@ struct JournalDayTimelineRow: View {
                         .font(AppFont.ui(11, design: .monospaced))
                         .foregroundStyle(palette.textTertiary.color)
                 }
-                if let verdict = entry.items.compactMap(\.review).last?.verdict {
-                    JournalReviewBadge(verdict: verdict, style: .mini, size: 20)
+                if !dayVerdicts.isEmpty {
+                    HStack(spacing: 3) {
+                        ForEach(dayVerdicts, id: \.self) { verdict in
+                            JournalReviewBadge(verdict: verdict, style: .mini, size: 20)
+                        }
+                    }
                 }
             }
         }
@@ -598,6 +602,16 @@ struct JournalDayTimelineRow: View {
                 .fill(palette.divider.color.opacity(0.6))
                 .frame(height: 1)
         }
+    }
+
+    /// 当日复盘的对/错章集合:同时有对错则并列两个,只有一种则一个(取去重后的集合,
+    /// 不再用「最后复盘的那个」近似)。
+    private var dayVerdicts: [JournalReviewVerdict] {
+        let reviews = entry.items.compactMap(\.review)
+        var result: [JournalReviewVerdict] = []
+        if reviews.contains(where: { $0.verdict == .correct }) { result.append(.correct) }
+        if reviews.contains(where: { $0.verdict == .wrong }) { result.append(.wrong) }
+        return result
     }
 
     /// 「8月20日」/ "Aug 20"。
