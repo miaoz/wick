@@ -11,7 +11,7 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var hostingController: NSViewController?
     private var titlebarAccessoryController: NSTitlebarAccessoryViewController?
-    private var titlebarBackgroundView: NSView?
+    private var titlebarBackgroundView: JournalTitlebarBackgroundView?
     private var titlebarDividerView: NSView?
     private var languageObserver: NSObjectProtocol?
     private var activeJournalObserver: NSObjectProtocol?
@@ -209,13 +209,16 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
               let titlebarContainer = contentView.superview
         else { return }
         let height = JournalTopBarView.preferredHeight
-        let background = NSView(
+        let background = JournalTitlebarBackgroundView(
             frame: NSRect(
                 x: 0,
                 y: titlebarContainer.bounds.maxY - height,
                 width: titlebarContainer.bounds.width,
                 height: height
-            )
+            ),
+            onEffectiveAppearanceChange: { [weak self] in
+                self?.applyWindowThemeIfPresent()
+            }
         )
         background.autoresizingMask = [.width, .minYMargin]
         background.wantsLayer = true
@@ -282,7 +285,7 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
     /// current day-arc palette. Called on open and on settings changes; the
     /// palette drifts slowly, so per-minute accuracy is not needed here.
     private func applyWindowTheme(to window: NSWindow) {
-        let appearance = NSApplication.shared.effectiveAppearance
+        let appearance = window.effectiveAppearance
         let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let palette = DayArcEngine.palette(
             at: DayArcEngine.currentDate(),
@@ -291,6 +294,11 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         window.backgroundColor = palette.cardTop.nsColor
         titlebarBackgroundView?.layer?.backgroundColor = palette.cardTop.nsColor.cgColor
         titlebarDividerView?.layer?.backgroundColor = palette.divider.nsColor.cgColor
+    }
+
+    private func applyWindowThemeIfPresent() {
+        guard let window else { return }
+        applyWindowTheme(to: window)
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
@@ -420,4 +428,25 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         }
     }
     #endif
+}
+
+/// Observes the effective appearance of the titlebar frame. The app's
+/// `.system` appearance leaves `NSApp.appearance` nil, so UserDefaults changes
+/// cannot detect the later macOS light/dark transition on their own.
+@MainActor
+private final class JournalTitlebarBackgroundView: NSView {
+    private let onEffectiveAppearanceChange: () -> Void
+
+    init(frame frameRect: NSRect, onEffectiveAppearanceChange: @escaping () -> Void) {
+        self.onEffectiveAppearanceChange = onEffectiveAppearanceChange
+        super.init(frame: frameRect)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onEffectiveAppearanceChange()
+    }
 }
