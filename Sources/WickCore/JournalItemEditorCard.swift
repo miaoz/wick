@@ -391,6 +391,7 @@ struct JournalItemEditorCard: View {
                     ForEach(item.imageFilenames, id: \.self) { filename in
                         JournalImageThumb(
                             filename: filename,
+                            isEditing: isEditing,
                             onDelete: {
                                 store.removeImage(filename: filename, from: entryID, itemID: item.id)
                                 item.imageFilenames.removeAll { $0 == filename }
@@ -407,7 +408,9 @@ struct JournalImageThumb: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: JournalStore
     let filename: String
+    let isEditing: Bool
     let onDelete: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -429,17 +432,25 @@ struct JournalImageThumb: View {
             .clipped()
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-            Button(action: onDelete) {
-                Image(systemName: "xmark.circle.fill")
+            if isEditing || isHovered {
+                Button(action: onDelete) {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(JournalQuietIconButtonStyle(role: .destructive, fontSize: 16, alwaysShowOnDarkChrome: true))
+                .help(L10n.string(.journalDeleteItem, language: settings.language))
+                .accessibilityLabel(Text(L10n.string(.journalDeleteItem, language: settings.language)))
+                .padding(4)
+                .transition(.opacity)
             }
-            .buttonStyle(JournalQuietIconButtonStyle(role: .destructive, fontSize: 16, alwaysShowOnDarkChrome: true))
-            .help(L10n.string(.journalDeleteItem, language: settings.language))
-            .accessibilityLabel(Text(L10n.string(.journalDeleteItem, language: settings.language)))
-            .padding(4)
         }
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) {
+                isHovered = hovering
+            }
         }
     }
 }
