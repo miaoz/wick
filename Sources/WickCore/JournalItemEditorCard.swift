@@ -167,13 +167,17 @@ struct JournalItemEditorCard: View {
 
     @ViewBuilder
     private var bodyField: some View {
+        let font = WickPrintFont.songti(13.5)
+        let lineSpacing = AppFont.adaptiveLineSpacing(for: font)
+
         if isEditing {
             IMESafeTextEditor(
                 text: Binding(
                     get: { item.body },
                     set: { item.body = $0 }
                 ),
-                font: WickPrintFont.songti(13.5),
+                font: font,
+                lineSpacing: lineSpacing,
                 minHeight: 48,
                 maxHeight: nil,
                 onChange: onChange,
@@ -185,6 +189,7 @@ struct JournalItemEditorCard: View {
                 if item.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(L10n.string(.journalBodyPlaceholder, language: settings.language))
                         .font(AppFont.paper(13.5))
+                        .lineSpacing(lineSpacing)
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 5)
                         .allowsHitTesting(false)
@@ -194,6 +199,7 @@ struct JournalItemEditorCard: View {
             let trimmed = item.body.trimmingCharacters(in: .whitespacesAndNewlines)
             Text(trimmed.isEmpty ? " " : item.body)
                 .font(AppFont.paper(13.5))
+                .lineSpacing(lineSpacing)
                 .foregroundStyle(palette.textPrimary.color)
                 .frame(maxWidth: .infinity, minHeight: 48, alignment: .topLeading)
                 .padding(.horizontal, 5)
@@ -201,6 +207,7 @@ struct JournalItemEditorCard: View {
                     if trimmed.isEmpty {
                         Text(L10n.string(.journalBodyPlaceholder, language: settings.language))
                             .font(AppFont.paper(13.5))
+                            .lineSpacing(lineSpacing)
                             .foregroundStyle(.tertiary)
                             .padding(.horizontal, 5)
                             .allowsHitTesting(false)
@@ -223,12 +230,14 @@ struct JournalItemEditorCard: View {
 
     /// 复盘批注:朱砂左边线引文(e-note),章本身只表对/错。
     private var noteRow: some View {
-        HStack(alignment: .top, spacing: 9) {
+        let noteSpacing = AppFont.paperLineSpacing(11.5)
+        return HStack(alignment: .top, spacing: 9) {
             Rectangle()
                 .fill(palette.reviewCorrect.color)
                 .frame(width: 2)
             Text(noteText)
                 .font(AppFont.paper(11.5))
+                .lineSpacing(noteSpacing)
                 .foregroundStyle(palette.textSecondary.color)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -219,6 +219,7 @@ final class AutoHeightScrollView: NSScrollView {
 struct IMESafeTextEditor: NSViewRepresentable {
     @Binding var text: String
     var font: NSFont = AppFont.paperNSFont(NSFont.systemFontSize)
+    var lineSpacing: CGFloat? = nil
     /// Empty / short bodies still get a couple of lines of breathing room.
     var minHeight: CGFloat = 48
     /// Soft cap; `nil` grows without limit (preferred for timeline cards).
@@ -238,6 +239,18 @@ struct IMESafeTextEditor: NSViewRepresentable {
         textView.delegate = context.coordinator
         textView.string = text
         textView.font = font
+        let effectiveLineSpacing = lineSpacing ?? AppFont.adaptiveLineSpacing(for: font)
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = effectiveLineSpacing
+        textView.defaultParagraphStyle = paragraphStyle
+        textView.typingAttributes = [
+            .font: font,
+            .foregroundColor: NSColor.labelColor,
+            .paragraphStyle: paragraphStyle,
+        ]
+        if !text.isEmpty, let textStorage = textView.textStorage {
+            textStorage.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: textStorage.length))
+        }
         textView.textColor = .labelColor
         textView.drawsBackground = false
         textView.backgroundColor = .clear
@@ -292,6 +305,32 @@ struct IMESafeTextEditor: NSViewRepresentable {
         guard let textView = scrollView.documentView as? IMETextView else { return }
         textView.onPasteImage = onPasteImage
 
+        let effectiveLineSpacing = lineSpacing ?? AppFont.adaptiveLineSpacing(for: font)
+        let currentSpacing = textView.defaultParagraphStyle?.lineSpacing ?? 0
+        let spacingChanged = abs(currentSpacing - effectiveLineSpacing) > 0.1
+        let fontChanged = textView.font != font
+
+        if fontChanged || spacingChanged {
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.lineSpacing = effectiveLineSpacing
+            textView.defaultParagraphStyle = paragraphStyle
+            textView.typingAttributes[.font] = font
+            textView.typingAttributes[.paragraphStyle] = paragraphStyle
+            if fontChanged {
+                textView.font = font
+            }
+            if let textStorage = textView.textStorage, textStorage.length > 0 {
+                textStorage.addAttributes([
+                    .font: font,
+                    .paragraphStyle: paragraphStyle,
+                ], range: NSRange(location: 0, length: textStorage.length))
+            }
+        }
+
+        if textView.textColor != NSColor.labelColor {
+            textView.textColor = .labelColor
+        }
+
         if textView.hasMarkedText() {
             // Still refresh height from current layout; do not rewrite the string.
             context.coordinator.recomputeHeight()
@@ -301,18 +340,17 @@ struct IMESafeTextEditor: NSViewRepresentable {
         if textView.string != text {
             let selected = textView.selectedRange()
             textView.string = text
+            if let paragraphStyle = textView.defaultParagraphStyle,
+               let textStorage = textView.textStorage,
+               textStorage.length > 0
+            {
+                textStorage.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: textStorage.length))
+            }
             let length = (text as NSString).length
             let location = min(selected.location, length)
             let maxLength = max(0, length - location)
             let restoredLength = min(selected.length, maxLength)
             textView.setSelectedRange(NSRange(location: location, length: restoredLength))
-        }
-
-        if textView.font != font {
-            textView.font = font
-        }
-        if textView.textColor != NSColor.labelColor {
-            textView.textColor = .labelColor
         }
 
         if becomeFirstResponder, !context.coordinator.didBecomeFirstResponder {
@@ -462,7 +500,8 @@ struct IMESafeTextEditor: NSViewRepresentable {
 
             let lineHeight: CGFloat = {
                 if let font = textView.font {
-                    return ceil(layoutManager.defaultLineHeight(for: font))
+                    let spacing = textView.defaultParagraphStyle?.lineSpacing ?? 0
+                    return ceil(layoutManager.defaultLineHeight(for: font) + spacing)
                 }
                 return 18
             }()

@@ -81,6 +81,30 @@ enum AppFont {
         return bold ? NSFontManager.shared.convert(base, toHaveTrait: .boldFontMask) : base
     }
 
+    /// Computes the adaptive extra line spacing (`lineSpacing` in pt) for body text.
+    ///
+    /// CJK fonts, Latin fonts, and historical/classical reprint faces carry wildly
+    /// different intrinsic vertical metrics (e.g. Songti SC has a 1.40x raw height,
+    /// while WenYue Classical Ming has a 1.00x height with 0 leading).
+    ///
+    /// This resolves a harmonious target line height (~1.55x font size) across all
+    /// faces and languages while preserving a minimum 2.5pt breathing room for faces
+    /// that already bundle generous metrics.
+    static func adaptiveLineSpacing(
+        for font: NSFont,
+        targetMultiplier: CGFloat = 1.55,
+        minSpacing: CGFloat = 2.5
+    ) -> CGFloat {
+        let natural = font.ascender - font.descender + font.leading
+        let target = font.pointSize * targetMultiplier
+        return max(minSpacing, ceil((target - natural) * 2) / 2)
+    }
+
+    /// Convenience resolver for paper text line spacing at a given point size.
+    static func paperLineSpacing(_ size: CGFloat) -> CGFloat {
+        adaptiveLineSpacing(for: paperNSFont(size))
+    }
+
     // MARK: - Installed fonts
 
     /// One entry per installed font family (regular weight), so the picker shows
