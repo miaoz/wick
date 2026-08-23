@@ -29,6 +29,7 @@ struct JournalItemEditorCard: View {
     let onPickImage: () -> Void
     let onDrop: ([NSItemProvider]) -> Bool
     let onChange: () -> Void
+    var onPreviewImage: (([String], Int) -> Void)? = nil
     /// False until the user clicks the tag or body: display uses SwiftUI `Text`
     /// so off-screen days stay lazy on macOS 13 (P1).
     let isEditing: Bool
@@ -388,13 +389,16 @@ struct JournalItemEditorCard: View {
                     columns: [GridItem(.adaptive(minimum: 140), spacing: 10)],
                     spacing: 10
                 ) {
-                    ForEach(item.imageFilenames, id: \.self) { filename in
+                    ForEach(Array(item.imageFilenames.enumerated()), id: \.element) { index, filename in
                         JournalImageThumb(
                             filename: filename,
                             isEditing: isEditing,
                             onDelete: {
                                 store.removeImage(filename: filename, from: entryID, itemID: item.id)
                                 item.imageFilenames.removeAll { $0 == filename }
+                            },
+                            onPreview: {
+                                onPreviewImage?(item.imageFilenames, index)
                             }
                         )
                     }
@@ -410,6 +414,7 @@ struct JournalImageThumb: View {
     let filename: String
     let isEditing: Bool
     let onDelete: () -> Void
+    var onPreview: (() -> Void)? = nil
     @State private var isHovered = false
 
     var body: some View {
@@ -431,6 +436,31 @@ struct JournalImageThumb: View {
             .frame(minWidth: 0, maxWidth: .infinity, minHeight: 110, maxHeight: 150)
             .clipped()
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .onTapGesture(count: 2) {
+                onPreview?()
+            }
+
+            // Quick zoom hint icon on hover (bottom trailing)
+            if isHovered {
+                Button {
+                    onPreview?()
+                } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(AppFont.ui(10, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 22, height: 22)
+                        .background(
+                            Circle()
+                                .fill(Color.black.opacity(0.6))
+                        )
+                }
+                .buttonStyle(.plain)
+                .help(L10n.string(.journalImagePreviewHint, language: settings.language))
+                .padding(6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .transition(.opacity)
+            }
 
             if isEditing || isHovered {
                 Button(action: onDelete) {
@@ -446,6 +476,48 @@ struct JournalImageThumb: View {
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+        .help(L10n.string(.journalImagePreviewHint, language: settings.language))
+        .contextMenu {
+            Button {
+                onPreview?()
+            } label: {
+                Label(L10n.string(.journalPreviewImage, language: settings.language), systemImage: "eye")
+            }
+
+            Button {
+                if let url = store.imageURL(for: filename) {
+                    NSWorkspace.shared.open(url)
+                }
+            } label: {
+                Label(L10n.string(.journalOpenInPreview, language: settings.language), systemImage: "arrow.up.forward.app")
+            }
+
+            Button {
+                if let image = store.loadNSImage(filename: filename) {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.writeObjects([image])
+                }
+            } label: {
+                Label(L10n.string(.journalCopyImage, language: settings.language), systemImage: "doc.on.doc")
+            }
+
+            Button {
+                if let url = store.imageURL(for: filename) {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                }
+            } label: {
+                Label(L10n.string(.journalRevealInFinder, language: settings.language), systemImage: "folder")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label(L10n.string(.journalDeleteItem, language: settings.language), systemImage: "trash")
+            }
         }
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.12)) {

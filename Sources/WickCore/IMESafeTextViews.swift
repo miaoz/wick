@@ -234,6 +234,13 @@ struct IMESafeTextEditor: NSViewRepresentable {
         Coordinator(self)
     }
 
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: AutoHeightScrollView, context: Context) -> CGSize? {
+        let width = proposal.width ?? (nsView.bounds.width > 1 ? nsView.bounds.width : 400)
+        let effectiveWidth = max(width, 100)
+        let height = context.coordinator.calculateHeight(for: effectiveWidth)
+        return CGSize(width: proposal.width ?? NSView.noIntrinsicMetric, height: height)
+    }
+
     func makeNSView(context: Context) -> AutoHeightScrollView {
         let textView = IMETextView(frame: NSRect(x: 0, y: 0, width: 400, height: minHeight))
         textView.delegate = context.coordinator
@@ -281,10 +288,12 @@ struct IMESafeTextEditor: NSViewRepresentable {
         scrollView.hasVerticalScroller = false
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
-        scrollView.fittedHeight = minHeight
 
         context.coordinator.textView = textView
         context.coordinator.scrollView = scrollView
+        let initialHeight = context.coordinator.calculateHeight(for: 400)
+        scrollView.fittedHeight = initialHeight
+
         context.coordinator.trackClipWidth(of: scrollView, textView: textView)
         // Do not measure here: clip width is still 0 during `makeNSView`,
         // and `setFrameSize` posts frame-change notifications that re-enter
@@ -448,6 +457,50 @@ struct IMESafeTextEditor: NSViewRepresentable {
             recomputeHeight()
         }
 
+        func calculateHeight(for width: CGFloat) -> CGFloat {
+            guard let textView else { return parent.minHeight }
+
+            let effectiveWidth = max(width, 100)
+            if abs(textView.frame.width - effectiveWidth) > 0.5 {
+                textView.setFrameSize(NSSize(width: effectiveWidth, height: textView.frame.height))
+            }
+            textView.textContainer?.widthTracksTextView = true
+            textView.textContainer?.containerSize = NSSize(
+                width: effectiveWidth,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+
+            guard let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer
+            else {
+                return parent.minHeight
+            }
+
+            layoutManager.ensureLayout(for: textContainer)
+            let used = layoutManager.usedRect(for: textContainer)
+            var usedHeight = used.height
+            if layoutManager.extraLineFragmentRect.height > 0 {
+                usedHeight = max(usedHeight, layoutManager.extraLineFragmentRect.maxY)
+            }
+            let raw = ceil(usedHeight + textView.textContainerInset.height * 2 + 4)
+
+            let lineHeight: CGFloat = {
+                if let font = textView.font {
+                    let spacing = textView.defaultParagraphStyle?.lineSpacing ?? 0
+                    return ceil(layoutManager.defaultLineHeight(for: font) + spacing)
+                }
+                return 18
+            }()
+            let contentHeight = max(raw, lineHeight + 4)
+            let minH = parent.minHeight
+            let uncapped = max(contentHeight, minH)
+
+            if let maxH = parent.maxHeight, uncapped > maxH {
+                return maxH
+            }
+            return uncapped
+        }
+
         /// Measure laid-out text and push height into the scroll view's
         /// intrinsic size so SwiftUI reflows the card.
         func recomputeHeight() {
@@ -478,53 +531,23 @@ struct IMESafeTextEditor: NSViewRepresentable {
             isRecomputingHeight = true
             defer { isRecomputingHeight = false }
 
-            if abs(textView.frame.width - width) > 0.5 {
-                textView.setFrameSize(NSSize(width: width, height: textView.frame.height))
-            }
-            textView.textContainer?.widthTracksTextView = true
-            textView.textContainer?.containerSize = NSSize(
-                width: width,
-                height: CGFloat.greatestFiniteMagnitude
-            )
+            let calculated = calculateHeight(for: width)
 
-            guard let layoutManager = textView.layoutManager,
-                  let textContainer = textView.textContainer
-            else {
-                return
-            }
-
-            layoutManager.ensureLayout(for: textContainer)
-            let used = layoutManager.usedRect(for: textContainer)
-            // A little slack so the last descender / insertion point is not clipped.
-            let raw = ceil(used.height + textView.textContainerInset.height * 2 + 4)
-
-            let lineHeight: CGFloat = {
-                if let font = textView.font {
-                    let spacing = textView.defaultParagraphStyle?.lineSpacing ?? 0
-                    return ceil(layoutManager.defaultLineHeight(for: font) + spacing)
-                }
-                return 18
-            }()
-            // At least one line of content area even when `used` is empty.
-            let contentHeight = max(raw, lineHeight + 4)
-            let minH = parent.minHeight
-            let uncapped = max(contentHeight, minH)
-
-            if let maxH = parent.maxHeight, uncapped > maxH {
+            if let maxH = parent.maxHeight, calculated >= maxH {
                 scrollView.hasVerticalScroller = true
                 scrollView.fittedHeight = maxH
                 // Let the text view grow inside the scroll view when capped.
-                let docHeight = max(uncapped, maxH)
+                let docHeight = max(calculated, maxH)
                 if abs(textView.frame.height - docHeight) > 0.5 {
-                    textView.setFrameSize(NSSize(width: textView.frame.width, height: docHeight))
+                    textView.setFrameSize(NSSize(width: width, height: docHeight))
                 }
             } else {
                 scrollView.hasVerticalScroller = false
-                scrollView.fittedHeight = uncapped
+                scrollView.fittedHeight = calculated
                 // Match document height to the fitted viewport so nested
                 // scrolling does not steal gestures from the timeline.
-                if abs(textView.frame.height - uncapped) > 0.5 {
-                    textView.setFrameSize(NSSize(width: textView.frame.width, height: uncapped))
+                if abs(textView.frame.height - calculated) > 0.5 {
+                    textView.setFrameSize(NSSize(width: width, height: calculated))
                 }
             }
         }

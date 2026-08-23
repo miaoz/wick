@@ -117,6 +117,15 @@ public enum L10n {
         case journalBodyPlaceholder
         case journalImagesHint
         case journalAddImage
+        case journalPreviewImage
+        case journalOpenInPreview
+        case journalCopyImage
+        case journalRevealInFinder
+        case journalImagePreviewHint
+        case journalImageZoomIn
+        case journalImageZoomOut
+        case journalImageActualSize
+        case journalImageFit
         case journalDelete
         case journalDeleteConfirm
         case journalAutosaved
@@ -378,6 +387,15 @@ public enum L10n {
             case .journalBodyPlaceholder: return "写点什么…"
             case .journalImagesHint: return "拖入图片，或从剪贴板粘贴。"
             case .journalAddImage: return "添加图片"
+            case .journalPreviewImage: return "预览图片"
+            case .journalOpenInPreview: return "在「预览」中打开"
+            case .journalCopyImage: return "拷贝图片"
+            case .journalRevealInFinder: return "在访达中显示"
+            case .journalImagePreviewHint: return "双击放大预览图片"
+            case .journalImageZoomIn: return "放大"
+            case .journalImageZoomOut: return "缩小"
+            case .journalImageActualSize: return "实际大小"
+            case .journalImageFit: return "适应窗口"
             case .journalDelete: return "删除日记"
             case .journalDeleteConfirm: return "确定删除这篇日记？其中的条目与图片都会一并删除。"
             case .journalAutosaved: return "已自动保存"
@@ -637,6 +655,15 @@ public enum L10n {
             case .journalBodyPlaceholder: return "Write something…"
             case .journalImagesHint: return "Drop images here, or paste from the clipboard."
             case .journalAddImage: return "Add Image"
+            case .journalPreviewImage: return "Preview Image"
+            case .journalOpenInPreview: return "Open in Preview"
+            case .journalCopyImage: return "Copy Image"
+            case .journalRevealInFinder: return "Reveal in Finder"
+            case .journalImagePreviewHint: return "Double-click to preview image"
+            case .journalImageZoomIn: return "Zoom In"
+            case .journalImageZoomOut: return "Zoom Out"
+            case .journalImageActualSize: return "Actual Size"
+            case .journalImageFit: return "Fit to Window"
             case .journalDelete: return "Delete Journal"
             case .journalDeleteConfirm: return "Delete this journal? All items and images will be removed."
             case .journalAutosaved: return "Autosaved"

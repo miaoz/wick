@@ -37,6 +37,7 @@ struct JournalEditorPane: View {
     }
     @State private var showImageImporter = false
     @State private var pendingScrollID: String?
+    @State private var previewImageState: JournalImagePreviewState?
     /// Only this item mounts AppKit text views (P1). Nil = all items are `Text`.
     @State private var editingItemID: UUID?
     @State private var editingFocus: ItemEditorFocus = .body
@@ -55,6 +56,11 @@ struct JournalEditorPane: View {
                 noSelection
             } else {
                 timelineChrome
+            }
+        }
+        .overlay {
+            if previewImageState != nil {
+                JournalImagePreviewOverlay(state: $previewImageState)
             }
         }
         .background(palette.editorCanvas.color)
@@ -614,6 +620,9 @@ struct JournalEditorPane: View {
                 handleDrop(providers, itemID: itemID, entryID: entryID)
             },
             onChange: { scheduleSave(for: entryID) },
+            onPreviewImage: { filenames, index in
+                previewImageState = JournalImagePreviewState(filenames: filenames, currentIndex: index)
+            },
             isEditing: editingItemID == itemID,
             initialFocus: editingFocus,
             onBeginEditing: { focus in
