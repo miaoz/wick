@@ -259,12 +259,14 @@ final class ExchangePositionCoordinator: ObservableObject {
         syncNow(journalID: journalID)
     }
 
-    func disconnect(journalID: UUID) {
+    func disconnect(journalID: UUID, preserveSnapshot: Bool = false) {
         cancelTasks(for: journalID)
         secretStore(for: journalID).clear()
         store.setExchangeBinding(nil, for: journalID)
-        try? FileManager.default.removeItem(at: Self.cacheURL(for: journalID))
-        if journalID == store.activeJournalID {
+        if !preserveSnapshot {
+            try? FileManager.default.removeItem(at: Self.cacheURL(for: journalID))
+        }
+        if journalID == store.activeJournalID, !preserveSnapshot {
             snapshot = nil
         }
         lastError = nil
@@ -573,7 +575,9 @@ final class ExchangePositionCoordinator: ObservableObject {
             positions: positions,
             fills: fills,
             funding: funding ?? [],
-            fundingBackfilled: fundingBackfilled
+            fundingBackfilled: fundingBackfilled,
+            sourceVenue: binding(for: journalID)?.venue.rawValue,
+            sourceAccountLabel: cloudAccountLabel(for: binding(for: journalID))
         )
         saveCache(next, for: journalID)
         if journalID == store.activeJournalID {
@@ -908,6 +912,106 @@ final class ExchangePositionCoordinator: ObservableObject {
         )
         if let data = try? JSONEncoder().encode(snapshot) {
             try? data.write(to: url, options: .atomic)
+            NotificationCenter.default.post(
+                name: .wickTradingSnapshotDidChange,
+                object: nil,
+                userInfo: ["journalID": journalID]
+            )
         }
+    }
+
+    func cloudSnapshotDocument(for journalID: UUID) -> JournalTradingSnapshotDocument? {
+        guard var cached = loadSnapshot(at: Self.cacheURL(for: journalID)) else { return nil }
+        let binding = binding(for: journalID)
+        let venue = binding?.venue.rawValue ?? cached.sourceVenue ?? "unknown"
+        cached.sourceVenue = venue
+        cached.sourceAccountLabel = sanitizedCloudAccountLabel(
+            venue: venue,
+            accountLabel: binding?.accountLabel ?? cached.sourceAccountLabel
+        )
+        guard let payload = try? JSONEncoder().encode(cached) else { return nil }
+        return JournalTradingSnapshotDocument(
+            journalID: journalID,
+            venue: cached.sourceVenue ?? "unknown",
+            accountLabel: cached.sourceAccountLabel ?? "",
+            fetchedAt: cached.fetchedAt,
+            payload: payload
+        )
+    }
+
+    func applyCloudSnapshotDocument(
+        _ document: JournalTradingSnapshotDocument,
+        journalID: UUID
+    ) {
+        guard document.journalID == journalID,
+              store.journals.contains(where: { $0.id == journalID }),
+              var decoded = try? JSONDecoder().decode(
+                  TradingPositionSnapshot.self,
+                  from: document.payload
+              ),
+              Int64((decoded.fetchedAt.timeIntervalSince1970 * 1_000).rounded())
+                == document.fetchedAtMilliseconds
+        else { return }
+
+        let existing = loadSnapshot(at: Self.cacheURL(for: journalID))
+        if let existing, decoded.fetchedAt < existing.fetchedAt { return }
+        decoded.sourceVenue = document.venue
+        decoded.sourceAccountLabel = document.accountLabel
+        saveCache(decoded, for: journalID)
+        if journalID == store.activeJournalID {
+            snapshot = decoded
+            ensurePositionEntriesIfNeeded(positions: decoded.positions, journalID: journalID)
+        }
+    }
+
+    func removeCloudSnapshot(for journalID: UUID) {
+        try? FileManager.default.removeItem(at: Self.cacheURL(for: journalID))
+        if journalID == store.activeJournalID {
+            snapshot = nil
+        }
+    }
+
+    private func cloudAccountLabel(for binding: JournalExchangeBinding?) -> String? {
+        guard let binding else { return nil }
+        return sanitizedCloudAccountLabel(
+            venue: binding.venue.rawValue,
+            accountLabel: binding.accountLabel
+        )
+    }
+
+    private func sanitizedCloudAccountLabel(venue: String, accountLabel: String?) -> String {
+        switch ExchangeVenue(rawValue: venue) {
+        case .binance:
+            return "Binance"
+        case .okx:
+            return "OKX"
+        case .hyperliquid:
+            let value = accountLabel ?? ""
+            guard value.count > 12 else { return "***" }
+            return "\(value.prefix(6))...\(value.suffix(4))"
+        case nil:
+            return ""
+        }
+    }
+}
+
+extension JournalStore {
+    var syncTradingSnapshotEnabled: Bool {
+        AppSettings.shared.syncTradingSnapshots
+    }
+
+    func syncedTradingSnapshot(journalID: UUID) -> JournalTradingSnapshotDocument? {
+        ExchangePositionCoordinator.shared.cloudSnapshotDocument(for: journalID)
+    }
+
+    func applySyncedTradingSnapshot(
+        _ document: JournalTradingSnapshotDocument,
+        journalID: UUID
+    ) {
+        ExchangePositionCoordinator.shared.applyCloudSnapshotDocument(document, journalID: journalID)
+    }
+
+    func removeSyncedTradingSnapshot(journalID: UUID) {
+        ExchangePositionCoordinator.shared.removeCloudSnapshot(for: journalID)
     }
 }

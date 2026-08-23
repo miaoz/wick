@@ -220,6 +220,10 @@ public struct TradingPositionSnapshot: Codable, Equatable, Sendable {
     public var funding: [FundingEvent]
     /// Whether the funding history has been fetched across the whole window.
     public var fundingBackfilled: Bool
+    /// Non-secret source metadata used when this derived cache is explicitly
+    /// shared through Dropbox. Account labels must already be redacted.
+    public var sourceVenue: String?
+    public var sourceAccountLabel: String?
 
     public init(
         fetchedAt: Date,
@@ -227,7 +231,9 @@ public struct TradingPositionSnapshot: Codable, Equatable, Sendable {
         positions: [TradingPosition],
         fills: [TradingFill] = [],
         funding: [FundingEvent] = [],
-        fundingBackfilled: Bool = false
+        fundingBackfilled: Bool = false,
+        sourceVenue: String? = nil,
+        sourceAccountLabel: String? = nil
     ) {
         self.fetchedAt = fetchedAt
         self.windowStart = windowStart
@@ -235,5 +241,7 @@ public struct TradingPositionSnapshot: Codable, Equatable, Sendable {
         self.fills = fills
         self.funding = funding
         self.fundingBackfilled = fundingBackfilled
+        self.sourceVenue = sourceVenue
+        self.sourceAccountLabel = sourceAccountLabel
     }
 }

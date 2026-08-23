@@ -8,6 +8,8 @@ import Foundation
 ///                                 propagate by rewriting it, rev-guarded)
 ///     days/<dayKey>.json          one canonical JournalEntry per file
 ///     images/<uuid>.png|jpg|...   content-addressed, immutable
+///     trading/snapshot.json       optional derived trading cache (no secrets)
+///     trading/deleted.json        explicit snapshot-deletion marker
 ///     tombstones/<dayKey>.json    deletion marker (GC'd after retention)
 ///     conflicts/<dayKey>-<ts>.json  losing side of an item-level conflict
 ///     settlements/<dayKey>-….json  conflict-settlement marker for peers
@@ -32,6 +34,14 @@ public enum JournalSyncLayout {
 
     public static func imagePath(for journalID: UUID, filename: String) -> String {
         "\(journalRoot(for: journalID))/images/\(filename)"
+    }
+
+    public static func tradingSnapshotPath(for journalID: UUID) -> String {
+        "\(journalRoot(for: journalID))/trading/snapshot.json"
+    }
+
+    public static func tradingSnapshotTombstonePath(for journalID: UUID) -> String {
+        "\(journalRoot(for: journalID))/trading/deleted.json"
     }
 
     public static func tombstonePath(for journalID: UUID, dayKey: String) -> String {
@@ -401,6 +411,12 @@ public struct JournalSyncState: Codable, Equatable {
     /// state files written before journal names synced (seeded once from the
     /// remote manifest on the first cycle of a rename-capable build).
     public var manifestName: String?
+    /// Baseline for the optional whole-file trading snapshot. Unlike journal
+    /// days it has no merge history: the document with the newer fetchedAt wins.
+    public var tradingSnapshotRev: String?
+    public var tradingSnapshotFetchedAtMilliseconds: Int64?
+    public var tradingSnapshotTombstoneRev: String?
+    public var tradingSnapshotDeletedAtMilliseconds: Int64?
     public var lastSyncAt: Date?
     /// Manifests of OTHER journals found on the remote (journalID -> record),
     /// used to offer adoption on this device.
@@ -414,6 +430,10 @@ public struct JournalSyncState: Codable, Equatable {
         pendingConflictCleanups: [String] = [],
         manifestRev: String? = nil,
         manifestName: String? = nil,
+        tradingSnapshotRev: String? = nil,
+        tradingSnapshotFetchedAtMilliseconds: Int64? = nil,
+        tradingSnapshotTombstoneRev: String? = nil,
+        tradingSnapshotDeletedAtMilliseconds: Int64? = nil,
         lastSyncAt: Date? = nil,
         discoveredJournals: [String: DiscoveredJournalRecord] = [:]
     ) {
@@ -424,13 +444,19 @@ public struct JournalSyncState: Codable, Equatable {
         self.pendingConflictCleanups = pendingConflictCleanups
         self.manifestRev = manifestRev
         self.manifestName = manifestName
+        self.tradingSnapshotRev = tradingSnapshotRev
+        self.tradingSnapshotFetchedAtMilliseconds = tradingSnapshotFetchedAtMilliseconds
+        self.tradingSnapshotTombstoneRev = tradingSnapshotTombstoneRev
+        self.tradingSnapshotDeletedAtMilliseconds = tradingSnapshotDeletedAtMilliseconds
         self.lastSyncAt = lastSyncAt
         self.discoveredJournals = discoveredJournals
     }
 
     public enum CodingKeys: String, CodingKey {
         case cursor, remoteFiles, days, pendingConflicts, pendingConflictCleanups
-        case manifestRev, manifestName, lastSyncAt, discoveredJournals
+        case manifestRev, manifestName, tradingSnapshotRev, tradingSnapshotFetchedAtMilliseconds
+        case tradingSnapshotTombstoneRev, tradingSnapshotDeletedAtMilliseconds
+        case lastSyncAt, discoveredJournals
     }
 
     /// Everything except `cursor`/`manifestRev`/`manifestName` decodes with a
@@ -445,6 +471,16 @@ public struct JournalSyncState: Codable, Equatable {
         pendingConflictCleanups = try container.decodeIfPresent([String].self, forKey: .pendingConflictCleanups) ?? []
         manifestRev = try container.decodeIfPresent(String.self, forKey: .manifestRev)
         manifestName = try container.decodeIfPresent(String.self, forKey: .manifestName)
+        tradingSnapshotRev = try container.decodeIfPresent(String.self, forKey: .tradingSnapshotRev)
+        tradingSnapshotFetchedAtMilliseconds = try container.decodeIfPresent(
+            Int64.self,
+            forKey: .tradingSnapshotFetchedAtMilliseconds
+        )
+        tradingSnapshotTombstoneRev = try container.decodeIfPresent(String.self, forKey: .tradingSnapshotTombstoneRev)
+        tradingSnapshotDeletedAtMilliseconds = try container.decodeIfPresent(
+            Int64.self,
+            forKey: .tradingSnapshotDeletedAtMilliseconds
+        )
         lastSyncAt = try container.decodeIfPresent(Date.self, forKey: .lastSyncAt)
         discoveredJournals = try container.decodeIfPresent([String: DiscoveredJournalRecord].self, forKey: .discoveredJournals) ?? [:]
     }
@@ -466,19 +502,25 @@ public struct JournalDeviceSyncState: Codable, Equatable {
     /// Journal tombstones this device has fully processed (its own deletions
     /// plus acknowledged peer deletions). Suppresses rediscovery/reimport.
     public var processedJournalTombstones: [UUID]
+    /// Explicit user requests to remove only the derived cloud trading file.
+    /// Device-scoped so deletion survives offline periods and journal switches.
+    public var pendingTradingSnapshotDeletions: [JournalTradingSnapshotTombstone]
 
     public init(
         pendingJournalDeletions: [JournalDeletionTombstone] = [],
         unackedRemoteDeletions: [UUID] = [],
-        processedJournalTombstones: [UUID] = []
+        processedJournalTombstones: [UUID] = [],
+        pendingTradingSnapshotDeletions: [JournalTradingSnapshotTombstone] = []
     ) {
         self.pendingJournalDeletions = pendingJournalDeletions
         self.unackedRemoteDeletions = unackedRemoteDeletions
         self.processedJournalTombstones = processedJournalTombstones
+        self.pendingTradingSnapshotDeletions = pendingTradingSnapshotDeletions
     }
 
     public enum CodingKeys: String, CodingKey {
         case pendingJournalDeletions, unackedRemoteDeletions, processedJournalTombstones
+        case pendingTradingSnapshotDeletions
     }
 
     /// Fields decode with defaults so files written by older builds keep loading.
@@ -487,6 +529,10 @@ public struct JournalDeviceSyncState: Codable, Equatable {
         pendingJournalDeletions = try container.decodeIfPresent([JournalDeletionTombstone].self, forKey: .pendingJournalDeletions) ?? []
         unackedRemoteDeletions = try container.decodeIfPresent([UUID].self, forKey: .unackedRemoteDeletions) ?? []
         processedJournalTombstones = try container.decodeIfPresent([UUID].self, forKey: .processedJournalTombstones) ?? []
+        pendingTradingSnapshotDeletions = try container.decodeIfPresent(
+            [JournalTradingSnapshotTombstone].self,
+            forKey: .pendingTradingSnapshotDeletions
+        ) ?? []
     }
 
     /// True when a journal's deletion must not surface anywhere on this device

@@ -6,6 +6,8 @@ public enum JournalSyncError: Error, Equatable {
     case unsupportedRemoteFormat(Int)
     /// Active journal changed mid-cycle; abort quietly and start over.
     case journalSwitched
+    /// Optional trading snapshot uses a newer envelope than this build knows.
+    case unsupportedTradingSnapshotFormat(Int)
 }
 
 /// Two-way journal synchronizer. The local store stays the source of truth;
@@ -253,6 +255,18 @@ public final class JournalSyncEngine: ObservableObject {
         stateStore.clear(for: journalID)
     }
 
+    /// Queues removal of the optional derived trading file. The request is
+    /// persisted device-wide so it survives offline periods and journal switches.
+    public func queueTradingSnapshotDeletion(_ journalID: UUID) {
+        if !deviceState.pendingTradingSnapshotDeletions.contains(where: { $0.journalID == journalID }) {
+            deviceState.pendingTradingSnapshotDeletions.append(
+                JournalTradingSnapshotTombstone(journalID: journalID, deviceID: deviceID)
+            )
+            saveDeviceStateAndPublish()
+        }
+        syncNow()
+    }
+
     // MARK: - Journal deletion propagation
 
     /// Queues a journal deleted on this device for remote propagation: the
@@ -431,6 +445,7 @@ public final class JournalSyncEngine: ObservableObject {
         // active-journal work, so a deleted journal can never be resurrected
         // by this cycle's manifest/day syncing.
         await flushPendingJournalDeletions()
+        await flushPendingTradingSnapshotDeletions()
         if deviceState.isTombstoned(journalID) {
             // The active journal was deleted somewhere (tombstone seen or
             // queued): syncing it would recreate its manifest and days. The
@@ -544,6 +559,18 @@ public final class JournalSyncEngine: ObservableObject {
         } catch {
             if firstError == nil { firstError = error }
             NSLog("Wick sync: images failed: \(error.localizedDescription)")
+        }
+
+        // 4b. Trading data is an optional derived whole-file snapshot. It is
+        // intentionally reconciled after days so auto-created position tags
+        // arrive before the receipts that attach to them.
+        do {
+            try await reconcileTradingSnapshot(journalID: journalID)
+        } catch JournalSyncError.journalSwitched {
+            throw JournalSyncError.journalSwitched
+        } catch {
+            if firstError == nil { firstError = error }
+            NSLog("Wick sync: trading snapshot failed: \(error.localizedDescription)")
         }
 
         // 5. Garbage-collect ancient tombstones (best effort).
@@ -1177,6 +1204,185 @@ public final class JournalSyncEngine: ObservableObject {
         }
     }
 
+    // MARK: - Trading snapshot
+
+    private func reconcileTradingSnapshot(journalID: UUID) async throws {
+        guard localSource.syncTradingSnapshotEnabled else { return }
+        guard !deviceState.pendingTradingSnapshotDeletions.contains(where: { $0.journalID == journalID }) else {
+            return
+        }
+        try requireJournal(journalID)
+
+        let path = JournalSyncLayout.tradingSnapshotPath(for: journalID)
+        let key = path.lowercased()
+        let local = localSource.syncedTradingSnapshot(journalID: journalID)
+        let tombstonePath = JournalSyncLayout.tradingSnapshotTombstonePath(for: journalID)
+        let tombstoneKey = tombstonePath.lowercased()
+
+        if let tombstoneRecord = state.remoteFiles[tombstoneKey] {
+            var deletedAt = state.tradingSnapshotDeletedAtMilliseconds
+            if tombstoneRecord.rev != state.tradingSnapshotTombstoneRev || deletedAt == nil {
+                let (data, rev) = try await backend.download(path: tombstonePath)
+                let marker = try JournalSyncEncoding.decoder.decode(
+                    JournalTradingSnapshotTombstone.self,
+                    from: data
+                )
+                guard marker.journalID == journalID else {
+                    throw CocoaError(.fileReadCorruptFile)
+                }
+                state.tradingSnapshotTombstoneRev = rev
+                state.tradingSnapshotDeletedAtMilliseconds = marker.deletedAtMilliseconds
+                deletedAt = marker.deletedAtMilliseconds
+            }
+
+            if let local, let deletedAt, local.fetchedAtMilliseconds > deletedAt {
+                // A genuinely newer exchange refresh intentionally resurrects
+                // cloud sharing and removes the old deletion marker.
+                try await backend.delete(path: tombstonePath)
+                state.remoteFiles.removeValue(forKey: tombstoneKey)
+                state.tradingSnapshotTombstoneRev = nil
+                state.tradingSnapshotDeletedAtMilliseconds = nil
+            } else {
+                localSource.removeSyncedTradingSnapshot(journalID: journalID)
+                if state.remoteFiles[key] != nil {
+                    try? await backend.delete(path: path)
+                    state.remoteFiles.removeValue(forKey: key)
+                }
+                state.tradingSnapshotRev = nil
+                state.tradingSnapshotFetchedAtMilliseconds = nil
+                return
+            }
+        }
+
+        guard let remoteRecord = state.remoteFiles[key] else {
+            state.tradingSnapshotRev = nil
+            state.tradingSnapshotFetchedAtMilliseconds = nil
+            guard let local else { return }
+            try validateTradingSnapshot(local, journalID: journalID)
+            let data = try JournalSyncEncoding.encoder.encode(local)
+            let rev = try await backend.upload(path: path, data: data, ifRev: nil)
+            try requireJournal(journalID)
+            recordTradingSnapshotUpload(data: data, rev: rev, document: local, path: key)
+            return
+        }
+
+        // A changed rev must be inspected even when the local timestamp did
+        // not move: another device may have published a newer snapshot.
+        if state.tradingSnapshotRev != remoteRecord.rev {
+            let (data, downloadedRev) = try await backend.download(path: path)
+            let remote = try JournalSyncEncoding.decoder.decode(
+                JournalTradingSnapshotDocument.self,
+                from: data
+            )
+            try validateTradingSnapshot(remote, journalID: journalID)
+            try requireJournal(journalID)
+
+            if let local, local.fetchedAtMilliseconds > remote.fetchedAtMilliseconds {
+                try validateTradingSnapshot(local, journalID: journalID)
+                let localData = try JournalSyncEncoding.encoder.encode(local)
+                let rev = try await backend.upload(path: path, data: localData, ifRev: downloadedRev)
+                try requireJournal(journalID)
+                recordTradingSnapshotUpload(
+                    data: localData,
+                    rev: rev,
+                    document: local,
+                    path: key
+                )
+            } else {
+                localSource.applySyncedTradingSnapshot(remote, journalID: journalID)
+                state.tradingSnapshotRev = downloadedRev
+                state.tradingSnapshotFetchedAtMilliseconds = remote.fetchedAtMilliseconds
+            }
+            return
+        }
+
+        let baseline = state.tradingSnapshotFetchedAtMilliseconds
+        let localIsMissingOrOlder = local.map { snapshot in
+            baseline.map { snapshot.fetchedAtMilliseconds < $0 } ?? false
+        } ?? true
+        if let local, baseline.map({ local.fetchedAtMilliseconds > $0 }) ?? true {
+            try validateTradingSnapshot(local, journalID: journalID)
+            let data = try JournalSyncEncoding.encoder.encode(local)
+            let rev = try await backend.upload(path: path, data: data, ifRev: remoteRecord.rev)
+            try requireJournal(journalID)
+            recordTradingSnapshotUpload(data: data, rev: rev, document: local, path: key)
+        } else if localIsMissingOrOlder {
+            // Restore a cloud snapshot removed or replaced locally while the
+            // opt-in remains enabled. Disabling the setting skips this path.
+            let (data, downloadedRev) = try await backend.download(path: path)
+            let remote = try JournalSyncEncoding.decoder.decode(
+                JournalTradingSnapshotDocument.self,
+                from: data
+            )
+            try validateTradingSnapshot(remote, journalID: journalID)
+            try requireJournal(journalID)
+            localSource.applySyncedTradingSnapshot(remote, journalID: journalID)
+            state.tradingSnapshotRev = downloadedRev
+            state.tradingSnapshotFetchedAtMilliseconds = remote.fetchedAtMilliseconds
+        }
+    }
+
+    private func validateTradingSnapshot(
+        _ document: JournalTradingSnapshotDocument,
+        journalID: UUID
+    ) throws {
+        guard document.formatVersion <= JournalTradingSnapshotDocument.currentFormatVersion else {
+            throw JournalSyncError.unsupportedTradingSnapshotFormat(document.formatVersion)
+        }
+        guard document.journalID == journalID else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+    }
+
+    private func recordTradingSnapshotUpload(
+        data: Data,
+        rev: String,
+        document: JournalTradingSnapshotDocument,
+        path: String
+    ) {
+        state.remoteFiles[path] = RemoteFileRecord(
+            rev: rev,
+            contentHash: JournalSyncEncoding.contentHash(of: data)
+        )
+        state.tradingSnapshotRev = rev
+        state.tradingSnapshotFetchedAtMilliseconds = document.fetchedAtMilliseconds
+    }
+
+    private func flushPendingTradingSnapshotDeletions() async {
+        guard !deviceState.pendingTradingSnapshotDeletions.isEmpty else { return }
+        var failed: [JournalTradingSnapshotTombstone] = []
+        for marker in deviceState.pendingTradingSnapshotDeletions {
+            let journalID = marker.journalID
+            let path = JournalSyncLayout.tradingSnapshotPath(for: journalID)
+            let tombstonePath = JournalSyncLayout.tradingSnapshotTombstonePath(for: journalID)
+            do {
+                let data = try JournalSyncEncoding.encoder.encode(marker)
+                let knownRev = state.remoteFiles[tombstonePath.lowercased()]?.rev
+                let tombstoneRev = try await backend.upload(
+                    path: tombstonePath,
+                    data: data,
+                    ifRev: knownRev
+                )
+                try await backend.delete(path: path)
+                state.remoteFiles.removeValue(forKey: path.lowercased())
+                state.remoteFiles[tombstonePath.lowercased()] = RemoteFileRecord(
+                    rev: tombstoneRev,
+                    contentHash: JournalSyncEncoding.contentHash(of: data)
+                )
+                if stateJournalID == journalID {
+                    state.tradingSnapshotRev = nil
+                    state.tradingSnapshotFetchedAtMilliseconds = nil
+                    state.tradingSnapshotTombstoneRev = tombstoneRev
+                    state.tradingSnapshotDeletedAtMilliseconds = marker.deletedAtMilliseconds
+                }
+            } catch {
+                failed.append(marker)
+            }
+        }
+        deviceState.pendingTradingSnapshotDeletions = failed
+        saveDeviceStateAndPublish()
+    }
+
     // MARK: - Manifest / tombstones
 
     private func ensureManifest(journalID: UUID, localName: String) async throws {
@@ -1423,6 +1629,8 @@ public final class JournalSyncEngine: ObservableObject {
         switch error {
         case .unsupportedRemoteFormat(let version):
             return "remote format v\(version) is newer than this app supports"
+        case .unsupportedTradingSnapshotFormat(let version):
+            return "trading snapshot format v\(version) is newer than this app supports"
         case .journalSwitched:
             return "journal switched"
         }

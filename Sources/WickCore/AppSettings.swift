@@ -102,6 +102,7 @@ final class AppSettings: ObservableObject {
         static let deviceID = "wick.deviceID"
         static let syncEnabled = "wick.sync.enabled"
         static let syncAccountEmail = "wick.sync.accountEmail"
+        static let syncTradingSnapshots = "wick.sync.tradingSnapshots"
     }
 
     /// Suppresses reminder rescheduling while loading defaults in `init`.
@@ -194,6 +195,13 @@ final class AppSettings: ObservableObject {
     @Published var syncEnabled: Bool {
         didSet {
             UserDefaults.standard.set(syncEnabled, forKey: Keys.syncEnabled)
+        }
+    }
+
+    /// Opt-in transport for derived trading history. Credentials never use it.
+    @Published var syncTradingSnapshots: Bool {
+        didSet {
+            UserDefaults.standard.set(syncTradingSnapshots, forKey: Keys.syncTradingSnapshots)
         }
     }
 
@@ -342,6 +350,7 @@ final class AppSettings: ObservableObject {
 
         syncEnabled = UserDefaults.standard.bool(forKey: Keys.syncEnabled)
         syncAccountEmail = UserDefaults.standard.string(forKey: Keys.syncAccountEmail) ?? ""
+        syncTradingSnapshots = UserDefaults.standard.bool(forKey: Keys.syncTradingSnapshots)
 
         physicalCalendarEnabled = UserDefaults.standard.bool(forKey: Keys.physicalCalendar)
 

@@ -9,4 +9,5 @@ extension Notification.Name {
 
     /// Posted when the active journal changes (switch / create / delete / rename).
     static let wickActiveJournalDidChange = Notification.Name("wick.activeJournalDidChange")
+    static let wickTradingSnapshotDidChange = Notification.Name("wick.tradingSnapshotDidChange")
 }

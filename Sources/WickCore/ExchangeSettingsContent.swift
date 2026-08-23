@@ -56,15 +56,35 @@ struct ExchangeSettingsContent: View {
             isPresented: $showDisconnectConfirm,
             titleVisibility: .visible
         ) {
-            Button(L10n.string(.exchangeDisconnect, language: language), role: .destructive) {
-                if let id = targetJournal?.id {
-                    coordinator.disconnect(journalID: id)
+            if canManageCloudSnapshot {
+                Button(L10n.string(.exchangeDisconnectLocalOnly, language: language)) {
+                    if let id = targetJournal?.id {
+                        coordinator.disconnect(journalID: id, preserveSnapshot: true)
+                    }
+                }
+                Button(L10n.string(.exchangeDisconnectDeleteCloud, language: language), role: .destructive) {
+                    if let id = targetJournal?.id {
+                        coordinator.disconnect(journalID: id)
+                        SyncCoordinator.shared.deleteCloudTradingSnapshot(for: id)
+                    }
+                }
+            } else {
+                Button(L10n.string(.exchangeDisconnect, language: language), role: .destructive) {
+                    if let id = targetJournal?.id {
+                        coordinator.disconnect(journalID: id)
+                    }
                 }
             }
             Button(L10n.string(.cancel, language: language), role: .cancel) {}
         } message: {
             Text(L10n.string(.exchangeDisconnectConfirmBody, language: language))
         }
+    }
+
+    private var canManageCloudSnapshot: Bool {
+        settings.syncEnabled
+            && settings.syncTradingSnapshots
+            && SyncCoordinator.shared.backend.isAuthorized
     }
 
     private var journalPicker: some View {

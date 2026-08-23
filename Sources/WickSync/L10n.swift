@@ -180,6 +180,8 @@ public enum L10n {
         case syncDisconnectConfirmBody
         case syncRemoteJournalFormat
         case syncImportJournal
+        case syncTradingSnapshots
+        case syncTradingSnapshotsHint
         case journalRestoredFromBackup
         case journalReadOnly
         case journalChangeDate
@@ -220,6 +222,8 @@ public enum L10n {
         case exchangeDisconnect
         case exchangeDisconnectConfirmTitle
         case exchangeDisconnectConfirmBody
+        case exchangeDisconnectLocalOnly
+        case exchangeDisconnectDeleteCloud
         case exchangeReadonlyHint
         case exchangeWindowHint
         case exchangeOKXHint
@@ -436,6 +440,8 @@ public enum L10n {
             case .syncDisconnectConfirmBody: return "将停止同步。本机与 Dropbox 中已有的数据都会保留。"
             case .syncRemoteJournalFormat: return "在 Dropbox 上发现日记本「%@」，可导入本机"
             case .syncImportJournal: return "导入"
+            case .syncTradingSnapshots: return "同步仓位快照"
+            case .syncTradingSnapshotsHint: return "可选。上传成交、资金费与仓位供其他设备只读展示；API Key、Secret 与 Passphrase 永不上传。"
             case .journalRestoredFromBackup: return "已从备份恢复日记"
             case .journalReadOnly: return "只读（加载失败）"
             case .journalChangeDate: return "修改日期"
@@ -474,7 +480,9 @@ public enum L10n {
             case .exchangeSyncNow: return "立即刷新"
             case .exchangeDisconnect: return "断开交易所"
             case .exchangeDisconnectConfirmTitle: return "断开交易所？"
-            case .exchangeDisconnectConfirmBody: return "将删除本日记本保存的凭据并清空已同步的仓位。日记内容不受影响。"
+            case .exchangeDisconnectConfirmBody: return "本机保存的交易所凭据将被删除。日记内容不受影响。"
+            case .exchangeDisconnectLocalOnly: return "仅断开本机"
+            case .exchangeDisconnectDeleteCloud: return "断开并删除云端仓位"
             case .exchangeReadonlyHint: return "中心化交易所请用只读 API Key。打包后的应用把密钥存在本机钥匙串；用 swift run 开发时写在 Application Support 的本地文件里，避免每次重编译都弹钥匙串密码。"
             case .exchangeWindowHint: return "同步范围从本日记最早一天起。Binance 为 USDⓈ-M 合约；开仓日没有日记时会自动创建条目，删除后不会自动重建。"
             case .exchangeOKXHint: return "OKX 永续（SWAP），只读 API Key。同步从本日记第一天起，更早的成交不拉；所侧大约最多只能提供近 3 个月。"
@@ -691,6 +699,8 @@ public enum L10n {
             case .syncDisconnectConfirmBody: return "Syncing will stop. Data already on this Mac and in Dropbox is kept."
             case .syncRemoteJournalFormat: return "Found journal “%@” on Dropbox — it can be imported to this Mac"
             case .syncImportJournal: return "Import"
+            case .syncTradingSnapshots: return "Sync position snapshots"
+            case .syncTradingSnapshotsHint: return "Optional. Uploads fills, funding, and positions for read-only display on other devices. API keys, secrets, and passphrases are never uploaded."
             case .journalRestoredFromBackup: return "Journal restored from backup"
             case .journalReadOnly: return "Read-only (load failed)"
             case .journalChangeDate: return "Change date"
@@ -729,7 +739,9 @@ public enum L10n {
             case .exchangeSyncNow: return "Refresh Now"
             case .exchangeDisconnect: return "Disconnect"
             case .exchangeDisconnectConfirmTitle: return "Disconnect exchange?"
-            case .exchangeDisconnectConfirmBody: return "Credentials stored for this journal and synced positions will be removed. Journal content is not affected."
+            case .exchangeDisconnectConfirmBody: return "Exchange credentials stored on this Mac will be removed. Journal content is not affected."
+            case .exchangeDisconnectLocalOnly: return "Disconnect This Mac Only"
+            case .exchangeDisconnectDeleteCloud: return "Disconnect & Delete Cloud Positions"
             case .exchangeReadonlyHint: return "Use a read-only API key on centralized venues. The packaged app stores secrets in Keychain; `swift run` writes a local Application Support file so rebuilds don’t prompt for the login password."
             case .exchangeWindowHint: return "Sync covers from this journal’s earliest day. Binance is USDⓈ-M futures; missing position days get an entry, and deletions are respected."
             case .exchangeOKXHint: return "OKX perpetuals (SWAP), read-only key. Sync starts at this journal’s first day — older fills are not fetched. The venue itself only keeps about three months."

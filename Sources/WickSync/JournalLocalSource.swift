@@ -51,6 +51,56 @@ public enum JournalSyncMutation: Sendable, Equatable {
     }
 }
 
+/// Versioned cloud document for an optional, journal-scoped trading snapshot.
+/// `payload` stays opaque to WickSync so the journal sync target does not
+/// depend on WickTrading's exchange models. It must never contain credentials.
+public struct JournalTradingSnapshotDocument: Codable, Equatable, Sendable {
+    public static let currentFormatVersion = 1
+
+    public var formatVersion: Int
+    public var journalID: UUID
+    public var venue: String
+    public var accountLabel: String
+    public var fetchedAtMilliseconds: Int64
+    public var payload: Data
+
+    public var fetchedAt: Date {
+        Date(timeIntervalSince1970: Double(fetchedAtMilliseconds) / 1_000)
+    }
+
+    public init(
+        formatVersion: Int = currentFormatVersion,
+        journalID: UUID,
+        venue: String,
+        accountLabel: String,
+        fetchedAt: Date,
+        payload: Data
+    ) {
+        self.formatVersion = formatVersion
+        self.journalID = journalID
+        self.venue = venue
+        self.accountLabel = accountLabel
+        fetchedAtMilliseconds = Int64((fetchedAt.timeIntervalSince1970 * 1_000).rounded())
+        self.payload = payload
+    }
+}
+
+public struct JournalTradingSnapshotTombstone: Codable, Equatable, Sendable {
+    public var journalID: UUID
+    public var deletedAtMilliseconds: Int64
+    public var deviceID: String
+
+    public var deletedAt: Date {
+        Date(timeIntervalSince1970: Double(deletedAtMilliseconds) / 1_000)
+    }
+
+    public init(journalID: UUID, deletedAt: Date = Date(), deviceID: String) {
+        self.journalID = journalID
+        deletedAtMilliseconds = Int64((deletedAt.timeIntervalSince1970 * 1_000).rounded())
+        self.deviceID = deviceID
+    }
+}
+
 /// The sync engine's view of the local journal store.
 ///
 /// Implemented by `JournalStore` on macOS (and by a future iOS store). All calls
@@ -118,4 +168,24 @@ public protocol JournalLocalSource: AnyObject {
     /// filenames are content-addressed UUIDs chosen at import time).
     /// Same active-journal guard as `applySyncedEntry`.
     func storeSyncedImage(filename: String, data: Data, journalID: UUID)
+
+    /// Optional Dropbox transport for derived trading data. The setting is
+    /// deliberately off by default; disabling it leaves any remote snapshot
+    /// untouched and performs no upload or download.
+    var syncTradingSnapshotEnabled: Bool { get }
+    func syncedTradingSnapshot(journalID: UUID) -> JournalTradingSnapshotDocument?
+    func applySyncedTradingSnapshot(_ document: JournalTradingSnapshotDocument, journalID: UUID)
+    func removeSyncedTradingSnapshot(journalID: UUID)
+}
+
+public extension JournalLocalSource {
+    var syncTradingSnapshotEnabled: Bool { false }
+
+    func syncedTradingSnapshot(journalID: UUID) -> JournalTradingSnapshotDocument? {
+        nil
+    }
+
+    func applySyncedTradingSnapshot(_ document: JournalTradingSnapshotDocument, journalID: UUID) {}
+
+    func removeSyncedTradingSnapshot(journalID: UUID) {}
 }

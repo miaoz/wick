@@ -504,6 +504,19 @@ struct SettingsContentView: View {
 
                         syncStatusFooter
 
+                        Toggle(isOn: $settings.syncTradingSnapshots) {
+                            Text(L10n.string(.syncTradingSnapshots, language: language))
+                                .font(AppFont.ui(13, weight: .medium, design: .rounded))
+                                .foregroundStyle(theme.primaryText)
+                        }
+                        .toggleStyle(.switch)
+                        .tint(theme.selectionAccent)
+
+                        Text(L10n.string(.syncTradingSnapshotsHint, language: language))
+                            .font(AppFont.preset(.caption2))
+                            .foregroundStyle(theme.tertiaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+
                         let adoptableJournals = syncCoordinator.engine.discoveredJournals.filter { manifest in
                             !journalStore.journals.contains { $0.id == manifest.journalID }
                         }

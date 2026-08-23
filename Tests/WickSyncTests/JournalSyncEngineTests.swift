@@ -152,6 +152,10 @@ final class FakeLocalSource: JournalLocalSource {
     var writable = true
     var days: [String: JournalEntry] = [:]
     var images: [String: Data] = [:]
+    var tradingSnapshotEnabled = false
+    var tradingSnapshot: JournalTradingSnapshotDocument?
+    private(set) var appliedTradingSnapshots: [JournalTradingSnapshotDocument] = []
+    private(set) var removedTradingSnapshotCount = 0
     var removedDayKeys: [String] = []
     /// Batch counters for PF-01: how many times `applySyncedChanges` ran and
     /// how many mutations it carried.
@@ -241,6 +245,24 @@ final class FakeLocalSource: JournalLocalSource {
         guard journalID == self.journalID else { return }
         images[filename] = data
     }
+    var syncTradingSnapshotEnabled: Bool { tradingSnapshotEnabled }
+    func syncedTradingSnapshot(journalID: UUID) -> JournalTradingSnapshotDocument? {
+        guard journalID == self.journalID else { return nil }
+        return tradingSnapshot
+    }
+    func applySyncedTradingSnapshot(
+        _ document: JournalTradingSnapshotDocument,
+        journalID: UUID
+    ) {
+        guard journalID == self.journalID else { return }
+        tradingSnapshot = document
+        appliedTradingSnapshots.append(document)
+    }
+    func removeSyncedTradingSnapshot(journalID: UUID) {
+        guard journalID == self.journalID else { return }
+        tradingSnapshot = nil
+        removedTradingSnapshotCount += 1
+    }
 }
 
 // MARK: - Tests
@@ -293,6 +315,16 @@ final class JournalSyncEngineTests: XCTestCase {
     private func decodeRemoteDay(_ dayKey: String) throws -> JournalEntry {
         let data = try XCTUnwrap(backend.fileData(dayPath(dayKey)))
         return try JournalSyncEncoding.decoder.decode(JournalEntry.self, from: data)
+    }
+
+    private func tradingDocument(fetchedAt: Date, marker: String) -> JournalTradingSnapshotDocument {
+        JournalTradingSnapshotDocument(
+            journalID: journalID,
+            venue: "binance",
+            accountLabel: "Binance",
+            fetchedAt: fetchedAt,
+            payload: Data(marker.utf8)
+        )
     }
 
     // MARK: basics
@@ -1567,6 +1599,153 @@ final class JournalSyncEngineTests: XCTestCase {
         await engine.performSyncCycle()
         XCTAssertFalse(backend.hasFile(strayPath), "tombstoned folders must not linger")
         XCTAssertTrue(backend.hasFile(JournalSyncLayout.journalTombstonePath(for: deadID)))
+    }
+
+    // MARK: optional trading snapshots
+
+    func testTradingSnapshotOptOutDoesNotUploadOrDownload() async throws {
+        let remote = tradingDocument(fetchedAt: t0.addingTimeInterval(20), marker: "remote")
+        backend.seedFile(
+            JournalSyncLayout.tradingSnapshotPath(for: journalID),
+            data: try JournalSyncEncoding.encoder.encode(remote)
+        )
+        let source = makeSource()
+        source.tradingSnapshot = tradingDocument(fetchedAt: t0, marker: "local")
+
+        await makeEngine(source: source, stateDir: "a", device: "A").performSyncCycle()
+
+        XCTAssertEqual(source.tradingSnapshot?.payload, Data("local".utf8))
+        XCTAssertTrue(source.appliedTradingSnapshots.isEmpty)
+        let stored = try JournalSyncEncoding.decoder.decode(
+            JournalTradingSnapshotDocument.self,
+            from: XCTUnwrap(backend.fileData(JournalSyncLayout.tradingSnapshotPath(for: journalID)))
+        )
+        XCTAssertEqual(stored.payload, Data("remote".utf8))
+    }
+
+    func testTradingSnapshotUploadsAndPullsToAnotherDevice() async throws {
+        let a = makeSource()
+        a.tradingSnapshotEnabled = true
+        a.tradingSnapshot = tradingDocument(fetchedAt: t0, marker: "from-a")
+        await makeEngine(source: a, stateDir: "a", device: "A").performSyncCycle()
+
+        let path = JournalSyncLayout.tradingSnapshotPath(for: journalID)
+        XCTAssertTrue(backend.hasFile(path))
+
+        let b = makeSource()
+        b.tradingSnapshotEnabled = true
+        await makeEngine(source: b, stateDir: "b", device: "B").performSyncCycle()
+
+        XCTAssertEqual(b.tradingSnapshot?.payload, Data("from-a".utf8))
+        XCTAssertEqual(b.appliedTradingSnapshots.count, 1)
+    }
+
+    func testNewerTradingSnapshotWinsInBothDirections() async throws {
+        let olderRemote = tradingDocument(fetchedAt: t0, marker: "old-remote")
+        backend.seedFile(
+            JournalSyncLayout.tradingSnapshotPath(for: journalID),
+            data: try JournalSyncEncoding.encoder.encode(olderRemote)
+        )
+        let source = makeSource()
+        source.tradingSnapshotEnabled = true
+        source.tradingSnapshot = tradingDocument(
+            fetchedAt: t0.addingTimeInterval(10),
+            marker: "new-local"
+        )
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        await engine.performSyncCycle()
+
+        let path = JournalSyncLayout.tradingSnapshotPath(for: journalID)
+        var stored = try JournalSyncEncoding.decoder.decode(
+            JournalTradingSnapshotDocument.self,
+            from: XCTUnwrap(backend.fileData(path))
+        )
+        XCTAssertEqual(stored.payload, Data("new-local".utf8))
+
+        let newerRemote = tradingDocument(
+            fetchedAt: t0.addingTimeInterval(20),
+            marker: "newer-remote"
+        )
+        backend.seedFile(path, data: try JournalSyncEncoding.encoder.encode(newerRemote))
+        await engine.performSyncCycle()
+
+        XCTAssertEqual(source.tradingSnapshot?.payload, Data("newer-remote".utf8))
+        stored = try JournalSyncEncoding.decoder.decode(
+            JournalTradingSnapshotDocument.self,
+            from: XCTUnwrap(backend.fileData(path))
+        )
+        XCTAssertEqual(stored.payload, Data("newer-remote".utf8))
+    }
+
+    func testConvergedTradingSnapshotDoesNotTransferAgain() async {
+        let source = makeSource()
+        source.tradingSnapshotEnabled = true
+        source.tradingSnapshot = tradingDocument(fetchedAt: t0, marker: "stable")
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        await engine.performSyncCycle()
+        let uploads = backend.uploadCount
+        let downloads = backend.downloadCount
+
+        await engine.performSyncCycle()
+
+        XCTAssertEqual(backend.uploadCount, uploads)
+        XCTAssertEqual(backend.downloadCount, downloads)
+    }
+
+    func testQueuedTradingSnapshotDeletionSurvivesOfflineAndDoesNotReupload() async throws {
+        let source = makeSource()
+        source.tradingSnapshotEnabled = true
+        source.tradingSnapshot = tradingDocument(fetchedAt: t0, marker: "remove-me")
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        await engine.performSyncCycle()
+        let path = JournalSyncLayout.tradingSnapshotPath(for: journalID)
+        XCTAssertTrue(backend.hasFile(path))
+
+        backend.authorized = false
+        source.tradingSnapshot = nil
+        engine.queueTradingSnapshotDeletion(journalID)
+        try await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertTrue(backend.hasFile(path), "offline deletion must remain queued")
+
+        backend.authorized = true
+        await engine.performSyncCycle()
+        XCTAssertFalse(backend.hasFile(path))
+        XCTAssertTrue(backend.hasFile(JournalSyncLayout.tradingSnapshotTombstonePath(for: journalID)))
+
+        await engine.performSyncCycle()
+        XCTAssertFalse(backend.hasFile(path), "an explicit deletion must stay deleted")
+    }
+
+    func testTradingSnapshotTombstoneStopsStalePeerAndNewRefreshResurrects() async throws {
+        let a = makeSource()
+        a.tradingSnapshotEnabled = true
+        a.tradingSnapshot = tradingDocument(fetchedAt: t0, marker: "old")
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        await engineA.performSyncCycle()
+
+        a.tradingSnapshot = nil
+        engineA.queueTradingSnapshotDeletion(journalID)
+        try await Task.sleep(nanoseconds: 20_000_000)
+        await engineA.performSyncCycle()
+
+        let stalePeer = makeSource()
+        stalePeer.tradingSnapshotEnabled = true
+        stalePeer.tradingSnapshot = tradingDocument(fetchedAt: t0, marker: "stale-peer")
+        let engineB = makeEngine(source: stalePeer, stateDir: "b", device: "B")
+        await engineB.performSyncCycle()
+
+        let snapshotPath = JournalSyncLayout.tradingSnapshotPath(for: journalID)
+        let tombstonePath = JournalSyncLayout.tradingSnapshotTombstonePath(for: journalID)
+        XCTAssertNil(stalePeer.tradingSnapshot)
+        XCTAssertEqual(stalePeer.removedTradingSnapshotCount, 1)
+        XCTAssertFalse(backend.hasFile(snapshotPath))
+        XCTAssertTrue(backend.hasFile(tombstonePath))
+
+        stalePeer.tradingSnapshot = tradingDocument(fetchedAt: Date(), marker: "fresh-refresh")
+        await engineB.performSyncCycle()
+
+        XCTAssertTrue(backend.hasFile(snapshotPath))
+        XCTAssertFalse(backend.hasFile(tombstonePath))
     }
 
     // MARK: re-import baseline reset

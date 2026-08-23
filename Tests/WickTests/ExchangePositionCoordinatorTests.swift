@@ -132,6 +132,14 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
         }
     }
 
+    private func emptySnapshot(fetchedAt: Date = Date()) -> TradingPositionSnapshot {
+        TradingPositionSnapshot(
+            fetchedAt: fetchedAt,
+            windowStart: fetchedAt.addingTimeInterval(-3_600),
+            positions: []
+        )
+    }
+
     func testEquivalentTagsRenderEachPositionOnlyOnce() {
         let first = JournalItem(tag: "BTC")
         let duplicate = JournalItem(tag: "BTC")
@@ -164,6 +172,55 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
                 items: [first, duplicate]
             ).isEmpty
         )
+    }
+
+    func testCloudSnapshotMasksHyperliquidAddressAndContainsNoCredentials() throws {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = store.activeJournalID!
+        let address = "0x1234567890abcdef1234567890abcdef12345678"
+        store.setExchangeBinding(
+            JournalExchangeBinding(venue: .hyperliquid, accountLabel: address),
+            for: journalID
+        )
+        try JSONEncoder().encode(emptySnapshot()).write(to: cacheFile(for: journalID))
+
+        let document = try XCTUnwrap(coordinator.cloudSnapshotDocument(for: journalID))
+        XCTAssertEqual(document.venue, ExchangeVenue.hyperliquid.rawValue)
+        XCTAssertEqual(document.accountLabel, "0x1234...5678")
+        XCTAssertFalse(String(decoding: document.payload, as: UTF8.self).contains(address))
+    }
+
+    func testCloudSnapshotAppliesAtMillisecondPrecisionAndRefreshesActiveJournal() throws {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = store.activeJournalID!
+        let fetchedAt = Date(timeIntervalSince1970: 1_777_777_777.1234)
+        let cached = emptySnapshot(fetchedAt: fetchedAt)
+        let document = JournalTradingSnapshotDocument(
+            journalID: journalID,
+            venue: ExchangeVenue.binance.rawValue,
+            accountLabel: "Binance",
+            fetchedAt: fetchedAt,
+            payload: try JSONEncoder().encode(cached)
+        )
+
+        coordinator.applyCloudSnapshotDocument(document, journalID: journalID)
+
+        XCTAssertEqual(coordinator.snapshot?.fetchedAt, fetchedAt)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cacheFile(for: journalID).path))
+    }
+
+    func testLocalOnlyDisconnectPreservesReadOnlySnapshot() throws {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = bindActiveJournal()
+        let cached = emptySnapshot()
+        try JSONEncoder().encode(cached).write(to: cacheFile(for: journalID))
+        coordinator.activeJournalDidChange()
+
+        coordinator.disconnect(journalID: journalID, preserveSnapshot: true)
+
+        XCTAssertNil(store.activeJournal?.exchangeBinding)
+        XCTAssertEqual(coordinator.snapshot, cached)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cacheFile(for: journalID).path))
     }
 
     func testSyncAddsOnlyMissingSymbolItemToExistingDay() async {

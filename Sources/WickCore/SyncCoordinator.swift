@@ -92,6 +92,21 @@ final class SyncCoordinator: ObservableObject {
             .sink { [weak self] in self?.engine.requestSync() }
             .store(in: &cancellables)
 
+        AppSettings.shared.$syncTradingSnapshots
+            .dropFirst()
+            .sink { [weak self] enabled in
+                guard enabled else { return }
+                self?.engine.syncNow()
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .wickTradingSnapshotDidChange)
+            .sink { [weak self] _ in
+                guard AppSettings.shared.syncTradingSnapshots else { return }
+                self?.engine.requestSync()
+            }
+            .store(in: &cancellables)
+
         NotificationCenter.default.addObserver(
             forName: .wickActiveJournalDidChange,
             object: nil,
@@ -157,6 +172,13 @@ final class SyncCoordinator: ObservableObject {
         backend.signOut()
         AppSettings.shared.syncEnabled = false
         AppSettings.shared.syncAccountEmail = ""
+    }
+
+    /// Explicit destructive action from the exchange disconnect dialog. The
+    /// regular trading opt-in never mirrors a missing local cache as deletion.
+    func deleteCloudTradingSnapshot(for journalID: UUID) {
+        guard AppSettings.shared.syncEnabled, backend.isAuthorized else { return }
+        engine.queueTradingSnapshotDeletion(journalID)
     }
 
     /// Adopts a journal discovered on the remote (registering it locally under
