@@ -543,32 +543,6 @@ private struct CalendarPadBinding: View {
         )
         .shadow(color: .black.opacity(0.18), radius: 2, y: 1.5)
         .windowDragHandle()
-        .overlay(alignment: .topTrailing) {
-            if layout.isFullBleed {
-                closeButton
-            }
-        }
-    }
-
-    /// 34pt touch target that stays clear of the Dynamic Island.
-    private var closeButton: some View {
-        Button {
-            onClose()
-        } label: {
-            Image(systemName: "xmark")
-                .font(TradingCalendarTheme.control(11, weight: .bold))
-                .foregroundStyle(TradingCalendarTheme.ink.opacity(0.6))
-                .frame(width: 34, height: 34)
-                .background(Circle().fill(Color.white.opacity(0.6)))
-                .overlay(Circle().strokeBorder(TradingCalendarTheme.ink.opacity(0.2), lineWidth: 0.5))
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .help("close")
-        .offset(
-            x: -10,
-            y: layout.bindingSafeTop + (layout.bindingH - layout.bindingSafeTop - 34) / 2
-        )
     }
 
     private var staple: some View {
