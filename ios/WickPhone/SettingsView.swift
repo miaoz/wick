@@ -68,7 +68,7 @@ struct SettingsView: View {
                 VStack(spacing: 14) {
                     // 1. Appearance & Theme
                     SettingsCard(title: "外观与主题") {
-                        SettingsRow(title: "外观模式", subtitle: "跟随系统 / 亮色 / 暗色") {
+                        SettingsRow(title: "外观模式", subtitle: "自动 / 亮色 / 暗色") {
                             SettingsSegmentedPicker(
                                 options: AppAppearance.allCases,
                                 selection: appearanceBinding

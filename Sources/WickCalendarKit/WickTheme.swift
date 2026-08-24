@@ -159,9 +159,9 @@ public enum AppAppearance: String, CaseIterable, Identifiable, Codable, Sendable
         case (.dark, .english):
             return "Dark"
         case (.system, .chinese):
-            return "跟随系统"
+            return "自动"
         case (.system, .english):
-            return "System"
+            return "Auto"
         }
     }
 }
