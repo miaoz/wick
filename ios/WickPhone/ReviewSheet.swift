@@ -34,7 +34,7 @@ struct ReviewSheet: View {
                     .padding(.top, 8)
 
                 // Header
-                Text("复盘盖印")
+                Text(L10n.string(.journalReview, language: .chinese))
                     .font(.system(size: 16, weight: .bold, design: .serif))
                     .foregroundColor(PhoneTheme.inkPrimary)
 
@@ -60,22 +60,33 @@ struct ReviewSheet: View {
 
                 // Optional note area
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("反思批注（可选）")
+                    Text("批注")
                         .font(.system(size: 11, weight: .medium, design: .serif))
                         .foregroundColor(PhoneTheme.inkTertiary)
 
-                    TextEditor(text: $noteDraft)
-                        .font(.system(size: 13, design: .serif))
-                        .foregroundColor(PhoneTheme.inkPrimary)
-                        .frame(height: 72)
-                        .padding(8)
-                        .scrollContentBackground(.hidden)
-                        .background(PhoneTheme.paper)
-                        .cornerRadius(4)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 4)
-                                .stroke(PhoneTheme.rule, lineWidth: 1)
-                        )
+                    ZStack(alignment: .topLeading) {
+                        if noteDraft.isEmpty {
+                            Text(L10n.string(.journalReviewNotePlaceholder, language: .chinese))
+                                .font(.system(size: 13, design: .serif))
+                                .foregroundColor(PhoneTheme.inkTertiary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .allowsHitTesting(false)
+                        }
+
+                        TextEditor(text: $noteDraft)
+                            .font(.system(size: 13, design: .serif))
+                            .foregroundColor(PhoneTheme.inkPrimary)
+                            .frame(height: 72)
+                            .padding(8)
+                            .scrollContentBackground(.hidden)
+                            .background(PhoneTheme.paper)
+                            .cornerRadius(4)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(PhoneTheme.rule, lineWidth: 1)
+                            )
+                    }
                 }
                 .padding(.horizontal, 20)
 
@@ -92,17 +103,14 @@ struct ReviewSheet: View {
                         onCommit(review)
                         dismiss()
                     } label: {
-                        HStack(spacing: 6) {
-                            JournalReviewBadge(verdict: verdict, style: .mini, size: 20)
-                            Text("落印")
-                                .font(.system(size: 14, weight: .bold, design: .serif))
-                        }
-                        .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 11)
-                        .background(PhoneTheme.cinnabar)
-                        .cornerRadius(6)
-                        .shadow(color: PhoneTheme.cinnabar.opacity(0.35), radius: 4, y: 2)
+                        Text("落印")
+                            .font(.system(size: 14, weight: .bold, design: .serif))
+                            .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(PhoneTheme.cinnabar)
+                            .cornerRadius(6)
+                            .shadow(color: PhoneTheme.cinnabar.opacity(0.35), radius: 4, y: 2)
                     }
 
                     if hadExistingReview {
