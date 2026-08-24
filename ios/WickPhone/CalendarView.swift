@@ -47,101 +47,18 @@ private struct FlatCalendarView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 12) {
-                // Top Date Navigation Bar
-                HStack {
-                    Button {
-                        shiftDate(by: -1)
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(PhoneFont.ui(13, weight: .semibold))
-                            .foregroundColor(PhoneTheme.inkSecondary)
-                            .frame(width: 32, height: 32)
-                            .background(PhoneTheme.paperHi)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
+            VStack(spacing: 14) {
+                // Tall, Breathing Almanac Hero Card
+                FlatCalendarHeroCard(
+                    date: selectedDate,
+                    language: language,
+                    onPreviousDay: { shiftDate(by: -1) },
+                    onNextDay: { shiftDate(by: 1) },
+                    onToday: {
+                        selectedDate = Date()
+                        calendarStore.loadIfNeeded(for: selectedDate)
                     }
-
-                    Spacer()
-
-                    VStack(spacing: 2) {
-                        Text(Self.dateDisplay(for: selectedDate, language: language))
-                            .font(PhoneFont.paper(18, weight: .bold))
-                            .foregroundColor(PhoneTheme.inkPrimary)
-
-                        if let lunar = LunarLine.string(for: selectedDate) {
-                            Text(lunar)
-                                .font(PhoneFont.paper(10.5))
-                                .foregroundColor(PhoneTheme.inkTertiary)
-                        }
-                    }
-
-                    Spacer()
-
-                    Button {
-                        shiftDate(by: 1)
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .font(PhoneFont.ui(13, weight: .semibold))
-                            .foregroundColor(PhoneTheme.inkSecondary)
-                            .frame(width: 32, height: 32)
-                            .background(PhoneTheme.paperHi)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
-                    }
-
-                    if !Calendar.current.isDateInToday(selectedDate) {
-                        Button(L10n.string(.journalToday, language: language)) {
-                            selectedDate = Date()
-                            calendarStore.loadIfNeeded(for: selectedDate)
-                        }
-                        .font(PhoneFont.preset(.caption, weight: .bold))
-                        .foregroundColor(PhoneTheme.cinnabar)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(PhoneTheme.cinnabarSoft)
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.top, 6)
-
-                // Yi / Ji Paper Banner
-                HStack {
-                    HStack(spacing: 4) {
-                        Text(language == .chinese ? "宜" : "DO")
-                            .font(PhoneFont.paper(10, weight: .black))
-                            .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(PhoneTheme.cinnabar)
-                            .cornerRadius(2)
-                        Text(language == .chinese ? "止盈 · 依纪复盘" : "Take Profit · Review Strategy")
-                            .font(PhoneFont.paper(11.5))
-                            .foregroundColor(PhoneTheme.inkSecondary)
-                    }
-
-                    Spacer()
-
-                    HStack(spacing: 4) {
-                        Text(language == .chinese ? "忌" : "AVOID")
-                            .font(PhoneFont.paper(10, weight: .black))
-                            .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(PhoneTheme.char)
-                            .cornerRadius(2)
-                        Text(language == .chinese ? "追涨 · 扛单违规" : "FOMO · Hold Losing Trades")
-                            .font(PhoneFont.paper(11.5))
-                            .foregroundColor(PhoneTheme.inkSecondary)
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(PhoneTheme.paperHi)
-                .cornerRadius(4)
-                .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
-                .padding(.horizontal, 14)
+                )
 
                 // Macro / Earnings Dual Tabs
                 HStack(spacing: 8) {
@@ -210,12 +127,228 @@ private struct FlatCalendarView: View {
             gen.impactOccurred()
         }
     }
+}
 
-    private static func dateDisplay(for date: Date, language: AppLanguage) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = language.locale
-        formatter.dateFormat = language == .chinese ? "M月d日 EEE" : "MMM d, EEE"
-        return formatter.string(from: date)
+// MARK: - Flat Calendar Hero Card
+
+private struct FlatCalendarHeroCard: View {
+    let date: Date
+    let language: AppLanguage
+    let onPreviousDay: () -> Void
+    let onNextDay: () -> Void
+    let onToday: () -> Void
+
+    private var isToday: Bool {
+        Calendar.current.isDateInToday(date)
+    }
+
+    private var dayNum: String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "d"
+        return fmt.string(from: date)
+    }
+
+    private var yearMonthDisplay: String {
+        let fmt = DateFormatter()
+        fmt.locale = language.locale
+        fmt.dateFormat = language == .chinese ? "yyyy年 M月" : "MMMM yyyy"
+        return fmt.string(from: date)
+    }
+
+    private var weekdayChars: [String] {
+        let cal = Calendar.current
+        let weekday = cal.component(.weekday, from: date)
+        if language == .chinese {
+            let names = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+            let name = names[(weekday - 1) % 7]
+            return name.map { String($0) }
+        } else {
+            let names = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
+            return [names[(weekday - 1) % 7]]
+        }
+    }
+
+    private var dayOfYear: Int {
+        Calendar.current.ordinality(of: .day, in: .year, for: date) ?? 1
+    }
+
+    private var daysLeft: Int {
+        let total = Calendar.current.range(of: .day, in: .year, for: date)?.count ?? 365
+        return max(0, total - dayOfYear)
+    }
+
+    private var lunarGanzhiText: String {
+        if let lunar = LunarCalendar.lunar(from: date) {
+            let m = (lunar.isLeapMonth ? "闰" : "") + LunarCalendar.monthName(lunar.month)
+            let d = LunarCalendar.dayName(lunar.day)
+            let gz = LunarCalendar.ganzhiYear(lunar.year)
+            let z = LunarCalendar.zodiac(lunar.year)
+            if language == .chinese {
+                return "\(m)\(d) · \(gz)年 (属\(z))"
+            } else {
+                return "\(m) \(d) · Year \(gz)"
+            }
+        }
+        return ""
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // 1. Top Navigation Bar (Year/Month + Prev/Next Controls + Today Tag)
+            HStack(alignment: .center) {
+                Button(action: onPreviousDay) {
+                    Image(systemName: "chevron.left")
+                        .font(PhoneFont.ui(12, weight: .semibold))
+                        .foregroundColor(PhoneTheme.inkSecondary)
+                        .frame(width: 32, height: 32)
+                        .background(PhoneTheme.paper)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                HStack(spacing: 6) {
+                    Text(yearMonthDisplay)
+                        .font(PhoneFont.paper(14, weight: .bold))
+                        .foregroundColor(PhoneTheme.inkPrimary)
+
+                    if !isToday {
+                        Button(action: onToday) {
+                            Text(L10n.string(.journalToday, language: language))
+                                .font(PhoneFont.paper(10.5, weight: .bold))
+                                .foregroundColor(PhoneTheme.cinnabar)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2.5)
+                                .background(PhoneTheme.cinnabarSoft)
+                                .cornerRadius(3)
+                                .overlay(RoundedRectangle(cornerRadius: 3).stroke(PhoneTheme.cinnabar.opacity(0.3), lineWidth: 0.8))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                Spacer()
+
+                Button(action: onNextDay) {
+                    Image(systemName: "chevron.right")
+                        .font(PhoneFont.ui(12, weight: .semibold))
+                        .foregroundColor(PhoneTheme.inkSecondary)
+                        .frame(width: 32, height: 32)
+                        .background(PhoneTheme.paper)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 6)
+
+            // 2. Grand Almanac Center Stage
+            HStack(alignment: .center, spacing: 14) {
+                // Left Column: Day count & progress
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(language == .chinese ? "第 \(dayOfYear) 天" : "Day \(dayOfYear)")
+                        .font(PhoneFont.paper(12, weight: .medium))
+                        .foregroundColor(PhoneTheme.inkSecondary)
+                    Text(language == .chinese ? "余 \(daysLeft) 天" : "\(daysLeft) days left")
+                        .font(PhoneFont.paper(10.5))
+                        .foregroundColor(PhoneTheme.inkTertiary)
+                }
+                .frame(minWidth: 70, alignment: .leading)
+
+                Spacer()
+
+                // Center: Big Bold Day Numeral
+                Text(dayNum)
+                    .font(PhoneFont.paper(60, weight: .black))
+                    .foregroundColor(PhoneTheme.cinnabar)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+
+                Spacer()
+
+                // Right Column: Vertical Weekday Cinnabar Slip
+                VStack(spacing: 2) {
+                    ForEach(Array(weekdayChars.enumerated()), id: \.offset) { _, ch in
+                        Text(ch)
+                    }
+                }
+                .font(PhoneFont.paper(language == .chinese ? 12.5 : 10, weight: .bold))
+                .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
+                .padding(.horizontal, language == .chinese ? 7 : 5)
+                .padding(.vertical, 7)
+                .background(PhoneTheme.cinnabar)
+                .cornerRadius(3)
+                .shadow(color: PhoneTheme.cinnabar.opacity(0.25), radius: 3, y: 1)
+                .frame(minWidth: 70, alignment: .trailing)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+
+            // 3. Hairline Divider
+            Rectangle()
+                .fill(PhoneTheme.rule)
+                .frame(height: 1)
+                .padding(.horizontal, 14)
+
+            // 4. Lunar Line
+            if !lunarGanzhiText.isEmpty {
+                Text(lunarGanzhiText)
+                    .font(PhoneFont.paper(11.5))
+                    .foregroundColor(PhoneTheme.inkSecondary)
+                    .padding(.top, 8)
+                    .padding(.bottom, 8)
+            }
+
+            // 5. Integrated Yi / Ji Guidance Bar
+            HStack(spacing: 12) {
+                HStack(spacing: 5) {
+                    Text(language == .chinese ? "宜" : "DO")
+                        .font(PhoneFont.paper(9.5, weight: .black))
+                        .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1.5)
+                        .background(PhoneTheme.cinnabar)
+                        .cornerRadius(2)
+                    Text(language == .chinese ? "止盈 · 依纪复盘" : "Take Profit · Review")
+                        .font(PhoneFont.paper(11))
+                        .foregroundColor(PhoneTheme.inkSecondary)
+                }
+
+                Spacer()
+
+                HStack(spacing: 5) {
+                    Text(language == .chinese ? "忌" : "AVOID")
+                        .font(PhoneFont.paper(9.5, weight: .black))
+                        .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1.5)
+                        .background(PhoneTheme.char)
+                        .cornerRadius(2)
+                    Text(language == .chinese ? "追涨 · 扛单违规" : "FOMO · Hold Loss")
+                        .font(PhoneFont.paper(11))
+                        .foregroundColor(PhoneTheme.inkSecondary)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(PhoneTheme.paper)
+            .cornerRadius(4)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 12)
+        }
+        .background(PhoneTheme.paperHi)
+        .cornerRadius(6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(PhoneTheme.rule, lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.04), radius: 6, y: 2)
+        .padding(.horizontal, 14)
+        .padding(.top, 4)
     }
 }
 

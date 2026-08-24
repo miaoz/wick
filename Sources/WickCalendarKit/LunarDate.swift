@@ -1,16 +1,23 @@
 import Foundation
 
 /// A Chinese lunar date.
-struct LunarDate: Equatable {
-    let year: Int
-    let isLeapMonth: Bool
-    let month: Int // 1-12
-    let day: Int   // 1-30
+public struct LunarDate: Equatable, Sendable {
+    public let year: Int
+    public let isLeapMonth: Bool
+    public let month: Int // 1-12
+    public let day: Int   // 1-30
+
+    public init(year: Int, isLeapMonth: Bool, month: Int, day: Int) {
+        self.year = year
+        self.isLeapMonth = isLeapMonth
+        self.month = month
+        self.day = day
+    }
 }
 
 /// Gregorian → Chinese lunar conversion using the standard 1900–2100 month-length table
 /// (the same algorithm used by common Chinese-calendar libraries). Pure & testable.
-enum LunarCalendar {
+public enum LunarCalendar {
     // Each year (1900+i) encodes: low 4 bits = leap month (0 = none), bit 4..15 = which
     // months have 30 days, bit 16 = whether the leap month has 30 days.
     private static let lunarInfo: [Int] = [
@@ -61,7 +68,7 @@ enum LunarCalendar {
     }
 
     /// Converts a (local-midnight) `Date` to its lunar date.
-    static func lunar(from date: Date, calendar: Calendar = .current) -> LunarDate? {
+    public static func lunar(from date: Date, calendar: Calendar = .current) -> LunarDate? {
         var cal = calendar
         cal.timeZone = calendar.timeZone
         guard let epoch = cal.date(from: DateComponents(year: 1900, month: 1, day: 31)) else { return nil }
@@ -108,23 +115,23 @@ enum LunarCalendar {
 
     // MARK: - Display helpers
 
-    static let stems = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"]
-    static let branches = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"]
-    static let zodiacs = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
+    public static let stems = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"]
+    public static let branches = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"]
+    public static let zodiacs = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
 
     /// 天干地支 of a lunar (or Gregorian) year, e.g. 2026 → 丙午.
     /// The sexagenary cycle anchors at year 4 AD = 甲子.
-    static func ganzhiYear(_ year: Int) -> String {
+    public static func ganzhiYear(_ year: Int) -> String {
         stems[mod(year - 4, 10)] + branches[mod(year - 4, 12)]
     }
 
     /// 生肖 of a lunar year, e.g. 2026 → 马.
-    static func zodiac(_ year: Int) -> String {
+    public static func zodiac(_ year: Int) -> String {
         zodiacs[mod(year - 4, 12)]
     }
 
     /// Chinese lunar month name: 正月 / 二…十 / 冬月 / 腊月 (闰 prefix for leap months).
-    static func monthName(_ month: Int) -> String {
+    public static func monthName(_ month: Int) -> String {
         switch month {
         case 1: return "正月"
         case 11: return "冬月"
@@ -134,7 +141,7 @@ enum LunarCalendar {
     }
 
     /// Chinese lunar day name: 初一 … 三十.
-    static func dayName(_ day: Int) -> String {
+    public static func dayName(_ day: Int) -> String {
         let tens = ["初", "十", "廿", "三"]
         let units = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"]
         if day == 10 { return "初十" }
