@@ -412,6 +412,16 @@ final class PhoneJournalStore: ObservableObject {
         persistCatalog()
     }
 
+    /// Binds (or clears) the exchange account for one journal.
+    func setExchangeBinding(_ binding: JournalExchangeBinding?, for id: UUID) {
+        guard !isCatalogReadOnly else { return }
+        guard let index = journals.firstIndex(where: { $0.id == id }) else { return }
+        journals[index].exchangeBinding = binding
+        journals[index].updatedAt = Date()
+        persistCatalog()
+        objectWillChange.send()
+    }
+
     /// Deletes a journal and its on-disk folder. Refuses to delete the last one.
     @discardableResult
     func deleteJournal(id: UUID) -> Bool {
@@ -984,6 +994,22 @@ extension PhoneJournalStore: JournalLocalSource {
         guard !isReadOnlyDueToLoadFailure else { return }
         guard let url = imageURL(for: filename) else { return }
         try? data.write(to: url, options: .atomic)
+    }
+
+    var syncTradingSnapshotEnabled: Bool {
+        PhoneExchangeCoordinator.shared.cloudSyncEnabled
+    }
+
+    func syncedTradingSnapshot(journalID: UUID) -> JournalTradingSnapshotDocument? {
+        PhoneExchangeCoordinator.shared.cloudSnapshotDocument(for: journalID)
+    }
+
+    func applySyncedTradingSnapshot(_ document: JournalTradingSnapshotDocument, journalID: UUID) {
+        PhoneExchangeCoordinator.shared.applyCloudSnapshotDocument(document, journalID: journalID)
+    }
+
+    func removeSyncedTradingSnapshot(journalID: UUID) {
+        PhoneExchangeCoordinator.shared.removeCloudSnapshot(for: journalID)
     }
 }
 

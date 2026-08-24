@@ -8,23 +8,37 @@ import WickSync
 /// 错 = the loss color (red-up: 对 red / 错 green; green-up: reversed).
 /// Three layers: distressed seal body (silhouette-only wobble), uneven ink
 /// shading, crisp character. Stamps in with a 0.3s slam on appear.
-struct JournalReviewBadge: View {
-    enum Style {
+public struct JournalReviewBadge: View {
+    public enum Style {
         case seal
         case mini
     }
 
     @Environment(\.wickPalette) private var palette
-    @EnvironmentObject private var settings: AppSettings
 
-    let verdict: JournalReviewVerdict
-    var style: Style = .seal
-    /// Seal edge length in points.
-    var size: CGFloat = 52
+    public let verdict: JournalReviewVerdict
+    public var style: Style
+    public var size: CGFloat
+    public var convention: PnlColorConvention
+    public var language: AppLanguage
 
     @State private var stamped = false
 
-    var body: some View {
+    public init(
+        verdict: JournalReviewVerdict,
+        style: Style = .seal,
+        size: CGFloat = 52,
+        convention: PnlColorConvention = .redUp,
+        language: AppLanguage = .system
+    ) {
+        self.verdict = verdict
+        self.style = style
+        self.size = size
+        self.convention = convention
+        self.language = language
+    }
+
+    public var body: some View {
         switch style {
         case .seal:
             seal
@@ -65,43 +79,45 @@ struct JournalReviewBadge: View {
         .accessibilityLabel(accessibilityText)
     }
 
-    /// 中文 UI 用「对/错」篆刻字;英文 UI 用 ✓/✗(同一方章,靠字表意)。
     private var glyph: String {
-        let chinese = settings.language == .chinese
+        let isChinese = (language == .chinese) || (language == .system && Locale.current.language.languageCode?.identifier == "zh")
         switch verdict {
-        case .correct: return chinese ? "对" : "✓"
-        case .wrong: return chinese ? "错" : "✗"
+        case .correct: return isChinese ? "对" : "✓"
+        case .wrong: return isChinese ? "错" : "✗"
         }
     }
 
     private var glyphFont: Font {
-        if settings.language == .chinese {
-            return AppFont.paper(size * 0.46, weight: .bold)
+        let isChinese = (language == .chinese) || (language == .system && Locale.current.language.languageCode?.identifier == "zh")
+        if isChinese {
+            return .system(size: size * 0.46, weight: .bold, design: .serif)
         }
-        return AppFont.ui(size * 0.44, weight: .heavy)
+        return .system(size: size * 0.44, weight: .heavy, design: .rounded)
     }
 
-    /// 对/错印章颜色跟随「涨跌配色」配置:对 = 涨色、错 = 跌色
-    /// (红涨则对红错绿,绿涨则对绿错红)。
     private var inkColor: WickRGB {
-        verdict.inkColor(in: palette, convention: settings.pnlColorConvention)
+        verdict.inkColor(in: palette, convention: convention)
     }
     private var charColor: Color { Color(red: 0.97, green: 0.91, blue: 0.84) }
 
     private var accessibilityText: String {
         switch verdict {
-        case .correct: return L10n.string(.journalReviewCorrect, language: settings.language)
-        case .wrong: return L10n.string(.journalReviewWrong, language: settings.language)
+        case .correct: return L10n.string(.journalReviewCorrect, language: language)
+        case .wrong: return L10n.string(.journalReviewWrong, language: language)
         }
     }
 }
 
 /// Square seal silhouette with a hand-chipped edge. Deterministic per seal;
 /// displacement applies to the ink body only, the character stays crisp.
-private struct SealBodyShape: Shape {
-    var seed: Double
+public struct SealBodyShape: Shape {
+    public var seed: Double
 
-    func path(in rect: CGRect) -> Path {
+    public init(seed: Double = 9) {
+        self.seed = seed
+    }
+
+    public func path(in rect: CGRect) -> Path {
         func chip(_ t: CGFloat, _ phase: Double) -> CGFloat {
             sin(t * 21 + phase) * 0.9 + sin(t * 47 + phase * 2.2) * 0.55 + sin(t * 8 + phase * 0.7) * 0.8
         }
@@ -136,9 +152,9 @@ private struct SealBodyShape: Shape {
     }
 }
 
-extension JournalReviewVerdict {
+public extension JournalReviewVerdict {
     /// 对 = 涨色、错 = 跌色 —— 印章颜色跟随「涨跌配色」配置。
-    func inkColor(in palette: WickPalette, convention: PnlColorConvention) -> WickRGB {
+    func inkColor(in palette: WickPalette, convention: PnlColorConvention = .redUp) -> WickRGB {
         let pair = palette.upDownColors(convention)
         switch self {
         case .correct: return pair.gain

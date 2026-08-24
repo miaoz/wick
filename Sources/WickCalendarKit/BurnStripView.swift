@@ -6,19 +6,25 @@ import SwiftUI
 /// left by candlelight, the frontier is a thin ember line with a small flame,
 /// the future is clean ruled paper. Tick semantics: day 24 / week 7 /
 /// month = days in month / year 12.
-struct BurnStripView: View {
+public struct BurnStripView: View {
     @Environment(\.wickPalette) private var palette
 
     /// 0...1, fraction already elapsed.
-    var elapsed: Double
+    public var elapsed: Double
     /// Tick segment count (24 / 7 / 28...31 / 12).
-    var ticks: Int = 24
+    public var ticks: Int
     /// Show the flame dot (hero tier only).
-    var showsFlame: Bool = false
+    public var showsFlame: Bool
+
+    public init(elapsed: Double, ticks: Int = 24, showsFlame: Bool = false) {
+        self.elapsed = elapsed
+        self.ticks = ticks
+        self.showsFlame = showsFlame
+    }
 
     private var fraction: Double { min(1, max(0, elapsed)) }
 
-    var body: some View {
+    public var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
             let frontier = size.width * fraction
@@ -80,10 +86,14 @@ struct BurnStripView: View {
 }
 
 /// Vertical hairlines dividing the strip into `ticks` segments.
-private struct TickMarksShape: Shape {
-    var ticks: Int
+public struct TickMarksShape: Shape {
+    public var ticks: Int
 
-    func path(in rect: CGRect) -> Path {
+    public init(ticks: Int) {
+        self.ticks = ticks
+    }
+
+    public func path(in rect: CGRect) -> Path {
         var path = Path()
         let count = max(1, ticks)
         for index in 1..<count {
@@ -96,18 +106,21 @@ private struct TickMarksShape: Shape {
 }
 
 /// The elapsed area; its right (frontier) edge wobbles with a deterministic
-/// sum-of-sines so every strip has a hand-torn, candle-warmed edge. The noise
-/// is silhouette-only — content never gets displaced (design rule).
-private struct StainShape: Shape {
-    var fraction: Double
-    var seed: Double = 7
+/// sum-of-sines so every strip has a hand-torn, candle-warmed edge.
+public struct StainShape: Shape {
+    public var fraction: Double
+    public var seed: Double
 
-    func path(in rect: CGRect) -> Path {
+    public init(fraction: Double, seed: Double = 7) {
+        self.fraction = fraction
+        self.seed = seed
+    }
+
+    public func path(in rect: CGRect) -> Path {
         let fx = rect.width * min(1, max(0, fraction))
         guard fx > 0.5 else { return Path() }
 
         func wobble(_ t: CGFloat) -> CGFloat {
-            // t in 0...1 along the edge; ~±1.8pt irregular burn
             sin(t * 9 + seed) * 1.05 + sin(t * 23 + seed * 3.1) * 0.65 + sin(t * 41 + seed * 1.7) * 0.35
         }
 
@@ -125,14 +138,14 @@ private struct StainShape: Shape {
     }
 }
 
-/// The small flame at the burn frontier. Breathes on its own 1.2s loop; the
-/// panel only lives while open, so a lightweight opacity animation is fine
-/// (the no-Timer rule applies to the MenuBarExtra label, not panel content).
-private struct FlameDot: View {
+/// The small flame at the burn frontier.
+public struct FlameDot: View {
     @Environment(\.wickPalette) private var palette
     @State private var breathing = false
 
-    var body: some View {
+    public init() {}
+
+    public var body: some View {
         TeardropShape()
             .fill(
                 RadialGradient(
@@ -156,8 +169,10 @@ private struct FlameDot: View {
 }
 
 /// Upright flame teardrop, normalized to its bounding box.
-private struct TeardropShape: Shape {
-    func path(in rect: CGRect) -> Path {
+public struct TeardropShape: Shape {
+    public init() {}
+
+    public func path(in rect: CGRect) -> Path {
         var path = Path()
         let w = rect.width, h = rect.height
         path.move(to: CGPoint(x: w * 0.5, y: 0))

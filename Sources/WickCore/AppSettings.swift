@@ -37,42 +37,6 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     }
 }
 
-/// Which of the two existing palette colors marks a gain.
-/// Only the assignment swaps — no color values are changed.
-enum PnlColorConvention: String, CaseIterable, Identifiable {
-    /// 红涨绿跌: red = gain, green = loss.
-    case redUp
-    /// 绿涨红跌: green = gain, red = loss (default).
-    case greenUp
-
-    var id: String { rawValue }
-
-    func displayName(language: AppLanguage) -> String {
-        switch (self, language) {
-        case (.redUp, .chinese):
-            return "红涨绿跌"
-        case (.redUp, .english):
-            return "Red up"
-        case (.greenUp, .chinese):
-            return "绿涨红跌"
-        case (.greenUp, .english):
-            return "Green up"
-        }
-    }
-}
-
-extension WickPalette {
-    /// (gain, loss) colors under a convention — picks which existing palette
-    /// color is used for each; the color values themselves are untouched.
-    func upDownColors(_ convention: PnlColorConvention) -> (gain: WickRGB, loss: WickRGB) {
-        switch convention {
-        case .redUp:
-            return (pnlUp, pnlDown)
-        case .greenUp:
-            return (pnlDown, pnlUp)
-        }
-    }
-}
 
 /// The app's font is chosen from the user's installed fonts (a PostScript name)
 /// or left empty for the shipped Songti/system look. See `AppFont`.

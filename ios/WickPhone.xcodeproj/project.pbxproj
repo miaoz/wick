@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		B10000000000000000000100 /* WickSync in Frameworks */ = {isa = PBXBuildFile; productRef = B10000000000000000000101 /* WickSync */; };
 		B10000000000000000000103 /* WickCalendarKit in Frameworks */ = {isa = PBXBuildFile; productRef = B10000000000000000000102 /* WickCalendarKit */; };
+		B10000000000000000000106 /* WickTrading in Frameworks */ = {isa = PBXBuildFile; productRef = B10000000000000000000104 /* WickTrading */; };
 		B20000000000000000000100 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B20000000000000000000105 /* XCTest.framework */; };
 /* End PBXBuildFile section */
 
@@ -41,6 +42,7 @@
 			files = (
 				B10000000000000000000100 /* WickSync in Frameworks */,
 				B10000000000000000000103 /* WickCalendarKit in Frameworks */,
+				B10000000000000000000106 /* WickTrading in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -55,6 +57,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		9B74610A303C1B7C0012B93E /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000105 /* XCTest.framework */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		B10000000000000000000130 = {
 			isa = PBXGroup;
 			children = (
@@ -62,6 +72,7 @@
 				B20000000000000000000110 /* WickPhoneTests */,
 				B10000000000000000000105 /* Info.plist */,
 				B10000000000000000000131 /* Products */,
+				9B74610A303C1B7C0012B93E /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -96,6 +107,7 @@
 			packageProductDependencies = (
 				B10000000000000000000101 /* WickSync */,
 				B10000000000000000000102 /* WickCalendarKit */,
+				B10000000000000000000104 /* WickTrading */,
 			);
 			productName = WickPhone;
 			productReference = B10000000000000000000132 /* WickPhone.app */;
@@ -438,6 +450,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B10000000000000000000160 /* XCLocalSwiftPackageReference ".." */;
 			productName = WickCalendarKit;
+		};
+		B10000000000000000000104 /* WickTrading */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B10000000000000000000160 /* XCLocalSwiftPackageReference ".." */;
+			productName = WickTrading;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -2,9 +2,9 @@ import Foundation
 import WickSync
 
 /// Per-day display + value formatting for the trading calendar page.
-enum MacroCalendarFormat {
+public enum MacroCalendarFormat {
     /// Event release time in China time (matches akshare's `Asia/Shanghai` conversion).
-    static func eventTime(_ date: Date) -> String {
+    public static func eventTime(_ date: Date) -> String {
         formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
         formatter.dateFormat = "HH:mm"
         return formatter.string(from: date)
