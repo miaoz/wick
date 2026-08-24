@@ -28,25 +28,25 @@ struct WickPhoneApp: App {
                 TabView(selection: $selectedTab) {
                     HomeView()
                         .tabItem {
-                            Label("今日", systemImage: "flame.fill")
+                            Image(systemName: "flame.fill")
                         }
                         .tag(0)
 
                     DayListView()
                         .tabItem {
-                            Label("日记", systemImage: "book.closed.fill")
+                            Image(systemName: "book.closed.fill")
                         }
                         .tag(1)
 
                     CalendarView()
                         .tabItem {
-                            Label("黄历", systemImage: "calendar")
+                            Image(systemName: "calendar")
                         }
                         .tag(2)
 
                     SettingsView()
                         .tabItem {
-                            Label("设置", systemImage: "gearshape.fill")
+                            Image(systemName: "gearshape.fill")
                         }
                         .tag(3)
                 }
