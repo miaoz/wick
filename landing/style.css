@@ -29,7 +29,7 @@
   --receipt-ink: #33291A;
   --sh-page: 0 1px 2px rgba(43, 32, 20, 0.1), 0 10px 26px rgba(43, 32, 20, 0.14);
   --sh-lift: 0 2px 6px rgba(43, 32, 20, 0.12), 0 22px 50px rgba(43, 32, 20, 0.22);
-  --f-print: "Songti SC", "STSong", "HiraMinProN-W6", "Noto Serif SC", serif;
+  --f-print: "STSongti-SC-Regular", "Songti SC", "STSong", "HiraMinProN-W6", "Noto Serif SC", serif;
   --f-disp: ui-serif, "New York", "Songti SC", serif;
   --f-ui: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
   --f-mono: ui-monospace, "SF Mono", "Menlo", monospace;
@@ -373,6 +373,29 @@ main.container { position: relative; z-index: 1; }
 .feat:hover { transform: translateY(-2px); box-shadow: var(--sh-lift); }
 .feat h3 { margin: 0 0 6px; font-family: var(--f-print); font-size: 17px; font-weight: 900; }
 .feat p { margin: 0; font-size: 13px; line-height: 1.85; color: var(--ink-2); }
+
+/* Songti SC Bold/Black mixes a few simplified glyphs with sans-style forms on iOS. */
+[lang="zh"] .site-nav a,
+[lang="zh"] .eyebrow,
+[lang="zh"] .hero h1,
+[lang="zh"] .hero-live,
+[lang="zh"] .btn-primary,
+[lang="zh"] .btn-ghost,
+[lang="zh"] .btn-ghost .soon,
+[lang="zh"] .slip-title,
+[lang="zh"] .strip-row .lbl,
+[lang="zh"] .sec-head h2,
+[lang="zh"] .feat h3 {
+  font-weight: 400;
+}
+[lang="zh"] .hero h1 { -webkit-text-stroke: 0.35px currentColor; }
+[lang="zh"] .hero-live,
+[lang="zh"] .sec-head h2,
+[lang="zh"] .feat h3 { -webkit-text-stroke: 0.15px currentColor; }
+[lang="zh"] .shot .cap-no {
+  font-family: var(--f-print);
+  font-weight: 400;
+}
 
 /* ---------- 实拍:洗出来贴在纸上的照片 ---------- */
 .shots-grid {
