@@ -398,15 +398,9 @@ private struct TodayJournalFeedCard: View {
                                     onReviewTap(item)
                                 } label: {
                                     Text("复盘")
-                                        .font(.system(size: 9.5, weight: .bold, design: .serif))
-                                        .foregroundColor(PhoneTheme.cinnabar)
-                                        .padding(.horizontal, 5)
-                                        .padding(.vertical, 2)
-                                        .background(PhoneTheme.paper)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 2)
-                                                .stroke(PhoneTheme.cinnabar.opacity(0.5), lineWidth: 1)
-                                        )
+                                        .font(.system(size: 10, weight: .bold, design: .serif))
+                                        .foregroundColor(PhoneTheme.cinnabar.opacity(0.85))
+                                        .rotationEffect(.degrees(-3))
                                 }
                                 .buttonStyle(.plain)
                             }

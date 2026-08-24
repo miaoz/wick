@@ -356,17 +356,11 @@ private struct ItemRowView: View {
                 if let review = item.review {
                     JournalReviewBadge(verdict: review.verdict, style: .mini, size: 36)
                 } else {
-                    VStack(spacing: 2) {
-                        Text("复盘")
-                            .font(.system(size: 10, weight: .bold, design: .serif))
-                            .foregroundColor(PhoneTheme.cinnabar)
-                    }
-                    .frame(width: 36, height: 36)
-                    .background(PhoneTheme.paper)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .stroke(PhoneTheme.cinnabar.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [3]))
-                    )
+                    Text("复盘")
+                        .font(.system(size: 11, weight: .bold, design: .serif))
+                        .foregroundColor(PhoneTheme.cinnabar.opacity(0.85))
+                        .frame(width: 36, height: 36)
+                        .rotationEffect(.degrees(-3))
                 }
             }
             .buttonStyle(.plain)
