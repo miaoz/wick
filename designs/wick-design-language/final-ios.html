@@ -1,0 +1,1868 @@
+<!DOCTYPE html>
+<html lang="zh" data-scheme="light" data-phase="day">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wick iOS 客户端 · 秉烛定稿 v1.0</title>
+<link rel="stylesheet" href="tokens-v2.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: var(--f-ui);
+    color: var(--ink-1);
+    background: var(--desk);
+    min-height: 100vh;
+    text-wrap: pretty;
+    transition: background 0.4s ease, color 0.3s ease;
+  }
+  .grain-layer { position: fixed; inset: 0; pointer-events: none; opacity: var(--grain-opacity); z-index: 0; }
+  .page-container { position: relative; z-index: 1; max-width: 1360px; margin: 0 auto; padding: 48px 32px 140px; }
+
+  /* 顶部全局主题切换栏 */
+  .theme-bar {
+    position: fixed; top: 14px; right: 16px; z-index: 999; display: flex; gap: 8px; align-items: center;
+    padding: 5px 8px; background: var(--paper-hi); border: 1px solid var(--rule); box-shadow: var(--sh-page);
+    border-radius: 4px; backdrop-filter: blur(12px);
+  }
+  .theme-bar .grp { display: flex; gap: 2px; }
+  .theme-bar button {
+    font-family: var(--f-ui); font-size: 12px; font-weight: 600; color: var(--ink-2);
+    background: transparent; border: none; cursor: pointer; padding: 6px 10px; border-radius: 3px;
+    transition: all 0.18s ease;
+  }
+  .theme-bar button:hover { color: var(--ink-1); }
+  .theme-bar button.is-on { background: var(--ember); color: #FFF3E0; box-shadow: 0 0 10px var(--glow); }
+  .theme-bar .sep { width: 1px; height: 18px; background: var(--rule); }
+
+  /* 顶栏刊头 */
+  .masthead {
+    padding: 24px 0 36px; border-bottom: 2px solid var(--ink-1);
+    display: flex; align-items: flex-end; gap: 24px;
+  }
+  .flame-mark {
+    width: 58px; height: 58px; display: grid; place-items: center; background: var(--char-1);
+    border-radius: 8px; box-shadow: 0 0 32px var(--glow); flex: none;
+  }
+  .masthead h1 { font-family: var(--f-print); font-size: 42px; font-weight: 900; line-height: 1.08; }
+  .masthead h1 small {
+    font-family: var(--f-ui); font-size: 12px; font-weight: 700; letter-spacing: 0.28em;
+    color: var(--cinnabar); display: block; margin-bottom: 6px; text-transform: uppercase;
+  }
+  .masthead .meta {
+    margin-left: auto; text-align: right; font-family: var(--f-mono); font-size: 11.5px;
+    color: var(--ink-3); line-height: 1.9;
+  }
+  .masthead .meta b { color: var(--cinnabar); }
+
+  /* 导航跳转与返回 */
+  .nav-strip {
+    display: flex; gap: 16px; align-items: center; margin-top: 18px; font-size: 13px; font-weight: 600;
+  }
+  .nav-strip a { color: var(--ink-2); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+  .nav-strip a:hover { color: var(--cinnabar); }
+  .nav-strip .current { color: var(--cinnabar); font-weight: 700; }
+
+  /* 章节结构 */
+  section { margin-top: 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 12px; }
+  .sec-head .no { font-family: var(--f-mono); font-size: 14px; color: var(--cinnabar); font-weight: 800; }
+  .sec-head h2 { font-family: var(--f-print); font-size: 26px; font-weight: 900; letter-spacing: 0.02em; }
+  .sec-head .en { font-size: 11.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+  .lead { color: var(--ink-2); font-size: 14.5px; line-height: 1.9; max-width: 820px; margin-bottom: 24px; }
+  .lead b { color: var(--ink-1); }
+
+  .sheet { background: var(--paper); box-shadow: var(--sh-page); padding: 28px 32px; position: relative; }
+  .sheet-edge { height: 5px; margin: 0 6px; background: var(--paper-edge); box-shadow: var(--sh-page); }
+
+  table.spec { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.spec th, table.spec td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--rule); vertical-align: top; line-height: 1.75; }
+  table.spec th { font-size: 10.5px; letter-spacing: 0.12em; color: var(--ink-3); text-transform: uppercase; }
+  table.spec tr:last-child td { border-bottom: none; }
+  table.spec td:first-child { white-space: nowrap; font-weight: 700; }
+  table.spec td .mono { font-family: var(--f-mono); font-size: 11.5px; }
+  table.spec td.dim { color: var(--ink-2); }
+
+  /* ==========================================================================
+     交互式手机主舞台 (Interactive Live Prototype)
+     ========================================================================== */
+  .interactive-stage {
+    margin-top: 24px;
+    background: radial-gradient(1100px 600px at 50% 10%, color-mix(in srgb, var(--wall) 75%, #7A5328 25%), var(--wall) 85%);
+    border: 1px solid var(--rule); box-shadow: var(--sh-lift);
+    padding: 48px 32px; display: flex; flex-direction: column; align-items: center; gap: 28px;
+    border-radius: 8px;
+  }
+  .stage-controls {
+    display: flex; gap: 10px; background: var(--paper-hi); padding: 6px;
+    border: 1px solid var(--rule); box-shadow: var(--sh-page); border-radius: 6px; flex-wrap: wrap; justify-content: center;
+  }
+  .stage-btn {
+    font-family: var(--f-ui); font-size: 13px; font-weight: 700; color: var(--ink-2);
+    background: transparent; border: none; padding: 7px 16px; border-radius: 4px; cursor: pointer;
+    transition: all 0.18s ease; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .stage-btn:hover { color: var(--ink-1); background: var(--rule); }
+  .stage-btn.active { background: var(--cinnabar); color: #FFF3E0; box-shadow: 0 2px 8px rgba(192, 58, 34, 0.4); }
+
+  /* iPhone 16 Pro 机身外壳 */
+  .iphone-frame {
+    width: 393px; height: 852px; background: var(--desk); border-radius: 54px; position: relative;
+    box-shadow:
+      0 0 0 10px #181410,
+      0 0 0 12px #382D20,
+      0 0 0 13px rgba(255,255,255,0.1),
+      0 36px 90px rgba(0,0,0,0.65);
+    overflow: hidden; flex: none; display: flex; flex-direction: column;
+  }
+  /* 灵动岛 Dynamic Island */
+  .dynamic-island {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    width: 124px; height: 35px; background: #000; border-radius: 20px; z-index: 100;
+    pointer-events: none; display: flex; align-items: center; justify-content: space-between; padding: 0 12px;
+  }
+  .island-cam { width: 11px; height: 11px; border-radius: 50%; background: #080812; box-shadow: inset 0 0 2px #1E284A; margin-left: auto; }
+
+  /* 虚拟安全区域与状态栏 */
+  .ios-status-bar {
+    height: 48px; flex: none; display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 0 28px 8px; font-size: 13.5px; font-weight: 700; font-family: var(--f-ui); z-index: 90;
+    color: var(--ink-1); pointer-events: none;
+  }
+  .ios-home-indicator {
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    width: 138px; height: 5px; background: var(--ink-1); opacity: 0.35; border-radius: 3px;
+    z-index: 100; pointer-events: none;
+  }
+
+  /* 手机屏幕容器 */
+  .phone-screen {
+    flex: 1; position: relative; overflow: hidden; display: flex; flex-direction: column;
+    background: var(--desk);
+  }
+  .phone-view {
+    position: absolute; inset: 0; display: none; flex-direction: column; overflow-y: auto; overflow-x: hidden;
+    padding-bottom: 90px; -webkit-overflow-scrolling: touch;
+  }
+  .phone-view.active { display: flex; animation: view-fade 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
+  @keyframes view-fade { from { opacity: 0; transform: scale(0.985); } to { opacity: 1; transform: scale(1); } }
+
+  /* 底部 TabBar 导航 (iOS 标准: 今日 / 日记 / 黄历 / 设置) */
+  .ios-tabbar {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 78px;
+    background: color-mix(in srgb, var(--paper-hi) 88%, transparent);
+    backdrop-filter: blur(20px); border-top: 1px solid var(--rule);
+    display: flex; justify-content: space-around; align-items: flex-start; padding-top: 8px; z-index: 80;
+  }
+  .tab-item {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: var(--ink-3); background: none; border: none; cursor: pointer; font-size: 10px; font-weight: 700;
+    width: 64px; transition: color 0.15s ease;
+  }
+  .tab-item svg { width: 22px; height: 22px; stroke-width: 1.8; }
+  .tab-item.active { color: var(--cinnabar); }
+  .tab-item.active svg { stroke-width: 2.2; }
+
+  /* ==========================================================================
+     页面 1: 首页 · 今日 (Home Today) - 今日时间与交易看板
+     ========================================================================== */
+  .hm-wrap { padding: 10px 14px 20px; display: flex; flex-direction: column; gap: 14px; }
+  
+  /* 今日主纸签卡片 */
+  .hm-card {
+    background: var(--paper-hi); box-shadow: var(--sh-page); padding: 22px 20px 20px;
+    position: relative; border-radius: 4px;
+  }
+  .hm-card::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 6px;
+    background: var(--paper-edge); border-radius: 0 0 4px 4px;
+  }
+  .hm-header { display: flex; align-items: flex-start; justify-content: space-between; }
+  .hm-date-big { font-family: var(--f-disp); font-size: 36px; font-weight: 900; line-height: 1; color: var(--ink-1); }
+  .hm-lunar-sub { font-family: var(--f-print); font-size: 11.5px; color: var(--ink-2); line-height: 1.7; margin-top: 5px; }
+  .hm-flame-badge {
+    width: 38px; height: 38px; border-radius: 6px; background: var(--char-1);
+    display: grid; place-items: center; box-shadow: 0 0 20px var(--glow); flex: none;
+  }
+  
+  /* 烛痕进度条系统 */
+  .hm-burn-block { margin-top: 18px; }
+  .hm-burn-headline { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+  .hm-burn-headline .lbl { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; color: var(--ink-2); }
+  .hm-burn-headline .pct { font-family: var(--f-disp); font-size: 34px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1; }
+  .hm-burn-headline .pct small { font-size: 14px; }
+  .hm-burn-strip { height: 26px; }
+
+  .hm-sub-strips { margin-top: 14px; display: flex; flex-direction: column; gap: 9px; }
+  .hm-sub-row { display: flex; align-items: center; gap: 10px; font-size: 11px; }
+  .hm-sub-row .lbl { width: 32px; font-weight: 700; color: var(--ink-2); flex: none; }
+  .hm-sub-row .burnstrip { height: 8px; flex: 1; }
+  .hm-sub-row .val { width: 78px; text-align: right; font-family: var(--f-mono); font-size: 10px; color: var(--ink-2); }
+
+  /* 模块 1: 今日宏观倒计时雷达 (Next Event Radar) */
+  .hm-macro-alert {
+    background: var(--paper-hi); border: 1px solid var(--rule); box-shadow: var(--sh-page);
+    border-radius: 4px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; cursor: pointer;
+  }
+  .macro-alert-head { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
+  .macro-alert-badge {
+    display: inline-flex; align-items: center; gap: 5px; font-weight: 800; color: var(--cinnabar);
+    font-family: var(--f-ui); letter-spacing: 0.06em;
+  }
+  .macro-alert-badge::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--cinnabar);
+    box-shadow: 0 0 6px var(--cinnabar); animation: ember-flicker 1.8s infinite;
+  }
+  .macro-countdown { font-family: var(--f-mono); font-size: 11px; color: var(--ink-2); font-weight: 700; }
+  .macro-alert-body { display: flex; justify-content: space-between; align-items: baseline; }
+  .macro-alert-title { font-family: var(--f-print); font-size: 13.5px; font-weight: 900; color: var(--ink-1); }
+  .macro-alert-vals { font-family: var(--f-mono); font-size: 10.5px; color: var(--ink-3); }
+
+  /* 模块 2: 今日交易与平仓单据简报 (Today Trading & PnL Brief) */
+  .hm-trading-card {
+    background: var(--paper-hi); border: 1px solid var(--rule); box-shadow: var(--sh-page);
+    border-radius: 4px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;
+  }
+  .trading-card-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .trading-card-title { font-family: var(--f-print); font-size: 13px; font-weight: 900; color: var(--ink-1); }
+  .trading-card-pnl { font-family: var(--f-mono); font-size: 15px; font-weight: 800; color: var(--cinnabar); }
+  .trading-sub-note { font-size: 10.5px; font-family: var(--f-mono); color: var(--ink-3); }
+
+  /* 模块 3: 今日日记流与速记器 (Today Journal Feed & Quick Entry) */
+  .hm-journal-block {
+    background: var(--paper-hi); border: 1px solid var(--rule); box-shadow: var(--sh-page);
+    border-radius: 4px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .journal-block-head { display: flex; justify-content: space-between; align-items: center; }
+  .journal-block-title { font-family: var(--f-print); font-size: 13px; font-weight: 900; color: var(--ink-1); }
+  .journal-badge-review {
+    font-size: 10.5px; font-weight: 700; color: var(--cinnabar); background: var(--cinnabar-soft);
+    padding: 2px 7px; border-radius: 3px; cursor: pointer;
+  }
+  
+  .hm-journal-mini-items { display: flex; flex-direction: column; gap: 9px; }
+  .hm-mini-item {
+    display: flex; gap: 10px; align-items: flex-start; font-size: 12px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .hm-mini-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .hm-mini-time { font-family: var(--f-mono); font-size: 10px; color: var(--ink-3); flex: none; width: 34px; padding-top: 1px; }
+  .hm-mini-body { flex: 1; font-family: var(--f-print); line-height: 1.6; color: var(--ink-1); }
+
+  /* 今日速记输入条 */
+  .hm-quick-box {
+    display: flex; align-items: center; gap: 8px; background: var(--paper); border: 1px solid var(--rule);
+    border-radius: 4px; padding: 6px 10px; margin-top: 4px;
+  }
+  .hm-quick-input {
+    flex: 1; background: none; border: none; font-family: var(--f-print); font-size: 12px;
+    color: var(--ink-1); outline: none;
+  }
+  .hm-quick-send {
+    width: 26px; height: 26px; border-radius: 4px; background: var(--ember); border: none;
+    color: #FFF3E0; display: grid; place-items: center; cursor: pointer; flex: none;
+    box-shadow: 0 1px 4px var(--glow);
+  }
+  .hm-quick-send svg { width: 14px; height: 14px; }
+
+  /* ==========================================================================
+     页面 2: 历史日记列表 / 月历 (Day List & Heatmap) - Tab 2「日记」
+     ========================================================================== */
+  .dl-wrap { padding: 10px 14px 20px; display: flex; flex-direction: column; gap: 14px; }
+  
+  /* 日记本选择器与工具顶栏 */
+  .dl-topbar {
+    display: flex; align-items: center; justify-content: space-between; padding: 4px 6px;
+  }
+  .journal-picker-btn {
+    font-family: var(--f-print); font-size: 18px; font-weight: 900; color: var(--ink-1);
+    display: inline-flex; align-items: center; gap: 6px; background: none; border: none; cursor: pointer;
+  }
+  .journal-picker-btn svg { width: 14px; height: 14px; color: var(--cinnabar); }
+  .dl-topbar-actions { display: flex; gap: 8px; }
+  .icon-square-btn {
+    width: 32px; height: 32px; border-radius: 4px; background: var(--paper-hi); border: 1px solid var(--rule);
+    display: grid; place-items: center; color: var(--ink-2); cursor: pointer; box-shadow: var(--sh-page);
+  }
+  .icon-square-btn svg { width: 16px; height: 16px; }
+
+  /* 紧凑盈亏月历热力图 */
+  .dl-heatmap-card {
+    background: var(--paper-hi); border: 1px solid var(--rule); box-shadow: var(--sh-page);
+    padding: 14px 16px; border-radius: 4px;
+  }
+  .heatmap-head {
+    display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;
+    font-size: 11px; font-weight: 700; color: var(--ink-2);
+  }
+  .heatmap-head .month { font-family: var(--f-print); font-size: 13px; font-weight: 900; color: var(--ink-1); }
+  .heatmap-head .pnl-sum { font-family: var(--f-mono); color: var(--cinnabar); font-weight: 700; }
+  .heatmap-grid {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px;
+  }
+  .hm-cell {
+    aspect-ratio: 1; border-radius: 3px; display: grid; place-items: center;
+    font-size: 9px; font-family: var(--f-mono); color: var(--ink-3); cursor: pointer;
+    background: rgba(127,110,90,0.06);
+  }
+  .hm-cell.dow { font-size: 8px; font-family: var(--f-ui); color: var(--ink-3); aspect-ratio: auto; padding: 2px 0; background: none; }
+  .hm-cell.up { background: var(--cinnabar-soft); color: var(--cinnabar); font-weight: 800; border: 1px solid rgba(192,58,34,0.25); }
+  .hm-cell.down { background: var(--dai-soft); color: var(--dai); font-weight: 800; border: 1px solid rgba(62,92,80,0.25); }
+  .hm-cell.stain { background: var(--stain-1); color: var(--ink-2); font-weight: 600; }
+  .hm-cell.today { outline: 1.5px solid var(--ember); color: var(--ink-1); font-weight: 900; }
+
+  /* 标签筛选流 */
+  .tag-filter-bar {
+    display: flex; gap: 6px; overflow-x: auto; padding: 2px 0; -webkit-overflow-scrolling: touch;
+  }
+  .tag-filter-bar::-webkit-scrollbar { display: none; }
+  .tag-chip {
+    font-size: 11.5px; font-family: var(--f-ui); padding: 3px 10px; border-radius: 3px;
+    border: 1px solid var(--rule); background: var(--paper); color: var(--ink-2); white-space: nowrap; cursor: pointer;
+  }
+  .tag-chip.active { background: var(--cinnabar); color: #FFF3E0; border-color: var(--cinnabar); font-weight: 700; }
+
+  /* 历史日子列表 (按月分节) */
+  .dl-month-section { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+  .dl-section-label {
+    font-family: var(--f-print); font-size: 12px; font-weight: 800; color: var(--ink-3);
+    letter-spacing: 0.1em; padding: 0 4px;
+  }
+  .dl-day-card {
+    background: var(--paper-hi); border: 1px solid var(--rule); box-shadow: var(--sh-page);
+    padding: 13px 15px; border-radius: 4px; display: flex; align-items: center; gap: 12px;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  .dl-day-card:hover { transform: translateX(2px); border-color: var(--ember); }
+  .dl-day-card.selected { border-left: 3.5px solid var(--cinnabar); }
+  .dl-day-left { display: flex; flex-direction: column; }
+  .dl-day-num { font-family: var(--f-disp); font-size: 20px; font-weight: 900; line-height: 1; }
+  .dl-day-meta { font-size: 10px; color: var(--ink-3); margin-top: 2px; }
+  .dl-day-center { flex: 1; min-width: 0; margin-left: 4px; }
+  .dl-day-preview { font-family: var(--f-print); font-size: 12.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dl-day-tags { display: flex; gap: 4px; margin-top: 4px; }
+  .dl-day-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+  .dl-day-pnl { font-family: var(--f-mono); font-size: 11.5px; font-weight: 800; }
+  .dl-day-pnl.up { color: var(--cinnabar); }
+  .dl-day-pnl.down { color: var(--dai); }
+
+  /* ==========================================================================
+     页面 3: 默认平实交易日历 (Default Flat Calendar) - Tab 3「黄历」
+     ========================================================================== */
+  .flat-cal-wrap { padding: 8px 12px 20px; display: flex; flex-direction: column; gap: 10px; }
+  
+  /* 日历顶部日期翻页栏 */
+  .flat-cal-topbar {
+    display: flex; align-items: center; justify-content: space-between; padding: 4px 6px;
+  }
+  .flat-cal-date-nav { display: flex; align-items: center; gap: 8px; }
+  .flat-nav-btn {
+    width: 28px; height: 28px; border-radius: 4px; background: var(--paper-hi); border: 1px solid var(--rule);
+    display: grid; place-items: center; color: var(--ink-2); cursor: pointer;
+  }
+  .flat-nav-btn svg { width: 14px; height: 14px; }
+  .flat-cal-current-date { display: flex; flex-direction: column; }
+  .flat-cal-current-date .day-text { font-family: var(--f-print); font-size: 17px; font-weight: 900; color: var(--ink-1); }
+  .flat-cal-current-date .lunar-text { font-family: var(--f-print); font-size: 10px; color: var(--ink-3); }
+  .flat-today-btn {
+    font-family: var(--f-ui); font-size: 11.5px; font-weight: 700; color: var(--cinnabar);
+    background: var(--cinnabar-soft); border: 1px solid rgba(192,58,34,0.2); padding: 4px 10px; border-radius: 3px; cursor: pointer;
+  }
+
+  /* 宜忌平实签条 */
+  .flat-yiji-banner {
+    display: flex; align-items: center; justify-content: space-between; background: var(--paper-hi);
+    border: 1px solid var(--rule); box-shadow: var(--sh-page); padding: 8px 12px; border-radius: 4px;
+    font-family: var(--f-print); font-size: 11.5px;
+  }
+  .flat-yiji-banner .yi-tag b { color: #FFF3E0; background: var(--cinnabar); padding: 1px 5px; border-radius: 2px; font-size: 10px; margin-right: 4px; }
+  .flat-yiji-banner .ji-tag b { color: #FFF3E0; background: var(--char-1); padding: 1px 5px; border-radius: 2px; font-size: 10px; margin-right: 4px; }
+  .easter-tip-badge {
+    font-family: var(--f-ui); font-size: 9.5px; font-weight: 700; color: var(--ink-3);
+    border: 1px dashed var(--rule); padding: 2px 6px; border-radius: 2px; cursor: pointer;
+  }
+
+  /* 宏观 / 财报 双 Tab */
+  .flat-cal-tabs { display: flex; gap: 8px; margin-top: 2px; }
+  .flat-tab-btn {
+    flex: 1; padding: 7px 0; font-family: var(--f-print); font-size: 12.5px; font-weight: 700;
+    text-align: center; border-radius: 4px; border: 1px solid var(--rule); background: var(--paper);
+    color: var(--ink-2); cursor: pointer; transition: all 0.15s ease;
+  }
+  .flat-tab-btn.active {
+    background: var(--cinnabar); color: #FFF3E0; border-color: var(--cinnabar); box-shadow: 0 2px 6px rgba(192,58,34,0.25);
+  }
+
+  /* 平实事件列表 (滚动列表，不可撕页) */
+  .flat-event-list { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; }
+  .flat-event-card {
+    background: var(--paper-hi); border: 1px solid var(--rule); box-shadow: var(--sh-page);
+    border-radius: 4px; padding: 10px 14px; display: flex; gap: 12px; align-items: center;
+  }
+  .flat-event-time-col { display: flex; flex-direction: column; align-items: center; width: 44px; flex: none; gap: 2px; }
+  .flat-event-time { font-family: var(--f-mono); font-size: 12px; font-weight: 800; color: var(--cinnabar); }
+  .flat-event-stars { font-size: 8.5px; color: var(--ember); letter-spacing: -0.05em; }
+  .flat-event-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .flat-event-title-row { display: flex; align-items: baseline; gap: 6px; }
+  .country-pill {
+    font-family: var(--f-print); font-size: 9.5px; color: var(--ink-2); background: rgba(127,110,90,0.12);
+    padding: 1px 4px; border-radius: 2px; flex: none;
+  }
+  .flat-event-title { font-family: var(--f-print); font-size: 12.5px; color: var(--ink-1); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .flat-event-data-row { display: flex; gap: 12px; font-family: var(--f-mono); font-size: 10px; color: var(--ink-3); }
+  .flat-event-data-row b { color: var(--ink-1); font-weight: 700; }
+
+  /* ==========================================================================
+     彩蛋: 满屏拟物撕页黄历 (Physical Tearable Calendar Easter Egg)
+     ========================================================================== */
+  .fs-cal-view {
+    position: absolute; inset: 0; background: var(--receipt); color: #2A2118;
+    display: flex; flex-direction: column; z-index: 10;
+  }
+  .fs-rail {
+    height: 72px; flex: none; background: linear-gradient(180deg, #7E2418, #A82E1E 60%, #6E1F14);
+    position: relative; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  .fs-rail::before, .fs-rail::after {
+    content: ""; position: absolute; bottom: 14px; width: 12px; height: 12px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #F0D9A8, #B08D4F 65%, #7A5E2E); box-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  }
+  .fs-rail::before { left: 70px; }
+  .fs-rail::after { right: 70px; }
+
+  .fs-border-frame {
+    position: absolute; inset: 86px 14px 20px; border: 2.5px solid #2A2118; pointer-events: none;
+  }
+  .fs-border-frame::before { content: ""; position: absolute; inset: 3px; border: 1px solid #2A2118; }
+
+  .fs-cal-body { flex: 1; padding: 24px 26px 20px; display: flex; flex-direction: column; position: relative; }
+  .fs-masthead {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    border-bottom: 2.5px solid var(--cinnabar); padding-bottom: 6px;
+  }
+  .fs-masthead .brand { font-family: var(--f-print); font-size: 16px; font-weight: 900; letter-spacing: 0.32em; }
+  .fs-masthead .sub { font-family: var(--f-print); font-size: 11px; text-align: right; line-height: 1.6; opacity: 0.85; }
+
+  .fs-hero { display: flex; align-items: stretch; margin-top: 14px; }
+  .fs-big-day { font-family: var(--f-disp); font-size: 106px; font-weight: 900; line-height: 0.88; flex: 1; }
+  .fs-vert-week {
+    writing-mode: vertical-rl; font-family: var(--f-print); font-size: 22px; letter-spacing: 0.42em;
+    border-left: 1px solid #2A2118; padding-left: 10px;
+  }
+  .fs-lunar-bar {
+    margin-top: 10px; display: flex; justify-content: space-between; font-family: var(--f-print);
+    font-size: 12.5px; border-top: 1px solid rgba(42,33,24,0.35); border-bottom: 1px solid rgba(42,33,24,0.35);
+    padding: 5px 2px;
+  }
+  .fs-yiji-row { display: flex; gap: 16px; margin-top: 8px; font-family: var(--f-print); font-size: 12.5px; }
+  .fs-yiji-row .yi b { color: #FFF3E0; background: var(--cinnabar); padding: 1px 7px; border-radius: 2px; font-size: 11px; margin-right: 6px; }
+  .fs-yiji-row .ji b { color: #FFF3E0; background: #2A2118; padding: 1px 7px; border-radius: 2px; font-size: 11px; margin-right: 6px; }
+
+  .fs-tab-bar { display: flex; gap: 8px; margin-top: 12px; }
+  .fs-tab {
+    font-family: var(--f-print); font-size: 12.5px; letter-spacing: 0.14em; padding: 4px 14px;
+    border-radius: 2px; cursor: pointer;
+  }
+  .fs-tab.on { background: var(--cinnabar); color: #FFF3E0; font-weight: 700; }
+  .fs-tab.off { border: 1px solid var(--cinnabar); color: var(--cinnabar); }
+
+  .fs-event-list { margin-top: 8px; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .fs-event-row {
+    display: flex; align-items: baseline; gap: 8px; padding: 7px 0; border-bottom: 1px solid rgba(42,33,24,0.15);
+    font-size: 12px;
+  }
+  .fs-event-row .time { font-family: var(--f-mono); font-weight: 700; color: var(--cinnabar); width: 38px; flex: none; font-size: 11px; }
+  .fs-event-row .country { font-family: var(--f-print); width: 26px; flex: none; opacity: 0.85; }
+  .fs-event-row .title { font-family: var(--f-print); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fs-event-row .vals { font-family: var(--f-mono); font-size: 10px; opacity: 0.75; flex: none; }
+
+  .fs-tear-hint {
+    margin-top: auto; text-align: center; font-family: var(--f-print); font-size: 10.5px;
+    letter-spacing: 0.45em; color: rgba(42,33,24,0.4); padding-top: 6px; cursor: pointer;
+    transition: color 0.18s ease;
+  }
+  .fs-tear-hint:hover { color: var(--cinnabar); font-weight: 700; }
+
+  /* ==========================================================================
+     页面 4: 单日日记页 / 编辑 (Daily Journal Page)
+     ========================================================================== */
+  .ed-wrap { padding: 8px 12px 20px; display: flex; flex-direction: column; }
+  .ed-sheet {
+    background: var(--paper-hi); box-shadow: var(--sh-lift); padding: 22px 18px 24px;
+    position: relative; border-radius: 4px; display: flex; flex-direction: column;
+  }
+  .ed-sheet::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -5px; height: 8px;
+    background: var(--paper-edge); border-radius: 0 0 4px 4px;
+  }
+  .ed-head-row { display: flex; justify-content: space-between; align-items: flex-start; }
+  .ed-date-btn {
+    font-family: var(--f-disp); font-size: 32px; font-weight: 900; line-height: 1;
+    color: var(--ink-1); background: none; border: none; text-align: left; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .ed-date-btn svg { width: 14px; height: 14px; color: var(--cinnabar); opacity: 0.8; }
+  .ed-meta-sub { font-family: var(--f-print); font-size: 11px; color: var(--ink-2); line-height: 1.6; margin-top: 4px; }
+  .ed-pnl-badge { text-align: right; font-family: var(--f-mono); font-size: 10px; color: var(--ink-3); line-height: 1.5; }
+  .ed-pnl-badge b { color: var(--cinnabar); font-size: 15px; font-weight: 800; display: block; }
+
+  .ed-burn-bar { margin: 12px 0 16px; }
+  .ed-burn-bar .burnstrip { height: 8px; }
+
+  /* 条目时间轴流 */
+  .ed-items-list { display: flex; flex-direction: column; gap: 16px; }
+  .ed-item-row {
+    display: flex; gap: 12px; position: relative; padding-bottom: 14px; border-bottom: 1px solid var(--rule);
+  }
+  .ed-item-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .ed-item-time {
+    width: 38px; flex: none; font-family: var(--f-mono); font-size: 10.5px;
+    color: var(--ink-3); padding-top: 2px;
+  }
+  .ed-item-body { flex: 1; min-width: 0; }
+  .ed-item-tags { display: flex; gap: 5px; margin-bottom: 6px; flex-wrap: wrap; }
+  .ptag {
+    font-family: var(--f-ui); font-size: 10.5px; font-weight: 700; color: var(--cinnabar);
+    background: var(--cinnabar-soft); padding: 1.5px 7px; border-radius: 2px;
+  }
+  .ptag.active { background: var(--cinnabar); color: #FFF3E0; }
+  .ed-item-text { font-family: var(--f-print); font-size: 13.5px; line-height: 1.85; color: var(--ink-1); }
+
+  /* 胶带交易所单据 */
+  .receipt-card {
+    margin: 10px 0 6px; padding: 10px 14px 8px; background: var(--receipt);
+    color: var(--receipt-ink); border: 1px solid rgba(43,32,20,0.14); box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    position: relative; border-radius: 2px;
+  }
+  .receipt-card::before {
+    content: ""; position: absolute; top: -6px; left: 24px; width: 44px; height: 12px;
+    background: var(--tape); transform: rotate(-2deg);
+  }
+  .receipt-head { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 6px; border-bottom: 1px dashed rgba(43,32,20,0.2); padding-bottom: 4px; }
+  .receipt-head b { font-weight: 800; }
+  .receipt-head span { font-family: var(--f-mono); font-size: 9.5px; opacity: 0.75; }
+  .receipt-row { display: flex; justify-content: space-between; font-size: 10.5px; font-family: var(--f-mono); margin: 3px 0; }
+  .receipt-total { border-top: 1px solid rgba(43,32,20,0.2); margin-top: 6px; padding-top: 4px; font-weight: 800; font-size: 11.5px; }
+  .receipt-total .up { color: var(--cinnabar); }
+  .receipt-total .down { color: var(--dai); }
+
+  /* 复盘印章与批注 */
+  .ed-item-seal-slot { flex: none; width: 50px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 2px; }
+  .review-trigger-box {
+    width: 44px; height: 44px; border: 1px dashed var(--cinnabar); border-radius: 4px;
+    display: grid; place-items: center; font-size: 10px; font-family: var(--f-print); color: var(--cinnabar);
+    cursor: pointer; transition: all 0.18s ease;
+  }
+  .review-trigger-box:hover { background: var(--cinnabar-soft); }
+  .review-quote-box {
+    margin-top: 8px; border-left: 2px solid var(--cinnabar); padding-left: 8px;
+    font-family: var(--f-print); font-size: 12px; color: var(--ink-2); line-height: 1.6;
+    background: var(--cinnabar-soft); padding-top: 4px; padding-bottom: 4px; border-radius: 0 3px 3px 0;
+  }
+
+  /* 浮动新建条目按钮 FAB */
+  .ed-fab {
+    position: absolute; right: 20px; bottom: 86px; width: 52px; height: 52px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, var(--ember-hi), var(--ember) 75%);
+    box-shadow: 0 8px 24px var(--glow); border: none; color: #FFF3E0; display: grid; place-items: center;
+    cursor: pointer; z-index: 70; transition: transform 0.18s ease;
+  }
+  .ed-fab:hover { transform: scale(1.06); }
+  .ed-fab svg { width: 22px; height: 22px; }
+
+  /* ==========================================================================
+     页面 5: 复盘判定抽屉 (Review Modal Sheet)
+     ========================================================================== */
+  .review-sheet-overlay {
+    position: absolute; inset: 0; background: rgba(20,15,10,0.65); backdrop-filter: blur(4px);
+    z-index: 95; display: flex; flex-direction: column; justify-content: flex-end;
+  }
+  .review-sheet {
+    background: var(--paper-hi); border-radius: 18px 18px 0 0; padding: 18px 22px 34px;
+    box-shadow: 0 -8px 30px rgba(0,0,0,0.3); border-top: 1px solid var(--rule); display: flex; flex-direction: column; gap: 14px;
+  }
+  .sheet-handle { width: 38px; height: 4px; border-radius: 2px; background: var(--ink-3); opacity: 0.4; margin: 0 auto 4px; }
+  .sheet-head { display: flex; justify-content: space-between; align-items: center; }
+  .sheet-title { font-family: var(--f-print); font-size: 16px; font-weight: 900; }
+  .sheet-close-btn { background: none; border: none; font-size: 12px; font-weight: 700; color: var(--ink-3); cursor: pointer; }
+
+  .review-chops-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }
+  .review-chop-card {
+    border: 1px solid var(--rule); background: var(--paper); padding: 12px 10px; border-radius: 6px;
+    display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; transition: all 0.18s ease;
+  }
+  .review-chop-card:hover { border-color: var(--cinnabar); transform: translateY(-1px); }
+  .review-chop-card.selected { border: 2px solid var(--cinnabar); background: var(--cinnabar-soft); }
+  .review-chop-card .label { font-size: 11.5px; font-weight: 700; color: var(--ink-1); }
+  .review-chop-card .desc { font-size: 9.5px; color: var(--ink-3); text-align: center; }
+
+  .review-input-area {
+    width: 100%; height: 72px; background: var(--paper); border: 1px solid var(--rule);
+    border-radius: 4px; padding: 8px 10px; font-family: var(--f-print); font-size: 12.5px; color: var(--ink-1);
+    resize: none; outline: none;
+  }
+  .review-input-area:focus { border-color: var(--ember); }
+  .review-submit-btn {
+    background: var(--cinnabar); color: #FFF3E0; border: none; padding: 10px; border-radius: 4px;
+    font-family: var(--f-ui); font-size: 13px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(192,58,34,0.3);
+  }
+
+  /* ==========================================================================
+     页面 6: 设置页 (Settings View) - 含彩蛋开关
+     ========================================================================== */
+  .set-view-wrap { padding: 12px 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+  .set-card {
+    background: var(--paper-hi); border: 1px solid var(--rule); box-shadow: var(--sh-page);
+    border-radius: 6px; padding: 14px 18px;
+  }
+  .set-group-title {
+    font-family: var(--f-print); font-size: 11px; font-weight: 800; letter-spacing: 0.12em;
+    color: var(--ink-3); text-transform: uppercase; margin-bottom: 10px;
+  }
+  .set-item-row {
+    display: flex; align-items: center; justify-content: space-between; padding: 9px 0;
+    border-bottom: 1px solid var(--rule); font-size: 13px; color: var(--ink-1);
+  }
+  .set-item-row:last-child { border-bottom: none; }
+  .set-item-row .sub { font-size: 10.5px; color: var(--ink-3); display: block; margin-top: 2px; }
+  
+  .ios-toggle {
+    width: 44px; height: 26px; border-radius: 13px; background: var(--rule);
+    position: relative; cursor: pointer; transition: background 0.2s ease; flex: none;
+  }
+  .ios-toggle::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
+    border-radius: 50%; background: var(--paper-hi); box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .ios-toggle.on { background: var(--ember); }
+  .ios-toggle.on::after { transform: translateX(18px); }
+
+  .easter-setting-box {
+    background: var(--cinnabar-soft); border: 1px dashed var(--cinnabar); border-radius: 6px;
+    padding: 10px 12px; margin-top: 8px;
+  }
+  .easter-setting-box .set-item-row { border-bottom: none; padding: 0; }
+
+  /* ==========================================================================
+     页面 7: 桌面小组件提案 (Widgets Suite)
+     ========================================================================== */
+  .widget-stage-wrap {
+    padding: 18px 16px 20px; display: flex; flex-direction: column; gap: 18px; align-items: center;
+  }
+  .widget-preview-card {
+    background: var(--paper-hi); border-radius: 22px; box-shadow: var(--sh-lift);
+    border: 1px solid var(--rule); padding: 18px 20px; position: relative; overflow: hidden;
+  }
+  .widget-preview-card::before {
+    content: ""; position: absolute; top: -50px; right: -40px; width: 140px; height: 140px;
+    border-radius: 50%; background: radial-gradient(circle, var(--glow), transparent 70%); pointer-events: none;
+  }
+  .widget-small { width: 155px; height: 155px; display: flex; flex-direction: column; justify-content: space-between; }
+  .widget-medium { width: 330px; height: 155px; }
+
+  /* ==========================================================================
+     全景展台陈列 (Panels Showcase Gallery)
+     ========================================================================== */
+  .gallery-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 32px;
+    margin-top: 24px;
+  }
+  .gallery-card {
+    background: var(--paper); border: 1px solid var(--rule); box-shadow: var(--sh-page);
+    border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .gallery-header { display: flex; justify-content: space-between; align-items: baseline; }
+  .gallery-title { font-family: var(--f-print); font-size: 18px; font-weight: 900; }
+  .gallery-tag { font-family: var(--f-mono); font-size: 11px; color: var(--cinnabar); font-weight: 700; }
+  .gallery-desc { font-size: 12.5px; color: var(--ink-2); line-height: 1.8; }
+  .gallery-desc b { color: var(--ink-1); }
+
+  /* 印章动效与样式 (白文方章) */
+  .chop {
+    position: relative; display: inline-grid; place-items: center; color: #F7E7D2;
+    font-family: var(--f-print); font-weight: 700; transform: rotate(-4deg); user-select: none;
+  }
+  .chop::before {
+    content: ""; position: absolute; inset: 0; z-index: 0;
+    background:
+      radial-gradient(130% 130% at 28% 20%, rgba(247, 231, 210, 0.3), transparent 44%),
+      radial-gradient(150% 150% at 50% 55%, transparent 50%, rgba(96, 14, 4, 0.42)),
+      var(--cinnabar);
+    border-radius: 8%; box-shadow: inset 0 0 0 1.5px rgba(247, 231, 210, 0.38), 0 1px 2px rgba(43, 32, 20, 0.3);
+    filter: url(#f-seal);
+  }
+  .chop::after {
+    content: ""; position: absolute; inset: 0; z-index: 0; border-radius: 8%;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='90' height='90' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+    background-size: 90px 90px; mix-blend-mode: overlay; opacity: 0.4;
+  }
+  .chop span { position: relative; z-index: 1; }
+  .chop.stamped { animation: seal-drop 0.32s cubic-bezier(0.18, 1.25, 0.4, 1) forwards; }
+  @keyframes seal-drop {
+    0% { transform: scale(1.6) rotate(12deg); opacity: 0; }
+    70% { transform: scale(0.96) rotate(-5deg); opacity: 1; }
+    100% { transform: scale(1) rotate(-4deg); opacity: 1; }
+  }
+
+  /* 底部 Footer */
+  footer {
+    margin-top: 90px; padding-top: 24px; border-top: 1px solid var(--rule);
+    display: flex; justify-content: space-between; font-size: 12.5px; color: var(--ink-3);
+  }
+  footer a { color: var(--cinnabar); text-decoration: none; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="grain-layer grain"></div>
+
+<!-- SVG 滤镜库 -->
+<svg width="0" height="0" style="position: absolute;" aria-hidden="true">
+  <filter id="f-char" x="-5%" y="-30%" width="110%" height="160%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.012 0.35" numOctaves="3" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="f-torn" x="-5%" y="-12%" width="110%" height="124%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.035 0.28" numOctaves="3" seed="11" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="f-seal" x="-8%" y="-8%" width="116%" height="116%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="2" seed="9" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="2.4"/>
+  </filter>
+  <filter id="f-torn-top" x="-5%" y="-30%" width="110%" height="130%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.05 0.09" numOctaves="2" seed="4" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="3.5"/>
+  </filter>
+</svg>
+
+<!-- 顶部主题与时段切换栏 (联动 <html> 属性) -->
+<div class="theme-bar">
+  <div class="grp">
+    <button data-set-phase="dawn">拂晓</button>
+    <button data-set-phase="day">正午</button>
+    <button data-set-phase="dusk">黄昏</button>
+    <button data-set-phase="night">子夜</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button data-set-scheme="light">亮</button>
+    <button data-set-scheme="dark">暗</button>
+  </div>
+</div>
+
+<div class="page-container">
+
+  <!-- 刊头 -->
+  <header class="masthead">
+    <div class="flame-mark">
+      <svg width="30" height="30" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+        <path d="M9 1.4 C7.6 3.1 6.6 4.6 6.6 6.1 C6.6 7.8 7.7 9 9 9 C10.3 9 11.4 7.8 11.4 6.1 C11.4 4.6 10.4 3.1 9 1.4 Z" fill="#F7B261"/>
+        <rect x="8.5" y="9.2" width="1" height="2" fill="#C9B795"/>
+        <path d="M5.6 11.2 L12.4 11.2 L12.8 15.6 Q12.85 16.6 11.6 16.6 L6.4 16.6 Q5.15 16.6 5.2 15.6 Z" fill="#E8DCC0"/>
+      </svg>
+    </div>
+    <div>
+      <h1><small>WICK · IOS CLIENT DESIGN SPEC</small>秉烛 · iOS 客户端定稿</h1>
+    </div>
+    <div class="meta">
+      v1.0 · 2026-08-24<br>
+      状态：<b>定稿，作为 iOS 客户端落地蓝本</b><br>
+      <span data-clock></span>
+    </div>
+  </header>
+
+  <div class="nav-strip">
+    <a href="final.html">← macOS 客户端定稿 (final.html)</a>
+    <span style="color: var(--ink-3);">/</span>
+    <span class="current">iOS 客户端定稿 (final-ios.html)</span>
+    <span style="color: var(--ink-3);">/</span>
+    <a href="v2-ios.html">v2.1 探索稿</a>
+  </div>
+
+  <!-- ==================== 00 移动端概念与定稿决策 ==================== -->
+  <section data-screen-label="决策记录">
+    <div class="sec-head"><span class="no">00</span><h2>决策与演进</h2><span class="en">Mobile Design Decisions</span></div>
+    <p class="lead">iOS 客户端全面对齐 macOS 客户端的成熟产品哲学：在确立原生 TabBar 导航与今日看板的同时，<b>交易黄历默认采用平实纸面风格（不可撕页，纯净高效），拟物撕页黄历作为设置中自行开启的彩蛋</b>。</p>
+    <div class="sheet">
+      <table class="spec">
+        <tr><th>维度</th><th>macOS 落地规范</th><th>iOS 定稿决策 (本稿)</th></tr>
+        <tr><td>黄历归属与风格</td><td>默认入册（检查器滚动列表，无撕页）；贴桌物理黄历降级为<b>设置中自行开启的彩蛋</b>。</td><td><b>完全对齐 macOS 策略</b>：黄历 Tab 默认采用<b>平实纸面风格（不可撕页）</b>，支持日期切换与宏观/财报滚动列表；设置中提供「拟物物理黄历」彩蛋开关，开启后切换为朱漆装订条与撕页物理。</td></tr>
+        <tr><td>导航架构 (TabBar)</td><td>原生工具栏 + 三栏/两栏/专注态切换。</td><td><b>标准四大核心域</b>：① <b>今日</b>（时间与交易看板）→ ② <b>日记</b>（历史列表与盈亏月历）→ ③ <b>黄历</b>（平实交易日历 / 彩蛋撕页）→ ④ <b>设置</b>。</td></tr>
+        <tr><td>信息架构 (IA)</td><td>菜单栏常驻纸签 + 检查器对账。</td><td><b>彻底移除重复跳转卡片</b>。首页聚焦为<b>「今日时间与交易看板」</b>：集成关键宏观倒计时、实盘盈亏单据简报、今日日记流与就地速记栏。</td></tr>
+        <tr><td>盈亏月历</td><td>检查器下半栏或导航栏顶部迷你月历</td><td><b>日记列表顶部紧凑盈亏热力图</b>，支持周一开头、折叠展开与点击跳跃至指定日。</td></tr>
+        <tr><td>复盘盖章</td><td>条目右下角白文朱砂方章（「对」/「错」），0.3s 落印动效</td><td><b>触屏专属交互</b>：轻点条目复盘位呼出底部纸面抽屉（Sheet），点选方章后原地落印，附带触觉振动反馈。</td></tr>
+        <tr><td>材料系统</td><td>宣纸 / 烟墨 / 烛火 / 朱砂 / 黛青 / 烛痕 / 单据纸（7 色板）</td><td><b>100% 严格一致</b>：共享 <code>tokens-v2.css</code> 与 DayArcEngine 4 时段锚点，火苗色恒定。</td></tr>
+      </table>
+    </div>
+    <div class="sheet-edge"></div>
+  </section>
+
+  <!-- ==================== 01 全真交互实机 (Interactive Prototype) ==================== -->
+  <section data-screen-label="实机原型">
+    <div class="sec-head"><span class="no">01</span><h2>全真交互实机</h2><span class="en">Live Interactive Prototype</span></div>
+    <p class="lead">下方是一台运行定稿视觉的 <b>iPhone 16 Pro 实机交互原型</b>。黄历默认呈现平实纸面列表；前往设置或点按提示可开启「拟物物理黄历」彩蛋体验撕页：</p>
+
+    <div class="interactive-stage">
+      <!-- 页面场景快捷切换器 -->
+      <div class="stage-controls">
+        <button class="stage-btn active" data-target="view-home">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          1. 首页 · 今日看板
+        </button>
+        <button class="stage-btn" data-target="view-days">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          2. 日记列表 (月历)
+        </button>
+        <button class="stage-btn" data-target="view-calendar">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          3. 交易黄历 (默认平实 / 彩蛋)
+        </button>
+        <button class="stage-btn" data-target="view-editor">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          4. 单日日记页 (条目/单据)
+        </button>
+        <button class="stage-btn" data-target="view-settings">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          5. 设置 (含彩蛋开关)
+        </button>
+        <button class="stage-btn" data-target="view-widgets">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          6. 桌面小组件
+        </button>
+      </div>
+
+      <!-- iPhone 机身 -->
+      <div class="iphone-frame">
+        <!-- 灵动岛 -->
+        <div class="dynamic-island">
+          <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--ember); box-shadow: 0 0 6px var(--glow);"></div>
+          <div class="island-cam"></div>
+        </div>
+
+        <!-- 状态栏 -->
+        <div class="ios-status-bar">
+          <span style="letter-spacing: -0.02em;">13:48</span>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <svg width="15" height="11" viewBox="0 0 18 12" fill="currentColor"><path d="M1 8.5h3v3H1zM6 6h3v5.5H6zM11 3.5h3v8h-3zM16 1h1v10.5h-1z"/></svg>
+            <svg width="15" height="11" viewBox="0 0 16 12" fill="currentColor"><path d="M8 2.5a10.9 10.9 0 0 1 6.3 2A.6.6 0 0 1 14.5 5l-1.2 1.3a.5.5 0 0 1-.7.05 8.1 8.1 0 0 0-9.2 0 .5.5 0 0 1-.7-.05L1.5 5a.6.6 0 0 1 .2-.5A10.9 10.9 0 0 1 8 2.5zM8 6.5a6.5 6.5 0 0 1 3.7 1.1.5.5 0 0 1 .1.7L8.4 11.7a.5.5 0 0 1-.8 0L4.2 8.3a.5.5 0 0 1 .1-.7A6.5 6.5 0 0 1 8 6.5z"/></svg>
+            <svg width="22" height="11" viewBox="0 0 24 12" fill="currentColor"><rect x="1" y="1" width="19" height="10" rx="3" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="2.5" y="2.5" width="14" height="7" rx="1.5"/><path d="M21 4.5v3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          </div>
+        </div>
+
+        <!-- 屏幕内容区 -->
+        <div class="phone-screen">
+
+          <!-- ---------------- 视图 1: 首页 · 今日时间与交易看板 ---------------- -->
+          <div class="phone-view active" id="view-home">
+            <div class="hm-wrap">
+              
+              <!-- 今日主纸签卡片 -->
+              <div class="hm-card">
+                <div class="hm-header">
+                  <div>
+                    <div class="hm-date-big">8月24日</div>
+                    <div class="hm-lunar-sub">星期一 · 农历七月十二<br>丙午年 · 丙申月 · 庚子日</div>
+                  </div>
+                  <div class="hm-flame-badge">
+                    <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+                      <path d="M9 1.4 C7.6 3.1 6.6 4.6 6.6 6.1 C6.6 7.8 7.7 9 9 9 C10.3 9 11.4 7.8 11.4 6.1 C11.4 4.6 10.4 3.1 9 1.4 Z" fill="#F7B261"/>
+                      <rect x="8.5" y="9.2" width="1" height="2" fill="#C9B795"/>
+                      <path d="M5.6 11.2 L12.4 11.2 L12.8 15.6 Q12.85 16.6 11.6 16.6 L6.4 16.6 Q5.15 16.6 5.2 15.6 Z" fill="#E8DCC0"/>
+                    </svg>
+                  </div>
+                </div>
+
+                <div class="hm-burn-block">
+                  <div class="hm-burn-headline">
+                    <span class="lbl">今日剩余</span>
+                    <span class="pct"><span data-burn-day-label>42.5</span><small>%</small></span>
+                  </div>
+                  <div class="burnstrip hm-burn-strip" data-burn-day style="--p: 57.5%;">
+                    <div class="char"></div>
+                    <div class="emberline"></div>
+                    <div class="flame"></div>
+                  </div>
+                </div>
+
+                <div class="hm-sub-strips">
+                  <div class="hm-sub-row">
+                    <span class="lbl">本周</span>
+                    <div class="burnstrip" style="--p: 14.3%; --ticks: 7;"><div class="char"></div><div class="emberline"></div></div>
+                    <span class="val">剩 85.7%</span>
+                  </div>
+                  <div class="hm-sub-row">
+                    <span class="lbl">本月</span>
+                    <div class="burnstrip" style="--p: 77.4%; --ticks: 31;"><div class="char"></div><div class="emberline"></div></div>
+                    <span class="val">剩 22.6%</span>
+                  </div>
+                  <div class="hm-sub-row">
+                    <span class="lbl">今年</span>
+                    <div class="burnstrip" style="--p: 64.6%; --ticks: 12;"><div class="char"></div><div class="emberline"></div></div>
+                    <span class="val">剩 35.4%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 模块 1: 今日宏观雷达与倒计时 -->
+              <div class="hm-macro-alert" onclick="switchView('view-calendar')">
+                <div class="macro-alert-head">
+                  <span class="macro-alert-badge">下个关键数据发布</span>
+                  <span class="macro-countdown">距离发布 1小时57分</span>
+                </div>
+                <div class="macro-alert-body">
+                  <span class="macro-alert-title">21:45 美国 · 8月标普全球制造业PMI初值</span>
+                  <span class="macro-alert-vals">前 49.5 / 预期 49.8</span>
+                </div>
+              </div>
+
+              <!-- 模块 2: 今日交易与平仓单据简报 -->
+              <div class="hm-trading-card" onclick="switchView('view-editor')">
+                <div class="trading-card-head">
+                  <span class="trading-card-title">今日实盘已实现盈亏</span>
+                  <span class="trading-card-pnl">+431.38 USDT</span>
+                </div>
+                <div class="trading-sub-note">Binance 2 笔平仓成交 · 当前无隔夜持仓风险</div>
+                
+                <!-- 迷你单据摘要 -->
+                <div class="receipt-card" style="margin: 2px 0 0;">
+                  <div class="receipt-head">
+                    <b>BTCUSDT 永续 · 多 (已止盈)</b>
+                    <span>14:35 VWAP 114,206.0</span>
+                  </div>
+                  <div class="receipt-row receipt-total" style="margin-top: 2px; border-top: none; padding-top: 0;">
+                    <span>已实现盈亏</span>
+                    <span class="up">+431.38 USDT</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 模块 3: 今日日记流与速记器 -->
+              <div class="hm-journal-block">
+                <div class="journal-block-head">
+                  <span class="journal-block-title">今日记录 · 3 条</span>
+                  <span class="journal-badge-review" onclick="openReviewModal()">1 条待复盘 ›</span>
+                </div>
+
+                <div class="hm-journal-mini-items" id="hm-journal-items">
+                  <div class="hm-mini-item">
+                    <span class="hm-mini-time">09:15</span>
+                    <span class="hm-mini-body">今晚 21:45 制造业 PMI 初值，严禁主观抢跑…</span>
+                  </div>
+                  <div class="hm-mini-item">
+                    <span class="hm-mini-time">14:35</span>
+                    <span class="hm-mini-body">BTC 多单分批止盈完毕，执行完全符合纪律。</span>
+                  </div>
+                </div>
+
+                <!-- 首页直接速记条 -->
+                <div class="hm-quick-box">
+                  <input type="text" id="quick-input-text" class="hm-quick-input" placeholder="写下此刻的交易想法或盘感…">
+                  <button class="hm-quick-send" onclick="addQuickJournalNote()" title="快速记一笔">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ---------------- 视图 2: 历史日记列表 / 月历 (Tab 2: 日记) ---------------- -->
+          <div class="phone-view" id="view-days">
+            <div class="dl-wrap">
+              <!-- 顶部日记本管理 -->
+              <div class="dl-topbar">
+                <button class="journal-picker-btn">
+                  <span>实盘日记本</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="dl-topbar-actions">
+                  <button class="icon-square-btn" title="搜索日记"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+                  <button class="icon-square-btn" title="新建今日" onclick="switchView('view-editor')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+                </div>
+              </div>
+
+              <!-- 紧凑盈亏月历热力图 -->
+              <div class="dl-heatmap-card">
+                <div class="heatmap-head">
+                  <span class="month">二〇二六年 · 八月</span>
+                  <span class="pnl-sum">月合计 +1,842.10 USDT</span>
+                </div>
+                <div class="heatmap-grid">
+                  <span class="hm-cell dow">一</span><span class="hm-cell dow">二</span><span class="hm-cell dow">三</span><span class="hm-cell dow">四</span><span class="hm-cell dow">五</span><span class="hm-cell dow">六</span><span class="hm-cell dow">日</span>
+                  <!-- 8月1日是周六 -->
+                  <span class="hm-cell" style="opacity: 0.3;">27</span><span class="hm-cell" style="opacity: 0.3;">28</span><span class="hm-cell" style="opacity: 0.3;">29</span><span class="hm-cell" style="opacity: 0.3;">30</span><span class="hm-cell" style="opacity: 0.3;">31</span>
+                  <span class="hm-cell stain">1</span><span class="hm-cell stain">2</span>
+                  <span class="hm-cell up">3</span><span class="hm-cell down">4</span><span class="hm-cell up">5</span><span class="hm-cell up">6</span><span class="hm-cell stain">7</span><span class="hm-cell stain">8</span><span class="hm-cell stain">9</span>
+                  <span class="hm-cell up">10</span><span class="hm-cell up">11</span><span class="hm-cell down">12</span><span class="hm-cell up">13</span><span class="hm-cell up">14</span><span class="hm-cell stain">15</span><span class="hm-cell stain">16</span>
+                  <span class="hm-cell up">17</span><span class="hm-cell down">18</span><span class="hm-cell up">19</span><span class="hm-cell up">20</span><span class="hm-cell up">21</span><span class="hm-cell stain">22</span><span class="hm-cell stain">23</span>
+                  <span class="hm-cell up today" onclick="switchView('view-editor')">24</span>
+                  <span class="hm-cell">25</span><span class="hm-cell">26</span><span class="hm-cell">27</span><span class="hm-cell">28</span><span class="hm-cell">29</span><span class="hm-cell">30</span>
+                </div>
+              </div>
+
+              <!-- 标签筛选条 -->
+              <div class="tag-filter-bar">
+                <span class="tag-chip active">全部</span>
+                <span class="tag-chip">趋势跟踪</span>
+                <span class="tag-chip">突破</span>
+                <span class="tag-chip">止损复盘</span>
+                <span class="tag-chip">心态</span>
+                <span class="tag-chip">宏观数据</span>
+              </div>
+
+              <!-- 日期条目流 -->
+              <div class="dl-month-section">
+                <div class="dl-section-label">本周</div>
+                
+                <div class="dl-day-card selected" onclick="switchView('view-editor')">
+                  <div class="dl-day-left">
+                    <span class="dl-day-num">24</span>
+                    <span class="dl-day-meta">今天 · 周一</span>
+                  </div>
+                  <div class="dl-day-center">
+                    <div class="dl-day-preview">今晚 21:45 制造业 PMI 初值。BTC 多单按计划分批止盈…</div>
+                    <div class="dl-day-tags"><span class="ptag">趋势跟踪</span><span class="ptag">计划</span></div>
+                  </div>
+                  <div class="dl-day-right">
+                    <span class="dl-day-pnl up">+431.38</span>
+                    <span class="chop" style="width: 22px; height: 22px; font-size: 11px;"><span>对</span></span>
+                  </div>
+                </div>
+
+                <div class="dl-day-card" onclick="switchView('view-editor')">
+                  <div class="dl-day-left">
+                    <span class="dl-day-num">21</span>
+                    <span class="dl-day-meta">8月21日 · 周五</span>
+                  </div>
+                  <div class="dl-day-center">
+                    <div class="dl-day-preview">ETH 空单被扫，追高犯了老毛病。周末暂停交易，阅读复盘。</div>
+                    <div class="dl-day-tags"><span class="ptag">心态</span><span class="ptag">震荡</span></div>
+                  </div>
+                  <div class="dl-day-right">
+                    <span class="dl-day-pnl down">-311.25</span>
+                    <span class="chop" style="width: 22px; height: 22px; font-size: 11px; transform: rotate(3deg);"><span>错</span></span>
+                  </div>
+                </div>
+
+                <div class="dl-day-card" onclick="switchView('view-editor')">
+                  <div class="dl-day-left">
+                    <span class="dl-day-num">20</span>
+                    <span class="dl-day-meta">8月20日 · 周四</span>
+                  </div>
+                  <div class="dl-day-center">
+                    <div class="dl-day-preview">初请失业金数据后轻仓试多，点位极佳，持仓过夜。</div>
+                    <div class="dl-day-tags"><span class="ptag">趋势跟踪</span></div>
+                  </div>
+                  <div class="dl-day-right">
+                    <span class="dl-day-pnl up">+620.00</span>
+                    <span class="chop" style="width: 22px; height: 22px; font-size: 11px;"><span>对</span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ---------------- 视图 3: 交易黄历 (Tab 3: 黄历 · 默认平实 / 彩蛋拟物) ---------------- -->
+          <div class="phone-view" id="view-calendar">
+            
+            <!-- 3.1 默认平实纸面日历 (不可撕页 · 纯净高效) -->
+            <div class="flat-cal-wrap" id="flat-calendar-container">
+              <!-- 顶部日期翻页条 -->
+              <div class="flat-cal-topbar">
+                <div class="flat-cal-date-nav">
+                  <button class="flat-nav-btn" onclick="navCalDay(-1)" title="前一日">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                  </button>
+                  <div class="flat-cal-current-date">
+                    <span class="day-text" id="flat-cal-day-text">8月24日 周一</span>
+                    <span class="lunar-text" id="flat-cal-lunar-text">农历七月十二 · 庚子日</span>
+                  </div>
+                  <button class="flat-nav-btn" onclick="navCalDay(1)" title="后一日">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </div>
+                <div class="flat-cal-actions">
+                  <button class="flat-today-btn" onclick="resetCalToday()">回到今日</button>
+                </div>
+              </div>
+
+              <!-- 宜忌纸签条 -->
+              <div class="flat-yiji-banner">
+                <span class="yi-tag"><b>宜</b> 止盈 · 依纪复盘</span>
+                <span class="ji-tag"><b>忌</b> 追涨 · 扛单违规</span>
+                <span class="easter-tip-badge" onclick="toggleEasterEggFromCal()" title="点击切换至彩蛋拟物撕页黄历">彩蛋撕页 ›</span>
+              </div>
+
+              <!-- 宏观 / 财报 双 Tab -->
+              <div class="flat-cal-tabs">
+                <button class="flat-tab-btn active" id="tab-btn-macro" onclick="switchCalTab('macro')">宏观数据 (9)</button>
+                <button class="flat-tab-btn" id="tab-btn-earnings" onclick="switchCalTab('earnings')">公司财报 (4)</button>
+              </div>
+
+              <!-- 宏观事件列表 (平实滚动列表，不可撕页) -->
+              <div class="flat-event-list" id="flat-macro-list">
+                <div class="flat-event-card">
+                  <div class="flat-event-time-col">
+                    <span class="flat-event-time">20:30</span>
+                    <span class="flat-event-stars">★★★</span>
+                  </div>
+                  <div class="flat-event-main">
+                    <div class="flat-event-title-row">
+                      <span class="country-pill">美国</span>
+                      <span class="flat-event-title">至8月22日当周初请失业金人数(万人)</span>
+                    </div>
+                    <div class="flat-event-data-row">
+                      <span>前值 <b>22.5</b></span>
+                      <span>预期 <b>22.8</b></span>
+                      <span>今值 <b style="color: var(--cinnabar);">待公布</b></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flat-event-card">
+                  <div class="flat-event-time-col">
+                    <span class="flat-event-time">20:30</span>
+                    <span class="flat-event-stars">★★☆</span>
+                  </div>
+                  <div class="flat-event-main">
+                    <div class="flat-event-title-row">
+                      <span class="country-pill">美国</span>
+                      <span class="flat-event-title">8月费城联储制造业指数</span>
+                    </div>
+                    <div class="flat-event-data-row">
+                      <span>前值 <b>7.0</b></span>
+                      <span>预期 <b>8.2</b></span>
+                      <span>今值 <b style="color: var(--cinnabar);">待公布</b></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flat-event-card" style="border-left: 3.5px solid var(--cinnabar);">
+                  <div class="flat-event-time-col">
+                    <span class="flat-event-time">21:45</span>
+                    <span class="flat-event-stars">★★★</span>
+                  </div>
+                  <div class="flat-event-main">
+                    <div class="flat-event-title-row">
+                      <span class="country-pill">美国</span>
+                      <span class="flat-event-title">8月标普全球制造业PMI初值</span>
+                    </div>
+                    <div class="flat-event-data-row">
+                      <span>前值 <b>49.5</b></span>
+                      <span>预期 <b>49.8</b></span>
+                      <span>今值 <b style="color: var(--cinnabar);">待公布</b></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flat-event-card">
+                  <div class="flat-event-time-col">
+                    <span class="flat-event-time">22:00</span>
+                    <span class="flat-event-stars">★★☆</span>
+                  </div>
+                  <div class="flat-event-main">
+                    <div class="flat-event-title-row">
+                      <span class="country-pill">美国</span>
+                      <span class="flat-event-title">7月新屋销售总数年化(万户)</span>
+                    </div>
+                    <div class="flat-event-data-row">
+                      <span>前值 <b>61.7</b></span>
+                      <span>预期 <b>64.5</b></span>
+                      <span>今值 <b style="color: var(--cinnabar);">待公布</b></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flat-event-card">
+                  <div class="flat-event-time-col">
+                    <span class="flat-event-time">22:30</span>
+                    <span class="flat-event-stars">★★☆</span>
+                  </div>
+                  <div class="flat-event-main">
+                    <div class="flat-event-title-row">
+                      <span class="country-pill">美国</span>
+                      <span class="flat-event-title">至8月21日当周EIA原油库存(万桶)</span>
+                    </div>
+                    <div class="flat-event-data-row">
+                      <span>前值 <b>-464.9</b></span>
+                      <span>预期 <b>-180.0</b></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 财报列表 (默认隐藏) -->
+              <div class="flat-event-list" id="flat-earnings-list" style="display: none;">
+                <div class="flat-event-card">
+                  <div class="flat-event-time-col">
+                    <span class="flat-event-time">AMC</span>
+                    <span style="font-size: 8px; color: var(--ink-3);">盘后</span>
+                  </div>
+                  <div class="flat-event-main">
+                    <div class="flat-event-title-row">
+                      <span class="country-pill">美股</span>
+                      <span class="flat-event-title">NVDA · 英伟达 Q2 财报</span>
+                    </div>
+                    <div class="flat-event-data-row">
+                      <span>EPS 预期 <b>$0.64</b></span>
+                      <span>营收预期 <b>$28.7B</b></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flat-event-card">
+                  <div class="flat-event-time-col">
+                    <span class="flat-event-time">BMO</span>
+                    <span style="font-size: 8px; color: var(--ink-3);">盘前</span>
+                  </div>
+                  <div class="flat-event-main">
+                    <div class="flat-event-title-row">
+                      <span class="country-pill">港股</span>
+                      <span class="flat-event-title">0700.HK · 腾讯控股</span>
+                    </div>
+                    <div class="flat-event-data-row">
+                      <span>净利润预期 <b>468.5亿</b></span>
+                      <span>同比 <b>+18.2%</b></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3.2 拟物撕页黄历 (设置彩蛋开启后呈现) -->
+            <div class="fs-cal-view" id="physical-calendar-container" style="display: none;">
+              <div class="fs-rail"></div>
+              <div class="fs-border-frame"></div>
+              <div class="fs-cal-body">
+                <div class="fs-masthead">
+                  <div class="brand">交易日历</div>
+                  <div class="sub">二〇二六年八月 · 彩蛋模式<br>MONDAY · 8月24日</div>
+                </div>
+
+                <div class="fs-hero">
+                  <div class="fs-big-day" id="fs-hero-day">24</div>
+                  <div class="fs-vert-week" id="fs-hero-week">星期一</div>
+                </div>
+
+                <div class="fs-lunar-bar">
+                  <span>农历七月十二</span>
+                  <span>丙午年 · 丙申月 · 庚子日</span>
+                </div>
+
+                <div class="fs-yiji-row">
+                  <span class="yi"><b>宜</b>止盈 · 依纪复盘</span>
+                  <span class="ji"><b>忌</b>追涨 · 扛单违规</span>
+                </div>
+
+                <div class="fs-tab-bar">
+                  <span class="fs-tab on">宏观事件</span>
+                  <span class="fs-tab off">财报发布</span>
+                </div>
+
+                <div class="fs-event-list">
+                  <div class="fs-event-row">
+                    <span class="time">20:30</span><span class="country">美国</span>
+                    <span class="title">至8月22日当周初请失业金人数(万人)</span>
+                    <span class="vals">预 22.8 前 22.5</span>
+                  </div>
+                  <div class="fs-event-row">
+                    <span class="time">21:45</span><span class="country">美国</span>
+                    <span class="title">8月标普全球制造业PMI初值</span>
+                    <span class="vals">预 49.8 前 49.5</span>
+                  </div>
+                  <div class="fs-event-row">
+                    <span class="time">22:00</span><span class="country">美国</span>
+                    <span class="title">7月新屋销售总数年化(万户)</span>
+                    <span class="vals">预 64.5 前 61.7</span>
+                  </div>
+                </div>
+
+                <div class="fs-tear-hint" onclick="tearCalendarPage()">
+                  ↓ 点 击 撕 页 (或 下 拉) ↓
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ---------------- 视图 4: 单日日记编辑页 ---------------- -->
+          <div class="phone-view" id="view-editor">
+            <div class="ed-wrap">
+              <div class="ed-sheet">
+                <div class="ed-head-row">
+                  <div>
+                    <button class="ed-date-btn">
+                      <span>8月24日</span>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <div class="ed-meta-sub">星期一 · 农历七月十二</div>
+                  </div>
+                  <div class="ed-pnl-badge">
+                    今日已实现
+                    <b>+431.38</b> USDT
+                  </div>
+                </div>
+
+                <div class="ed-burn-bar">
+                  <div class="burnstrip" data-burn-day style="--p: 57.5%;">
+                    <div class="char"></div>
+                    <div class="emberline"></div>
+                    <div class="flame"></div>
+                  </div>
+                </div>
+
+                <!-- 条目流 -->
+                <div class="ed-items-list">
+                  <!-- 条目 1: 计划 -->
+                  <div class="ed-item-row">
+                    <div class="ed-item-time">09:15</div>
+                    <div class="ed-item-body">
+                      <div class="ed-item-tags"><span class="ptag">数据面</span><span class="ptag">计划</span></div>
+                      <p class="ed-item-text">今晚 21:45 制造业 PMI 初值，22:00 新屋销售。数据前严禁主观提前抢跑，等待右侧确认信号。</p>
+                    </div>
+                    <div class="ed-item-seal-slot"></div>
+                  </div>
+
+                  <!-- 条目 2: 盈利平仓 + 已盖方章 -->
+                  <div class="ed-item-row">
+                    <div class="ed-item-time">14:35</div>
+                    <div class="ed-item-body">
+                      <div class="ed-item-tags"><span class="ptag active">趋势跟踪</span></div>
+                      <p class="ed-item-text">BTC 多单按计划分批止盈完毕，入场 VWAP 与平仓执行完全符合纪律，没有受盘口波动干扰。</p>
+                      
+                      <!-- 胶带单据 -->
+                      <div class="receipt-card">
+                        <div class="receipt-head">
+                          <b>BTCUSDT 永续 · 多</b>
+                          <span>08-22 09:40 → 08-24 14:30</span>
+                        </div>
+                        <div class="receipt-row">
+                          <span>开仓 → 平仓 VWAP</span>
+                          <span>112,480.5 → 114,206.0</span>
+                        </div>
+                        <div class="receipt-row">
+                          <span>数量 · 持有</span>
+                          <span>0.250 BTC · 2天4小时</span>
+                        </div>
+                        <div class="receipt-row receipt-total">
+                          <span>已实现盈亏</span>
+                          <span class="up">+431.38 USDT</span>
+                        </div>
+                      </div>
+
+                      <div class="review-quote-box">
+                        <b>反思：</b>耐心等待 VWAP 均线回踩才开仓，止盈分三批挂单，执行完美。
+                      </div>
+                    </div>
+                    
+                    <div class="ed-item-seal-slot">
+                      <span class="chop stamped" style="width: 44px; height: 44px; font-size: 20px;"><span>对</span></span>
+                    </div>
+                  </div>
+
+                  <!-- 条目 3: 待复盘条目 -->
+                  <div class="ed-item-row">
+                    <div class="ed-item-time">18:20</div>
+                    <div class="ed-item-body">
+                      <div class="ed-item-tags"><span class="ptag">突破</span><span class="ptag">心态</span></div>
+                      <p class="ed-item-text">SOL 尝试假突破轻仓追多，尾盘走弱平价损出。需复盘是否属于冲动交易？</p>
+                    </div>
+                    <div class="ed-item-seal-slot" onclick="openReviewModal()">
+                      <div class="review-trigger-box" title="点击复盘盖章">
+                        复盘
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 悬浮新建条目按钮 -->
+              <button class="ed-fab" title="写一笔新记录">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+            </div>
+
+            <!-- 复盘判定抽屉 Sheet -->
+            <div class="review-sheet-overlay" id="review-modal" style="display: none;">
+              <div class="review-sheet">
+                <div class="sheet-handle"></div>
+                <div class="sheet-head">
+                  <span class="sheet-title">盖印复盘 · 18:20 条目</span>
+                  <button class="sheet-close-btn" onclick="closeReviewModal()">取消</button>
+                </div>
+
+                <div class="review-chops-choice">
+                  <div class="review-chop-card selected" onclick="selectChop(this, '对')">
+                    <span class="chop" style="width: 38px; height: 38px; font-size: 18px;"><span>对</span></span>
+                    <span class="label">对 · 遵循系统</span>
+                    <span class="desc">执行符合策略，盈亏皆是概率</span>
+                  </div>
+                  <div class="review-chop-card" onclick="selectChop(this, '错')">
+                    <span class="chop" style="width: 38px; height: 38px; font-size: 18px; transform: rotate(4deg);"><span>错</span></span>
+                    <span class="label">错 · 违纪冲动</span>
+                    <span class="desc">情绪交易、扛单或未按计划进出</span>
+                  </div>
+                </div>
+
+                <textarea class="review-input-area" placeholder="写下你的复盘批注与教训（可选）…"></textarea>
+                <button class="review-submit-btn" onclick="applyReviewSeal()">盖下朱砂方章</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ---------------- 视图 5: 设置页 (Tab 4: 设置 · 含彩蛋开关) ---------------- -->
+          <div class="phone-view" id="view-settings">
+            <div class="set-view-wrap">
+              <div class="set-card">
+                <div class="set-group-title">外观与主题</div>
+                <div class="set-item-row">
+                  <div>
+                    <span>外观模式</span>
+                    <span class="sub">跟随系统 / 亮 / 暗</span>
+                  </div>
+                  <span class="ptag active">跟随系统</span>
+                </div>
+                <div class="set-item-row">
+                  <div>
+                    <span>字体风格</span>
+                    <span class="sub">宋体纸面印刷 (Songti SC)</span>
+                  </div>
+                  <span style="font-size: 12px; color: var(--ink-2);">默认宋体 ›</span>
+                </div>
+              </div>
+
+              <div class="set-card">
+                <div class="set-group-title">数据同步</div>
+                <div class="set-item-row">
+                  <div>
+                    <span>Dropbox 云同步</span>
+                    <span class="sub">已连接 · 1 分钟前对账</span>
+                  </div>
+                  <div class="ios-toggle on" onclick="this.classList.toggle('on')"></div>
+                </div>
+                <div class="set-item-row">
+                  <div>
+                    <span>仓位快照同步</span>
+                    <span class="sub">跨设备只读展示成交与盈亏</span>
+                  </div>
+                  <div class="ios-toggle on" onclick="this.classList.toggle('on')"></div>
+                </div>
+              </div>
+
+              <div class="set-card">
+                <div class="set-group-title">交易所凭据</div>
+                <div class="set-item-row">
+                  <div>
+                    <span>Binance USDⓈ-M</span>
+                    <span class="sub">只读 API Key · Keychain 安全加密</span>
+                  </div>
+                  <span class="ptag">已绑定</span>
+                </div>
+                <div class="set-item-row">
+                  <div>
+                    <span>Hyperliquid</span>
+                    <span class="sub">0x4a9...b281 (只填地址，不存私钥)</span>
+                  </div>
+                  <span class="ptag">已绑定</span>
+                </div>
+              </div>
+
+              <div class="set-card">
+                <div class="set-group-title">交易日历</div>
+                <div class="set-item-row">
+                  <div>
+                    <span>宏观与财报数据源</span>
+                    <span class="sub">华尔街见闻 REST 直连缓存</span>
+                  </div>
+                  <span style="font-size: 11px; color: var(--ink-3);">实时在线</span>
+                </div>
+                <div class="set-item-row">
+                  <div>
+                    <span>日历默认风格</span>
+                    <span class="sub">平实纸面列表（不可撕页，高效阅读）</span>
+                  </div>
+                  <span class="ptag">平实风格</span>
+                </div>
+
+                <!-- 贴桌物理黄历彩蛋开关 -->
+                <div class="easter-setting-box">
+                  <div class="set-item-row">
+                    <div>
+                      <span style="font-weight: 700; color: var(--cinnabar);">拟物物理黄历 (彩蛋)</span>
+                      <span class="sub" style="color: var(--ink-2);">默认关闭。开启后，黄历 Tab 将切换为朱漆装订条与撕页物理，合成纸声与触觉震动完整保留。</span>
+                    </div>
+                    <div class="ios-toggle" id="setting-easter-toggle" onclick="toggleEasterEgg(this)"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ---------------- 视图 6: 小组件提案 ---------------- -->
+          <div class="phone-view" id="view-widgets">
+            <div class="widget-stage-wrap">
+              <div style="font-family: var(--f-print); font-size: 13px; color: var(--ink-2); text-align: center;">
+                <b>iOS 桌面与锁屏小组件提案</b><br>每秒推进 1/86400 烛苗，抬手即见时间流逝
+              </div>
+
+              <!-- 中号小组件 Medium Widget -->
+              <div class="widget-preview-card widget-medium">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <div style="width: 18px; height: 18px; border-radius: 4px; background: var(--char-1); display: grid; place-items: center;">
+                      <svg width="10" height="10" viewBox="0 0 18 18" fill="none"><path d="M9 1.4 C7.6 3.1 6.6 4.6 6.6 6.1 C6.6 7.8 7.7 9 9 9 C10.3 9 11.4 7.8 11.4 6.1 C11.4 4.6 10.4 3.1 9 1.4 Z" fill="#F7B261"/></svg>
+                    </div>
+                    <span style="font-size: 11px; font-weight: 800;">秉烛</span>
+                  </div>
+                  <span style="font-family: var(--f-mono); font-size: 10px; color: var(--ink-3);">8月24日 周一</span>
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                  <div style="font-family: var(--f-disp); font-size: 32px; font-weight: 900; line-height: 1;">
+                    42.5<small style="font-size: 13px;">%</small>
+                  </div>
+                  <span style="font-size: 10.5px; color: var(--ink-2);">今日剩余 · 烛苗走至 24:00</span>
+                </div>
+
+                <div class="burnstrip" style="height: 18px; margin: 8px 0;">
+                  <div class="char" style="width: 57.5%;"></div>
+                  <div class="emberline" style="left: 57.5%;"></div>
+                  <div class="flame" style="left: 57.5%;"></div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; font-size: 10px; font-family: var(--f-mono); color: var(--ink-2);">
+                  <span>周剩 85.7%</span>
+                  <span>月剩 22.6%</span>
+                  <span>年剩 35.4%</span>
+                </div>
+              </div>
+
+              <!-- 小号小组件 Small Widget -->
+              <div class="widget-preview-card widget-small">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <span style="font-size: 11px; font-weight: 800;">今日</span>
+                  <span style="font-family: var(--f-disp); font-size: 18px; font-weight: 900;">24</span>
+                </div>
+                <div style="font-family: var(--f-disp); font-size: 38px; font-weight: 900; line-height: 1;">
+                  42.5<small style="font-size: 14px;">%</small>
+                </div>
+                <div class="burnstrip" style="height: 14px;">
+                  <div class="char" style="width: 57.5%;"></div>
+                  <div class="emberline" style="left: 57.5%;"></div>
+                  <div class="flame" style="left: 57.5%;"></div>
+                </div>
+                <span style="font-size: 9.5px; color: var(--ink-3); text-align: right;">烛光落于 24:00</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- 底部原生 TabBar (四大独立核心域: 今日 / 日记 / 黄历 / 设置) -->
+        <div class="ios-tabbar">
+          <button class="tab-item active" data-tab="view-home" onclick="switchView('view-home')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            今日
+          </button>
+          <button class="tab-item" data-tab="view-days" onclick="switchView('view-days')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            日记
+          </button>
+          <button class="tab-item" data-tab="view-calendar" onclick="switchView('view-calendar')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            黄历
+          </button>
+          <button class="tab-item" data-tab="view-settings" onclick="switchView('view-settings')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            设置
+          </button>
+        </div>
+
+        <!-- 底部横条指示器 -->
+        <div class="ios-home-indicator"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 02 页面全景展台 (All Screens Gallery) ==================== -->
+  <section data-screen-label="全景展台">
+    <div class="sec-head"><span class="no">02</span><h2>六屏全景展台</h2><span class="en">Screen Architecture & Gallery</span></div>
+    <p class="lead">将 iOS 客户端六大核心界面平铺陈列，直观对比页面间的信息层级、组件连续性与材质呼应：</p>
+
+    <div class="gallery-grid">
+      <!-- 展卡 1: 首页 -->
+      <div class="gallery-card">
+        <div class="gallery-header">
+          <span class="gallery-title">01 · 首页「今日看板」</span>
+          <span class="gallery-tag">HomeView.swift</span>
+        </div>
+        <div class="gallery-desc">
+          <b>今日时间与交易行动中枢。</b>大日期报头 + 烛痕主条（每秒推进）+ 周/月/年进度 + <b>宏观倒计时雷达</b> + <b>今日实盘单据简报</b> + <b>今日日记流与就地速记栏</b>。
+        </div>
+      </div>
+
+      <!-- 展卡 2: 日记列表 -->
+      <div class="gallery-card">
+        <div class="gallery-header">
+          <span class="gallery-title">02 · 日记列表与月历</span>
+          <span class="gallery-tag">DayListView.swift</span>
+        </div>
+        <div class="gallery-desc">
+          <b>历史纵览与月历对账（Tab 2）。</b>顶部多日记本切换，嵌入式周一开头盈亏热力月历（红盈黛亏），标签过滤流，按月分节日期行（条数/盈亏/复盘印鉴）。
+        </div>
+      </div>
+
+      <!-- 展卡 3: 交易黄历 -->
+      <div class="gallery-card">
+        <div class="gallery-header">
+          <span class="gallery-title">03 · 交易黄历 (平实 / 彩蛋)</span>
+          <span class="gallery-tag">CalendarView.swift</span>
+        </div>
+        <div class="gallery-desc">
+          <b>双模态日历系统（Tab 3）。</b><br>
+          · <b>默认平实风格</b>：宣纸底色，顶部日期翻页栏，宜忌横条，宏观数据与财报双 Tab 滚动浏览（不可撕页，纯净高效）；<br>
+          · <b>设置彩蛋</b>：开启后切换为拟物物理撕纸黄历，朱漆装订条 + 铜钉 + 满屏撕页物理与合成纸声。
+        </div>
+      </div>
+
+      <!-- 展卡 4: 日记编辑页 -->
+      <div class="gallery-card">
+        <div class="gallery-header">
+          <span class="gallery-title">04 · 单日日记编辑页</span>
+          <span class="gallery-tag">EditorView.swift</span>
+        </div>
+        <div class="gallery-desc">
+          <b>一天一页纸。</b>大日期页眉 + 当日已实现盈亏 + 细烛痕条；流水式条目、朱砂方角标签、胶带交易所单据、白文朱砂方章（对/错）落印与复盘引文。
+        </div>
+      </div>
+
+      <!-- 展卡 5: 复盘抽屉 -->
+      <div class="gallery-card">
+        <div class="gallery-header">
+          <span class="gallery-title">05 · 复盘判定抽屉</span>
+          <span class="gallery-tag">ReviewSheet.swift</span>
+        </div>
+        <div class="gallery-desc">
+          <b>仪式感的落印体验。</b>触碰未复盘条目弹出半屏纸质抽屉，点选「对·遵循系统」或「错·违纪冲动」，写下反思批注后原地盖下朱砂方章。
+        </div>
+      </div>
+
+      <!-- 展卡 6: 桌面小组件 -->
+      <div class="gallery-card">
+        <div class="gallery-header">
+          <span class="gallery-title">06 · 桌面小组件系统</span>
+          <span class="gallery-tag">WickWidgetExtension</span>
+        </div>
+        <div class="gallery-desc">
+          <b>桌面上的微光。</b>Small / Medium / Lock Screen 三种尺寸规格，将烛痕暖渍与剩余比例带上 iPhone 锁定屏幕与主屏幕。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 03 触控规范与组件设计 ==================== -->
+  <section data-screen-label="触控与组件">
+    <div class="sec-head"><span class="no">03</span><h2>触控规范与组件体系</h2><span class="en">Ergonomics & Components</span></div>
+    <p class="lead">移动设备与桌面鼠标有着本质区别。iOS 客户端在完全承袭「秉烛」材料系统的同时，针对触屏交互建立了专属的设计护栏：</p>
+    <div class="sheet">
+      <table class="spec">
+        <tr><th>触控规范</th><th>参数与实现规则</th></tr>
+        <tr><td>触控目标地板</td><td class="dim">所有可点击部件（Tab 项、签条、方章位、日期按钮）<b>最小命中区域 ≥ 44 × 44 pt</b>；小尺寸视觉元素通过 <code>.contentShape(Rectangle())</code> 扩充命中区。</td></tr>
+        <tr><td>滑动与手势</td><td class="dim">默认黄历：随手势自然垂直滚动；彩蛋黄历：下拉撕页（拉下位移 > 90pt 触发撕口物理与音效）；日历月视图：左右滑动手势翻月；图片预览：双击与捏合缩放。</td></tr>
+        <tr><td>字态四声部适配</td><td class="dim">
+          ① <b>宋体印刷</b>（Songti SC / Serif）：正文 13.5pt / 行高 1.85 / 墨色 <code>--ink-1</code>；<br>
+          ② <b>粗衬线大数字</b>（Display Serif）：黄历日期 106pt、首页日期 36pt、百分比 34pt；<br>
+          ③ <b>刻印小标签</b>（UI Sans）：签条 11.5pt、Tab 10pt、操作提示 10.5pt；<br>
+          ④ <b>单据等宽</b>（Monospace）：成交价格、时间戳、VWAP、盈亏数字 10–12.5pt。
+        </td></tr>
+        <tr><td>震动与触觉反馈</td><td class="dim">盖章落印：<code>UIImpactFeedbackGenerator(style: .medium)</code>；彩蛋撕页成功：<code>UINotificationFeedbackGenerator().notificationOccurred(.success)</code>。</td></tr>
+        <tr><td>单据与方章</td><td class="dim">单据纸（<code>--receipt</code>）在暗黑模式下<b>恒定保持物理浅纸色</b>；白文朱砂方章盖下时伴随 0.3s 缩放与落印微弹，角度随机（-6° ~ +6°）。</td></tr>
+      </table>
+    </div>
+    <div class="sheet-edge"></div>
+  </section>
+
+  <!-- ==================== 04 SwiftUI 落地与架构映射 ==================== -->
+  <section data-screen-label="工程落地">
+    <div class="sec-head"><span class="no">04</span><h2>SwiftUI 落地注记</h2><span class="en">Engineering Architecture & SwiftUI</span></div>
+    <div class="sheet">
+      <table class="spec">
+        <tr><th>模块 Target</th><th>对应 Swift 文件</th><th>关键实现要点</th></tr>
+        <tr><td><code>WickPhone</code> (App)</td><td class="mono">WickPhoneApp.swift / HomeView.swift</td><td class="dim">采用 <code>TimelineView(.periodic(by: 1))</code> 单独隔离每秒烛痕条与时钟刷新，<b>严禁重建整棵 NavigationStack</b>；外观监听 <code>@Environment(\.colorScheme)</code> 并注入 <code>\.wickPalette</code>。</td></tr>
+        <tr><td><code>WickPhone</code> (日记)</td><td class="mono">DayListView.swift / EditorView.swift</td><td class="dim">承载 Tab 2「日记」视图，内嵌周一开头盈亏月历与多日记本切换；单日编辑页支持单据挂载与复盘白文方章。</td></tr>
+        <tr><td><code>WickCalendarKit</code> (黄历)</td><td class="mono">CalendarView.swift / MacroDayPageView.swift</td><td class="dim">承载 Tab 3「黄历」视图：<br>· <b>默认模式</b>：渲染平实纸面 <code>MacroCalendarFlatListView</code>（事件/财报列表，不可撕页）；<br>· <b>彩蛋模式</b>（读取 <code>wick.calendar.physicalEasterEgg</code>）：加载 <code>TradingCalendarRootView</code> 满屏撕页物理与合成纸声。</td></tr>
+        <tr><td><code>WickTrading</code></td><td class="mono">ReceiptCardView.swift / PositionAggregator</td><td class="dim">共享成交数据解析与聚合；根据 <code>openTime</code> 匹配日记日；单据视图采用 <code>ReceiptShape</code> + <code>TapeStrip</code> 胶带绘制。</td></tr>
+        <tr><td><code>WickSync</code></td><td class="mono">PhoneJournalStore.swift / PhoneSyncCoordinator.swift</td><td class="dim">纯 Foundation 跨平台日记模型；Dropbox PKCE 鉴权；退火防抖落盘与 <code>scenePhase == .background</code> 自动 flush。</td></tr>
+      </table>
+    </div>
+    <div class="sheet-edge"></div>
+  </section>
+
+  <footer>
+    <span>Wick iOS 客户端 · 秉烛定稿 v1.0 · Design System Token: <code>tokens-v2.css</code></span>
+    <span><a href="final.html">macOS 定稿规范 →</a> · <a href="v2-ios.html">v2.1 探索历史 →</a></span>
+  </footer>
+
+</div>
+
+<!-- 交互脚本 -->
+<script src="theme.js"></script>
+<script>
+  // 切换 iPhone 手机内部视图
+  function switchView(viewId) {
+    document.querySelectorAll('.phone-view').forEach(v => v.classList.remove('active'));
+    const target = document.getElementById(viewId);
+    if (target) target.classList.add('active');
+
+    // 同步机身上方控制器按钮
+    document.querySelectorAll('.stage-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-target') === viewId);
+    });
+
+    // 同步底部 TabBar
+    document.querySelectorAll('.tab-item').forEach(tab => {
+      tab.classList.toggle('active', tab.getAttribute('data-tab') === viewId);
+    });
+  }
+
+  // 顶部快捷按钮监听
+  document.querySelectorAll('.stage-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.getAttribute('data-target');
+      switchView(targetId);
+    });
+  });
+
+  // 首页快速添加日记条目
+  function addQuickJournalNote() {
+    const input = document.getElementById('quick-input-text');
+    if (!input || !input.value.trim()) return;
+    const text = input.value.trim();
+    
+    const now = new Date();
+    const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    
+    const list = document.getElementById('hm-journal-items');
+    if (list) {
+      const item = document.createElement('div');
+      item.className = 'hm-mini-item';
+      item.innerHTML = `<span class="hm-mini-time">${timeStr}</span><span class="hm-mini-body">${text}</span>`;
+      list.prepend(item);
+    }
+    input.value = '';
+  }
+
+  // 复盘抽屉控制
+  function openReviewModal() {
+    const m = document.getElementById('review-modal');
+    if (m) m.style.display = 'flex';
+  }
+  function closeReviewModal() {
+    const m = document.getElementById('review-modal');
+    if (m) m.style.display = 'none';
+  }
+  function selectChop(el, val) {
+    document.querySelectorAll('.review-chop-card').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+  function applyReviewSeal() {
+    closeReviewModal();
+    // 盖章成功反馈
+    const slot = document.querySelector('.ed-item-row:last-child .ed-item-seal-slot');
+    if (slot) {
+      slot.innerHTML = '<span class="chop stamped" style="width: 44px; height: 44px; font-size: 20px;"><span>对</span></span>';
+    }
+    const badge = document.querySelector('.journal-badge-review');
+    if (badge) {
+      badge.textContent = '已复盘 ✓';
+      badge.style.background = 'var(--stain-1)';
+      badge.style.color = 'var(--ink-2)';
+    }
+  }
+
+  // 平实日历翻日交互
+  let flatCalDay = 24;
+  const weekdaysZh = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  const lunarDays = ['初八', '初九', '初十', '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十'];
+  let flatWeekIdx = 1;
+  function navCalDay(delta) {
+    flatCalDay = Math.max(1, Math.min(31, flatCalDay + delta));
+    flatWeekIdx = (flatWeekIdx + delta + 7) % 7;
+    const dayText = document.getElementById('flat-cal-day-text');
+    const lunarText = document.getElementById('flat-cal-lunar-text');
+    if (dayText) dayText.textContent = `8月${flatCalDay}日 ${weekdaysZh[flatWeekIdx]}`;
+    if (lunarText) lunarText.textContent = `农历七月${lunarDays[(flatCalDay - 20 + 4 + 13) % 13]} · 庚子日`;
+  }
+  function resetCalToday() {
+    flatCalDay = 24;
+    flatWeekIdx = 1;
+    navCalDay(0);
+  }
+
+  // 平实日历 宏观 / 财报 Tab 切换
+  function switchCalTab(tabName) {
+    const macroList = document.getElementById('flat-macro-list');
+    const earningsList = document.getElementById('flat-earnings-list');
+    const tabMacro = document.getElementById('tab-btn-macro');
+    const tabEarnings = document.getElementById('tab-btn-earnings');
+
+    if (tabName === 'macro') {
+      if (macroList) macroList.style.display = 'flex';
+      if (earningsList) earningsList.style.display = 'none';
+      if (tabMacro) tabMacro.classList.add('active');
+      if (tabEarnings) tabEarnings.classList.remove('active');
+    } else {
+      if (macroList) macroList.style.display = 'none';
+      if (earningsList) earningsList.style.display = 'flex';
+      if (tabMacro) tabMacro.classList.remove('active');
+      if (tabEarnings) tabEarnings.classList.add('active');
+    }
+  }
+
+  // 物理黄历彩蛋开关控制
+  let isEasterEggOn = false;
+  function toggleEasterEgg(toggleEl) {
+    isEasterEggOn = !isEasterEggOn;
+    if (toggleEl) toggleEl.classList.toggle('on', isEasterEggOn);
+    
+    const settingToggle = document.getElementById('setting-easter-toggle');
+    if (settingToggle && settingToggle !== toggleEl) {
+      settingToggle.classList.toggle('on', isEasterEggOn);
+    }
+    
+    const flatContainer = document.getElementById('flat-calendar-container');
+    const physicalContainer = document.getElementById('physical-calendar-container');
+    if (flatContainer && physicalContainer) {
+      flatContainer.style.display = isEasterEggOn ? 'none' : 'flex';
+      physicalContainer.style.display = isEasterEggOn ? 'flex' : 'none';
+    }
+  }
+  function toggleEasterEggFromCal() {
+    const settingToggle = document.getElementById('setting-easter-toggle');
+    toggleEasterEgg(settingToggle);
+  }
+
+  // 彩蛋模式下撕日历页交互演示
+  let calDay = 24;
+  const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+  let weekIdx = 1;
+  function tearCalendarPage() {
+    const dayEl = document.getElementById('fs-hero-day');
+    const weekEl = document.getElementById('fs-hero-week');
+    if (!dayEl) return;
+    
+    // 撕页动效与换日
+    dayEl.style.transform = 'translateY(20px) rotate(6deg)';
+    dayEl.style.opacity = '0';
+    setTimeout(() => {
+      calDay = calDay >= 31 ? 1 : calDay + 1;
+      weekIdx = (weekIdx + 1) % 7;
+      dayEl.textContent = calDay;
+      if (weekEl) weekEl.textContent = weekdays[weekIdx];
+      dayEl.style.transform = 'translateY(0) rotate(0)';
+      dayEl.style.opacity = '1';
+    }, 220);
+  }
+</script>
+</body>
+</html>

@@ -86,8 +86,17 @@
           "status": "needs-review"
         }
       ]
+    },
+    "Wick iOS 客户端 · 秉烛定稿": {
+      "versions": [
+        {
+          "path": "final-ios.html",
+          "createdAt": "2026-08-24T13:51:00.000Z",
+          "status": "needs-review"
+        }
+      ]
     }
   },
   "createdAt": "2026-08-20T14:56:24.530Z",
-  "updatedAt": "2026-08-20T18:29:33.011Z"
+  "updatedAt": "2026-08-24T13:51:00.000Z"
 }
