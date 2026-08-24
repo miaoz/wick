@@ -188,6 +188,7 @@ struct SettingsView: View {
                                     .foregroundColor(PhoneTheme.cinnabar)
                             )
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 14)
                         .padding(.bottom, 12)
                     }
@@ -319,6 +320,7 @@ struct SettingsView: View {
                                         .shadow(color: PhoneTheme.cinnabar.opacity(0.3), radius: 3, y: 1)
                                     }
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 10)
                             }
@@ -402,6 +404,7 @@ struct SettingsView: View {
                                         .foregroundColor(PhoneTheme.inkTertiary)
                                 }
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
                         }
@@ -477,9 +480,6 @@ struct SettingsView: View {
                         Text(language == .chinese ? "Wick for iOS · 秉烛" : "Wick for iOS")
                             .font(.system(size: 12, weight: .bold, design: .serif))
                             .foregroundColor(PhoneTheme.inkSecondary)
-                        Text(language == .chinese ? "1.0 · 本地优先 · 纯粹时间与交易记录" : "1.0 · Local-first · Pure time & trading journal")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(PhoneTheme.inkTertiary)
                     }
                     .padding(.top, 8)
                     .padding(.bottom, 24)
@@ -659,6 +659,7 @@ private struct SettingsCard<Content: View>: View {
             VStack(spacing: 0) {
                 content
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(PhoneTheme.paperHi)
             .cornerRadius(6)
             .overlay(
@@ -667,6 +668,7 @@ private struct SettingsCard<Content: View>: View {
             )
             .shadow(color: Color.black.opacity(0.03), radius: 2, y: 1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

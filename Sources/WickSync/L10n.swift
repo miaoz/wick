@@ -554,7 +554,7 @@ public enum L10n {
             case .copied: return "已复制"
 
             case .tradingCalendar: return "交易日历"
-            case .macroEventsSection: return "宏观事件"
+            case .macroEventsSection: return "宏观"
             case .macroLoading: return "加载中…"
             case .macroLoadFailed: return "加载失败"
             case .macroNoEvents: return "今日暂无宏观事件"

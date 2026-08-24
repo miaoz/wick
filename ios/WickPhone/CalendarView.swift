@@ -146,14 +146,14 @@ private struct FlatCalendarView: View {
                 // Macro / Earnings Dual Tabs
                 HStack(spacing: 8) {
                     TabButton(
-                        title: language == .chinese ? "宏观事件 (\(calendarStore.events(for: selectedDate).count))" : "Macro Events (\(calendarStore.events(for: selectedDate).count))",
+                        title: "\(L10n.string(.macroEventsSection, language: language)) (\(calendarStore.events(for: selectedDate).count))",
                         isActive: activeTab == .macro
                     ) {
                         activeTab = .macro
                     }
 
                     TabButton(
-                        title: language == .chinese ? "公司财报 (\(calendarStore.earnings(for: selectedDate).count))" : "Earnings Reports (\(calendarStore.earnings(for: selectedDate).count))",
+                        title: "\(L10n.string(.earningsSection, language: language)) (\(calendarStore.earnings(for: selectedDate).count))",
                         isActive: activeTab == .earnings
                     ) {
                         activeTab = .earnings
