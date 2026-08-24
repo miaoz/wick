@@ -518,9 +518,9 @@ private struct CalendarPadBinding: View {
                         .strokeBorder(Color.black.opacity(0.12), lineWidth: 0.5)
                 )
                 .overlay(alignment: .top) {
-                    // The green spine tape peeking over the top.
+                    // The red spine tape peeking over the top.
                     Rectangle()
-                        .fill(TradingCalendarTheme.ink.opacity(0.9))
+                        .fill(TradingCalendarTheme.red.opacity(0.9))
                         .frame(height: 2.5 * s)
                         .padding(.horizontal, 2 * s)
                         .padding(.top, 0.5 * s)

@@ -99,11 +99,11 @@ struct MacroDayPageView: View {
             trailing: layout.frameSideInset + 4.5 * s
         )
         return RoundedRectangle(cornerRadius: 2, style: .continuous)
-            .strokeBorder(TradingCalendarTheme.ink.opacity(0.9), lineWidth: 2.2 * s)
+            .strokeBorder(TradingCalendarTheme.red.opacity(0.85), lineWidth: 2.2 * s)
             .padding(outer)
             .overlay {
                 RoundedRectangle(cornerRadius: 1, style: .continuous)
-                    .strokeBorder(TradingCalendarTheme.ink.opacity(0.7), lineWidth: 0.7 * s)
+                    .strokeBorder(TradingCalendarTheme.red.opacity(0.55), lineWidth: 0.7 * s)
                     .padding(inner)
             }
     }
@@ -125,7 +125,7 @@ struct MacroDayPageView: View {
         .padding(.bottom, 6 * s)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(TradingCalendarTheme.ink.opacity(0.5))
+                .fill(TradingCalendarTheme.red.opacity(0.4))
                 .frame(height: 0.7 * s)
         }
     }
@@ -150,7 +150,7 @@ struct MacroDayPageView: View {
             VStack(spacing: 2 * s) {
                 Text("\(day)")
                     .font(TradingCalendarTheme.numeral(day >= 10 ? 66 * s : 78 * s))
-                    .foregroundStyle(TradingCalendarTheme.ink)
+                    .foregroundStyle(TradingCalendarTheme.red)
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                 Text("第\(dayOfYear)天 · 剩\(daysLeft)天")
@@ -178,7 +178,7 @@ struct MacroDayPageView: View {
             .frame(maxHeight: layout.isFullBleed ? .infinity : nil)
             .background(
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(TradingCalendarTheme.ink)
+                    .fill(TradingCalendarTheme.red)
             )
             .frame(width: 34 * s)
         }
@@ -194,7 +194,7 @@ struct MacroDayPageView: View {
                 .foregroundStyle(TradingCalendarTheme.paper)
                 .padding(.horizontal, 5 * s)
                 .padding(.vertical, 1.5 * s)
-                .background(Rectangle().fill(TradingCalendarTheme.ink))
+                .background(Rectangle().fill(TradingCalendarTheme.red))
 
             Text(lunarMonthDayText)
                 .font(TradingCalendarTheme.mincho(10 * s))
@@ -250,8 +250,8 @@ struct MacroDayPageView: View {
         VStack(alignment: .leading, spacing: 0) {
             // Compartment divider - a double rule echoing the page border.
             VStack(spacing: 2 * s) {
-                Rectangle().fill(TradingCalendarTheme.ink.opacity(0.5)).frame(height: 1 * s)
-                Rectangle().fill(TradingCalendarTheme.ink.opacity(0.28)).frame(height: 0.5 * s)
+                Rectangle().fill(TradingCalendarTheme.red.opacity(0.55)).frame(height: 1 * s)
+                Rectangle().fill(TradingCalendarTheme.red.opacity(0.3)).frame(height: 0.5 * s)
             }
             .padding(.top, 2 * s)
 
@@ -302,7 +302,7 @@ struct MacroDayPageView: View {
         }
     }
 
-    /// A pane tab chip: solid ink when active, an outlined ghost when not.
+    /// A pane tab chip: solid red when active, an outlined ghost when not.
     private func tabChip(_ chip: MacroCalendarTab, title: String) -> some View {
         let active = tab == chip
         return Text(title)
@@ -310,11 +310,11 @@ struct MacroDayPageView: View {
             .foregroundStyle(active ? TradingCalendarTheme.paper : TradingCalendarTheme.dimInk)
             .padding(.horizontal, 5 * s)
             .padding(.vertical, 2 * s)
-            .background(Rectangle().fill(active ? TradingCalendarTheme.ink : .clear))
+            .background(Rectangle().fill(active ? TradingCalendarTheme.red : .clear))
             .overlay {
                 if !active {
                     Rectangle()
-                        .strokeBorder(TradingCalendarTheme.ink.opacity(0.45), lineWidth: 0.7 * s)
+                        .strokeBorder(TradingCalendarTheme.red.opacity(0.45), lineWidth: 0.7 * s)
                 }
             }
     }
@@ -666,7 +666,7 @@ struct MacroDayPageView: View {
                 .foregroundStyle(TradingCalendarTheme.paper)
                 .padding(.horizontal, 7 * s)
                 .padding(.vertical, 3 * s)
-                .background(Rectangle().fill(TradingCalendarTheme.ink))
+                .background(Rectangle().fill(TradingCalendarTheme.red))
                 .rotationEffect(.degrees(-2))
         }
         .padding(.top, 5 * s)
