@@ -88,7 +88,7 @@ struct HomeView: View {
         gen.impactOccurred()
     }
 
-    private func applyReview(_ review: JournalReview, for item: JournalItem) {
+    private func applyReview(_ review: JournalReview?, for item: JournalItem) {
         var today = store.openOrCreateToday()
         if let idx = today.items.firstIndex(where: { $0.id == item.id }) {
             today.items[idx].review = review

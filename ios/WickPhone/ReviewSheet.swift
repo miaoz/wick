@@ -1,19 +1,23 @@
 import SwiftUI
 import UIKit
+import WickCalendarKit
 import WickSync
 
 /// Sheet for reviewing a journal item: choose verdict (对 / 错), write notes, and stamp.
+/// Pure seal stamp aesthetics matching macOS — no redundant slogans or text clutter.
 struct ReviewSheet: View {
     let item: JournalItem
-    let onCommit: (JournalReview) -> Void
+    let onCommit: (JournalReview?) -> Void
     @Environment(\.dismiss) private var dismiss
 
     @State private var verdict: JournalReviewVerdict = .correct
     @State private var noteDraft: String = ""
+    private let hadExistingReview: Bool
 
-    init(item: JournalItem, onCommit: @escaping (JournalReview) -> Void) {
+    init(item: JournalItem, onCommit: @escaping (JournalReview?) -> Void) {
         self.item = item
         self.onCommit = onCommit
+        self.hadExistingReview = item.review != nil
         if let existing = item.review {
             _verdict = State(initialValue: existing.verdict)
             _noteDraft = State(initialValue: existing.note)
@@ -22,97 +26,110 @@ struct ReviewSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Drag handle
                 Capsule()
                     .fill(PhoneTheme.inkTertiary.opacity(0.4))
                     .frame(width: 38, height: 4)
                     .padding(.top, 8)
 
-                Text("盖印复盘")
-                    .font(.system(.title3, design: .serif).weight(.bold))
+                // Header
+                Text("复盘盖印")
+                    .font(.system(size: 16, weight: .bold, design: .serif))
                     .foregroundColor(PhoneTheme.inkPrimary)
 
-                // Choice cards
-                HStack(spacing: 14) {
-                    VerdictCard(
+                // Pure Seal Stamp Choice
+                HStack(spacing: 28) {
+                    SealChoiceButton(
                         verdict: .correct,
-                        title: "对 · 遵循系统",
-                        desc: "符合策略，盈亏皆是概率",
                         isSelected: verdict == .correct
                     ) {
                         verdict = .correct
                         triggerHapticFeedback()
                     }
 
-                    VerdictCard(
+                    SealChoiceButton(
                         verdict: .wrong,
-                        title: "错 · 违纪冲动",
-                        desc: "情绪交易、扛单或未按计划",
                         isSelected: verdict == .wrong
                     ) {
                         verdict = .wrong
                         triggerHapticFeedback()
                     }
                 }
-                .padding(.horizontal)
+                .padding(.vertical, 8)
 
                 // Optional note area
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("复盘反思批注（可选）")
-                        .font(.caption)
-                        .foregroundColor(PhoneTheme.inkSecondary)
+                    Text("反思批注（可选）")
+                        .font(.system(size: 11, weight: .medium, design: .serif))
+                        .foregroundColor(PhoneTheme.inkTertiary)
 
                     TextEditor(text: $noteDraft)
-                        .font(.system(.body, design: .serif))
-                        .frame(height: 80)
+                        .font(.system(size: 13, design: .serif))
+                        .foregroundColor(PhoneTheme.inkPrimary)
+                        .frame(height: 72)
                         .padding(8)
+                        .scrollContentBackground(.hidden)
                         .background(PhoneTheme.paper)
+                        .cornerRadius(4)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            RoundedRectangle(cornerRadius: 4)
                                 .stroke(PhoneTheme.rule, lineWidth: 1)
                         )
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 20)
 
-                Spacer()
+                Spacer(minLength: 0)
 
-                // Stamp button
-                Button {
-                    let review = JournalReview(
-                        verdict: verdict,
-                        note: noteDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                    )
-                    triggerHapticFeedback()
-                    onCommit(review)
-                    dismiss()
-                } label: {
-                    HStack {
-                        JournalReviewBadge(verdict: verdict, style: .mini, size: 22)
-                        Text("盖下朱砂方章")
-                            .font(.headline)
+                // Action Buttons
+                VStack(spacing: 10) {
+                    Button {
+                        let review = JournalReview(
+                            verdict: verdict,
+                            note: noteDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                        )
+                        triggerHapticFeedback()
+                        onCommit(review)
+                        dismiss()
+                    } label: {
+                        HStack(spacing: 6) {
+                            JournalReviewBadge(verdict: verdict, style: .mini, size: 20)
+                            Text("落印")
+                                .font(.system(size: 14, weight: .bold, design: .serif))
+                        }
+                        .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(PhoneTheme.cinnabar)
+                        .cornerRadius(6)
+                        .shadow(color: PhoneTheme.cinnabar.opacity(0.35), radius: 4, y: 2)
                     }
-                    .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(PhoneTheme.cinnabar)
-                            .shadow(color: PhoneTheme.cinnabar.opacity(0.35), radius: 6, y: 2)
-                    )
+
+                    if hadExistingReview {
+                        Button {
+                            triggerHapticFeedback()
+                            onCommit(nil)
+                            dismiss()
+                        } label: {
+                            Text("清除复盘")
+                                .font(.system(size: 12, weight: .medium, design: .serif))
+                                .foregroundColor(PhoneTheme.inkTertiary)
+                        }
+                    }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 20)
                 .padding(.bottom, 16)
             }
             .background(PhoneTheme.paperHi.ignoresSafeArea())
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("取消") { dismiss() }
+                        .font(.system(size: 13, design: .serif))
                         .foregroundColor(PhoneTheme.inkSecondary)
                 }
             }
         }
-        .presentationDetents([.fraction(0.55), .medium])
+        .presentationDetents([.fraction(0.48), .medium])
         .presentationDragIndicator(.hidden)
     }
 
@@ -122,38 +139,33 @@ struct ReviewSheet: View {
     }
 }
 
-private struct VerdictCard: View {
+private struct SealChoiceButton: View {
     let verdict: JournalReviewVerdict
-    let title: String
-    let desc: String
     let isSelected: Bool
     let onSelect: () -> Void
 
     var body: some View {
         Button(action: onSelect) {
             VStack(spacing: 8) {
-                JournalReviewBadge(verdict: verdict, style: .mini, size: 36)
+                JournalReviewBadge(verdict: verdict, style: .seal, size: 52)
+                    .opacity(isSelected ? 1.0 : 0.35)
+                    .scaleEffect(isSelected ? 1.05 : 0.95)
+                    .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isSelected)
 
-                Text(title)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundColor(PhoneTheme.inkPrimary)
-
-                Text(desc)
-                    .font(.caption2)
-                    .foregroundColor(PhoneTheme.inkTertiary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
+                // Selection Indicator Bar
+                Rectangle()
+                    .fill(isSelected ? PhoneTheme.cinnabar : Color.clear)
+                    .frame(width: 24, height: 2)
+                    .cornerRadius(1)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .padding(.horizontal, 8)
+            .padding(10)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isSelected ? PhoneTheme.cinnabarSoft : PhoneTheme.paper)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(isSelected ? PhoneTheme.cinnabar : PhoneTheme.rule, lineWidth: isSelected ? 2 : 1)
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isSelected ? PhoneTheme.paper : Color.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(isSelected ? PhoneTheme.rule : Color.clear, lineWidth: 1)
+                    )
             )
         }
         .buttonStyle(.plain)
