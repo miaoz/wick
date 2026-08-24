@@ -691,9 +691,18 @@ public struct WickPaletteEnvironmentKey: EnvironmentKey {
     public static let defaultValue = DayArcEngine.anchorPalette(.day, scheme: .light)
 }
 
+public struct PnlColorConventionEnvironmentKey: EnvironmentKey {
+    public static let defaultValue: PnlColorConvention = .redUp
+}
+
 public extension EnvironmentValues {
     var wickPalette: WickPalette {
         get { self[WickPaletteEnvironmentKey.self] }
         set { self[WickPaletteEnvironmentKey.self] = newValue }
+    }
+
+    var pnlColorConvention: PnlColorConvention {
+        get { self[PnlColorConventionEnvironmentKey.self] }
+        set { self[PnlColorConventionEnvironmentKey.self] = newValue }
     }
 }

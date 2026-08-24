@@ -51,7 +51,7 @@ struct EditorView: View {
                                         .foregroundColor(PhoneTheme.inkTertiary)
                                     Text("\(isGain ? "+" : "")\(String(format: "%.2f", pnl)) USDT")
                                         .font(.system(.subheadline, design: .monospaced).weight(.bold))
-                                        .foregroundColor(isGain ? PhoneTheme.cinnabar : PhoneTheme.dai)
+                                        .foregroundColor(PhoneTheme.pnlColor(isGain: isGain))
                                 } else {
                                     Text("今日记录")
                                         .font(.caption2)

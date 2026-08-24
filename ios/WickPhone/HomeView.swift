@@ -303,7 +303,7 @@ private struct TodayTradingBriefCard: View {
                         let isGain = pnl >= 0
                         Text("\(isGain ? "+" : "")\(String(format: "%.2f", pnl)) USDT")
                             .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .foregroundColor(isGain ? PhoneTheme.cinnabar : PhoneTheme.dai)
+                            .foregroundColor(PhoneTheme.pnlColor(isGain: isGain))
                     } else {
                         Image(systemName: "chevron.right")
                             .font(.caption2.weight(.bold))

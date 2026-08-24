@@ -15,11 +15,12 @@ public struct JournalReviewBadge: View {
     }
 
     @Environment(\.wickPalette) private var palette
+    @Environment(\.pnlColorConvention) private var envConvention
 
     public let verdict: JournalReviewVerdict
     public var style: Style
     public var size: CGFloat
-    public var convention: PnlColorConvention
+    public var convention: PnlColorConvention?
     public var language: AppLanguage
 
     @State private var stamped = false
@@ -28,7 +29,7 @@ public struct JournalReviewBadge: View {
         verdict: JournalReviewVerdict,
         style: Style = .seal,
         size: CGFloat = 52,
-        convention: PnlColorConvention = .redUp,
+        convention: PnlColorConvention? = nil,
         language: AppLanguage = .system
     ) {
         self.verdict = verdict
@@ -96,7 +97,7 @@ public struct JournalReviewBadge: View {
     }
 
     private var inkColor: WickRGB {
-        verdict.inkColor(in: palette, convention: convention)
+        verdict.inkColor(in: palette, convention: convention ?? envConvention)
     }
     private var charColor: Color { Color(red: 0.97, green: 0.91, blue: 0.84) }
 

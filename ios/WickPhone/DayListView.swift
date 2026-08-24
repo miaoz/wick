@@ -345,7 +345,7 @@ private struct PnlHeatmapCard: View {
 
     private func cellBackground(hasEntry: Bool, pnl: Double?) -> Color {
         if let pnl {
-            return pnl >= 0 ? PhoneTheme.cinnabarSoft : PhoneTheme.daiSoft
+            return PhoneTheme.pnlColorSoft(isGain: pnl >= 0)
         }
         if hasEntry {
             return PhoneTheme.stain
@@ -355,7 +355,7 @@ private struct PnlHeatmapCard: View {
 
     private func cellTextColor(hasEntry: Bool, pnl: Double?) -> Color {
         if let pnl {
-            return pnl >= 0 ? PhoneTheme.cinnabar : PhoneTheme.dai
+            return PhoneTheme.pnlColor(isGain: pnl >= 0)
         }
         return hasEntry ? PhoneTheme.inkPrimary : PhoneTheme.inkTertiary
     }
@@ -432,10 +432,10 @@ private struct DayCardView: View {
                         let isGain = pnl >= 0
                         Text("\(isGain ? "+" : "")\(String(format: "%.1f", pnl))")
                             .font(.system(size: 9.5, weight: .bold, design: .monospaced))
-                            .foregroundColor(isGain ? PhoneTheme.cinnabar : PhoneTheme.dai)
+                            .foregroundColor(PhoneTheme.pnlColor(isGain: isGain))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
-                            .background(isGain ? PhoneTheme.cinnabarSoft : PhoneTheme.daiSoft)
+                            .background(PhoneTheme.pnlColorSoft(isGain: isGain))
                             .cornerRadius(2)
                     }
 

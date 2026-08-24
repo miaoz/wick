@@ -89,6 +89,33 @@ public enum PhoneTheme {
         })
     }
 
+    // MARK: - PnL Gain / Loss (Respects pnlColorConvention)
+
+    public static var currentPnlConvention: PnlColorConvention {
+        let raw = UserDefaults.standard.string(forKey: "wick.pnlColorConvention") ?? PnlColorConvention.redUp.rawValue
+        return PnlColorConvention(rawValue: raw) ?? .redUp
+    }
+
+    public static func pnlColor(isGain: Bool) -> Color {
+        Color(uiColor: UIColor { traits in
+            let scheme: ColorScheme = traits.userInterfaceStyle == .dark ? .dark : .light
+            let pal = current(for: scheme)
+            let conv = currentPnlConvention
+            let (up, down) = pal.upDownColors(conv)
+            return (isGain ? up : down).uiColor
+        })
+    }
+
+    public static func pnlColorSoft(isGain: Bool) -> Color {
+        Color(uiColor: UIColor { traits in
+            let scheme: ColorScheme = traits.userInterfaceStyle == .dark ? .dark : .light
+            let pal = current(for: scheme)
+            let conv = currentPnlConvention
+            let (up, down) = pal.upDownColors(conv)
+            return (isGain ? up : down).withAlpha(0.14).uiColor
+        })
+    }
+
     public static var ember: Color {
         Color(uiColor: UIColor { traits in
             let scheme: ColorScheme = traits.userInterfaceStyle == .dark ? .dark : .light

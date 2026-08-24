@@ -56,11 +56,11 @@ struct PhoneReceiptCard: View {
 
                 Text(position.side == .long ? "多 LONG" : "空 SHORT")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(position.side == .long ? PhoneTheme.cinnabar : PhoneTheme.dai)
+                    .foregroundColor(PhoneTheme.pnlColor(isGain: position.side == .long))
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
                     .background(
-                        (position.side == .long ? PhoneTheme.cinnabar : PhoneTheme.dai).opacity(0.12)
+                        PhoneTheme.pnlColorSoft(isGain: position.side == .long)
                     )
                     .cornerRadius(2)
 
@@ -103,7 +103,7 @@ struct PhoneReceiptCard: View {
                 let isGain = pnl >= 0
                 Text(formatPnl(pnl))
                     .font(.system(size: 12, weight: .bold, design: .monospaced))
-                    .foregroundColor(isGain ? PhoneTheme.cinnabar : PhoneTheme.dai)
+                    .foregroundColor(PhoneTheme.pnlColor(isGain: isGain))
             }
         }
         .padding(.horizontal, 10)

@@ -10,6 +10,7 @@ struct WickPhoneApp: App {
     @StateObject private var exchangeCoordinator = PhoneExchangeCoordinator.shared
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("wick.appearance") private var appearanceRaw = AppAppearance.system.rawValue
+    @AppStorage("wick.pnlColorConvention") private var pnlConventionRaw = PnlColorConvention.redUp.rawValue
 
     @State private var selectedTab = 0
 
@@ -17,9 +18,13 @@ struct WickPhoneApp: App {
         AppAppearance(rawValue: appearanceRaw) ?? .system
     }
 
+    private var pnlConvention: PnlColorConvention {
+        PnlColorConvention(rawValue: pnlConventionRaw) ?? .redUp
+    }
+
     var body: some Scene {
         WindowGroup {
-            PhoneThemeRoot(appearance: appearance) {
+            PhoneThemeRoot(appearance: appearance, pnlConvention: pnlConvention) {
                 TabView(selection: $selectedTab) {
                     HomeView()
                         .tabItem {
@@ -69,11 +74,13 @@ struct WickPhoneApp: App {
 /// Hosts the dynamic 24h day-arc theme engine for the iOS client.
 private struct PhoneThemeRoot<Content: View>: View {
     let appearance: AppAppearance
+    let pnlConvention: PnlColorConvention
     @Environment(\.colorScheme) private var systemColorScheme
     let content: Content
 
-    init(appearance: AppAppearance, @ViewBuilder content: () -> Content) {
+    init(appearance: AppAppearance, pnlConvention: PnlColorConvention, @ViewBuilder content: () -> Content) {
         self.appearance = appearance
+        self.pnlConvention = pnlConvention
         self.content = content()
     }
 
@@ -86,6 +93,7 @@ private struct PhoneThemeRoot<Content: View>: View {
             let palette = DayArcEngine.palette(at: context.date, scheme: effectiveScheme)
             content
                 .environment(\.wickPalette, palette)
+                .environment(\.pnlColorConvention, pnlConvention)
         }
     }
 }
