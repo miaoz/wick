@@ -163,23 +163,24 @@ private struct TimeArcPaperCard: View {
                 // Sub strips: Week / Month / Year
                 VStack(spacing: 8) {
                     ForEach(Array(all.dropFirst())) { item in
-                        HStack(spacing: 10) {
-                            Text(item.title)
-                                .font(.system(size: 11, weight: .bold))
+                        HStack(spacing: 8) {
+                            Text(item.subtitle)
+                                .font(.system(size: 11, weight: .bold, design: .serif))
                                 .foregroundColor(PhoneTheme.inkSecondary)
-                                .frame(width: 32, alignment: .leading)
+                                .fixedSize()
 
                             BurnStripView(
                                 elapsed: 1.0 - item.fractionRemaining,
-                                ticks: item.title.contains("周") ? 7 : (item.title.contains("月") ? 31 : 12),
+                                ticks: item.id == "weekOfYear" ? 7 : (item.id == "month" ? 31 : 12),
                                 showsFlame: false
                             )
                             .frame(height: 8)
 
                             Text(item.remainingText)
-                                .font(.system(size: 10, design: .monospaced))
+                                .font(.system(size: 10.5, design: .serif))
                                 .foregroundColor(PhoneTheme.inkTertiary)
-                                .frame(width: 72, alignment: .trailing)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                         }
                     }
                 }
