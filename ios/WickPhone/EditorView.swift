@@ -11,6 +11,7 @@ struct EditorView: View {
     @StateObject private var exchangeCoordinator = PhoneExchangeCoordinator.shared
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language: AppLanguage
 
     @State private var draft: JournalEntry
     @State private var originalEntry: JournalEntry
@@ -36,7 +37,7 @@ struct EditorView: View {
                             HStack(spacing: 4) {
                                 Image(systemName: "chevron.left")
                                     .font(.system(size: 13, weight: .semibold))
-                                Text("返回")
+                                Text(L10n.string(.back, language: language))
                                     .font(.system(size: 12.5, weight: .medium, design: .serif))
                             }
                             .foregroundColor(PhoneTheme.inkSecondary)
@@ -56,7 +57,7 @@ struct EditorView: View {
                         // Header
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(Self.dateDisplay(for: draft.date))
+                                Text(Self.dateDisplay(for: draft.date, language: language))
                                     .font(.system(size: 28, weight: .black, design: .serif))
                                     .foregroundColor(PhoneTheme.inkPrimary)
 
@@ -73,17 +74,17 @@ struct EditorView: View {
                             VStack(alignment: .trailing, spacing: 2) {
                                 if let pnl = exchangeCoordinator.pnl(for: draft.date) {
                                     let isGain = pnl >= 0
-                                    Text("已实现盈亏")
+                                    Text(L10n.string(.exchangePositionRealizedPnl, language: language))
                                         .font(.caption2)
                                         .foregroundColor(PhoneTheme.inkTertiary)
                                     Text("\(isGain ? "+" : "")\(String(format: "%.2f", pnl)) USDT")
                                         .font(.system(.subheadline, design: .monospaced).weight(.bold))
                                         .foregroundColor(PhoneTheme.pnlColor(isGain: isGain))
                                 } else {
-                                    Text("今日记录")
+                                    Text(L10n.string(.todayRecordsTitle, language: language))
                                         .font(.caption2)
                                         .foregroundColor(PhoneTheme.inkTertiary)
-                                    Text("\(draft.items.count) 条目")
+                                    Text(String(format: L10n.string(.recordsCountFormat, language: language), draft.items.count))
                                         .font(.system(.subheadline, design: .monospaced).weight(.bold))
                                         .foregroundColor(PhoneTheme.cinnabar)
                                 }
@@ -107,10 +108,10 @@ struct EditorView: View {
                         // Journal Items List
                         if draft.items.isEmpty {
                             VStack(spacing: 8) {
-                                Text("本日尚无记录")
+                                Text(L10n.string(.journalEmptyTitle, language: language))
                                     .font(.system(.subheadline, design: .serif))
                                     .foregroundColor(PhoneTheme.inkTertiary)
-                                Text("点击右下角按钮写下第一笔交易想法…")
+                                Text(language == .chinese ? "点击右下角按钮写下第一笔交易想法…" : "Tap the plus button to add an entry…")
                                     .font(.caption)
                                     .foregroundColor(PhoneTheme.inkTertiary)
                             }
@@ -123,6 +124,7 @@ struct EditorView: View {
                                 ItemRowView(
                                     item: $draft.items[idx],
                                     matchedPositions: matchedPositions,
+                                    language: language,
                                     imageURL: { store.imageURL(for: $0) },
                                     onReviewTap: {
                                         reviewingItemIndex = idx
@@ -155,9 +157,10 @@ struct EditorView: View {
 
             // Floating Action Button (FAB)
             Button {
+                let defaultTag = language == .chinese ? "计划" : "Plan"
                 let newItem = JournalItem(
                     id: UUID(),
-                    tag: "计划",
+                    tag: defaultTag,
                     body: ""
                 )
                 draft.items.append(newItem)
@@ -242,20 +245,10 @@ struct EditorView: View {
         }
     }
 
-    private static func dateDisplay(for date: Date) -> String {
+    private static func dateDisplay(for date: Date, language: AppLanguage) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月d日"
-        return formatter.string(from: date)
-    }
-
-    private static func headerTitle(for date: Date) -> String {
-        let cal = Calendar.current
-        if cal.isDateInToday(date) { return "今天 · 8月24日" }
-        if cal.isDateInYesterday(date) { return "昨天" }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy年M月d日"
+        formatter.locale = language.locale
+        formatter.dateFormat = language == .chinese ? "M月d日" : "MMM d"
         return formatter.string(from: date)
     }
 }
@@ -269,6 +262,7 @@ private struct ItemReviewTarget: Identifiable {
 private struct ItemRowView: View {
     @Binding var item: JournalItem
     let matchedPositions: [TradingPosition]
+    let language: AppLanguage
     let imageURL: (String) -> URL?
     let onReviewTap: () -> Void
     let onChange: () -> Void
@@ -279,7 +273,7 @@ private struct ItemRowView: View {
             VStack(alignment: .leading, spacing: 8) {
                 // Tag chip + quick edit
                 HStack {
-                    TextField("标签", text: $item.tag)
+                    TextField(language == .chinese ? "标签" : "Tag", text: $item.tag)
                         .font(.system(size: 11, weight: .bold, design: .serif))
                         .foregroundColor(PhoneTheme.cinnabar)
                         .padding(.horizontal, 6)
@@ -354,9 +348,9 @@ private struct ItemRowView: View {
             // Review stamp slot on trailing edge
             Button(action: onReviewTap) {
                 if let review = item.review {
-                    JournalReviewBadge(verdict: review.verdict, style: .mini, size: 36)
+                    JournalReviewBadge(verdict: review.verdict, style: .mini, size: 36, language: language)
                 } else {
-                    Text("复盘")
+                    Text(L10n.string(.journalReview, language: language))
                         .font(.system(size: 11, weight: .bold, design: .serif))
                         .foregroundColor(PhoneTheme.cinnabar.opacity(0.85))
                         .frame(width: 36, height: 36)

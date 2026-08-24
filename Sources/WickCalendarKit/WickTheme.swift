@@ -695,6 +695,10 @@ public struct PnlColorConventionEnvironmentKey: EnvironmentKey {
     public static let defaultValue: PnlColorConvention = .redUp
 }
 
+public struct AppLanguageEnvironmentKey: EnvironmentKey {
+    public static let defaultValue: AppLanguage = .chinese
+}
+
 public extension EnvironmentValues {
     var wickPalette: WickPalette {
         get { self[WickPaletteEnvironmentKey.self] }
@@ -704,5 +708,10 @@ public extension EnvironmentValues {
     var pnlColorConvention: PnlColorConvention {
         get { self[PnlColorConventionEnvironmentKey.self] }
         set { self[PnlColorConventionEnvironmentKey.self] = newValue }
+    }
+
+    var appLanguage: AppLanguage {
+        get { self[AppLanguageEnvironmentKey.self] }
+        set { self[AppLanguageEnvironmentKey.self] = newValue }
     }
 }

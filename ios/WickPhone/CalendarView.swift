@@ -9,6 +9,7 @@ import WickSync
 struct CalendarView: View {
     @AppStorage("wick.calendar.physicalEasterEgg") private var physicalEasterEgg = false
     @StateObject private var calendarStore = MacroCalendarStore.shared
+    @Environment(\.appLanguage) private var language: AppLanguage
     @State private var selectedDate = Date()
     @State private var activeTab: CalendarTab = .macro
 
@@ -21,12 +22,13 @@ struct CalendarView: View {
         NavigationStack {
             Group {
                 if physicalEasterEgg {
-                    PhysicalCalendarView()
+                    PhysicalCalendarView(language: language)
                 } else {
                     FlatCalendarView(
                         selectedDate: $selectedDate,
                         activeTab: $activeTab,
-                        calendarStore: calendarStore
+                        calendarStore: calendarStore,
+                        language: language
                     )
                 }
             }
@@ -41,6 +43,7 @@ private struct FlatCalendarView: View {
     @Binding var selectedDate: Date
     @Binding var activeTab: CalendarView.CalendarTab
     @ObservedObject var calendarStore: MacroCalendarStore
+    let language: AppLanguage
 
     var body: some View {
         ScrollView {
@@ -62,7 +65,7 @@ private struct FlatCalendarView: View {
                     Spacer()
 
                     VStack(spacing: 2) {
-                        Text(Self.dateDisplay(for: selectedDate))
+                        Text(Self.dateDisplay(for: selectedDate, language: language))
                             .font(.system(size: 18, weight: .bold, design: .serif))
                             .foregroundColor(PhoneTheme.inkPrimary)
 
@@ -88,7 +91,7 @@ private struct FlatCalendarView: View {
                     }
 
                     if !Calendar.current.isDateInToday(selectedDate) {
-                        Button("今天") {
+                        Button(L10n.string(.journalToday, language: language)) {
                             selectedDate = Date()
                             calendarStore.loadIfNeeded(for: selectedDate)
                         }
@@ -106,14 +109,14 @@ private struct FlatCalendarView: View {
                 // Yi / Ji Paper Banner
                 HStack {
                     HStack(spacing: 4) {
-                        Text("宜")
+                        Text(language == .chinese ? "宜" : "DO")
                             .font(.system(size: 10, weight: .black, design: .serif))
                             .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(PhoneTheme.cinnabar)
                             .cornerRadius(2)
-                        Text("止盈 · 依纪复盘")
+                        Text(language == .chinese ? "止盈 · 依纪复盘" : "Take Profit · Review Strategy")
                             .font(.system(size: 11.5, design: .serif))
                             .foregroundColor(PhoneTheme.inkSecondary)
                     }
@@ -121,14 +124,14 @@ private struct FlatCalendarView: View {
                     Spacer()
 
                     HStack(spacing: 4) {
-                        Text("忌")
+                        Text(language == .chinese ? "忌" : "AVOID")
                             .font(.system(size: 10, weight: .black, design: .serif))
                             .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(PhoneTheme.char)
                             .cornerRadius(2)
-                        Text("追涨 · 扛单违规")
+                        Text(language == .chinese ? "追涨 · 扛单违规" : "FOMO · Hold Losing Trades")
                             .font(.system(size: 11.5, design: .serif))
                             .foregroundColor(PhoneTheme.inkSecondary)
                     }
@@ -143,14 +146,14 @@ private struct FlatCalendarView: View {
                 // Macro / Earnings Dual Tabs
                 HStack(spacing: 8) {
                     TabButton(
-                        title: "宏观事件 (\(calendarStore.events(for: selectedDate).count))",
+                        title: language == .chinese ? "宏观事件 (\(calendarStore.events(for: selectedDate).count))" : "Macro Events (\(calendarStore.events(for: selectedDate).count))",
                         isActive: activeTab == .macro
                     ) {
                         activeTab = .macro
                     }
 
                     TabButton(
-                        title: "公司财报 (\(calendarStore.earnings(for: selectedDate).count))",
+                        title: language == .chinese ? "公司财报 (\(calendarStore.earnings(for: selectedDate).count))" : "Earnings Reports (\(calendarStore.earnings(for: selectedDate).count))",
                         isActive: activeTab == .earnings
                     ) {
                         activeTab = .earnings
@@ -162,11 +165,14 @@ private struct FlatCalendarView: View {
                 if activeTab == .macro {
                     let events = calendarStore.events(for: selectedDate)
                     if events.isEmpty {
-                        EmptyDayStampView(text: "本日无重大宏观发布")
+                        EmptyDayStampView(
+                            stamp: language == .chinese ? "本日休市" : "CLOSED",
+                            text: language == .chinese ? "本日无重大宏观发布" : "No macro events scheduled"
+                        )
                     } else {
                         VStack(spacing: 8) {
                             ForEach(events) { event in
-                                MacroEventCard(event: event)
+                                MacroEventCard(event: event, language: language)
                             }
                         }
                         .padding(.horizontal, 14)
@@ -174,11 +180,14 @@ private struct FlatCalendarView: View {
                 } else {
                     let earnings = calendarStore.earnings(for: selectedDate)
                     if earnings.isEmpty {
-                        EmptyDayStampView(text: "本日无重点公司财报")
+                        EmptyDayStampView(
+                            stamp: language == .chinese ? "本日休市" : "CLOSED",
+                            text: language == .chinese ? "本日无重点公司财报" : "No earnings reports scheduled"
+                        )
                     } else {
                         VStack(spacing: 8) {
                             ForEach(earnings) { item in
-                                EarningsReportCard(report: item)
+                                EarningsReportCard(report: item, language: language)
                             }
                         }
                         .padding(.horizontal, 14)
@@ -202,10 +211,10 @@ private struct FlatCalendarView: View {
         }
     }
 
-    private static func dateDisplay(for date: Date) -> String {
+    private static func dateDisplay(for date: Date, language: AppLanguage) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月d日 EEEE"
+        formatter.locale = language.locale
+        formatter.dateFormat = language == .chinese ? "M月d日 EEEE" : "MMM d, EEEE"
         return formatter.string(from: date)
     }
 }
@@ -237,6 +246,7 @@ private struct TabButton: View {
 
 private struct MacroEventCard: View {
     let event: MacroCalendarEvent
+    let language: AppLanguage
     @State private var isExpanded = false
 
     var body: some View {
@@ -278,17 +288,17 @@ private struct MacroEventCard: View {
 
                 HStack(spacing: 12) {
                     if let prev = event.previous {
-                        Text("前 \(formatNumber(prev))")
+                        Text("\(language == .chinese ? "前" : "Prev") \(formatNumber(prev))")
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(PhoneTheme.inkTertiary)
                     }
                     if let fc = event.forecast {
-                        Text("预 \(formatNumber(fc))")
+                        Text("\(language == .chinese ? "预" : "Fcst") \(formatNumber(fc))")
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(PhoneTheme.inkSecondary)
                     }
                     if let act = event.actual {
-                        Text("今 \(formatNumber(act))")
+                        Text("\(language == .chinese ? "今" : "Act") \(formatNumber(act))")
                             .font(.system(size: 10.5, design: .monospaced).weight(.bold))
                             .foregroundColor(PhoneTheme.cinnabar)
                     }
@@ -319,6 +329,7 @@ private struct MacroEventCard: View {
 
 private struct EarningsReportCard: View {
     let report: EarningsReport
+    let language: AppLanguage
     @State private var isExpanded = false
 
     var body: some View {
@@ -327,7 +338,7 @@ private struct EarningsReportCard: View {
                 Text(report.callTime.rawValue)
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundColor(PhoneTheme.inkSecondary)
-                Text(report.callTime == .beforeOpen ? "盘前" : (report.callTime == .afterClose ? "盘后" : "—"))
+                Text(report.callTime == .beforeOpen ? (language == .chinese ? "盘前" : "BMO") : (report.callTime == .afterClose ? (language == .chinese ? "盘后" : "AMC") : "—"))
                     .font(.system(size: 8.5))
                     .foregroundColor(PhoneTheme.inkTertiary)
             }
@@ -347,7 +358,7 @@ private struct EarningsReportCard: View {
                 }
 
                 if let eps = report.epsEstimate {
-                    Text("EPS 预期: \(String(format: "%.2f", eps))")
+                    Text("\(language == .chinese ? "EPS 预期" : "EPS Est"): \(String(format: "%.2f", eps))")
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundColor(PhoneTheme.inkTertiary)
                 }
@@ -369,6 +380,7 @@ private struct EarningsReportCard: View {
 }
 
 private struct EmptyDayStampView: View {
+    let stamp: String
     let text: String
 
     var body: some View {
@@ -377,7 +389,7 @@ private struct EmptyDayStampView: View {
                 RoundedRectangle(cornerRadius: 4)
                     .stroke(PhoneTheme.cinnabar.opacity(0.4), lineWidth: 1.5)
                     .frame(width: 88, height: 44)
-                Text("本日休市")
+                Text(stamp)
                     .font(.system(size: 14, weight: .bold, design: .serif))
                     .foregroundColor(PhoneTheme.cinnabar.opacity(0.8))
             }
@@ -396,8 +408,8 @@ private struct EmptyDayStampView: View {
 // MARK: - 2. Easter Egg Physical Tearable Calendar
 
 private struct PhysicalCalendarView: View {
+    let language: AppLanguage
     @State private var tornPiece: FallingPage?
-    private let language = AppLanguage.system
 
     var body: some View {
         GeometryReader { geo in

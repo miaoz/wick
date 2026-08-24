@@ -9,6 +9,7 @@ struct DayListView: View {
     @EnvironmentObject private var store: PhoneJournalStore
     @EnvironmentObject private var sync: PhoneSyncCoordinator
     @StateObject private var exchangeCoordinator = PhoneExchangeCoordinator.shared
+    @Environment(\.appLanguage) private var language: AppLanguage
 
     @State private var selectedTag: String? = nil
     @State private var heatmapMonth = Date()
@@ -38,7 +39,7 @@ struct DayListView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "plus")
                                 .font(.system(size: 12, weight: .bold))
-                            Text("今日")
+                            Text(L10n.string(.journalToday, language: language))
                                 .font(.system(size: 11.5, weight: .bold, design: .serif))
                         }
                         .foregroundColor(PhoneTheme.cinnabar)
@@ -59,6 +60,7 @@ struct DayListView: View {
                             currentMonth: $heatmapMonth,
                             entries: store.entries,
                             exchangeCoordinator: exchangeCoordinator,
+                            language: language,
                             onSelectDay: { dayKey in
                                 if let entry = store.entries.first(where: { $0.dayKey == dayKey }) {
                                     navigationPath.append(entry.dayKey)
@@ -77,7 +79,7 @@ struct DayListView: View {
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 6) {
                                     TagChipButton(
-                                        title: "全部",
+                                        title: L10n.string(.journalAllTags, language: language),
                                         isActive: selectedTag == nil
                                     ) {
                                         selectedTag = nil
@@ -104,7 +106,7 @@ struct DayListView: View {
 
                         if filteredEntries.isEmpty {
                             VStack(spacing: 8) {
-                                Text("无匹配日记")
+                                Text(L10n.string(.journalFilterEmptyTitle, language: language))
                                     .font(.system(.subheadline, design: .serif))
                                     .foregroundColor(PhoneTheme.inkTertiary)
                             }
@@ -117,7 +119,8 @@ struct DayListView: View {
                                         DayCardView(
                                             entry: entry,
                                             pnl: exchangeCoordinator.pnl(for: entry.date),
-                                            closedCount: exchangeCoordinator.closedCount(for: entry.dayKey)
+                                            closedCount: exchangeCoordinator.closedCount(for: entry.dayKey),
+                                            language: language
                                         )
                                     }
                                     .buttonStyle(.plain)
@@ -137,11 +140,11 @@ struct DayListView: View {
                 }
             }
             .alert(
-                nameAlertMode == .rename ? "重命名日记本" : "新建日记本",
+                nameAlertMode == .rename ? L10n.string(.journalLibraryRenameTitle, language: language) : L10n.string(.journalLibraryNewTitle, language: language),
                 isPresented: $showNameAlert
             ) {
-                TextField("名称", text: $nameDraft)
-                Button(nameAlertMode == .rename ? "保存" : "创建") {
+                TextField(L10n.string(.journalLibraryNamePlaceholder, language: language), text: $nameDraft)
+                Button(nameAlertMode == .rename ? L10n.string(.journalLibrarySaveName, language: language) : L10n.string(.journalLibraryCreate, language: language)) {
                     switch nameAlertMode {
                     case .rename:
                         if let id = store.activeJournalID {
@@ -151,21 +154,21 @@ struct DayListView: View {
                         store.createJournal(name: nameDraft)
                     }
                 }
-                Button("取消", role: .cancel) {}
+                Button(L10n.string(.cancel, language: language), role: .cancel) {}
             }
             .confirmationDialog(
-                "删除当前日记本？",
+                L10n.string(.journalLibraryDeleteConfirm, language: language),
                 isPresented: $showDeleteConfirm,
                 titleVisibility: .visible
             ) {
-                Button("删除", role: .destructive) {
+                Button(L10n.string(.journalLibraryDelete, language: language), role: .destructive) {
                     if let id = store.activeJournalID {
                         _ = store.deleteJournal(id: id)
                     }
                 }
-                Button("取消", role: .cancel) {}
+                Button(L10n.string(.cancel, language: language), role: .cancel) {}
             } message: {
-                Text("将删除「\(store.activeJournal?.name ?? "")」在本机的全部内容，且不可撤销。")
+                Text(language == .chinese ? "将删除「\(store.activeJournal?.name ?? "")」在本机的全部内容，且不可撤销。" : "This will permanently delete \"\(store.activeJournal?.name ?? "")\" on this device.")
             }
         }
     }
@@ -186,23 +189,23 @@ struct DayListView: View {
 
             Divider()
 
-            Button("新建日记本…") {
+            Button("\(L10n.string(.journalLibraryNewTitle, language: language))…") {
                 nameAlertMode = .new
                 nameDraft = ""
                 showNameAlert = true
             }
-            Button("重命名…") {
+            Button("\(L10n.string(.journalLibraryRenameTitle, language: language))…") {
                 nameAlertMode = .rename
                 nameDraft = store.activeJournal?.name ?? ""
                 showNameAlert = true
             }
-            Button("删除日记本…", role: .destructive) {
+            Button("\(L10n.string(.journalLibraryDelete, language: language))…", role: .destructive) {
                 showDeleteConfirm = true
             }
             .disabled(store.journals.count <= 1)
         } label: {
             HStack(spacing: 3) {
-                Text(store.activeJournal?.name ?? "实盘日记")
+                Text(store.activeJournal?.name ?? L10n.string(.journalLibraryDefaultName, language: language))
                     .font(.system(size: 15, weight: .bold, design: .serif))
                     .foregroundColor(PhoneTheme.inkPrimary)
                 Image(systemName: "chevron.down")
@@ -263,16 +266,19 @@ private struct PnlHeatmapCard: View {
     @Binding var currentMonth: Date
     let entries: [JournalEntry]
     @ObservedObject var exchangeCoordinator: PhoneExchangeCoordinator
+    let language: AppLanguage
     let onSelectDay: (String) -> Void
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: 7)
-    private let weekHeaders = ["一", "二", "三", "四", "五", "六", "日"]
+    private var weekHeaders: [String] {
+        language == .chinese ? ["一", "二", "三", "四", "五", "六", "日"] : ["M", "T", "W", "T", "F", "S", "S"]
+    }
 
     var body: some View {
         VStack(spacing: 8) {
             // Header
             HStack {
-                Text(Self.monthDisplay(for: currentMonth))
+                Text(Self.monthDisplay(for: currentMonth, language: language))
                     .font(.system(size: 13, weight: .bold, design: .serif))
                     .foregroundColor(PhoneTheme.inkPrimary)
 
@@ -406,10 +412,10 @@ private struct PnlHeatmapCard: View {
         return cells
     }
 
-    private static func monthDisplay(for date: Date) -> String {
+    private static func monthDisplay(for date: Date, language: AppLanguage) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy年 · M月"
+        formatter.locale = language.locale
+        formatter.dateFormat = language == .chinese ? "yyyy年 · M月" : "MMM yyyy"
         return formatter.string(from: date)
     }
 }
@@ -418,6 +424,7 @@ private struct DayCardView: View {
     let entry: JournalEntry
     let pnl: Double?
     let closedCount: Int
+    let language: AppLanguage
 
     var body: some View {
         HStack(spacing: 12) {
@@ -426,7 +433,7 @@ private struct DayCardView: View {
                 Text(Self.dayNum(for: entry.date))
                     .font(.system(size: 20, weight: .black, design: .serif))
                     .foregroundColor(PhoneTheme.inkPrimary)
-                Text(Self.relativeDay(for: entry.date))
+                Text(Self.relativeDay(for: entry.date, language: language))
                     .font(.system(size: 9.5))
                     .foregroundColor(PhoneTheme.inkTertiary)
             }
@@ -434,7 +441,7 @@ private struct DayCardView: View {
 
             // Content preview & tags
             VStack(alignment: .leading, spacing: 4) {
-                Text(entry.previewText.isEmpty ? "（无正文）" : entry.previewText)
+                Text(entry.previewText.isEmpty ? (language == .chinese ? "（无正文）" : "(Empty)") : entry.previewText)
                     .font(.system(size: 12.5, design: .serif))
                     .foregroundColor(PhoneTheme.inkPrimary)
                     .lineLimit(1)
@@ -462,7 +469,7 @@ private struct DayCardView: View {
                                 .cornerRadius(2)
                         }
                     }
-                    Text("\(entry.items.count) 条")
+                    Text(String(format: L10n.string(.recordsCountFormat, language: language), entry.items.count))
                         .font(.system(size: 9.5))
                         .foregroundColor(PhoneTheme.inkTertiary)
                 }
@@ -473,7 +480,7 @@ private struct DayCardView: View {
             // Review stamp badge if any item reviewed
             if let reviewedItem = entry.items.first(where: { $0.review != nil }),
                let review = reviewedItem.review {
-                JournalReviewBadge(verdict: review.verdict, style: .mini, size: 22)
+                JournalReviewBadge(verdict: review.verdict, style: .mini, size: 22, language: language)
             }
         }
         .padding(12)
@@ -491,12 +498,12 @@ private struct DayCardView: View {
         return formatter.string(from: date)
     }
 
-    private static func relativeDay(for date: Date) -> String {
+    private static func relativeDay(for date: Date, language: AppLanguage) -> String {
         let cal = Calendar.current
-        if cal.isDateInToday(date) { return "今天" }
-        if cal.isDateInYesterday(date) { return "昨天" }
+        if cal.isDateInToday(date) { return L10n.string(.journalToday, language: language) }
+        if cal.isDateInYesterday(date) { return L10n.string(.journalYesterday, language: language) }
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = language.locale
         formatter.dateFormat = "EEE"
         return formatter.string(from: date)
     }

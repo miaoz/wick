@@ -15,7 +15,7 @@ struct HomeView: View {
     @State private var reviewingItem: JournalItem?
     @State private var showEditor = false
 
-    private let language = AppLanguage.system
+    @Environment(\.appLanguage) private var language: AppLanguage
 
     var body: some View {
         NavigationStack {
@@ -25,12 +25,16 @@ struct HomeView: View {
                     TimeArcPaperCard(language: language)
 
                     // 2. 即将发布事件
-                    UpcomingEventsCard(calendarStore: calendarStore)
+                    UpcomingEventsCard(
+                        calendarStore: calendarStore,
+                        language: language
+                    )
 
                     // 3. 今日交易
                     TodayTradingCard(
                         store: store,
-                        exchangeCoordinator: exchangeCoordinator
+                        exchangeCoordinator: exchangeCoordinator,
+                        language: language
                     ) {
                         showEditor = true
                     }
@@ -38,6 +42,7 @@ struct HomeView: View {
                     // 4. 今日记录
                     TodayJournalCard(
                         store: store,
+                        language: language,
                         quickText: $quickText,
                         onAddNote: addQuickNote,
                         onReviewTap: { item in
@@ -75,9 +80,10 @@ struct HomeView: View {
         formatter.dateFormat = "HH:mm"
         let timePrefix = formatter.string(from: Date())
 
+        let defaultTag = language == .chinese ? "速记" : "Quick"
         let newItem = JournalItem(
             id: UUID(),
-            tag: "速记",
+            tag: defaultTag,
             body: "\(timePrefix) \(trimmed)"
         )
         today.items.insert(newItem, at: 0)
@@ -112,12 +118,12 @@ private struct TimeArcPaperCard: View {
                 // Header row: big date + lunar + candle badge
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(Self.dateDisplay(for: date))
+                        Text(Self.dateDisplay(for: date, language: language))
                             .font(.system(size: 32, weight: .black, design: .serif))
                             .foregroundColor(PhoneTheme.inkPrimary)
 
                         if let lunar = LunarLine.string(for: date) {
-                            Text("\(Self.weekdayDisplay(for: date)) · \(lunar)")
+                            Text("\(Self.weekdayDisplay(for: date, language: language)) · \(lunar)")
                                 .font(.system(size: 11.5, design: .serif))
                                 .foregroundColor(PhoneTheme.inkSecondary)
                         }
@@ -142,7 +148,7 @@ private struct TimeArcPaperCard: View {
                 if let dayProgress {
                     VStack(spacing: 6) {
                         HStack(alignment: .firstTextBaseline) {
-                            Text("今日剩余")
+                            Text(L10n.string(.panelHeroToday, language: language))
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(PhoneTheme.inkSecondary)
                             Spacer()
@@ -192,16 +198,16 @@ private struct TimeArcPaperCard: View {
         }
     }
 
-    private static func dateDisplay(for date: Date) -> String {
+    private static func dateDisplay(for date: Date, language: AppLanguage) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月d日"
+        formatter.locale = language.locale
+        formatter.dateFormat = language == .chinese ? "M月d日" : "MMM d"
         return formatter.string(from: date)
     }
 
-    private static func weekdayDisplay(for date: Date) -> String {
+    private static func weekdayDisplay(for date: Date, language: AppLanguage) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = language.locale
         formatter.dateFormat = "EEEE"
         return formatter.string(from: date)
     }
@@ -211,6 +217,7 @@ private struct TimeArcPaperCard: View {
 
 private struct UpcomingEventsCard: View {
     @ObservedObject var calendarStore: MacroCalendarStore
+    let language: AppLanguage
 
     var body: some View {
         let todayEvents = calendarStore.events(for: Date())
@@ -226,7 +233,7 @@ private struct UpcomingEventsCard: View {
                         .fill(PhoneTheme.cinnabar)
                         .frame(width: 6, height: 6)
                         .shadow(color: PhoneTheme.cinnabar, radius: 3)
-                    Text("即将发布事件")
+                    Text(L10n.string(.upcomingEventsTitle, language: language))
                         .font(.system(size: 12.5, weight: .bold, design: .serif))
                         .foregroundColor(PhoneTheme.inkPrimary)
                 }
@@ -234,18 +241,18 @@ private struct UpcomingEventsCard: View {
                 Spacer()
 
                 if let nextEvent {
-                    Text(Self.countdownText(to: nextEvent.time))
+                    Text(Self.countdownText(to: nextEvent.time, language: language))
                         .font(.system(size: 10.5, weight: .bold, design: .monospaced))
                         .foregroundColor(PhoneTheme.cinnabar)
                 } else if !todayEvents.isEmpty {
-                    Text("今日已公布完毕")
+                    Text(L10n.string(.allEventsPublished, language: language))
                         .font(.system(size: 10.5, design: .serif))
                         .foregroundColor(PhoneTheme.inkTertiary)
                 }
             }
 
             if displayEvents.isEmpty {
-                Text("今日暂无宏观数据发布")
+                Text(L10n.string(.noUpcomingEvents, language: language))
                     .font(.system(size: 11.5, design: .serif))
                     .foregroundColor(PhoneTheme.inkTertiary)
                     .padding(.vertical, 4)
@@ -285,10 +292,10 @@ private struct UpcomingEventsCard: View {
                             if event.previous != nil || event.forecast != nil {
                                 HStack(spacing: 10) {
                                     if let prev = event.previous {
-                                        Text("前值: \(String(format: "%.1f", prev))")
+                                        Text("\(L10n.string(.macroPrevious, language: language)): \(String(format: "%.1f", prev))")
                                     }
                                     if let fc = event.forecast {
-                                        Text("预期: \(String(format: "%.1f", fc))")
+                                        Text("\(L10n.string(.macroForecast, language: language)): \(String(format: "%.1f", fc))")
                                             .foregroundColor(PhoneTheme.inkSecondary)
                                     }
                                 }
@@ -306,15 +313,17 @@ private struct UpcomingEventsCard: View {
         .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
     }
 
-    private static func countdownText(to date: Date) -> String {
+    private static func countdownText(to date: Date, language: AppLanguage) -> String {
         let diff = Int(date.timeIntervalSinceNow)
-        if diff <= 0 { return "刚刚已发布" }
+        if diff <= 0 {
+            return language == .chinese ? "刚刚已发布" : "Just published"
+        }
         let mins = diff / 60
         let hours = mins / 60
         if hours > 0 {
-            return "倒计时 \(hours)小时\(mins % 60)分"
+            return language == .chinese ? "倒计时 \(hours)小时\(mins % 60)分" : "in \(hours)h \(mins % 60)m"
         } else {
-            return "倒计时 \(mins)分钟"
+            return language == .chinese ? "倒计时 \(mins)分钟" : "in \(mins)m"
         }
     }
 }
@@ -324,6 +333,7 @@ private struct UpcomingEventsCard: View {
 private struct TodayTradingCard: View {
     @ObservedObject var store: PhoneJournalStore
     @ObservedObject var exchangeCoordinator: PhoneExchangeCoordinator
+    let language: AppLanguage
     let onOpenEditor: () -> Void
 
     var body: some View {
@@ -331,7 +341,7 @@ private struct TodayTradingCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 // Header: "今日交易" + Realized PnL
                 HStack {
-                    Text("今日交易")
+                    Text(L10n.string(.todayTradingTitle, language: language))
                         .font(.system(size: 12.5, weight: .bold, design: .serif))
                         .foregroundColor(PhoneTheme.inkPrimary)
 
@@ -355,11 +365,11 @@ private struct TodayTradingCard: View {
 
                 HStack(spacing: 10) {
                     if closedCount > 0 {
-                        Text("\(closedCount) 笔平仓")
+                        Text(String(format: language == .chinese ? "%d 笔平仓" : "%d closed", closedCount))
                             .font(.system(size: 11, weight: .bold, design: .monospaced))
                             .foregroundColor(PhoneTheme.inkPrimary)
                     } else {
-                        Text("暂无平仓成交")
+                        Text(L10n.string(.noClosedTrades, language: language))
                             .font(.system(size: 11, design: .serif))
                             .foregroundColor(PhoneTheme.inkTertiary)
                     }
@@ -376,7 +386,7 @@ private struct TodayTradingCard: View {
 
                     Spacer()
 
-                    Text("查看实盘 ›")
+                    Text(L10n.string(.viewTradingDetails, language: language))
                         .font(.system(size: 11, design: .serif))
                         .foregroundColor(PhoneTheme.inkTertiary)
                 }
@@ -402,6 +412,7 @@ private struct TodayTradingCard: View {
 
 private struct TodayJournalCard: View {
     @ObservedObject var store: PhoneJournalStore
+    let language: AppLanguage
     @Binding var quickText: String
     let onAddNote: () -> Void
     let onReviewTap: (JournalItem) -> Void
@@ -414,19 +425,19 @@ private struct TodayJournalCard: View {
         VStack(alignment: .leading, spacing: 10) {
             // Header: "今日记录" + counts
             HStack {
-                Text("今日记录")
+                Text(L10n.string(.todayRecordsTitle, language: language))
                     .font(.system(size: 12.5, weight: .bold, design: .serif))
                     .foregroundColor(PhoneTheme.inkPrimary)
 
                 Spacer()
 
                 HStack(spacing: 6) {
-                    Text("共 \(items.count) 条")
+                    Text(String(format: L10n.string(.recordsCountFormat, language: language), items.count))
                         .font(.system(size: 10.5, design: .monospaced))
                         .foregroundColor(PhoneTheme.inkSecondary)
 
                     if unreviewedCount > 0 {
-                        Text("\(unreviewedCount) 待复盘")
+                        Text(String(format: L10n.string(.unreviewedCountBadgeFormat, language: language), unreviewedCount))
                             .font(.system(size: 10, weight: .bold))
                             .foregroundColor(PhoneTheme.cinnabar)
                             .padding(.horizontal, 5)
@@ -438,7 +449,7 @@ private struct TodayJournalCard: View {
             }
 
             if items.isEmpty {
-                Text("今天还没有记录，在下方快速写下一笔吧…")
+                Text(L10n.string(.emptyTodayJournalHint, language: language))
                     .font(.system(size: 11.5, design: .serif))
                     .foregroundColor(PhoneTheme.inkTertiary)
                     .padding(.vertical, 4)
@@ -446,7 +457,7 @@ private struct TodayJournalCard: View {
                 VStack(spacing: 8) {
                     ForEach(Array(items.prefix(3))) { item in
                         HStack(alignment: .top, spacing: 8) {
-                            Text(item.tag.isEmpty ? "笔记" : item.tag)
+                            Text(item.tag.isEmpty ? (language == .chinese ? "笔记" : "Note") : item.tag)
                                 .font(.system(size: 9.5, weight: .bold, design: .serif))
                                 .foregroundColor(PhoneTheme.cinnabar)
                                 .padding(.horizontal, 4)
@@ -454,7 +465,7 @@ private struct TodayJournalCard: View {
                                 .background(PhoneTheme.cinnabarSoft)
                                 .cornerRadius(2)
 
-                            Text(item.body.isEmpty ? "（空）" : item.body)
+                            Text(item.body.isEmpty ? (language == .chinese ? "（空）" : "(Empty)") : item.body)
                                 .font(.system(size: 12, design: .serif))
                                 .foregroundColor(PhoneTheme.inkPrimary)
                                 .lineLimit(2)
@@ -467,7 +478,7 @@ private struct TodayJournalCard: View {
                                 Button {
                                     onReviewTap(item)
                                 } label: {
-                                    Text("复盘")
+                                    Text(L10n.string(.journalReview, language: language))
                                         .font(.system(size: 10, weight: .bold, design: .serif))
                                         .foregroundColor(PhoneTheme.cinnabar.opacity(0.85))
                                         .rotationEffect(.degrees(-3))
@@ -481,7 +492,7 @@ private struct TodayJournalCard: View {
 
             // Quick capture input bar
             HStack(spacing: 8) {
-                TextField("写下此刻的交易想法或盘感…", text: $quickText)
+                TextField(L10n.string(.quickNotePlaceholder, language: language), text: $quickText)
                     .font(.system(size: 12, design: .serif))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)

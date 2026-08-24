@@ -9,6 +9,7 @@ struct ReviewSheet: View {
     let item: JournalItem
     let onCommit: (JournalReview?) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language
 
     @State private var verdict: JournalReviewVerdict = .correct
     @State private var noteDraft: String = ""
@@ -34,7 +35,7 @@ struct ReviewSheet: View {
                     .padding(.top, 8)
 
                 // Header
-                Text(L10n.string(.journalReview, language: .chinese))
+                Text(L10n.string(.journalReview, language: language))
                     .font(.system(size: 16, weight: .bold, design: .serif))
                     .foregroundColor(PhoneTheme.inkPrimary)
 
@@ -42,7 +43,8 @@ struct ReviewSheet: View {
                 HStack(spacing: 28) {
                     SealChoiceButton(
                         verdict: .correct,
-                        isSelected: verdict == .correct
+                        isSelected: verdict == .correct,
+                        language: language
                     ) {
                         verdict = .correct
                         triggerHapticFeedback()
@@ -50,7 +52,8 @@ struct ReviewSheet: View {
 
                     SealChoiceButton(
                         verdict: .wrong,
-                        isSelected: verdict == .wrong
+                        isSelected: verdict == .wrong,
+                        language: language
                     ) {
                         verdict = .wrong
                         triggerHapticFeedback()
@@ -60,13 +63,13 @@ struct ReviewSheet: View {
 
                 // Optional note area
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("批注")
+                    Text(L10n.string(.reviewNoteLabel, language: language))
                         .font(.system(size: 11, weight: .medium, design: .serif))
                         .foregroundColor(PhoneTheme.inkTertiary)
 
                     ZStack(alignment: .topLeading) {
                         if noteDraft.isEmpty {
-                            Text(L10n.string(.journalReviewNotePlaceholder, language: .chinese))
+                            Text(L10n.string(.journalReviewNotePlaceholder, language: language))
                                 .font(.system(size: 13, design: .serif))
                                 .foregroundColor(PhoneTheme.inkTertiary)
                                 .padding(.horizontal, 12)
@@ -103,7 +106,7 @@ struct ReviewSheet: View {
                         onCommit(review)
                         dismiss()
                     } label: {
-                        Text("落印")
+                        Text(L10n.string(.stampReview, language: language))
                             .font(.system(size: 14, weight: .bold, design: .serif))
                             .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
                             .frame(maxWidth: .infinity)
@@ -119,7 +122,7 @@ struct ReviewSheet: View {
                             onCommit(nil)
                             dismiss()
                         } label: {
-                            Text("清除复盘")
+                            Text(L10n.string(.journalReviewClear, language: language))
                                 .font(.system(size: 12, weight: .medium, design: .serif))
                                 .foregroundColor(PhoneTheme.inkTertiary)
                         }
@@ -131,7 +134,7 @@ struct ReviewSheet: View {
             .background(PhoneTheme.paperHi.ignoresSafeArea())
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }
+                    Button(L10n.string(.cancel, language: language)) { dismiss() }
                         .font(.system(size: 13, design: .serif))
                         .foregroundColor(PhoneTheme.inkSecondary)
                 }
@@ -150,12 +153,13 @@ struct ReviewSheet: View {
 private struct SealChoiceButton: View {
     let verdict: JournalReviewVerdict
     let isSelected: Bool
+    let language: AppLanguage
     let onSelect: () -> Void
 
     var body: some View {
         Button(action: onSelect) {
             VStack(spacing: 8) {
-                JournalReviewBadge(verdict: verdict, style: .seal, size: 52)
+                JournalReviewBadge(verdict: verdict, style: .seal, size: 52, language: language)
                     .opacity(isSelected ? 1.0 : 0.35)
                     .scaleEffect(isSelected ? 1.05 : 0.95)
                     .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isSelected)

@@ -1,7 +1,7 @@
 import Foundation
 
 /// App display language. Shared with the iPhone client.
-public enum AppLanguage: String, CaseIterable, Identifiable {
+public enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
     case chinese = "zh-Hans"
     case english = "en"
 
@@ -311,6 +311,32 @@ public enum L10n {
         case checkUpdatesOnLaunch
         case dataSection
 
+        // iOS mobile specific
+        case upcomingEventsTitle
+        case todayTradingTitle
+        case todayRecordsTitle
+        case noUpcomingEvents
+        case allEventsPublished
+        case noClosedTrades
+        case viewTradingDetails
+        case recordsCountFormat
+        case unreviewedCountBadgeFormat
+        case emptyTodayJournalHint
+        case quickNotePlaceholder
+        case stampReview
+        case reviewNoteLabel
+        case dailyReviewReminderSubtitle
+        case settingsAppearanceTheme
+        case exchangeBind
+        case exchangeUnbind
+        case exchangeAccountLabel
+        case exchangeConnected
+        case exchangeNotConnected
+        case tabHome
+        case tabJournal
+        case tabCalendar
+        case tabSettings
+
         public var chinese: String {
             switch self {
             case .motto: return "一寸光阴一寸金。"
@@ -576,6 +602,32 @@ public enum L10n {
             case .openReleasePage: return "打开发布页"
             case .checkUpdatesOnLaunch: return "启动时检查更新"
             case .dataSection: return "数据"
+
+            // iOS mobile specific
+            case .upcomingEventsTitle: return "即将发布事件"
+            case .todayTradingTitle: return "今日交易"
+            case .todayRecordsTitle: return "今日记录"
+            case .noUpcomingEvents: return "今日暂无宏观数据发布"
+            case .allEventsPublished: return "今日已公布完毕"
+            case .noClosedTrades: return "暂无平仓成交"
+            case .viewTradingDetails: return "查看实盘 ›"
+            case .recordsCountFormat: return "共 %d 条"
+            case .unreviewedCountBadgeFormat: return "%d 待复盘"
+            case .emptyTodayJournalHint: return "今天还没有记录，在下方快速写下一笔吧…"
+            case .quickNotePlaceholder: return "写下此刻的交易想法或盘感…"
+            case .stampReview: return "落印"
+            case .reviewNoteLabel: return "批注"
+            case .dailyReviewReminderSubtitle: return "每晚定时推送复盘提醒通知"
+            case .settingsAppearanceTheme: return "外观与主题"
+            case .exchangeBind: return "绑定交易所"
+            case .exchangeUnbind: return "解绑"
+            case .exchangeAccountLabel: return "账户备注"
+            case .exchangeConnected: return "已连接"
+            case .exchangeNotConnected: return "未配置交易所"
+            case .tabHome: return "今日"
+            case .tabJournal: return "日记"
+            case .tabCalendar: return "日历"
+            case .tabSettings: return "设置"
             }
         }
 
@@ -844,6 +896,32 @@ public enum L10n {
             case .openReleasePage: return "Open Releases"
             case .checkUpdatesOnLaunch: return "Check for updates on launch"
             case .dataSection: return "Data"
+
+            // iOS mobile specific
+            case .upcomingEventsTitle: return "Upcoming Events"
+            case .todayTradingTitle: return "Today's Trading"
+            case .todayRecordsTitle: return "Today's Records"
+            case .noUpcomingEvents: return "No upcoming macro data today"
+            case .allEventsPublished: return "All published for today"
+            case .noClosedTrades: return "No closed trades"
+            case .viewTradingDetails: return "View Trades ›"
+            case .recordsCountFormat: return "%d items"
+            case .unreviewedCountBadgeFormat: return "%d to review"
+            case .emptyTodayJournalHint: return "No entries today. Write a quick note below…"
+            case .quickNotePlaceholder: return "Write down your trading thoughts…"
+            case .stampReview: return "Stamp"
+            case .reviewNoteLabel: return "Note"
+            case .dailyReviewReminderSubtitle: return "Send a review reminder notification every night"
+            case .settingsAppearanceTheme: return "Appearance & Theme"
+            case .exchangeBind: return "Bind Exchange"
+            case .exchangeUnbind: return "Unbind"
+            case .exchangeAccountLabel: return "Account Label"
+            case .exchangeConnected: return "Connected"
+            case .exchangeNotConnected: return "Not Configured"
+            case .tabHome: return "Today"
+            case .tabJournal: return "Journal"
+            case .tabCalendar: return "Calendar"
+            case .tabSettings: return "Settings"
             }
         }
     }

@@ -14,6 +14,9 @@ struct SettingsView: View {
     @StateObject private var exchangeCoordinator = PhoneExchangeCoordinator.shared
     @StateObject private var reminderScheduler = PhoneReminderScheduler.shared
 
+    // Language Setting
+    @AppStorage("wick.language") private var languageRaw = AppLanguage.chinese.rawValue
+
     // Appearance & Convention Settings
     @AppStorage("wick.appearance") private var appearanceRaw = AppAppearance.system.rawValue
     @AppStorage("wick.pnlColorConvention") private var pnlConventionRaw = PnlColorConvention.redUp.rawValue
@@ -39,6 +42,17 @@ struct SettingsView: View {
     @State private var secretDraft = ""
     @State private var passphraseDraft = ""
     @State private var showUnbindConfirm = false
+
+    private var language: AppLanguage {
+        AppLanguage(rawValue: languageRaw) ?? .chinese
+    }
+
+    private var languageBinding: Binding<AppLanguage> {
+        Binding(
+            get: { language },
+            set: { languageRaw = $0.rawValue }
+        )
+    }
 
     private var targetJournal: JournalInfo? {
         if let targetJournalID,
@@ -67,31 +81,50 @@ struct SettingsView: View {
             ScrollView {
                 VStack(spacing: 14) {
                     // 1. Appearance & Theme
-                    SettingsCard(title: "外观与主题") {
-                        SettingsRow(title: "外观模式", subtitle: "自动 / 亮色 / 暗色") {
+                    SettingsCard(title: L10n.string(.settingsAppearanceTheme, language: language)) {
+                        SettingsRow(
+                            title: L10n.string(.language, language: language),
+                            subtitle: language == .chinese ? "中文 / English" : "English / 中文"
+                        ) {
+                            SettingsSegmentedPicker(
+                                options: AppLanguage.allCases,
+                                selection: languageBinding
+                            ) { option in
+                                option.displayName
+                            }
+                        }
+
+                        SettingsRow(
+                            title: L10n.string(.appearance, language: language),
+                            subtitle: language == .chinese ? "自动 / 亮色 / 暗色" : "Auto / Light / Dark"
+                        ) {
                             SettingsSegmentedPicker(
                                 options: AppAppearance.allCases,
                                 selection: appearanceBinding
                             ) { option in
-                                option.displayName(language: .chinese)
+                                option.displayName(language: language)
                             }
                         }
 
-                        SettingsRow(title: "涨跌配色", subtitle: "红涨绿跌 / 绿涨红跌", isLast: true) {
+                        SettingsRow(
+                            title: L10n.string(.pnlColorConvention, language: language),
+                            subtitle: language == .chinese ? "红涨绿跌 / 绿涨红跌" : "Red up / Green up",
+                            isLast: true
+                        ) {
                             SettingsSegmentedPicker(
                                 options: PnlColorConvention.allCases,
                                 selection: pnlConventionBinding
                             ) { option in
-                                option.displayName(language: .chinese)
+                                option.displayName(language: language)
                             }
                         }
                     }
 
                     // 2. Daily Notification Reminder
-                    SettingsCard(title: "日记提醒") {
+                    SettingsCard(title: L10n.string(.journalReminder, language: language)) {
                         SettingsRow(
-                            title: "每日复盘提醒",
-                            subtitle: "每晚定时推送复盘提醒通知",
+                            title: L10n.string(.journalReminderEnabled, language: language),
+                            subtitle: L10n.string(.dailyReviewReminderSubtitle, language: language),
                             isLast: !reminderEnabled
                         ) {
                             Toggle("", isOn: $reminderEnabled)
@@ -103,7 +136,7 @@ struct SettingsView: View {
                         }
 
                         if reminderEnabled {
-                            SettingsRow(title: "提醒时间", isLast: true) {
+                            SettingsRow(title: L10n.string(.journalReminderTime, language: language), isLast: true) {
                                 DatePicker(
                                     "",
                                     selection: $reminderTime,
@@ -119,9 +152,13 @@ struct SettingsView: View {
                     }
 
                     // 3. Trading Calendar & Easter Egg
-                    SettingsCard(title: "交易日历") {
-                        SettingsRow(title: "数据源", subtitle: "华尔街见闻 REST 直连缓存", isLast: true) {
-                            Text("实时在线")
+                    SettingsCard(title: L10n.string(.tradingCalendar, language: language)) {
+                        SettingsRow(
+                            title: language == .chinese ? "数据源" : "Data Feed",
+                            subtitle: language == .chinese ? "华尔街见闻 REST 直连缓存" : "WallStreetCN REST cache",
+                            isLast: true
+                        ) {
+                            Text(language == .chinese ? "实时在线" : "Online")
                                 .font(.system(size: 11, weight: .medium, design: .serif))
                                 .foregroundColor(PhoneTheme.inkTertiary)
                         }
@@ -130,10 +167,10 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(alignment: .center, spacing: 12) {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text("拟物物理黄历 (彩蛋)")
+                                    Text(language == .chinese ? "拟物物理黄历 (彩蛋)" : "Physical Desk Calendar (Easter Egg)")
                                         .font(.system(size: 13, weight: .bold, design: .serif))
                                         .foregroundColor(PhoneTheme.cinnabar)
-                                    Text("默认关闭。开启后黄历 Tab 将切换为朱漆装订条与撕页物理，合成纸声与触觉震动完整保留。")
+                                    Text(L10n.string(.calendarEasterEggNote, language: language))
                                         .font(.system(size: 10.5, design: .serif))
                                         .foregroundColor(PhoneTheme.inkSecondary)
                                 }
@@ -156,8 +193,11 @@ struct SettingsView: View {
                     }
 
                     // 4. Per-Journal Exchange Binding
-                    SettingsCard(title: "交易所与实盘仓位") {
-                        SettingsRow(title: "绑定日记本", subtitle: "选择要配置凭据的日记本") {
+                    SettingsCard(title: L10n.string(.exchangeSection, language: language)) {
+                        SettingsRow(
+                            title: language == .chinese ? "绑定日记本" : "Bound Journal",
+                            subtitle: language == .chinese ? "选择要配置凭据的日记本" : "Select journal to configure credentials"
+                        ) {
                             Menu {
                                 ForEach(store.journals) { journal in
                                     Button {
@@ -166,14 +206,14 @@ struct SettingsView: View {
                                         HStack {
                                             Text(journal.name)
                                             if journal.id == store.activeJournalID {
-                                                Text("(当前)")
+                                                Text(language == .chinese ? "(当前)" : "(Active)")
                                             }
                                         }
                                     }
                                 }
                             } label: {
                                 HStack(spacing: 4) {
-                                    Text(targetJournal?.name ?? "未选择")
+                                    Text(targetJournal?.name ?? (language == .chinese ? "未选择" : "None"))
                                         .font(.system(size: 12, weight: .semibold, design: .serif))
                                         .foregroundColor(PhoneTheme.inkPrimary)
                                     Image(systemName: "chevron.up.chevron.down")
@@ -190,70 +230,70 @@ struct SettingsView: View {
 
                         if let journal = targetJournal {
                             if let binding = journal.exchangeBinding {
-                                SettingsRow(title: "当前绑定") {
+                                SettingsRow(title: language == .chinese ? "当前绑定" : "Current Binding") {
                                     Text(venueName(binding.venue))
                                         .font(.system(size: 12, weight: .semibold, design: .serif))
                                         .foregroundColor(PhoneTheme.inkPrimary)
                                 }
 
-                                SettingsRow(title: "账户标识") {
+                                SettingsRow(title: language == .chinese ? "账户标识" : "Account Label") {
                                     Text(binding.accountLabel)
                                         .font(.system(size: 11, design: .monospaced))
                                         .foregroundColor(PhoneTheme.inkSecondary)
                                 }
 
                                 if exchangeCoordinator.isSyncing(for: journal.id) {
-                                    SettingsRow(title: "同步状态") {
+                                    SettingsRow(title: language == .chinese ? "同步状态" : "Sync Status") {
                                         HStack(spacing: 6) {
                                             ProgressView()
                                                 .scaleEffect(0.7)
-                                            Text("正在拉取成交…")
+                                            Text(L10n.string(.exchangeSyncing, language: language))
                                                 .font(.system(size: 11, design: .serif))
                                                 .foregroundColor(PhoneTheme.inkSecondary)
                                         }
                                     }
                                 } else if let error = exchangeCoordinator.error(for: journal.id) {
-                                    SettingsRow(title: "同步失败") {
+                                    SettingsRow(title: language == .chinese ? "同步失败" : "Sync Failed") {
                                         Text(error)
                                             .font(.system(size: 10.5, design: .serif))
                                             .foregroundColor(PhoneTheme.cinnabar)
                                     }
                                 } else if let snap = exchangeCoordinator.snapshot(for: journal.id) {
-                                    SettingsRow(title: "已聚合仓位") {
-                                        Text("\(snap.positions.count) 笔")
+                                    SettingsRow(title: language == .chinese ? "已聚合仓位" : "Aggregated Positions") {
+                                        Text(String(format: language == .chinese ? "%d 笔" : "%d positions", snap.positions.count))
                                             .font(.system(size: 11.5, weight: .bold, design: .monospaced))
                                             .foregroundColor(PhoneTheme.cinnabar)
                                     }
-                                    SettingsRow(title: "最新对账") {
+                                    SettingsRow(title: language == .chinese ? "最新对账" : "Last Reconciled") {
                                         Text(snap.fetchedAt.formatted(date: .omitted, time: .shortened))
                                             .font(.system(size: 11, design: .monospaced))
                                             .foregroundColor(PhoneTheme.inkSecondary)
                                     }
                                 }
 
-                                SettingsRow(title: "仓位刷新") {
+                                SettingsRow(title: language == .chinese ? "仓位刷新" : "Positions Refresh") {
                                     Button {
                                         exchangeCoordinator.syncNow(journalID: journal.id)
                                     } label: {
-                                        Text("立即刷新「\(journal.name)」")
+                                        Text(language == .chinese ? "立即刷新「\(journal.name)」" : "Refresh \"\(journal.name)\"")
                                             .font(.system(size: 12, weight: .bold, design: .serif))
                                             .foregroundColor(PhoneTheme.cinnabar)
                                     }
                                     .disabled(exchangeCoordinator.isSyncing(for: journal.id))
                                 }
 
-                                SettingsRow(title: "解除绑定") {
+                                SettingsRow(title: L10n.string(.exchangeUnbind, language: language)) {
                                     Button(role: .destructive) {
                                         showUnbindConfirm = true
                                     } label: {
-                                        Text("解除绑定…")
+                                        Text(L10n.string(.exchangeDisconnect, language: language))
                                             .font(.system(size: 12, weight: .medium, design: .serif))
                                             .foregroundColor(PhoneTheme.cinnabar)
                                     }
                                 }
                             } else {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("「\(journal.name)」尚未绑定交易所。一本日记绑定一个交易所只读账户。Hyperliquid 仅需填写 0x 钱包地址，无需私钥。")
+                                    Text(language == .chinese ? "「\(journal.name)」尚未绑定交易所。一本日记绑定一个交易所只读账户。Hyperliquid 仅需填写 0x 钱包地址，无需私钥。" : "\"\(journal.name)\" has no exchange linked. One journal binds one read-only account. Hyperliquid only requires a 0x address without private keys.")
                                         .font(.system(size: 11, design: .serif))
                                         .foregroundColor(PhoneTheme.inkSecondary)
 
@@ -268,7 +308,7 @@ struct SettingsView: View {
                                         HStack(spacing: 4) {
                                             Image(systemName: "link")
                                                 .font(.system(size: 11))
-                                            Text("为「\(journal.name)」绑定交易所…")
+                                            Text(language == .chinese ? "为「\(journal.name)」绑定交易所…" : "Bind Exchange for \"\(journal.name)\"…")
                                                 .font(.system(size: 12, weight: .bold, design: .serif))
                                         }
                                         .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
@@ -285,8 +325,8 @@ struct SettingsView: View {
                         }
 
                         SettingsRow(
-                            title: "云端快照同步",
-                            subtitle: "开启后通过 Dropbox 同步已聚合的仓位快照，在其他设备上以只读小票与盈亏月历展示。CEX 凭据永不上传。",
+                            title: L10n.string(.syncTradingSnapshots, language: language),
+                            subtitle: L10n.string(.syncTradingSnapshotsHint, language: language),
                             isLast: true
                         ) {
                             Toggle("", isOn: $exchangeCoordinator.cloudSyncEnabled)
@@ -296,40 +336,40 @@ struct SettingsView: View {
                     }
 
                     // 5. Dropbox Sync
-                    SettingsCard(title: "数据同步") {
+                    SettingsCard(title: L10n.string(.syncSection, language: language)) {
                         if sync.syncEnabled && sync.backend.isAuthorized {
-                            SettingsRow(title: "Dropbox 账号") {
-                                Text(sync.accountEmail.isEmpty ? "已授权" : sync.accountEmail)
+                            SettingsRow(title: language == .chinese ? "Dropbox 账号" : "Dropbox Account") {
+                                Text(sync.accountEmail.isEmpty ? (language == .chinese ? "已授权" : "Authorized") : sync.accountEmail)
                                     .font(.system(size: 11.5, design: .serif))
                                     .foregroundColor(PhoneTheme.inkSecondary)
                             }
 
-                            SettingsRow(title: "同步状态") {
+                            SettingsRow(title: language == .chinese ? "同步状态" : "Sync Status") {
                                 statusRow
                             }
 
-                            SettingsRow(title: "立即同步") {
+                            SettingsRow(title: L10n.string(.syncNow, language: language)) {
                                 Button {
                                     sync.engine.syncNow()
                                 } label: {
-                                    Text("对账同步")
+                                    Text(L10n.string(.syncNow, language: language))
                                         .font(.system(size: 12, weight: .bold, design: .serif))
                                         .foregroundColor(PhoneTheme.cinnabar)
                                 }
                             }
 
-                            SettingsRow(title: "断开连接", isLast: true) {
+                            SettingsRow(title: L10n.string(.syncDisconnect, language: language), isLast: true) {
                                 Button(role: .destructive) {
                                     showDisconnectConfirm = true
                                 } label: {
-                                    Text("断开 Dropbox…")
+                                    Text(L10n.string(.syncDisconnect, language: language))
                                         .font(.system(size: 12, weight: .medium, design: .serif))
                                         .foregroundColor(PhoneTheme.cinnabar)
                                 }
                             }
                         } else {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("通过 Dropbox 在多台设备间双向同步日记。本地始终是唯一主副本。")
+                                Text(L10n.string(.syncExplanation, language: language))
                                     .font(.system(size: 11, design: .serif))
                                     .foregroundColor(PhoneTheme.inkSecondary)
 
@@ -339,7 +379,7 @@ struct SettingsView: View {
                                     HStack(spacing: 4) {
                                         Image(systemName: "arrow.triangle.2.circlepath")
                                             .font(.system(size: 11))
-                                        Text(isConnecting ? "正在连接…" : "连接 Dropbox")
+                                        Text(isConnecting ? L10n.string(.syncConnecting, language: language) : L10n.string(.syncConnect, language: language))
                                             .font(.system(size: 12, weight: .bold, design: .serif))
                                     }
                                     .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
@@ -352,7 +392,7 @@ struct SettingsView: View {
                                 .disabled(isConnecting)
 
                                 if sync.syncEnabled, !sync.backend.isAuthorized {
-                                    Text("需要重新连接 Dropbox")
+                                    Text(L10n.string(.syncStatusNeedsAuth, language: language))
                                         .font(.system(size: 10.5, design: .serif))
                                         .foregroundColor(PhoneTheme.cinnabar)
                                 }
@@ -369,10 +409,10 @@ struct SettingsView: View {
 
                     // 6. Conflicts
                     if !sync.engine.pendingConflicts.isEmpty {
-                        SettingsCard(title: "对账冲突") {
+                        SettingsCard(title: language == .chinese ? "对账冲突" : "Sync Conflicts") {
                             ForEach(sync.engine.pendingConflicts) { conflict in
-                                SettingsRow(title: conflict.dayKey, subtitle: "双方内容均已合并保留") {
-                                    Button("知道了") {
+                                SettingsRow(title: conflict.dayKey, subtitle: language == .chinese ? "双方内容均已合并保留" : "Merged and preserved both versions") {
+                                    Button(L10n.string(.syncConflictDismiss, language: language)) {
                                         sync.engine.dismissConflict(id: conflict.id)
                                     }
                                     .font(.system(size: 11, weight: .bold, design: .serif))
@@ -383,18 +423,18 @@ struct SettingsView: View {
                     }
 
                     // 7. Storage & Backup
-                    SettingsCard(title: "存储与备份") {
+                    SettingsCard(title: L10n.string(.dataSection, language: language)) {
                         if store.isReadOnlyDueToLoadFailure {
-                            SettingsRow(title: "只读保护") {
-                                Text("日记文件无法读取，已阻止覆盖")
+                            SettingsRow(title: L10n.string(.journalReadOnly, language: language)) {
+                                Text(L10n.string(.journalLoadFailureTitle, language: language))
                                     .font(.system(size: 10.5, design: .serif))
                                     .foregroundColor(PhoneTheme.cinnabar)
                             }
                         }
 
                         if store.isCatalogReadOnly {
-                            SettingsRow(title: "库只读保护") {
-                                Button("从 catalog 备份恢复") {
+                            SettingsRow(title: language == .chinese ? "库只读保护" : "Catalog Protected") {
+                                Button(language == .chinese ? "从 catalog 备份恢复" : "Restore from catalog backup") {
                                     do {
                                         try store.restoreCatalogFromBackup()
                                     } catch {
@@ -407,13 +447,13 @@ struct SettingsView: View {
                         }
 
                         if let exportData = store.exportJournalData() {
-                            SettingsRow(title: "导出日记") {
+                            SettingsRow(title: L10n.string(.journalExport, language: language)) {
                                 ShareLink(
                                     item: exportData,
                                     preview: SharePreview("journal.json", image: Image(systemName: "book.closed"))
                                 ) {
                                     HStack(spacing: 4) {
-                                        Text("导出 journal.json")
+                                        Text(language == .chinese ? "导出 journal.json" : "Export journal.json")
                                             .font(.system(size: 11.5, weight: .bold, design: .serif))
                                         Image(systemName: "square.and.arrow.up")
                                             .font(.system(size: 10))
@@ -423,8 +463,8 @@ struct SettingsView: View {
                             }
                         }
 
-                        SettingsRow(title: "导入备份", isLast: true) {
-                            Button("导入 journal.json…") {
+                        SettingsRow(title: L10n.string(.journalImport, language: language), isLast: true) {
+                            Button(language == .chinese ? "导入 journal.json…" : "Import journal.json…") {
                                 showJournalImporter = true
                             }
                             .font(.system(size: 11.5, weight: .bold, design: .serif))
@@ -434,10 +474,10 @@ struct SettingsView: View {
 
                     // 8. About
                     VStack(spacing: 4) {
-                        Text("Wick for iOS · 秉烛")
+                        Text(language == .chinese ? "Wick for iOS · 秉烛" : "Wick for iOS")
                             .font(.system(size: 12, weight: .bold, design: .serif))
                             .foregroundColor(PhoneTheme.inkSecondary)
-                        Text("1.0 · 本地优先 · 纯粹时间与交易记录")
+                        Text(language == .chinese ? "1.0 · 本地优先 · 纯粹时间与交易记录" : "1.0 · Local-first · Pure time & trading journal")
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(PhoneTheme.inkTertiary)
                     }
@@ -462,6 +502,7 @@ struct SettingsView: View {
             .sheet(isPresented: $showExchangeSheet) {
                 ExchangeBindingSheet(
                     journals: store.journals,
+                    language: language,
                     selectedJournalID: Binding(
                         get: { bindingSheetTargetJournalID ?? targetJournal?.id ?? store.activeJournalID ?? store.journals.first?.id ?? UUID() },
                         set: { bindingSheetTargetJournalID = $0 }
@@ -492,18 +533,18 @@ struct SettingsView: View {
                 )
             }
             .confirmationDialog(
-                "解除交易所绑定？",
+                L10n.string(.exchangeDisconnectConfirmTitle, language: language),
                 isPresented: $showUnbindConfirm,
                 titleVisibility: .visible
             ) {
-                Button("解除绑定", role: .destructive) {
+                Button(L10n.string(.exchangeDisconnect, language: language), role: .destructive) {
                     if let journalID = targetJournal?.id {
                         exchangeCoordinator.removeBinding(for: journalID)
                     }
                 }
-                Button("取消", role: .cancel) {}
+                Button(L10n.string(.cancel, language: language), role: .cancel) {}
             } message: {
-                Text("将移除「\(targetJournal?.name ?? "")」本地与云端的仓位快照，凭据将被安全清除。")
+                Text(L10n.string(.exchangeDisconnectConfirmBody, language: language))
             }
             .fileImporter(
                 isPresented: $showJournalImporter,
@@ -522,34 +563,34 @@ struct SettingsView: View {
                     recoveryErrorMessage = error.localizedDescription
                 }
             }
-            .alert("恢复失败", isPresented: Binding(
+            .alert(L10n.string(.journalRecoveryFailedTitle, language: language), isPresented: Binding(
                 get: { recoveryErrorMessage != nil },
                 set: { if !$0 { recoveryErrorMessage = nil } }
             )) {
-                Button("好", role: .cancel) { recoveryErrorMessage = nil }
+                Button(L10n.string(.ok, language: language), role: .cancel) { recoveryErrorMessage = nil }
             } message: {
                 Text(recoveryErrorMessage ?? "")
             }
             .confirmationDialog(
-                "断开 Dropbox？",
+                L10n.string(.syncDisconnectConfirmTitle, language: language),
                 isPresented: $showDisconnectConfirm,
                 titleVisibility: .visible
             ) {
-                Button("断开 Dropbox", role: .destructive) {
+                Button(L10n.string(.syncDisconnect, language: language), role: .destructive) {
                     sync.disconnectDropbox()
                 }
-                Button("取消", role: .cancel) {}
+                Button(L10n.string(.cancel, language: language), role: .cancel) {}
             } message: {
-                Text("将停止同步。本机与 Dropbox 中已有的数据都会保留。")
+                Text(L10n.string(.syncDisconnectConfirmBody, language: language))
             }
         }
     }
 
     private func venueName(_ venue: ExchangeVenue) -> String {
         switch venue {
-        case .hyperliquid: return "Hyperliquid 永续"
+        case .hyperliquid: return "Hyperliquid"
         case .binance: return "Binance USDⓈ-M"
-        case .okx: return "OKX SWAP 永续"
+        case .okx: return "OKX SWAP"
         }
     }
 
@@ -557,19 +598,19 @@ struct SettingsView: View {
     private var statusRow: some View {
         switch sync.engine.status {
         case .syncing:
-            Text("正在同步…")
+            Text(L10n.string(.syncStatusSyncing, language: language))
                 .font(.system(size: 11, design: .serif))
                 .foregroundColor(PhoneTheme.inkSecondary)
         case .offline:
-            Text("当前离线，将自动重试")
+            Text(L10n.string(.syncStatusOffline, language: language))
                 .font(.system(size: 11, design: .serif))
                 .foregroundColor(PhoneTheme.inkSecondary)
         case .needsAuth:
-            Text("需要重新连接 Dropbox")
+            Text(L10n.string(.syncStatusNeedsAuth, language: language))
                 .font(.system(size: 11, design: .serif))
                 .foregroundColor(PhoneTheme.cinnabar)
         case .error(let message):
-            Text(message.contains("remote format") ? "远端数据由更新版本的 Wick 写入，请升级 App" : message)
+            Text(message.contains("remote format") ? L10n.string(.syncRemoteTooNew, language: language) : message)
                 .font(.system(size: 10.5, design: .serif))
                 .foregroundColor(PhoneTheme.inkSecondary)
         case .idle:
@@ -578,7 +619,7 @@ struct SettingsView: View {
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(PhoneTheme.inkSecondary)
             } else {
-                Text("尚未同步")
+                Text(L10n.string(.syncNeverSynced, language: language))
                     .font(.system(size: 11, design: .serif))
                     .foregroundColor(PhoneTheme.inkTertiary)
             }
@@ -722,6 +763,7 @@ private struct SettingsSegmentedPicker<T: Hashable & Identifiable>: View {
 
 private struct ExchangeBindingSheet: View {
     let journals: [JournalInfo]
+    let language: AppLanguage
     @Binding var selectedJournalID: UUID
     @Binding var selectedVenue: ExchangeVenue
     @Binding var accountLabelDraft: String
@@ -737,11 +779,11 @@ private struct ExchangeBindingSheet: View {
                 VStack(spacing: 16) {
                     // Header Bar
                     HStack {
-                        Text("绑定交易所")
+                        Text(L10n.string(.exchangeBind, language: language))
                             .font(.system(size: 16, weight: .bold, design: .serif))
                             .foregroundColor(PhoneTheme.inkPrimary)
                         Spacer()
-                        Button("取消") { dismiss() }
+                        Button(L10n.string(.cancel, language: language)) { dismiss() }
                             .font(.system(size: 13, design: .serif))
                             .foregroundColor(PhoneTheme.inkSecondary)
                     }
@@ -749,8 +791,8 @@ private struct ExchangeBindingSheet: View {
                     .padding(.top, 4)
 
                     // 1. Select Journal & Venue
-                    SettingsCard(title: "日记本与交易所") {
-                        SettingsRow(title: "目标日记本") {
+                    SettingsCard(title: language == .chinese ? "日记本与交易所" : "Journal & Exchange") {
+                        SettingsRow(title: language == .chinese ? "目标日记本" : "Target Journal") {
                             Menu {
                                 ForEach(journals) { journal in
                                     Button(journal.name) {
@@ -759,7 +801,7 @@ private struct ExchangeBindingSheet: View {
                                 }
                             } label: {
                                 HStack(spacing: 4) {
-                                    Text(journals.first(where: { $0.id == selectedJournalID })?.name ?? "选择")
+                                    Text(journals.first(where: { $0.id == selectedJournalID })?.name ?? (language == .chinese ? "选择" : "Select"))
                                         .font(.system(size: 12, weight: .semibold, design: .serif))
                                         .foregroundColor(PhoneTheme.inkPrimary)
                                     Image(systemName: "chevron.up.chevron.down")
@@ -774,9 +816,9 @@ private struct ExchangeBindingSheet: View {
                             }
                         }
 
-                        SettingsRow(title: "交易所类型", isLast: true) {
+                        SettingsRow(title: L10n.string(.exchangeVenue, language: language), isLast: true) {
                             Menu {
-                                Button("Hyperliquid (0x 钱包)") { selectedVenue = .hyperliquid }
+                                Button("Hyperliquid (0x \(language == .chinese ? "钱包" : "Wallet"))") { selectedVenue = .hyperliquid }
                                 Button("Binance USDⓈ-M") { selectedVenue = .binance }
                                 Button("OKX SWAP") { selectedVenue = .okx }
                             } label: {
@@ -798,10 +840,10 @@ private struct ExchangeBindingSheet: View {
                     }
 
                     // 2. Account Credentials Inputs
-                    SettingsCard(title: "账户凭据") {
+                    SettingsCard(title: language == .chinese ? "账户凭据" : "Credentials") {
                         if selectedVenue == .hyperliquid {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("0x 钱包地址 (不填私钥)")
+                                Text(L10n.string(.exchangeHyperliquidHint, language: language))
                                     .font(.system(size: 11, design: .serif))
                                     .foregroundColor(PhoneTheme.inkSecondary)
                                 TextField("0x1234...abcd", text: $accountLabelDraft)
@@ -817,10 +859,10 @@ private struct ExchangeBindingSheet: View {
                         } else {
                             VStack(alignment: .leading, spacing: 10) {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("账户备注")
+                                    Text(L10n.string(.exchangeAccountLabel, language: language))
                                         .font(.system(size: 11, design: .serif))
                                         .foregroundColor(PhoneTheme.inkSecondary)
-                                    TextField("如 主账号", text: $accountLabelDraft)
+                                    TextField(language == .chinese ? "如 主账号" : "e.g. Main", text: $accountLabelDraft)
                                         .font(.system(size: 12, design: .serif))
                                         .padding(8)
                                         .background(PhoneTheme.paper)
@@ -829,7 +871,7 @@ private struct ExchangeBindingSheet: View {
                                 }
 
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("API Key (只读)")
+                                    Text("\(L10n.string(.exchangeApiKey, language: language)) (\(language == .chinese ? "只读" : "Read-only"))")
                                         .font(.system(size: 11, design: .serif))
                                         .foregroundColor(PhoneTheme.inkSecondary)
                                     TextField("API Key", text: $apiKeyDraft)
@@ -843,7 +885,7 @@ private struct ExchangeBindingSheet: View {
                                 }
 
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("API Secret")
+                                    Text(L10n.string(.exchangeSecretKey, language: language))
                                         .font(.system(size: 11, design: .serif))
                                         .foregroundColor(PhoneTheme.inkSecondary)
                                     SecureField("Secret", text: $secretDraft)
@@ -858,7 +900,7 @@ private struct ExchangeBindingSheet: View {
 
                                 if selectedVenue == .okx {
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text("Passphrase")
+                                        Text(L10n.string(.exchangePassphrase, language: language))
                                             .font(.system(size: 11, design: .serif))
                                             .foregroundColor(PhoneTheme.inkSecondary)
                                         SecureField("Passphrase", text: $passphraseDraft)
@@ -880,7 +922,7 @@ private struct ExchangeBindingSheet: View {
                     Button {
                         onSave()
                     } label: {
-                        Text("保存并绑定")
+                        Text(L10n.string(.exchangeSaveAndSync, language: language))
                             .font(.system(size: 13, weight: .bold, design: .serif))
                             .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
                             .frame(maxWidth: .infinity)
