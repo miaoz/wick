@@ -18,6 +18,7 @@ struct EditorView: View {
     @State private var saveTask: Task<Void, Never>?
     @State private var isDirty = false
     @State private var reviewingItemIndex: Int?
+    @State private var imagePreviewState: PhoneImagePreviewState?
 
     init(entry: JournalEntry) {
         _draft = State(initialValue: entry)
@@ -129,6 +130,9 @@ struct EditorView: View {
                                     onReviewTap: {
                                         reviewingItemIndex = idx
                                     },
+                                    onImageTap: { filenames, imgIdx in
+                                        imagePreviewState = PhoneImagePreviewState(filenames: filenames, currentIndex: imgIdx)
+                                    },
                                     onChange: scheduleSave
                                 )
 
@@ -219,6 +223,18 @@ struct EditorView: View {
             }
         }
         .onDisappear(perform: saveNow)
+        .overlay {
+            if imagePreviewState != nil {
+                PhoneImagePreviewOverlay(
+                    state: $imagePreviewState,
+                    imageURL: { store.imageURL(for: $0) },
+                    language: language
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                .zIndex(100)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: imagePreviewState != nil)
     }
 
     private func scheduleSave() {
@@ -265,6 +281,7 @@ private struct ItemRowView: View {
     let language: AppLanguage
     let imageURL: (String) -> URL?
     let onReviewTap: () -> Void
+    let onImageTap: ([String], Int) -> Void
     let onChange: () -> Void
 
     var body: some View {
@@ -306,22 +323,27 @@ private struct ItemRowView: View {
                     .padding(.top, 2)
                 }
 
-                // Images horizontal scroll
+                // Images horizontal scroll with tap-to-preview
                 if !item.imageFilenames.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
-                            ForEach(item.imageFilenames, id: \.self) { filename in
+                            ForEach(Array(item.imageFilenames.enumerated()), id: \.offset) { imgIdx, filename in
                                 if let url = imageURL(filename),
                                    let image = UIImage(contentsOfFile: url.path) {
-                                    Image(uiImage: image)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 72, height: 72)
-                                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 4)
-                                                .stroke(PhoneTheme.rule, lineWidth: 1)
-                                        )
+                                    Button {
+                                        onImageTap(item.imageFilenames, imgIdx)
+                                    } label: {
+                                        Image(uiImage: image)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 72, height: 72)
+                                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 4)
+                                                    .stroke(PhoneTheme.rule, lineWidth: 1)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
