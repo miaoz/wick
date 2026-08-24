@@ -22,6 +22,7 @@ public struct FallingPage: Identifiable {
     public let throwVelocity: CGSize
     /// The pad the sheet came off - it renders and falls in this page size.
     public let layout: PaperLayout
+    public let convention: PnlColorConvention
 
     public init(
         date: Date,
@@ -35,7 +36,8 @@ public struct FallingPage: Identifiable {
         grabX: CGFloat,
         upward: Bool,
         throwVelocity: CGSize,
-        layout: PaperLayout = .desktop
+        layout: PaperLayout = .desktop,
+        convention: PnlColorConvention = .redUp
     ) {
         self.date = date
         self.events = events
@@ -49,6 +51,7 @@ public struct FallingPage: Identifiable {
         self.upward = upward
         self.throwVelocity = throwVelocity
         self.layout = layout
+        self.convention = convention
     }
 }
 
@@ -104,7 +107,8 @@ public struct FallingPageView: View {
             language: page.language,
             eventsPage: page.eventsPage,
             tab: page.tab,
-            layout: page.layout
+            layout: page.layout,
+            convention: page.convention
         )
         .clipShape(TornPieceShape(seed: page.seed, base: page.layout.tearY))
         // The padding gives the drop shadow room; a full-bleed piece starts

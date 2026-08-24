@@ -13,4 +13,9 @@ extension Notification.Name {
     /// top page so the new face set applies without reopening the window.
     /// Posted by the macOS host (`AppSettings`), observed by `TradingCalendarRootView`.
     public static let wickCalendarFontStyleChanged = Notification.Name("wick.calendarFontStyleChanged")
+
+    /// The PnL color convention changed; re-snapshots the physical calendar so
+    /// the accent color (red for redUp, green for greenUp) applies immediately.
+    /// Posted by the macOS host (`AppSettings`), observed by `TradingCalendarRootView`.
+    public static let wickCalendarPnlConventionChanged = Notification.Name("wick.calendarPnlConventionChanged")
 }

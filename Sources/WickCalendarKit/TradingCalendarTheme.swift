@@ -188,11 +188,29 @@ public struct PaperLayout: Sendable, Equatable, Hashable {
 public enum TradingCalendarTheme {
     public static let paper = Color(red: 0.984, green: 0.973, blue: 0.949)   // #FBF8F2 warm rice paper
     public static let ink = Color(red: 0.165, green: 0.129, blue: 0.094)     // #2A2118 smoke ink
-    public static let red = Color(red: 0.753, green: 0.227, blue: 0.133)     // #C03A22 cinnabar
+    public static let red = Color(red: 0.753, green: 0.227, blue: 0.133)     // #C03A22 cinnabar red
+    public static let green = Color(red: 0.114, green: 0.290, blue: 0.220)   // #1D4A38 pine / jade green
     public static let grain = Color(red: 0.45, green: 0.38, blue: 0.28)      // #736147 (fibre tint)
     public static let paperEdge = Color(red: 0.82, green: 0.79, blue: 0.71)  // stacked-sheet edge tint
     public static let dimInk = ink.opacity(0.75)
     public static let faintInk = ink.opacity(0.5)
+
+    /// Currently active PnL convention driving the physical calendar accent color.
+    @MainActor
+    public static var pnlConvention: PnlColorConvention = .redUp
+
+    /// Dynamic theme accent color: Cinnabar Red when `redUp`, Pine Green when `greenUp`.
+    @MainActor
+    public static var accent: Color {
+        accentColor(for: pnlConvention)
+    }
+
+    public static func accentColor(for convention: PnlColorConvention) -> Color {
+        switch convention {
+        case .redUp: return red
+        case .greenUp: return green
+        }
+    }
 
     // MARK: - Type
 

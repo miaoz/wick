@@ -58,6 +58,8 @@ final class AppSettings: ObservableObject {
     @Published var pnlColorConvention: PnlColorConvention {
         didSet {
             UserDefaults.standard.set(pnlColorConvention.rawValue, forKey: Keys.pnlColorConvention)
+            TradingCalendarTheme.pnlConvention = pnlColorConvention
+            NotificationCenter.default.post(name: .wickCalendarPnlConventionChanged, object: nil)
         }
     }
 
@@ -224,7 +226,9 @@ final class AppSettings: ObservableObject {
         appearance = AppAppearance(rawValue: appearanceRaw) ?? .system
 
         let conventionRaw = UserDefaults.standard.string(forKey: Keys.pnlColorConvention) ?? PnlColorConvention.greenUp.rawValue
-        pnlColorConvention = PnlColorConvention(rawValue: conventionRaw) ?? .greenUp
+        let convention = PnlColorConvention(rawValue: conventionRaw) ?? .greenUp
+        pnlColorConvention = convention
+        TradingCalendarTheme.pnlConvention = convention
 
         // Font name, with a one-time migration from the old two-choice enum.
         var fontName = UserDefaults.standard.string(forKey: Keys.journalFontName) ?? ""

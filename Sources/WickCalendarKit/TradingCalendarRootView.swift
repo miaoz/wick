@@ -27,6 +27,7 @@ public struct TradingCalendarRootView: View {
     let onPageTorn: (FallingPage) -> Void
     let layout: PaperLayout
 
+    @Environment(\.pnlColorConvention) private var envPnlConvention
     @ObservedObject private var store = MacroCalendarStore.shared
 
     @State private var currentDate = Date()
@@ -74,6 +75,7 @@ public struct TradingCalendarRootView: View {
         }
         .frame(width: layout.windowW, height: layout.windowH, alignment: .top)
         .onAppear {
+            TradingCalendarTheme.pnlConvention = envPnlConvention
             paperScene.sim = sim
             store.loadIfNeeded(for: currentDate)
             store.loadIfNeeded(for: nextDate)
@@ -95,6 +97,10 @@ public struct TradingCalendarRootView: View {
         .onChange(of: activeTab) { _ in
             refreshPageTexture()
         }
+        .onChange(of: envPnlConvention) { newConvention in
+            TradingCalendarTheme.pnlConvention = newConvention
+            refreshPageTexture()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .wickCalendarFlipEventsPage)) { note in
             // `direction` flips a page within the active tab; `tabSwitch`
             // toggles between the macro and earnings compartments.
@@ -106,6 +112,9 @@ public struct TradingCalendarRootView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .wickCalendarFontStyleChanged)) { _ in
+            refreshPageTexture()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .wickCalendarPnlConventionChanged)) { _ in
             refreshPageTexture()
         }
         #if os(macOS)
@@ -189,7 +198,8 @@ public struct TradingCalendarRootView: View {
                 language: language,
                 eventsPage: 0,
                 tab: activeTab,
-                layout: layout
+                layout: layout,
+                convention: envPnlConvention
             )
             .overlay(nextPageShading)
             .padding(.top, layout.pageTopInset)
@@ -423,7 +433,8 @@ public struct TradingCalendarRootView: View {
             language: language,
             eventsPage: eventsPage,
             tab: activeTab,
-            layout: layout
+            layout: layout,
+            convention: envPnlConvention
         )
         if let cg = CalendarSnapshot.cgImage(of: page, scale: 2) {
             paperScene.setPageTexture(SKTexture(cgImage: cg))
@@ -449,7 +460,8 @@ public struct TradingCalendarRootView: View {
             grabX: grabX,
             upward: upward,
             throwVelocity: lastVelocity,
-            layout: layout
+            layout: layout,
+            convention: envPnlConvention
         )
         TearSound.shared.playRip()
         Haptics.rip()
@@ -518,9 +530,9 @@ private struct CalendarPadBinding: View {
                         .strokeBorder(Color.black.opacity(0.12), lineWidth: 0.5)
                 )
                 .overlay(alignment: .top) {
-                    // The red spine tape peeking over the top.
+                    // The spine tape peeking over the top.
                     Rectangle()
-                        .fill(TradingCalendarTheme.red.opacity(0.9))
+                        .fill(TradingCalendarTheme.accent.opacity(0.9))
                         .frame(height: 2.5 * s)
                         .padding(.horizontal, 2 * s)
                         .padding(.top, 0.5 * s)
