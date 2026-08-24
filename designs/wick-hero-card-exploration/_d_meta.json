@@ -1,0 +1,31 @@
+{
+  "name": "wick-hero-card-exploration",
+  "title": "Wick iOS 首页顶部时间卡片视觉重构探索",
+  "createdAt": "2026-08-24T16:55:00+08:00",
+  "proposals": [
+    {
+      "id": "proposal-a",
+      "name": "朱砂印痕 (Cinnabar Seal)",
+      "badge": "推荐",
+      "summary": "朱砂白文方章替代黑底火焰，古典衬线百分比数字，微凹沉香纸槽刻度进度条与三栏小签条"
+    },
+    {
+      "id": "proposal-b",
+      "name": "日晷弧光 (Sun Arc Dial)",
+      "badge": "天文仪轨",
+      "summary": "微型 24 小时日晷弧光盘，弧内嵌百分比数字，四象墨轨同心排列"
+    },
+    {
+      "id": "proposal-c",
+      "name": "营造铜尺 (Printer Ruler)",
+      "badge": "严谨秩序",
+      "summary": "极细线描镂空铜烛台，仿古营造尺 24 格刻度配朱砂游标指针"
+    },
+    {
+      "id": "proposal-d",
+      "name": "极简墨韵 (Minimalist Ink)",
+      "badge": "轻盈留白",
+      "summary": "纯粹依靠文字负空间呼吸，4px 极细墨渍流光条与微光琥珀端点"
+    }
+  ]
+}

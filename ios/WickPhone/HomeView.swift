@@ -114,87 +114,139 @@ private struct TimeArcPaperCard: View {
             let all = TimeProgressCalculator.allProgress(at: date, language: language)
             let dayProgress = all.first
 
-            VStack(alignment: .leading, spacing: 14) {
-                // Header row: big date + lunar + candle badge
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(Self.dateDisplay(for: date, language: language))
-                            .font(.system(size: 32, weight: .black, design: .serif))
-                            .foregroundColor(PhoneTheme.inkPrimary)
-
-                        if let lunar = LunarLine.string(for: date) {
-                            Text("\(Self.weekdayDisplay(for: date, language: language)) · \(lunar)")
-                                .font(.system(size: 11.5, design: .serif))
-                                .foregroundColor(PhoneTheme.inkSecondary)
-                        }
-                    }
-
-                    Spacer()
-
-                    // Candle flame icon badge
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(PhoneTheme.char)
-                            .shadow(color: PhoneTheme.ember.opacity(0.3), radius: 6, x: 0, y: 2)
-
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 18))
-                            .foregroundColor(PhoneTheme.emberHi)
-                    }
-                    .frame(width: 38, height: 38)
-                }
-
-                // Day Burn Strip with big percentage
-                if let dayProgress {
-                    VStack(spacing: 6) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(L10n.string(.panelHeroToday, language: language))
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(PhoneTheme.inkSecondary)
-                            Spacer()
-                            Text(dayProgress.percentageText)
-                                .font(.system(size: 28, weight: .black, design: .serif))
-                                .foregroundColor(PhoneTheme.inkPrimary)
-                        }
-
-                        BurnStripView(
-                            elapsed: 1.0 - dayProgress.fractionRemaining,
-                            ticks: 24,
-                            showsFlame: true
+            ZStack(alignment: .topTrailing) {
+                // Top-Right Ambient Candle Glow from macOS
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                PhoneTheme.emberHi.opacity(0.28),
+                                PhoneTheme.ember.opacity(0.10),
+                                Color.clear
+                            ],
+                            center: .center,
+                            startRadius: 4,
+                            endRadius: 140
                         )
-                        .frame(height: 22)
-                    }
-                }
+                    )
+                    .frame(width: 180, height: 180)
+                    .offset(x: 45, y: -45)
+                    .allowsHitTesting(false)
 
-                // Sub strips: Week / Month / Year
-                VStack(spacing: 8) {
-                    ForEach(Array(all.dropFirst())) { item in
-                        HStack(spacing: 8) {
-                            Text(item.subtitle)
-                                .font(.system(size: 11, weight: .bold, design: .serif))
-                                .foregroundColor(PhoneTheme.inkSecondary)
-                                .fixedSize()
+                VStack(alignment: .leading, spacing: 14) {
+                    // Header row: big date + lunar + vertical cinnabar slip
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(Self.dateDisplay(for: date, language: language))
+                                .font(.system(size: 30, weight: .black, design: .serif))
+                                .foregroundColor(PhoneTheme.inkPrimary)
+
+                            if let lunar = LunarLine.string(for: date) {
+                                Text("\(Self.weekdayDisplay(for: date, language: language)) · \(lunar)")
+                                    .font(.system(size: 11, design: .serif))
+                                    .foregroundColor(PhoneTheme.inkSecondary)
+                            }
+                        }
+
+                        Spacer()
+
+                        // 朱砂引首 · 竖排签条
+                        VStack(spacing: 2) {
+                            if language == .chinese {
+                                Text("秉")
+                                Text("烛")
+                            } else {
+                                Text("W")
+                                Text("I")
+                                Text("C")
+                                Text("K")
+                            }
+                        }
+                        .font(.system(size: language == .chinese ? 11.5 : 8.5, weight: .bold, design: language == .chinese ? .serif : .monospaced))
+                        .foregroundColor(PhoneTheme.cinnabar)
+                        .padding(.horizontal, language == .chinese ? 6 : 5)
+                        .padding(.vertical, 5)
+                        .background(PhoneTheme.cinnabarSoft)
+                        .cornerRadius(2)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 2)
+                                .stroke(PhoneTheme.cinnabar.opacity(0.35), lineWidth: 1)
+                        )
+                        .shadow(color: PhoneTheme.ember.opacity(0.18), radius: 6, x: 0, y: 1)
+                    }
+
+                    // Day Burn Strip with metric headline
+                    if let dayProgress {
+                        VStack(spacing: 6) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(L10n.string(.panelHeroToday, language: language))
+                                    .font(.system(size: 11, weight: .bold, design: .serif))
+                                    .foregroundColor(PhoneTheme.inkSecondary)
+                                    .tracking(0.5)
+
+                                Spacer()
+
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                    Text(dayProgress.percentageText)
+                                        .font(.system(size: 24, weight: .bold, design: .serif))
+                                        .foregroundColor(PhoneTheme.inkPrimary)
+
+                                    Text(dayProgress.remainingText)
+                                        .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                                        .foregroundColor(PhoneTheme.cinnabar)
+                                }
+                            }
 
                             BurnStripView(
-                                elapsed: 1.0 - item.fractionRemaining,
-                                ticks: item.id == "weekOfYear" ? 7 : (item.id == "month" ? 31 : 12),
-                                showsFlame: false
+                                elapsed: 1.0 - dayProgress.fractionRemaining,
+                                ticks: 24,
+                                showsFlame: true
                             )
-                            .frame(height: 8)
+                            .frame(height: 18)
+                        }
+                    }
 
-                            Text(item.remainingText)
-                                .font(.system(size: 10.5, design: .serif))
-                                .foregroundColor(PhoneTheme.inkTertiary)
-                                .lineLimit(1)
-                                .fixedSize(horizontal: true, vertical: false)
+                    // Sub chips: Week / Month / Year
+                    HStack(spacing: 8) {
+                        ForEach(Array(all.dropFirst())) { item in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(item.subtitle)
+                                        .font(.system(size: 10, weight: .bold, design: .serif))
+                                        .foregroundColor(PhoneTheme.inkSecondary)
+                                    Spacer()
+                                    Text(item.percentageText)
+                                        .font(.system(size: 10.5, weight: .bold, design: .serif))
+                                        .foregroundColor(PhoneTheme.inkPrimary)
+                                }
+
+                                BurnStripView(
+                                    elapsed: 1.0 - item.fractionRemaining,
+                                    ticks: item.id == "weekOfYear" ? 7 : (item.id == "month" ? 31 : 12),
+                                    showsFlame: false
+                                )
+                                .frame(height: 4)
+
+                                Text(item.remainingText)
+                                    .font(.system(size: 9, design: .serif))
+                                    .foregroundColor(PhoneTheme.inkTertiary)
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(PhoneTheme.paper)
+                            .cornerRadius(3)
+                            .overlay(RoundedRectangle(cornerRadius: 3).stroke(PhoneTheme.rule, lineWidth: 1))
                         }
                     }
                 }
+                .padding(18)
             }
-            .padding(18)
             .background(PhoneTheme.paperHi)
             .cornerRadius(4)
             .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
+            .clipped()
         }
     }
 

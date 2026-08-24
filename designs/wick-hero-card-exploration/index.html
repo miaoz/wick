@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="zh" data-scheme="light" data-phase="day">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wick iOS · 首页顶部时间卡片视觉重构提案 (App Icon & 竖排「秉烛」探索)</title>
+<style>
+  :root {
+    /* Wick 经典宣纸色系 */
+    --desk: #EFE6D8;
+    --paper: #FBF6EE;
+    --paper-hi: #FFFDF9;
+    --paper-edge: #E3D5C0;
+    --rule: #E5D7C3;
+    --rule-light: rgba(229, 215, 195, 0.6);
+    
+    --ink-1: #2B2118;
+    --ink-2: #6A5847;
+    --ink-3: #99836E;
+    --ink-faint: #C8BAA7;
+    
+    --cinnabar: #C03A22;
+    --cinnabar-soft: rgba(192, 58, 34, 0.08);
+    --cinnabar-border: rgba(192, 58, 34, 0.25);
+    
+    --ember: #D96C1E;
+    --ember-hi: #F5A623;
+    --ember-glow: rgba(245, 166, 35, 0.38);
+    --ember-soft: rgba(217, 108, 30, 0.1);
+    
+    --ambient-glow: rgba(245, 166, 35, 0.32);
+    
+    --dai: #3E5C50;
+    --dai-soft: rgba(62, 92, 80, 0.1);
+    
+    --stain-1: rgba(106, 88, 71, 0.12);
+    --stain-2: rgba(106, 88, 71, 0.22);
+    
+    --sh-card: 0 1px 3px rgba(43, 33, 24, 0.05), 0 6px 18px rgba(43, 33, 24, 0.05);
+    
+    --f-print: "Songti SC", "Songti TC", "STSong", "Hiragino Mincho ProN", "Noto Serif CJK SC", serif;
+    --f-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans", sans-serif;
+    --f-mono: "SF Mono", "Menlo", "Courier New", monospace;
+  }
+
+  [data-scheme="dark"] {
+    --desk: #181512;
+    --paper: #221D18;
+    --paper-hi: #2A241E;
+    --paper-edge: #1A1612;
+    --rule: #3D342B;
+    --rule-light: rgba(61, 52, 43, 0.6);
+    
+    --ink-1: #EFE4D6;
+    --ink-2: #B3A08D;
+    --ink-3: #7D6E60;
+    --ink-faint: #4E4338;
+    
+    --cinnabar: #DE533A;
+    --cinnabar-soft: rgba(222, 83, 58, 0.15);
+    --cinnabar-border: rgba(222, 83, 58, 0.35);
+    
+    --ember: #E87E30;
+    --ember-hi: #FFB74D;
+    --ember-glow: rgba(255, 183, 77, 0.35);
+    --ember-soft: rgba(232, 126, 48, 0.15);
+    
+    --ambient-glow: rgba(255, 183, 77, 0.22);
+    
+    --dai: #568070;
+    --dai-soft: rgba(86, 128, 112, 0.15);
+    
+    --stain-1: rgba(239, 228, 214, 0.08);
+    --stain-2: rgba(239, 228, 214, 0.16);
+    
+    --sh-card: 0 2px 10px rgba(0, 0, 0, 0.4);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--f-ui);
+    background: var(--desk);
+    color: var(--ink-1);
+    min-height: 100vh;
+    padding: 36px 24px 100px;
+    transition: background 0.3s, color 0.3s;
+  }
+
+  /* Header & Navigation */
+  .header-bar {
+    max-width: 1320px;
+    margin: 0 auto 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 2px solid var(--ink-1);
+    padding-bottom: 16px;
+  }
+  .title-group h1 {
+    font-family: var(--f-print);
+    font-size: 28px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+  }
+  .title-group p {
+    font-size: 13px;
+    color: var(--ink-2);
+    margin-top: 6px;
+    font-family: var(--f-print);
+  }
+
+  .controls-bar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .pill-group {
+    display: flex;
+    background: var(--paper-hi);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 3px;
+  }
+  .pill-btn {
+    border: none;
+    background: transparent;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-2);
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.18s;
+  }
+  .pill-btn.active {
+    background: var(--cinnabar);
+    color: #FFF6EE;
+  }
+
+  /* Comparison Grid */
+  .grid-container {
+    max-width: 1320px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(305px, 1fr));
+    gap: 24px;
+  }
+
+  .proposal-card {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: var(--sh-card);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: relative;
+    transition: border-color 0.2s, transform 0.15s ease;
+  }
+  .proposal-card:hover {
+    border-color: var(--ember);
+    transform: translateY(-2px);
+  }
+  .proposal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid var(--rule-light);
+    padding-bottom: 12px;
+  }
+  .proposal-header .badge {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--cinnabar);
+    background: var(--cinnabar-soft);
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+  .proposal-header h2 {
+    font-family: var(--f-print);
+    font-size: 17px;
+    font-weight: 900;
+  }
+  .proposal-desc {
+    font-size: 12px;
+    color: var(--ink-2);
+    line-height: 1.6;
+    font-family: var(--f-print);
+    min-height: 52px;
+  }
+
+  /* Mock iPhone Screen Container */
+  .phone-canvas {
+    background: var(--paper-hi);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 18px 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ----------------------------------------------------
+     THE MACOS AMBIENT CANDLE HALO (右上角烛光微晕)
+     ---------------------------------------------------- */
+  .ambient-halo-tr {
+    position: absolute;
+    top: -40px;
+    right: -40px;
+    width: 170px;
+    height: 170px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--ambient-glow) 0%, rgba(245, 166, 35, 0.12) 45%, transparent 75%);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .ambient-halo-core {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 60px;
+    height: 60px;
+    background: radial-gradient(circle, rgba(255, 235, 180, 0.5) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* ----------------------------------------------------
+     COMMON CARD INNER
+     ---------------------------------------------------- */
+  .card-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    position: relative;
+    z-index: 2;
+  }
+  .top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    position: relative;
+    z-index: 2;
+  }
+  .date-main {
+    font-family: var(--f-print);
+    font-size: 28px;
+    font-weight: 900;
+    line-height: 1.05;
+  }
+  .date-sub {
+    font-family: var(--f-print);
+    font-size: 11px;
+    color: var(--ink-2);
+    margin-top: 5px;
+  }
+
+  .hero-metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: 2px;
+    position: relative;
+    z-index: 2;
+  }
+  .metric-label {
+    font-family: var(--f-print);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink-2);
+    letter-spacing: 0.05em;
+  }
+  .metric-pct {
+    font-family: "Georgia", "Baskerville", var(--f-print);
+    font-size: 24px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-1);
+    letter-spacing: -0.02em;
+  }
+  .metric-countdown {
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    color: var(--cinnabar);
+    font-weight: 600;
+    margin-left: 6px;
+  }
+
+  /* 沉香纸槽刻度进度条 */
+  .burn-canal {
+    position: relative;
+    height: 18px;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    z-index: 2;
+  }
+  .burn-canal-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 67.4%;
+    background: linear-gradient(90deg, var(--stain-1) 0%, var(--stain-2) 100%);
+    border-right: 1.5px solid var(--ember);
+  }
+  .burn-canal-flame {
+    position: absolute;
+    left: 67.4%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 6px;
+    height: 10px;
+    background: radial-gradient(circle, #FFF 10%, var(--ember-hi) 50%, var(--ember) 90%);
+    border-radius: 50% 50% 30% 30% / 60% 60% 40% 40%;
+    box-shadow: 0 0 8px var(--ember-hi), 0 0 2px #FFF;
+    z-index: 3;
+  }
+  .burn-canal-ticks {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 4px;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .tick-mark {
+    width: 1px;
+    height: 5px;
+    background: var(--rule);
+    margin-top: auto;
+    margin-bottom: 2px;
+  }
+  .tick-mark.major {
+    height: 8px;
+    background: var(--ink-3);
+    opacity: 0.5;
+  }
+
+  /* 三列小签条 */
+  .sub-chips-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 4px;
+    position: relative;
+    z-index: 2;
+  }
+  .sub-chip {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .sub-chip-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    font-family: var(--f-print);
+    color: var(--ink-2);
+  }
+  .sub-chip-bar {
+    height: 3px;
+    background: var(--rule-light);
+    border-radius: 1.5px;
+    overflow: hidden;
+  }
+  .sub-chip-fill {
+    height: 100%;
+    background: var(--ink-3);
+  }
+
+  /* ----------------------------------------------------
+     SPECIFIC RIGHT-HEADER VARIATIONS
+     ---------------------------------------------------- */
+  
+  /* 1. App Icon Badge (官方应用图标) */
+  .app-icon-badge {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    box-shadow: 0 0 16px var(--ember-glow), 0 2px 6px rgba(0,0,0,0.25);
+    overflow: hidden;
+    flex: none;
+    z-index: 3;
+    background: #1C1814;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+  .app-icon-badge img {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* 2. 竖排纯净宋体「秉烛」 (Pure Typography) */
+  .vertical-calligraphy-pure {
+    font-family: var(--f-print);
+    font-size: 14px;
+    font-weight: 900;
+    color: var(--ink-1);
+    writing-mode: vertical-rl;
+    letter-spacing: 4px;
+    line-height: 1;
+    padding: 2px 0;
+    text-shadow: 0 0 12px var(--ambient-glow);
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .vertical-calligraphy-pure small {
+    font-family: var(--f-ui);
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--cinnabar);
+    text-transform: uppercase;
+  }
+
+  /* 3. 竖排朱砂引首签 (Cinnabar Vertical Slip) */
+  .vertical-slip-cinnabar {
+    background: var(--cinnabar-soft);
+    border: 1px solid var(--cinnabar-border);
+    padding: 4px 6px;
+    border-radius: 3px;
+    font-family: var(--f-print);
+    font-size: 12px;
+    font-weight: 900;
+    color: var(--cinnabar);
+    writing-mode: vertical-rl;
+    letter-spacing: 3px;
+    line-height: 1;
+    z-index: 3;
+    box-shadow: 0 0 12px var(--ambient-glow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* 4. 竖排「秉烛」+ 顶置火苗 (Vertical Text + Flame Dot) */
+  .vertical-text-with-flame {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    z-index: 3;
+  }
+  .mini-top-flame {
+    width: 6px;
+    height: 9px;
+    background: radial-gradient(circle at 50% 30%, #FFF 10%, var(--ember-hi) 60%, var(--ember) 100%);
+    border-radius: 50% 50% 35% 35% / 60% 60% 40% 40%;
+    box-shadow: 0 0 8px var(--ember-hi);
+  }
+  .vertical-text-chars {
+    font-family: var(--f-print);
+    font-size: 13px;
+    font-weight: 900;
+    color: var(--ink-1);
+    writing-mode: vertical-rl;
+    letter-spacing: 3px;
+    line-height: 1;
+  }
+
+  /* Comparison Details */
+  .table-section {
+    max-width: 1320px;
+    margin: 48px auto 0;
+    background: var(--paper-hi);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 24px;
+    box-shadow: var(--sh-card);
+  }
+  .table-section h3 {
+    font-family: var(--f-print);
+    font-size: 18px;
+    font-weight: 900;
+    margin-bottom: 16px;
+  }
+  table.matrix {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  table.matrix th, table.matrix td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--rule);
+    text-align: left;
+    vertical-align: middle;
+  }
+  table.matrix th {
+    font-family: var(--f-print);
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  table.matrix tr:last-child td {
+    border-bottom: none;
+  }
+  .pill-tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    color: var(--ink-2);
+  }
+</style>
+</head>
+<body>
+
+<div class="header-bar">
+  <div class="title-group">
+    <h1>Wick iOS · 首页顶部时间卡片视觉重构提案</h1>
+    <p>聚焦右上角探索：移植 macOS 烛光微晕 +「直接使用 App Icon」与「竖排“秉烛”」三款文人排版</p>
+  </div>
+  <div class="controls-bar">
+    <div class="pill-group">
+      <button class="pill-btn active" onclick="setScheme('light')">宣纸亮色</button>
+      <button class="pill-btn" onclick="setScheme('dark')">石板暗色</button>
+    </div>
+    <div class="pill-group">
+      <button class="pill-btn active" onclick="setLang('zh')">中文</button>
+      <button class="pill-btn" onclick="setLang('en')">English</button>
+    </div>
+  </div>
+</div>
+
+<div class="grid-container">
+
+  <!-- 1. 方案 A：直接使用官方 App Icon (带微光) -->
+  <div class="proposal-card" style="border-color: var(--ember);">
+    <div class="proposal-header">
+      <h2>方案 A ·「官方 App Icon」</h2>
+      <span class="badge" style="color: var(--ember); background: var(--ember-soft);">品牌同构</span>
+    </div>
+    <div class="proposal-desc">
+      右上角烛光微晕中直接放置<b>官方应用 App Icon (36×36)</b>，带圆角与琥珀微光。品牌辨识度极强，与整体应用血统完全一致。
+    </div>
+    <div class="phone-canvas">
+      <!-- 烛光微晕 -->
+      <div class="ambient-halo-tr"></div>
+      <div class="ambient-halo-core"></div>
+
+      <div class="card-inner">
+        <div class="top-row">
+          <div>
+            <div class="date-main loc-date">8月24日</div>
+            <div class="date-sub loc-lunar">丙午年 · 处暑 · 周一</div>
+          </div>
+
+          <!-- 真实官方 App Icon -->
+          <div class="app-icon-badge" title="Wick Official App Icon">
+            <img src="app-icon.png" alt="Wick App Icon" />
+          </div>
+        </div>
+
+        <div class="hero-metric-row">
+          <span class="metric-label loc-today-rem">当日剩余</span>
+          <div>
+            <span class="metric-pct">32.6%</span>
+            <span class="metric-countdown">余 07:49:26</span>
+          </div>
+        </div>
+
+        <!-- 沉香刻度纸槽 -->
+        <div class="burn-canal">
+          <div class="burn-canal-fill"></div>
+          <div class="burn-canal-flame"></div>
+          <div class="burn-canal-ticks">
+            <div class="tick-mark major"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark major"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark major"></div>
+          </div>
+        </div>
+
+        <!-- 底部三签条 -->
+        <div class="sub-chips-row">
+          <div class="sub-chip">
+            <div class="sub-chip-head"><span class="loc-week">本周</span><b>42.8%</b></div>
+            <div class="sub-chip-bar"><div class="sub-chip-fill" style="width: 57.2%;"></div></div>
+          </div>
+          <div class="sub-chip">
+            <div class="sub-chip-head"><span class="loc-month">本月</span><b>77.4%</b></div>
+            <div class="sub-chip-bar"><div class="sub-chip-fill" style="width: 22.6%;"></div></div>
+          </div>
+          <div class="sub-chip">
+            <div class="sub-chip-head"><span class="loc-year">今年</span><b>64.2%</b></div>
+            <div class="sub-chip-bar"><div class="sub-chip-fill" style="width: 35.8%;"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 方案 B：纯净竖排宋体「秉烛」 -->
+  <div class="proposal-card" style="border-color: var(--cinnabar-border);">
+    <div class="proposal-header">
+      <h2>方案 B ·「纯净竖排 · 秉烛题签」</h2>
+      <span class="badge">文人题额 · 极力推荐</span>
+    </div>
+    <div class="proposal-desc">
+      右上角无任何图标框，直接竖排两个大雅<b>宋体字「秉烛」</b>，下注微型朱砂 <code>WICK</code>。如古籍题签，文气四溢。
+    </div>
+    <div class="phone-canvas">
+      <!-- 烛光微晕 -->
+      <div class="ambient-halo-tr"></div>
+      <div class="ambient-halo-core"></div>
+
+      <div class="card-inner">
+        <div class="top-row">
+          <div>
+            <div class="date-main loc-date">8月24日</div>
+            <div class="date-sub loc-lunar">丙午年 · 处暑 · 周一</div>
+          </div>
+
+          <!-- 纯净竖排宋体 -->
+          <div class="vertical-calligraphy-pure" title="纯净竖排宋体">
+            <span>秉烛</span>
+            <small>WICK</small>
+          </div>
+        </div>
+
+        <div class="hero-metric-row">
+          <span class="metric-label loc-today-rem">当日剩余</span>
+          <div>
+            <span class="metric-pct">32.6%</span>
+            <span class="metric-countdown">余 07:49:26</span>
+          </div>
+        </div>
+
+        <div class="burn-canal">
+          <div class="burn-canal-fill"></div>
+          <div class="burn-canal-flame"></div>
+          <div class="burn-canal-ticks">
+            <div class="tick-mark major"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark major"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark major"></div>
+          </div>
+        </div>
+
+        <div class="sub-chips-row">
+          <div class="sub-chip">
+            <div class="sub-chip-head"><span class="loc-week">本周</span><b>42.8%</b></div>
+            <div class="sub-chip-bar"><div class="sub-chip-fill" style="width: 57.2%;"></div></div>
+          </div>
+          <div class="sub-chip">
+            <div class="sub-chip-head"><span class="loc-month">本月</span><b>77.4%</b></div>
+            <div class="sub-chip-bar"><div class="sub-chip-fill" style="width: 22.6%;"></div></div>
+          </div>
+          <div class="sub-chip">
+            <div class="sub-chip-head"><span class="loc-year">今年</span><b>64.2%</b></div>
+            <div class="sub-chip-bar"><div class="sub-chip-fill" style="width: 35.8%;"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 方案 C：竖排朱砂引首签条 -->
+  <div class="proposal-card">
+    <div class="proposal-header">
+      <h2>方案 C ·「朱砂引首 · 竖排签条」</h2>
+      <span class="badge" style="color: var(--cinnabar); background: var(--cinnabar-soft);">书笺签条</span>
+    </div>
+    <div class="proposal-desc">
+      右上角以一枚<b>朱砂引首竖签</b>承载「秉烛」，带淡朱砂底色与细线边框，如同案头便签或书籍扉页印签。
+    </div>
+    <div class="phone-canvas">
+      <!-- 烛光微晕 -->
+      <div class="ambient-halo-tr"></div>
+      <div class="ambient-halo-core"></div>
+
+      <div class="card-inner">
+        <div class="top-row">
+          <div>
+            <div class="date-main loc-date">8月24日</div>
+            <div class="date-sub loc-lunar">丙午年 · 处暑 · 周一</div>
+          </div>
+
+          <!-- 竖排朱砂签条 -->
+          <div class="vertical-slip-cinnabar" title="朱砂引首签条">
+            秉烛
+          </div>
+        </div>
+
+        <div class="hero-metric-row">
+          <span class="metric-label loc-today-rem">当日剩余</span>
+          <div>
+            <span class="metric-pct">32.6%</span>
+            <span class="metric-countdown">余 07:49:26</span>
+          </div>
+        </div>
+
+        <div class="burn-canal">
+          <div class="burn-canal-fill"></div>
+          <div class="burn-canal-flame"></div>
+          <div class="burn-canal-ticks">
+            <div class="tick-mark major"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark major"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark major"></div>
+          </div>
+        </div>
+
+        <div class="sub-chips-row">
+          <div class="sub-chip">
+            <div class="sub-chip-head"><span class="loc-week">本周</span><b>42.8%</b></div>
+            <div class="sub-chip-bar"><div class="sub-chip-fill" style="width: 57.2%;"></div></div>
+          </div>
+          <div class="sub-chip">
+            <div class="sub-chip-head"><span class="loc-month">本月</span><b>77.4%</b></div>
+            <div class="sub-chip-bar"><div class="sub-chip-fill" style="width: 22.6%;"></div></div>
+          </div>
+          <div class="sub-chip">
+            <div class="sub-chip-head"><span class="loc-year">今年</span><b>64.2%</b></div>
+            <div class="sub-chip-bar"><div class="sub-chip-fill" style="width: 35.8%;"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. 方案 D：竖排「秉烛」+ 顶置火苗点 -->
+  <div class="proposal-card">
+    <div class="proposal-header">
+      <h2>方案 D ·「文字烛火 · 意象合一」</h2>
+      <span class="badge" style="color: var(--dai); background: var(--dai-soft);">图文呼应</span>
+    </div>
+    <div class="proposal-desc">
+      竖排「秉烛」文字顶端缀有一枚<b>跳动的金色火苗点</b>，既有文字的沉静，又有烛火的呼吸律动。
+    </div>
+    <div class="phone-canvas">
+      <!-- 烛光微晕 -->
+      <div class="ambient-halo-tr"></div>
+      <div class="ambient-halo-core"></div>
+
+      <div class="card-inner">
+        <div class="top-row">
+          <div>
+            <div class="date-main loc-date">8月24日</div>
+            <div class="date-sub loc-lunar">丙午年 · 处暑 · 周一</div>
+          </div>
+
+          <!-- 竖排「秉烛」+ 火苗点 -->
+          <div class="vertical-text-with-flame" title="竖排秉烛 + 顶置烛苗">
+            <div class="mini-top-flame"></div>
+            <div class="vertical-text-chars">秉烛</div>
+          </div>
+        </div>
+
+        <div class="hero-metric-row">
+          <span class="metric-label loc-today-rem">当日剩余</span>
+          <div>
+            <span class="metric-pct">32.6%</span>
+            <span class="metric-countdown">余 07:49:26</span>
+          </div>
+        </div>
+
+        <div class="burn-canal">
+          <div class="burn-canal-fill"></div>
+          <div class="burn-canal-flame"></div>
+          <div class="burn-canal-ticks">
+            <div class="tick-mark major"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark major"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark"></div>
+            <div class="tick-mark major"></div>
+          </div>
+        </div>
+
+        <div class="sub-chips-row">
+          <div class="sub-chip">
+            <div class="sub-chip-head"><span class="loc-week">本周</span><b>42.8%</b></div>
+            <div class="sub-chip-bar"><div class="sub-chip-fill" style="width: 57.2%;"></div></div>
+          </div>
+          <div class="sub-chip">
+            <div class="sub-chip-head"><span class="loc-month">本月</span><b>77.4%</b></div>
+            <div class="sub-chip-bar"><div class="sub-chip-fill" style="width: 22.6%;"></div></div>
+          </div>
+          <div class="sub-chip">
+            <div class="sub-chip-head"><span class="loc-year">今年</span><b>64.2%</b></div>
+            <div class="sub-chip-bar"><div class="sub-chip-fill" style="width: 35.8%;"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 详细对比表格 -->
+<div class="table-section">
+  <h3>四套精细方案视觉维度对比</h3>
+  <table class="matrix">
+    <thead>
+      <tr>
+        <th style="width: 20%;">方案名称</th>
+        <th style="width: 25%;">右上角元素形态</th>
+        <th style="width: 25%;">光影与空间关系</th>
+        <th style="width: 15%;">视觉风格</th>
+        <th style="width: 15%;">推荐指数</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>方案 A · 官方 App Icon</b></td>
+        <td><b>36×36 原生 App Icon</b><br><small style="color: var(--ink-3);">精铸蜡烛与琥珀火苗</small></td>
+        <td><b>烛光微晕 + 图标外发光</b><br><small style="color: var(--ink-2);">高辨识度，双端一脉相承</small></td>
+        <td>官方正统、精致现代</td>
+        <td>⭐⭐⭐⭐⭐</td>
+      </tr>
+      <tr>
+        <td><b>方案 B · 纯净竖排「秉烛」</b></td>
+        <td><b>竖排宋体「秉烛」+ WICK 标</b><br><small style="color: var(--ink-3);">无边框无底盒，纯文字排印</small></td>
+        <td><b>微光直接映照墨字</b><br><small style="color: var(--ink-2);">极具东方线装书卷质感</small></td>
+        <td>文人雅致、诗意静谧</td>
+        <td>⭐⭐⭐⭐⭐<br><small style="color: var(--cinnabar);">最契合宣纸美学</small></td>
+      </tr>
+      <tr>
+        <td><b>方案 C · 朱砂引首签</b></td>
+        <td><b>竖向朱砂签条</b><br><small style="color: var(--ink-3);">内嵌「秉烛」，带细线朱砂框</small></td>
+        <td><b>微光映照朱砂签条</b><br><small style="color: var(--ink-2);">如藏书票或笺纸便签</small></td>
+        <td>工整典雅、印记感强</td>
+        <td>⭐⭐⭐⭐</td>
+      </tr>
+      <tr>
+        <td><b>方案 D · 竖排「秉烛」+ 顶置火苗</b></td>
+        <td><b>竖排宋体「秉烛」+ 顶置火苗点</b><br><small style="color: var(--ink-3);">字头有一颗跳动的烛火</small></td>
+        <td><b>火苗散发微光映照文字</b><br><small style="color: var(--ink-2);">图文自然结合</small></td>
+        <td>灵动精巧、意象呼应</td>
+        <td>⭐⭐⭐⭐</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  function setScheme(scheme) {
+    document.documentElement.setAttribute('data-scheme', scheme);
+    document.querySelectorAll('.controls-bar .pill-group:first-child .pill-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.textContent.includes(scheme === 'light' ? '亮色' : '暗色'));
+    });
+  }
+
+  function setLang(lang) {
+    document.querySelectorAll('.controls-bar .pill-group:last-child .pill-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.textContent.toLowerCase().includes(lang));
+    });
+    const isZh = lang === 'zh';
+    document.querySelectorAll('.loc-date').forEach(el => el.textContent = isZh ? '8月24日' : 'Aug 24');
+    document.querySelectorAll('.loc-lunar').forEach(el => el.textContent = isZh ? '丙午年 · 处暑 · 周一' : 'Monday · Chushu');
+    document.querySelectorAll('.loc-today-rem').forEach(el => el.textContent = isZh ? '当日剩余' : 'DAY REMAINING');
+    document.querySelectorAll('.loc-week').forEach(el => el.textContent = isZh ? '本周' : 'Week');
+    document.querySelectorAll('.loc-month').forEach(el => el.textContent = isZh ? '本月' : 'Month');
+    document.querySelectorAll('.loc-year').forEach(el => el.textContent = isZh ? '今年' : 'Year');
+  }
+</script>
+
+</body>
+</html>
