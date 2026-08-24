@@ -237,9 +237,10 @@ private struct TabButton: View {
 
 private struct MacroEventCard: View {
     let event: MacroCalendarEvent
+    @State private var isExpanded = false
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 10) {
             // Time & Importance
             VStack(spacing: 2) {
                 Text(MacroCalendarFormat.eventTime(event.time))
@@ -254,11 +255,11 @@ private struct MacroEventCard: View {
                     }
                 }
             }
-            .frame(width: 44)
+            .frame(width: 44, alignment: .leading)
 
             // Content
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     if !event.country.isEmpty {
                         Text(event.country)
                             .font(.system(size: 9.5, weight: .bold, design: .serif))
@@ -271,7 +272,8 @@ private struct MacroEventCard: View {
                     Text(event.title)
                         .font(.system(size: 12.5, weight: .semibold, design: .serif))
                         .foregroundColor(PhoneTheme.inkPrimary)
-                        .lineLimit(1)
+                        .lineLimit(isExpanded ? nil : 2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 HStack(spacing: 12) {
@@ -293,7 +295,7 @@ private struct MacroEventCard: View {
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 4)
         }
         .padding(10)
         .background(PhoneTheme.paperHi)
@@ -302,6 +304,12 @@ private struct MacroEventCard: View {
             RoundedRectangle(cornerRadius: 4)
                 .stroke(event.importance >= 3 ? PhoneTheme.cinnabar.opacity(0.3) : PhoneTheme.rule, lineWidth: 1)
         )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                isExpanded.toggle()
+            }
+        }
     }
 
     private func formatNumber(_ val: Double) -> String {
@@ -311,9 +319,10 @@ private struct MacroEventCard: View {
 
 private struct EarningsReportCard: View {
     let report: EarningsReport
+    @State private var isExpanded = false
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 10) {
             VStack {
                 Text(report.callTime.rawValue)
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
@@ -325,14 +334,16 @@ private struct EarningsReportCard: View {
             .frame(width: 36)
 
             VStack(alignment: .leading, spacing: 3) {
-                HStack {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(report.code)
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                         .foregroundColor(PhoneTheme.cinnabar)
+                        .fixedSize()
                     Text(report.companyName)
                         .font(.system(size: 12.5, weight: .semibold, design: .serif))
                         .foregroundColor(PhoneTheme.inkPrimary)
-                        .lineLimit(1)
+                        .lineLimit(isExpanded ? nil : 1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if let eps = report.epsEstimate {
@@ -342,12 +353,18 @@ private struct EarningsReportCard: View {
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 4)
         }
         .padding(10)
         .background(PhoneTheme.paperHi)
         .cornerRadius(4)
         .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                isExpanded.toggle()
+            }
+        }
     }
 }
 
