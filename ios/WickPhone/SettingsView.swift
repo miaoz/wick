@@ -5,13 +5,24 @@ import WickSync
 import WickTrading
 
 /// Tab 4: "设置" (Settings & Preferences).
-/// Sync settings, per-journal exchange position binding & cloud snapshot sync, library management, and calendar Easter Egg.
+/// Appearance (Light/Dark/System), PnL color convention, daily reminder, trading calendar Easter Egg,
+/// per-journal exchange binding, Dropbox sync, and data backup.
 struct SettingsView: View {
     @EnvironmentObject private var sync: PhoneSyncCoordinator
     @EnvironmentObject private var store: PhoneJournalStore
     @StateObject private var exchangeCoordinator = PhoneExchangeCoordinator.shared
+    @StateObject private var reminderScheduler = PhoneReminderScheduler.shared
+
+    // Appearance & Convention Settings
+    @AppStorage("wick.appearance") private var appearanceRaw = AppAppearance.system.rawValue
+    @AppStorage("wick.pnlColorConvention") private var pnlConventionRaw = PnlColorConvention.redUp.rawValue
     @AppStorage("wick.calendar.physicalEasterEgg") private var physicalEasterEgg = false
 
+    // Reminder Settings
+    @AppStorage("wick.journal.reminder.enabled") private var reminderEnabled = false
+    @State private var reminderTime = Calendar.current.date(bySettingHour: 21, minute: 0, second: 0, of: Date()) ?? Date()
+
+    // Dropbox / Recovery States
     @State private var isConnecting = false
     @State private var showDisconnectConfirm = false
     @State private var showJournalImporter = false
@@ -39,23 +50,44 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Section 1: Appearance & Typography
-                Section("外观与主题") {
-                    HStack {
-                        Text("主题风格")
-                        Spacer()
-                        Text("秉烛 · 一日弧光")
-                            .foregroundColor(PhoneTheme.inkSecondary)
+                // Section 1: Appearance & Convention
+                Section("外观与显示") {
+                    Picker("外观模式", selection: $appearanceRaw) {
+                        ForEach(AppAppearance.allCases) { option in
+                            Text(option.displayName(language: .chinese)).tag(option.rawValue)
+                        }
                     }
-                    HStack {
-                        Text("正文字体")
-                        Spacer()
-                        Text("宋体纸面印刷")
-                            .foregroundColor(PhoneTheme.inkSecondary)
+                    .pickerStyle(.segmented)
+
+                    Picker("涨跌配色", selection: $pnlConventionRaw) {
+                        ForEach(PnlColorConvention.allCases) { option in
+                            Text(option.displayName(language: .chinese)).tag(option.rawValue)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                // Section 2: Daily Notification Reminder
+                Section("日记提醒") {
+                    Toggle("每日复盘提醒", isOn: $reminderEnabled)
+                        .tint(PhoneTheme.ember)
+                        .onChange(of: reminderEnabled) { enabled in
+                            reminderScheduler.schedule(enabled: enabled, time: reminderTime)
+                        }
+
+                    if reminderEnabled {
+                        DatePicker(
+                            "提醒时间",
+                            selection: $reminderTime,
+                            displayedComponents: .hourAndMinute
+                        )
+                        .onChange(of: reminderTime) { time in
+                            reminderScheduler.schedule(enabled: reminderEnabled, time: time)
+                        }
                     }
                 }
 
-                // Section 2: Trading Calendar & Easter Egg
+                // Section 3: Trading Calendar & Easter Egg
                 Section("交易日历") {
                     HStack {
                         Text("数据源")
@@ -81,7 +113,7 @@ struct SettingsView: View {
                     .padding(.vertical, 4)
                 }
 
-                // Section 3: Per-Journal Exchange Binding & Cloud Snapshot Sync
+                // Section 4: Per-Journal Exchange Binding & Cloud Snapshot Sync
                 Section("交易所与实盘仓位") {
                     // Journal Target Picker
                     Picker("绑定日记本", selection: Binding(
@@ -155,7 +187,7 @@ struct SettingsView: View {
                         .foregroundColor(PhoneTheme.inkTertiary)
                 }
 
-                // Section 4: Dropbox Sync
+                // Section 5: Dropbox Sync
                 Section("数据同步") {
                     if sync.syncEnabled && sync.backend.isAuthorized {
                         LabeledContent("Dropbox", value: sync.accountEmail.isEmpty ? "—" : sync.accountEmail)
@@ -192,7 +224,7 @@ struct SettingsView: View {
                     }
                 }
 
-                // Section 5: Conflicts
+                // Section 6: Conflicts
                 if !sync.engine.pendingConflicts.isEmpty {
                     Section("冲突") {
                         ForEach(sync.engine.pendingConflicts) { conflict in
@@ -209,8 +241,8 @@ struct SettingsView: View {
                     }
                 }
 
-                // Section 6: Journal Storage & Recovery
-                Section("存储保护与备份") {
+                // Section 7: Storage & Backup
+                Section("存储与备份") {
                     if store.isReadOnlyDueToLoadFailure {
                         Text("日记文件无法读取，已阻止覆盖（只读保护中）")
                             .font(.footnote)
@@ -231,12 +263,28 @@ struct SettingsView: View {
                         }
                     }
 
+                    if let exportData = store.exportJournalData() {
+                        ShareLink(
+                            item: exportData,
+                            preview: SharePreview("journal.json", image: Image(systemName: "book.closed"))
+                        ) {
+                            HStack {
+                                Text("导出当前日记 (journal.json)")
+                                Spacer()
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.footnote)
+                            }
+                        }
+                        .foregroundColor(PhoneTheme.inkPrimary)
+                    }
+
                     Button("导入 journal.json…") {
                         showJournalImporter = true
                     }
+                    .foregroundColor(PhoneTheme.cinnabar)
                 }
 
-                // Section 7: About
+                // Section 8: About
                 Section {
                     HStack {
                         Text("Wick for iOS")

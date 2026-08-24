@@ -1,41 +1,7 @@
 import SwiftUI
 import WickCalendarKit
 
-enum AppAppearance: String, CaseIterable, Identifiable {
-    case light
-    case dark
-    case system
 
-    var id: String { rawValue }
-
-    var colorScheme: ColorScheme? {
-        switch self {
-        case .light:
-            return .light
-        case .dark:
-            return .dark
-        case .system:
-            return nil
-        }
-    }
-
-    func displayName(language: AppLanguage) -> String {
-        switch (self, language) {
-        case (.light, .chinese):
-            return "亮色"
-        case (.light, .english):
-            return "Light"
-        case (.dark, .chinese):
-            return "暗色"
-        case (.dark, .english):
-            return "Dark"
-        case (.system, .chinese):
-            return "自动"
-        case (.system, .english):
-            return "System"
-        }
-    }
-}
 
 
 /// The app's font is chosen from the user's installed fonts (a PostScript name)

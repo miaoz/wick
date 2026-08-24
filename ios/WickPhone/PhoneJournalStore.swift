@@ -191,6 +191,13 @@ final class PhoneJournalStore: ObservableObject {
         }
     }
 
+    /// Encodes the active journal's snapshot as JSON data for export.
+    func exportJournalData() -> Data? {
+        flushPendingWrites()
+        let snapshot = JournalSnapshot(version: JournalSnapshot.currentVersion, entries: entries)
+        return try? JournalSyncEncoding.encoder.encode(snapshot)
+    }
+
     private func recoverCatalog(_ recoveredCatalog: JournalCatalogSnapshot) throws {
         guard !recoveredCatalog.journals.isEmpty else {
             throw PhoneJournalStoreError.catalogRecoveryFailed

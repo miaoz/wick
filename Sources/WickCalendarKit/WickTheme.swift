@@ -128,6 +128,44 @@ public enum DayPhase: CaseIterable, Sendable {
     }
 }
 
+// MARK: - App Appearance
+
+public enum AppAppearance: String, CaseIterable, Identifiable, Codable, Sendable {
+    case system
+    case light
+    case dark
+
+    public var id: String { rawValue }
+
+    public var colorScheme: ColorScheme? {
+        switch self {
+        case .light:
+            return .light
+        case .dark:
+            return .dark
+        case .system:
+            return nil
+        }
+    }
+
+    public func displayName(language: AppLanguage) -> String {
+        switch (self, language) {
+        case (.light, .chinese):
+            return "亮色"
+        case (.light, .english):
+            return "Light"
+        case (.dark, .chinese):
+            return "暗色"
+        case (.dark, .english):
+            return "Dark"
+        case (.system, .chinese):
+            return "跟随系统"
+        case (.system, .english):
+            return "System"
+        }
+    }
+}
+
 // MARK: - PnL color convention
 
 /// Which of the two existing palette colors marks a gain.

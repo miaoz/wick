@@ -9,12 +9,17 @@ struct WickPhoneApp: App {
     @StateObject private var sync = PhoneSyncCoordinator.shared
     @StateObject private var exchangeCoordinator = PhoneExchangeCoordinator.shared
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("wick.appearance") private var appearanceRaw = AppAppearance.system.rawValue
 
     @State private var selectedTab = 0
 
+    private var appearance: AppAppearance {
+        AppAppearance(rawValue: appearanceRaw) ?? .system
+    }
+
     var body: some Scene {
         WindowGroup {
-            PhoneThemeRoot {
+            PhoneThemeRoot(appearance: appearance) {
                 TabView(selection: $selectedTab) {
                     HomeView()
                         .tabItem {
@@ -41,6 +46,7 @@ struct WickPhoneApp: App {
                         .tag(3)
                 }
                 .tint(PhoneTheme.cinnabar)
+                .preferredColorScheme(appearance.colorScheme)
                 .environmentObject(store)
                 .environmentObject(sync)
                 .environmentObject(exchangeCoordinator)
@@ -62,16 +68,22 @@ struct WickPhoneApp: App {
 
 /// Hosts the dynamic 24h day-arc theme engine for the iOS client.
 private struct PhoneThemeRoot<Content: View>: View {
-    @Environment(\.colorScheme) private var colorScheme
+    let appearance: AppAppearance
+    @Environment(\.colorScheme) private var systemColorScheme
     let content: Content
 
-    init(@ViewBuilder content: () -> Content) {
+    init(appearance: AppAppearance, @ViewBuilder content: () -> Content) {
+        self.appearance = appearance
         self.content = content()
+    }
+
+    private var effectiveScheme: ColorScheme {
+        appearance.colorScheme ?? systemColorScheme
     }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
-            let palette = DayArcEngine.palette(at: context.date, scheme: colorScheme)
+            let palette = DayArcEngine.palette(at: context.date, scheme: effectiveScheme)
             content
                 .environment(\.wickPalette, palette)
         }
