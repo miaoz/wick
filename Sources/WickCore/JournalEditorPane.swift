@@ -301,9 +301,7 @@ struct JournalEditorPane: View {
             .padding(.top, 16)
             .padding(.bottom, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(palette.pageSurface.color)
-            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-            .shadow(color: palette.pageShadow.color.opacity(0.3), radius: 13, x: 0, y: 5)
+            .journalPaperSheet()
         }
     }
 
@@ -368,9 +366,7 @@ struct JournalEditorPane: View {
         .padding(.top, 20)
         .padding(.bottom, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(palette.pageSurface.color)
-        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-        .shadow(color: palette.pageShadow.color.opacity(0.3), radius: 13, x: 0, y: 5)
+        .journalPaperSheet()
     }
 
     /// 页眉:粗衬线大日期(点开可改日)+ 星期农历小注 + 当日已实现盈亏 + 删除。

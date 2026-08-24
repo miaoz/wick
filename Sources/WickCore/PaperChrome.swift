@@ -301,3 +301,29 @@ struct CopyableErrorNotice: View {
         .help(L10n.string(.copyErrorHint, language: language))
     }
 }
+
+// MARK: - Journal paper sheet · 日记宣纸单页外壳
+
+/// 日记单页纸的宣纸纸面外壳（秉烛 §02: pageSurface + 0.5pt hairline border + 双层微接触投影）
+struct JournalPaperSheetModifier: ViewModifier {
+    @Environment(\.wickPalette) private var palette
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
+        content
+            .background(palette.pageSurface.color)
+            .clipShape(shape)
+            .overlay {
+                shape.strokeBorder(palette.cardStroke.color, lineWidth: 0.5)
+            }
+            .shadow(color: palette.pageShadow.color.opacity(0.08), radius: 2, x: 0, y: 1)
+            .shadow(color: palette.pageShadow.color.opacity(0.08), radius: 14, x: 0, y: 5)
+    }
+}
+
+extension View {
+    /// 包装为日记案头宣纸页（底色 + 0.5pt 发丝微边框 + 双层微接触投影）。
+    func journalPaperSheet() -> some View {
+        modifier(JournalPaperSheetModifier())
+    }
+}
