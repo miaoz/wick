@@ -10,3 +10,6 @@ xcuserdata/
 # Installed agent skills (third-party copies, regenerable from skills-lock.json)
 .agents/skills/
 .claude/skills/
+.env
+# Wrangler local state (cache/auth) for the landing page
+.wrangler/

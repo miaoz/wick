@@ -1,0 +1,18 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "Wick 落地页": {
+      "versions": [
+        {
+          "path": "index.html",
+          "createdAt": "2026-08-24T12:27:47.045Z",
+          "status": "needs-review"
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-08-24T12:27:47.047Z",
+  "updatedAt": "2026-08-24T15:25:55.235Z"
+}

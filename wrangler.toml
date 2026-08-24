@@ -1,0 +1,5 @@
+# Cloudflare Pages project for the Wick landing page (landing/).
+# Deploy: npx wrangler pages deploy landing --project-name=wick
+name = "wick"
+compatibility_date = "2026-08-25"
+pages_build_output_dir = "landing"

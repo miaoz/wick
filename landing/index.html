@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="zh" data-scheme="light" data-phase="day">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wick · 秉烛日记 —— 交易员的黄历与复盘日记</title>
+<meta name="description" content="Wick · 秉烛日记 —— 交易员的黄历与复盘日记。macOS 菜单栏应用：日 / 周 / 月 / 年剩余进度、一天一页复盘日记、撕页黄历与只读仓位单据。本地存储，无账号，无遥测。">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#FBF4E6">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#191209">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Wick · 秉烛日记 —— 交易员的黄历与复盘日记">
+<meta property="og:description" content="macOS 菜单栏应用：时间弧光 · 复盘日记 · 撕页黄历 · 只读仓位。本地存储，无账号，无遥测。">
+<meta property="og:image" content="assets/app-icon.png">
+<link rel="icon" href="assets/app-icon.png">
+<script>
+/* Pre-paint: scheme / arc phase / lang — no theme flash. */
+(function () {
+  var d = document.documentElement;
+  var q = new URLSearchParams(location.search);
+  var s = q.get("theme") || localStorage.getItem("wick-lp-scheme");
+  if (s !== "light" && s !== "dark") {
+    s = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  d.setAttribute("data-scheme", s);
+  var h = new Date().getHours();
+  d.setAttribute("data-phase", (h >= 5 && h < 8) ? "dawn" : (h >= 8 && h < 17) ? "day" : (h >= 17 && h < 20) ? "dusk" : "night");
+  var lang = localStorage.getItem("wick-lp-lang");
+  if (lang === "zh" || lang === "en") d.setAttribute("lang", lang);
+})();
+</script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- 秉烛形变滤镜:只作用于纸的剪影层,内容永远锐利 -->
+<svg width="0" height="0" style="position: absolute;" aria-hidden="true">
+  <filter id="f-char" x="-5%" y="-30%" width="110%" height="160%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.012 0.35" numOctaves="3" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="f-torn" x="-5%" y="-12%" width="110%" height="124%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.035 0.28" numOctaves="3" seed="11" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+
+<div class="grain-layer grain" aria-hidden="true"></div>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="#top" aria-label="Wick — back to top">
+      <span class="brand-name">WICK</span>
+      <span class="brand-zh">秉烛日记</span>
+    </a>
+    <nav class="site-nav" aria-label="Sections">
+      <a href="#features" data-i18n="nav.features">功能</a>
+      <a href="#shots" data-i18n="nav.shots">截图</a>
+      <a href="#download" data-i18n="nav.download">下载</a>
+      <a href="https://github.com/miaoz/wick" target="_blank" rel="noopener">GitHub</a>
+      <button id="scheme-toggle" class="icon-btn" type="button" aria-label="切换外观 / Toggle appearance">
+        <svg class="icon-moon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8Z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3.2"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1"/></svg>
+      </button>
+      <button id="lang-toggle" class="lang-btn" type="button" aria-label="Switch language">EN</button>
+    </nav>
+  </div>
+</header>
+
+<main class="container" id="top">
+
+  <section class="hero" data-screen-label="Hero">
+    <div class="hero-text">
+      <p class="eyebrow" data-i18n="eyebrow">交易员的黄历与复盘日记</p>
+      <h1 data-i18n="hero.title">秉烛日记</h1>
+      <p class="hero-live"><span data-i18n="hero.live.pre">此刻 · 今天还剩</span> <b><span data-day-left>—</span>%</b><span data-i18n="hero.live.post"></span></p>
+      <p class="lede" data-i18n="hero.lede">宏观事件日历，历史交易记录，盈亏计算汇总，苟日新，日日新，又日新。</p>
+      <div class="cta-row">
+        <a class="btn-primary" href="https://github.com/miaoz/wick/releases/latest" target="_blank" rel="noopener" data-i18n="cta.download">下载 macOS 版</a>
+        <a class="btn-ghost" href="https://github.com/miaoz/wick" target="_blank" rel="noopener" data-i18n="cta.source">GitHub 源码</a>
+      </div>
+    </div>
+    <aside class="slip" aria-label="Live progress">
+      <div class="slip-head">
+        <svg class="slip-flame" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M9 1.4 C7.6 3.1 6.6 4.6 6.6 6.1 C6.6 7.8 7.7 9 9 9 C10.3 9 11.4 7.8 11.4 6.1 C11.4 4.6 10.4 3.1 9 1.4 Z" fill="#F7B261"/>
+          <rect x="8.5" y="9.2" width="1" height="2" fill="#C9B795"/>
+          <path d="M5.6 11.2 L12.4 11.2 L12.8 15.6 Q12.85 16.6 11.6 16.6 L6.4 16.6 Q5.15 16.6 5.2 15.6 Z" fill="#E8DCC0"/>
+        </svg>
+        <span class="slip-title" data-i18n="slip.title">此刻</span>
+        <span class="slip-clock" data-clock></span>
+      </div>
+      <div class="strip-row">
+        <span class="lbl" data-i18n="strip.day">今日</span>
+        <div class="burnstrip" data-burn="day" style="--p: 50%; --ticks: 24;"><div class="char"></div><div class="emberline"></div><div class="flame"></div></div>
+        <span class="val" data-val="day"></span>
+      </div>
+      <div class="strip-row">
+        <span class="lbl" data-i18n="strip.week">本周</span>
+        <div class="burnstrip" data-burn="week" style="--p: 50%; --ticks: 7;"><div class="char"></div><div class="emberline"></div></div>
+        <span class="val" data-val="week"></span>
+      </div>
+      <div class="strip-row">
+        <span class="lbl" data-i18n="strip.month">本月</span>
+        <div class="burnstrip" data-burn="month" style="--p: 50%; --ticks: 31;"><div class="char"></div><div class="emberline"></div></div>
+        <span class="val" data-val="month"></span>
+      </div>
+      <div class="strip-row">
+        <span class="lbl" data-i18n="strip.year">今年</span>
+        <div class="burnstrip" data-burn="year" style="--p: 50%; --ticks: 12;"><div class="char"></div><div class="emberline"></div></div>
+        <span class="val" data-val="year"></span>
+      </div>
+    </aside>
+  </section>
+
+  <section id="features" class="section" data-screen-label="功能">
+    <div class="sec-head">
+      <span class="no">01</span>
+      <h2 data-i18n="features.title">它做什么</h2>
+      <span class="en">What it does</span>
+    </div>
+    <div class="feat-grid">
+      <div class="feat">
+        <h3 data-i18n="feat1.h">时间刻度</h3>
+        <p data-i18n="feat1.p">时光匆匆，只争朝夕，日 / 周 / 月 / 年的此刻剩余与结束时刻，电脑和手机同时在线，随时随地，一撇了然。</p>
+      </div>
+      <div class="feat">
+        <h3 data-i18n="feat2.h">纸上日记</h3>
+        <p data-i18n="feat2.p">一天一页，条目带标签与图片；复盘印章、条目级检索、每日提醒、导入导出。还有多日记本，可选 Dropbox 同步。</p>
+      </div>
+      <div class="feat">
+        <h3 data-i18n="feat3.h">撕页黄历</h3>
+        <p data-i18n="feat3.p">当日的全球重大宏观事件与财报信息一页览尽，甚至还附赠拥有物理撕页效果的黄历彩蛋，当然也可以不让它们打扰你。</p>
+      </div>
+      <div class="feat">
+        <h3 data-i18n="feat4.h">仓位单据</h3>
+        <p data-i18n="feat4.p">只读连接 Binance / OKX / Hyperliquid 等交易所，成交自动聚合成仓位，贴上当日日记。凭据只存本机，从不上传。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="shots" class="section" data-screen-label="实拍">
+    <div class="sec-head">
+      <span class="no">02</span>
+      <h2 data-i18n="shots.title">界面截图</h2>
+      <span class="en">Screenshots</span>
+    </div>
+    <div class="shots-grid">
+      <figure class="shot shot-main">
+        <div class="shot-mat">
+          <img class="img-light" src="assets/screenshot-journal.png" alt="秉烛主窗截图:一天一页的日记、仓位单据与复盘方章" loading="lazy">
+          <img class="img-dark" src="assets/screenshot-journal-dark.png" alt="秉烛主窗暗色截图" loading="lazy">
+        </div>
+        <figcaption><span class="cap-no">壹</span><span data-i18n="shot1.cap">秉烛主窗 —— 一天一页，单据与方章各就各位</span></figcaption>
+      </figure>
+      <figure class="shot shot-panel">
+        <div class="shot-mat">
+          <img class="img-light" src="assets/screenshot-panel.png" alt="菜单栏纸签截图:今日剩余百分比与四条烛痕" loading="lazy">
+          <img class="img-dark" src="assets/screenshot-panel-dark.png" alt="菜单栏纸签暗色截图" loading="lazy">
+        </div>
+        <figcaption><span class="cap-no">贰</span><span data-i18n="shot2.cap">菜单栏纸签 —— 抬头即见今日剩余</span></figcaption>
+      </figure>
+      <figure class="shot shot-ios">
+        <div class="shot-mat">
+          <img class="img-light" src="assets/screenshot-ios-home.png" alt="iOS 首页截图:时间弧光与今日事件" loading="lazy">
+          <img class="img-dark" src="assets/screenshot-ios-home-dark.png" alt="iOS 首页暗色截图" loading="lazy">
+        </div>
+        <figcaption><span class="cap-no">叁</span><span data-i18n="shot3.cap">iPhone 客户端 —— 时间弧光随身而行</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="download" class="section" data-screen-label="下载">
+    <div class="sec-head">
+      <span class="no">03</span>
+      <h2 data-i18n="dl.title">下载</h2>
+      <span class="en">Download</span>
+    </div>
+    <div class="dl-body">
+      <div class="dl-buttons">
+        <div class="dl-col">
+          <div class="dl-cta">
+            <a class="btn-primary big" href="https://github.com/miaoz/wick/releases/latest" target="_blank" rel="noopener">
+              <span data-i18n="dl.button">macOS</span><span class="ver" data-version hidden></span>
+            </a>
+          </div>
+          <p class="dl-meta" data-i18n="dl.meta">macOS 13 Ventura 或更高 · Universal（Apple Silicon 与 Intel）</p>
+        </div>
+        <div class="dl-col">
+          <div class="dl-cta">
+            <a class="btn-ghost big" href="https://github.com/miaoz/wick/tree/main/ios" target="_blank" rel="noopener">
+              <span data-i18n="dl.ios.button">iOS</span><span class="soon" data-i18n="dl.ios.soon">即将上架</span>
+            </a>
+          </div>
+          <p class="dl-meta">iOS 16+ · iPhone</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <span>© 2026 <span data-i18n="footer.brand">Wick · 秉烛日记</span> · <span data-i18n="footer.note">何不秉烛游</span></span>
+    <span class="footer-links">
+      <a href="https://github.com/miaoz/wick" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/miaoz/wick/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="https://github.com/miaoz/wick/issues" target="_blank" rel="noopener">Issues</a>
+    </span>
+  </div>
+</footer>
+
+<script src="app.js" defer></script>
+</body>
+</html>
