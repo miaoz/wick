@@ -12,6 +12,7 @@ struct WickPhoneApp: App {
     @AppStorage("wick.language") private var languageRaw = AppLanguage.chinese.rawValue
     @AppStorage("wick.appearance") private var appearanceRaw = AppAppearance.system.rawValue
     @AppStorage("wick.pnlColorConvention") private var pnlConventionRaw = PnlColorConvention.redUp.rawValue
+    @AppStorage("wick.journal.fontName") private var journalFontName = ""
 
     @State private var selectedTab = 0
 
@@ -25,6 +26,10 @@ struct WickPhoneApp: App {
 
     private var pnlConvention: PnlColorConvention {
         PnlColorConvention(rawValue: pnlConventionRaw) ?? .redUp
+    }
+
+    init() {
+        PhoneFontManager.registerCustomFonts()
     }
 
     var body: some Scene {
@@ -82,6 +87,7 @@ private struct PhoneThemeRoot<Content: View>: View {
     let pnlConvention: PnlColorConvention
     let language: AppLanguage
     @Environment(\.colorScheme) private var systemColorScheme
+    @AppStorage("wick.journal.fontName") private var journalFontName = ""
     let content: Content
 
     init(appearance: AppAppearance, pnlConvention: PnlColorConvention, language: AppLanguage, @ViewBuilder content: () -> Content) {
@@ -102,6 +108,7 @@ private struct PhoneThemeRoot<Content: View>: View {
                 .environment(\.wickPalette, palette)
                 .environment(\.pnlColorConvention, pnlConvention)
                 .environment(\.appLanguage, language)
+                .id(journalFontName)
         }
     }
 }

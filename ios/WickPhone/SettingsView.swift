@@ -43,8 +43,22 @@ struct SettingsView: View {
     @State private var passphraseDraft = ""
     @State private var showUnbindConfirm = false
 
+    @AppStorage("wick.journal.fontName") private var journalFontName = ""
+    @State private var showFontPicker = false
+
     private var language: AppLanguage {
         AppLanguage(rawValue: languageRaw) ?? .chinese
+    }
+
+    private var currentFontDisplayName: String {
+        if journalFontName.isEmpty {
+            return L10n.string(.fontDefault, language: language)
+        }
+        return UIFont(name: journalFontName, size: 12)?.familyName ?? journalFontName
+    }
+
+    private var fontDisplaySubtitle: String {
+        language == .chinese ? "设备字体与文件导入" : "Device fonts & import"
     }
 
     private var languageBinding: Binding<AppLanguage> {
@@ -109,7 +123,7 @@ struct SettingsView: View {
                         SettingsRow(
                             title: L10n.string(.pnlColorConvention, language: language),
                             subtitle: language == .chinese ? "红涨绿跌 / 绿涨红跌" : "Red up / Green up",
-                            isLast: true
+                            isLast: false
                         ) {
                             SettingsSegmentedPicker(
                                 options: PnlColorConvention.allCases,
@@ -117,6 +131,31 @@ struct SettingsView: View {
                             ) { option in
                                 option.displayName(language: language)
                             }
+                        }
+
+                        SettingsRow(
+                            title: L10n.string(.journalFontStyle, language: language),
+                            subtitle: fontDisplaySubtitle,
+                            isLast: true
+                        ) {
+                            Button {
+                                showFontPicker = true
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text(currentFontDisplayName)
+                                        .font(journalFontName.isEmpty ? .system(size: 11.5, weight: .medium, design: .serif) : .custom(journalFontName, size: 11.5))
+                                        .foregroundColor(PhoneTheme.cinnabar)
+                                        .lineLimit(1)
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 9, weight: .semibold))
+                                        .foregroundColor(PhoneTheme.inkTertiary)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(PhoneTheme.cinnabarSoft)
+                                .cornerRadius(4)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
 
@@ -582,6 +621,9 @@ struct SettingsView: View {
                 Button(L10n.string(.cancel, language: language), role: .cancel) {}
             } message: {
                 Text(L10n.string(.syncDisconnectConfirmBody, language: language))
+            }
+            .sheet(isPresented: $showFontPicker) {
+                PhoneFontPickerView()
             }
         }
     }
