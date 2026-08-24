@@ -22,29 +22,15 @@ struct CalendarView: View {
             Group {
                 if physicalEasterEgg {
                     PhysicalCalendarView()
+                        .toolbar(.hidden, for: .navigationBar)
                 } else {
                     FlatCalendarView(
                         selectedDate: $selectedDate,
                         activeTab: $activeTab,
                         calendarStore: calendarStore
                     )
-                }
-            }
-            .navigationTitle("交易黄历")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        physicalEasterEgg.toggle()
-                        let gen = UIImpactFeedbackGenerator(style: .light)
-                        gen.impactOccurred()
-                    } label: {
-                        HStack(spacing: 3) {
-                            Text(physicalEasterEgg ? "平实模式" : "彩蛋撕页")
-                                .font(.caption.weight(.bold))
-                        }
-                        .foregroundColor(PhoneTheme.cinnabar)
-                    }
+                    .navigationTitle("交易黄历")
+                    .navigationBarTitleDisplayMode(.inline)
                 }
             }
         }
