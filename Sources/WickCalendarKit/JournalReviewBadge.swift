@@ -91,9 +91,9 @@ public struct JournalReviewBadge: View {
     private var glyphFont: Font {
         let isChinese = (language == .chinese) || (language == .system && Locale.current.language.languageCode?.identifier == "zh")
         if isChinese {
-            return .system(size: size * 0.46, weight: .bold, design: .serif)
+            return TradingCalendarTheme.kanji(size * 0.46, weight: .bold)
         }
-        return .system(size: size * 0.44, weight: .heavy, design: .rounded)
+        return TradingCalendarTheme.kanji(size * 0.44, weight: .heavy)
     }
 
     private var inkColor: WickRGB {

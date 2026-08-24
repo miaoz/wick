@@ -219,23 +219,31 @@ public enum TradingCalendarTheme {
     @MainActor
     public static var fontStyle: TradingCalendarFontStyle = .default
 
-    /// Heavy gothic kanji (HiraginoSans-W7), or the chosen face.
+    /// Heavy gothic kanji (HiraginoSans-W7 on macOS / System Serif on iOS), or the chosen face.
     @MainActor
     public static func kanji(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
         switch fontStyle {
         case .default:
+            #if os(iOS)
+            return .system(size: size, weight: weight, design: .serif)
+            #else
             return .custom("HiraginoSans-W7", size: size)
+            #endif
         case .custom(let postScriptName):
             return .custom(postScriptName, size: size).weight(weight)
         }
     }
 
-    /// Serif mincho for small traditional text (HiraMinProN-W6), or the chosen face.
+    /// Serif mincho for small traditional text (HiraMinProN-W6 on macOS / System Serif on iOS), or the chosen face.
     @MainActor
     public static func mincho(_ size: CGFloat) -> Font {
         switch fontStyle {
         case .default:
+            #if os(iOS)
+            return .system(size: size, design: .serif)
+            #else
             return .custom("HiraMinProN-W6", size: size)
+            #endif
         case .custom(let postScriptName):
             return .custom(postScriptName, size: size)
         }
