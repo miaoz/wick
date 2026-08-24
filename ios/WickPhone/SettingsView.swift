@@ -238,36 +238,12 @@ struct SettingsView: View {
                             title: language == .chinese ? "绑定日记本" : "Bound Journal",
                             subtitle: language == .chinese ? "选择要配置凭据的日记本" : "Select journal to configure credentials"
                         ) {
-                            Menu {
-                                ForEach(store.journals) { journal in
-                                    Button {
-                                        targetJournalID = journal.id
-                                    } label: {
-                                        HStack {
-                                            Text(journal.name)
-                                                .font(PhoneFont.paper(13))
-                                            if journal.id == store.activeJournalID {
-                                                Text(language == .chinese ? "(当前)" : "(Active)")
-                                                    .font(PhoneFont.paper(12))
-                                            }
-                                        }
-                                    }
-                                }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text(targetJournal?.name ?? (language == .chinese ? "未选择" : "None"))
-                                        .font(PhoneFont.paper(12, weight: .semibold))
-                                        .foregroundColor(PhoneTheme.inkPrimary)
-                                    Image(systemName: "chevron.up.chevron.down")
-                                        .font(PhoneFont.ui(9))
-                                        .foregroundColor(PhoneTheme.cinnabar)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(PhoneTheme.paper)
-                                .cornerRadius(4)
-                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
-                            }
+                            SettingsJournalPickerMenu(
+                                journals: store.journals,
+                                activeJournalID: store.activeJournalID,
+                                targetJournalID: $targetJournalID,
+                                language: language
+                            )
                         }
 
                         if let journal = targetJournal {
@@ -839,52 +815,18 @@ private struct ExchangeBindingSheet: View {
                     // 1. Select Journal & Venue
                     SettingsCard(title: language == .chinese ? "日记本与交易所" : "Journal & Exchange") {
                         SettingsRow(title: language == .chinese ? "目标日记本" : "Target Journal") {
-                            Menu {
-                                ForEach(journals) { journal in
-                                    Button {
-                                        selectedJournalID = journal.id
-                                    } label: {
-                                        Text(journal.name)
-                                            .font(PhoneFont.paper(13))
-                                    }
-                                }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text(journals.first(where: { $0.id == selectedJournalID })?.name ?? (language == .chinese ? "选择" : "Select"))
-                                        .font(PhoneFont.paper(12, weight: .semibold))
-                                        .foregroundColor(PhoneTheme.inkPrimary)
-                                    Image(systemName: "chevron.up.chevron.down")
-                                        .font(PhoneFont.ui(9))
-                                        .foregroundColor(PhoneTheme.cinnabar)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(PhoneTheme.paper)
-                                .cornerRadius(4)
-                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
-                            }
+                            SheetJournalPickerMenu(
+                                journals: journals,
+                                selectedJournalID: $selectedJournalID,
+                                language: language
+                            )
                         }
 
                         SettingsRow(title: L10n.string(.exchangeVenue, language: language), isLast: true) {
-                            Menu {
-                                Button("Hyperliquid (0x \(language == .chinese ? "钱包" : "Wallet"))") { selectedVenue = .hyperliquid }
-                                Button("Binance USDⓈ-M") { selectedVenue = .binance }
-                                Button("OKX SWAP") { selectedVenue = .okx }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text(venueTitle(selectedVenue))
-                                        .font(PhoneFont.paper(12, weight: .semibold))
-                                        .foregroundColor(PhoneTheme.inkPrimary)
-                                    Image(systemName: "chevron.up.chevron.down")
-                                        .font(PhoneFont.ui(9))
-                                        .foregroundColor(PhoneTheme.cinnabar)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(PhoneTheme.paper)
-                                .cornerRadius(4)
-                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
-                            }
+                            SheetVenuePickerMenu(
+                                selectedVenue: $selectedVenue,
+                                language: language
+                            )
                         }
                     }
 
@@ -993,12 +935,118 @@ private struct ExchangeBindingSheet: View {
         }
         .presentationDetents([.medium, .large])
     }
+}
+
+// MARK: - Isolated Menu Components to prevent UIContextMenuInteraction spurious updates
+
+private struct SettingsJournalPickerMenu: View {
+    let journals: [JournalInfo]
+    let activeJournalID: UUID?
+    @Binding var targetJournalID: UUID?
+    let language: AppLanguage
+
+    private var targetJournal: JournalInfo? {
+        journals.first(where: { $0.id == (targetJournalID ?? activeJournalID) })
+    }
+
+    var body: some View {
+        Menu {
+            ForEach(journals) { journal in
+                Button {
+                    targetJournalID = journal.id
+                } label: {
+                    HStack {
+                        Text(journal.name)
+                            .font(PhoneFont.paper(13))
+                        if journal.id == activeJournalID {
+                            Text(language == .chinese ? "(当前)" : "(Active)")
+                                .font(PhoneFont.paper(12))
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(targetJournal?.name ?? (language == .chinese ? "未选择" : "None"))
+                    .font(PhoneFont.paper(12, weight: .semibold))
+                    .foregroundColor(PhoneTheme.inkPrimary)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(PhoneFont.ui(9))
+                    .foregroundColor(PhoneTheme.cinnabar)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(PhoneTheme.paper)
+            .cornerRadius(4)
+            .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
+        }
+    }
+}
+
+private struct SheetJournalPickerMenu: View {
+    let journals: [JournalInfo]
+    @Binding var selectedJournalID: UUID
+    let language: AppLanguage
+
+    var body: some View {
+        Menu {
+            ForEach(journals) { journal in
+                Button {
+                    selectedJournalID = journal.id
+                } label: {
+                    Text(journal.name)
+                        .font(PhoneFont.paper(13))
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(journals.first(where: { $0.id == selectedJournalID })?.name ?? (language == .chinese ? "选择" : "Select"))
+                    .font(PhoneFont.paper(12, weight: .semibold))
+                    .foregroundColor(PhoneTheme.inkPrimary)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(PhoneFont.ui(9))
+                    .foregroundColor(PhoneTheme.cinnabar)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(PhoneTheme.paper)
+            .cornerRadius(4)
+            .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
+        }
+    }
+}
+
+private struct SheetVenuePickerMenu: View {
+    @Binding var selectedVenue: ExchangeVenue
+    let language: AppLanguage
 
     private func venueTitle(_ venue: ExchangeVenue) -> String {
         switch venue {
         case .hyperliquid: return "Hyperliquid (0x)"
         case .binance: return "Binance USDⓈ-M"
         case .okx: return "OKX SWAP"
+        }
+    }
+
+    var body: some View {
+        Menu {
+            Button("Hyperliquid (0x \(language == .chinese ? "钱包" : "Wallet"))") { selectedVenue = .hyperliquid }
+            Button("Binance USDⓈ-M") { selectedVenue = .binance }
+            Button("OKX SWAP") { selectedVenue = .okx }
+        } label: {
+            HStack(spacing: 4) {
+                Text(venueTitle(selectedVenue))
+                    .font(PhoneFont.paper(12, weight: .semibold))
+                    .foregroundColor(PhoneTheme.inkPrimary)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(PhoneFont.ui(9))
+                    .foregroundColor(PhoneTheme.cinnabar)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(PhoneTheme.paper)
+            .cornerRadius(4)
+            .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
         }
     }
 }

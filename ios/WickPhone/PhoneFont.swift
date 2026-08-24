@@ -24,6 +24,8 @@ public struct InstalledFontItem: Identifiable, Hashable, Sendable {
 
 @MainActor
 public enum PhoneFontManager {
+    private static var registeredPostScriptNames: Set<String> = []
+
     public static var fontsDirectory: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let fontsDir = docs.appendingPathComponent("Fonts", isDirectory: true)
@@ -31,6 +33,18 @@ public enum PhoneFontManager {
             try? FileManager.default.createDirectory(at: fontsDir, withIntermediateDirectories: true)
         }
         return fontsDir
+    }
+
+    /// Reads font metadata from file without registering.
+    public static func fontInfo(at url: URL) -> (postScriptName: String, displayName: String)? {
+        guard let data = try? Data(contentsOf: url),
+              let provider = CGDataProvider(data: data as CFData),
+              let cgFont = CGFont(provider) else {
+            return nil
+        }
+        let psName = (cgFont.postScriptName as String?) ?? url.deletingPathExtension().lastPathComponent
+        let displayName = (cgFont.fullName as String?) ?? (UIFont(name: psName, size: 12)?.familyName) ?? url.deletingPathExtension().lastPathComponent
+        return (psName, displayName)
     }
 
     /// Registers all imported custom fonts in Documents/Fonts on startup.
@@ -42,21 +56,31 @@ public enum PhoneFontManager {
         syncCalendarThemeFont()
     }
 
-    /// Registers a font file dynamically with CoreText & UIKit.
+    /// Registers a font file dynamically with CoreText & UIKit if not already registered.
     public static func registerFont(at url: URL) -> (postScriptName: String, displayName: String)? {
+        guard let info = fontInfo(at: url) else { return nil }
+        if registeredPostScriptNames.contains(info.postScriptName) {
+            return info
+        }
+
         guard let data = try? Data(contentsOf: url),
               let provider = CGDataProvider(data: data as CFData),
               let cgFont = CGFont(provider) else {
-            return nil
+            return info
         }
+
         var error: Unmanaged<CFError>?
-        CTFontManagerRegisterGraphicsFont(cgFont, &error)
-        CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error)
+        if CTFontManagerRegisterGraphicsFont(cgFont, &error) {
+            registeredPostScriptNames.insert(info.postScriptName)
+        } else if let err = error?.takeRetainedValue() {
+            let code = CFErrorGetCode(err)
+            // kCTFontManagerErrorAlreadyRegistered = 105
+            if code == 105 {
+                registeredPostScriptNames.insert(info.postScriptName)
+            }
+        }
 
-        let psName = (cgFont.postScriptName as String?) ?? url.deletingPathExtension().lastPathComponent
-        let displayName = (cgFont.fullName as String?) ?? (UIFont(name: psName, size: 12)?.familyName) ?? url.deletingPathExtension().lastPathComponent
-
-        return (psName, displayName)
+        return info
     }
 
     /// Imports a font file from user document picker into the app's private font folder.
@@ -85,9 +109,10 @@ public enum PhoneFontManager {
     public static func deleteCustomFont(postScriptName: String) {
         guard let files = try? FileManager.default.contentsOfDirectory(at: fontsDirectory, includingPropertiesForKeys: nil) else { return }
         for file in files {
-            if let (psName, _) = registerFont(at: file), psName == postScriptName {
+            if let info = fontInfo(at: file), info.postScriptName == postScriptName {
                 var error: Unmanaged<CFError>?
                 CTFontManagerUnregisterFontsForURL(file as CFURL, .process, &error)
+                registeredPostScriptNames.remove(postScriptName)
                 try? FileManager.default.removeItem(at: file)
             }
         }

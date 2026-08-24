@@ -174,45 +174,26 @@ struct DayListView: View {
     }
 
     private var journalMenu: some View {
-        Menu {
-            ForEach(store.journals) { journal in
-                Button {
-                    store.switchToJournal(id: journal.id)
-                } label: {
-                    if journal.id == store.activeJournalID {
-                        Label(journal.name, systemImage: "checkmark")
-                    } else {
-                        Text(journal.name)
-                    }
-                }
-            }
-
-            Divider()
-
-            Button("\(L10n.string(.journalLibraryNewTitle, language: language))…") {
+        DayListJournalMenu(
+            journals: store.journals,
+            activeJournalID: store.activeJournalID,
+            activeJournalName: store.activeJournal?.name ?? L10n.string(.journalLibraryDefaultName, language: language),
+            language: language,
+            onSelectJournal: { id in store.switchToJournal(id: id) },
+            onNewJournal: {
                 nameAlertMode = .new
                 nameDraft = ""
                 showNameAlert = true
-            }
-            Button("\(L10n.string(.journalLibraryRenameTitle, language: language))…") {
+            },
+            onRenameJournal: { currentName in
                 nameAlertMode = .rename
-                nameDraft = store.activeJournal?.name ?? ""
+                nameDraft = currentName
                 showNameAlert = true
-            }
-            Button("\(L10n.string(.journalLibraryDelete, language: language))…", role: .destructive) {
+            },
+            onDeleteJournal: {
                 showDeleteConfirm = true
             }
-            .disabled(store.journals.count <= 1)
-        } label: {
-            HStack(spacing: 3) {
-                Text(store.activeJournal?.name ?? L10n.string(.journalLibraryDefaultName, language: language))
-                    .font(PhoneFont.paper(15, weight: .bold))
-                    .foregroundColor(PhoneTheme.inkPrimary)
-                Image(systemName: "chevron.down")
-                    .font(PhoneFont.ui(10, weight: .bold))
-                    .foregroundColor(PhoneTheme.cinnabar)
-            }
-        }
+        )
     }
 
     private func extractTags(from entries: [JournalEntry]) -> [String] {
@@ -506,5 +487,54 @@ private struct DayCardView: View {
         formatter.locale = language.locale
         formatter.dateFormat = "EEE"
         return formatter.string(from: date)
+    }
+}
+
+private struct DayListJournalMenu: View {
+    let journals: [JournalInfo]
+    let activeJournalID: UUID?
+    let activeJournalName: String
+    let language: AppLanguage
+    let onSelectJournal: (UUID) -> Void
+    let onNewJournal: () -> Void
+    let onRenameJournal: (String) -> Void
+    let onDeleteJournal: () -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(journals) { journal in
+                Button {
+                    onSelectJournal(journal.id)
+                } label: {
+                    if journal.id == activeJournalID {
+                        Label(journal.name, systemImage: "checkmark")
+                    } else {
+                        Text(journal.name)
+                    }
+                }
+            }
+
+            Divider()
+
+            Button("\(L10n.string(.journalLibraryNewTitle, language: language))…") {
+                onNewJournal()
+            }
+            Button("\(L10n.string(.journalLibraryRenameTitle, language: language))…") {
+                onRenameJournal(activeJournalName)
+            }
+            Button("\(L10n.string(.journalLibraryDelete, language: language))…", role: .destructive) {
+                onDeleteJournal()
+            }
+            .disabled(journals.count <= 1)
+        } label: {
+            HStack(spacing: 3) {
+                Text(activeJournalName)
+                    .font(PhoneFont.paper(15, weight: .bold))
+                    .foregroundColor(PhoneTheme.inkPrimary)
+                Image(systemName: "chevron.down")
+                    .font(PhoneFont.ui(10, weight: .bold))
+                    .foregroundColor(PhoneTheme.cinnabar)
+            }
+        }
     }
 }
