@@ -66,32 +66,39 @@ final class PhoneSyncCoordinator: ObservableObject {
         )
 
         engine.objectWillChange
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
 
         // Edit-driven sync; the engine coalesces these (15 s debounce).
         PhoneJournalStore.shared.$entries
             .dropFirst()
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.engine.requestSync() }
             .store(in: &cancellables)
 
         engine.$discoveredJournals
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.autoImportRemoteJournals($0) }
             .store(in: &cancellables)
 
         // Journals deleted on another device (tombstone on the remote): drop
         // the local copy and acknowledge.
         engine.$remoteJournalDeletions
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.applyRemoteJournalDeletions($0) }
             .store(in: &cancellables)
 
         // Journal switches re-point the engine (it syncs the active journal).
         PhoneJournalStore.shared.$activeJournalID
             .dropFirst()
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.engine.syncNow() }
             .store(in: &cancellables)
 
         PhoneJournalStore.shared.$journals
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] in
                 self?.trackLocalJournalDeletions($0)
                 // Renames ride the next sync cycle (debounced; no-op otherwise).

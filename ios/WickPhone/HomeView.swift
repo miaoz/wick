@@ -8,8 +8,8 @@ import WickTrading
 struct HomeView: View {
     @EnvironmentObject private var store: PhoneJournalStore
     @EnvironmentObject private var sync: PhoneSyncCoordinator
-    @StateObject private var calendarStore = MacroCalendarStore.shared
-    @StateObject private var exchangeCoordinator = PhoneExchangeCoordinator.shared
+    @ObservedObject private var calendarStore = MacroCalendarStore.shared
+    @EnvironmentObject private var exchangeCoordinator: PhoneExchangeCoordinator
 
     @State private var quickText = ""
     @State private var reviewingItem: JournalItem?

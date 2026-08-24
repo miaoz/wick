@@ -11,8 +11,8 @@ import WickTrading
 struct SettingsView: View {
     @EnvironmentObject private var sync: PhoneSyncCoordinator
     @EnvironmentObject private var store: PhoneJournalStore
-    @StateObject private var exchangeCoordinator = PhoneExchangeCoordinator.shared
-    @StateObject private var reminderScheduler = PhoneReminderScheduler.shared
+    @EnvironmentObject private var exchangeCoordinator: PhoneExchangeCoordinator
+    @ObservedObject private var reminderScheduler = PhoneReminderScheduler.shared
 
     // Language Setting
     @AppStorage("wick.language") private var languageRaw = AppLanguage.chinese.rawValue

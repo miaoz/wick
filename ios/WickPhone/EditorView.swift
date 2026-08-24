@@ -8,7 +8,7 @@ import WickTrading
 /// Edits a local draft and saves debounced. Commits on flush/disappear/background.
 struct EditorView: View {
     @EnvironmentObject private var store: PhoneJournalStore
-    @StateObject private var exchangeCoordinator = PhoneExchangeCoordinator.shared
+    @EnvironmentObject private var exchangeCoordinator: PhoneExchangeCoordinator
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appLanguage) private var language: AppLanguage

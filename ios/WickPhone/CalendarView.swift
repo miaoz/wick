@@ -8,7 +8,7 @@ import WickSync
 /// 2. Easter Egg (Physical Tearable): Full-screen verlet physics tearable page with vermilion binding rail.
 struct CalendarView: View {
     @AppStorage("wick.calendar.physicalEasterEgg") private var physicalEasterEgg = false
-    @StateObject private var calendarStore = MacroCalendarStore.shared
+    @ObservedObject private var calendarStore = MacroCalendarStore.shared
     @Environment(\.appLanguage) private var language: AppLanguage
     @State private var selectedDate = Date()
     @State private var activeTab: CalendarTab = .macro

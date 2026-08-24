@@ -56,6 +56,8 @@ final class PhoneExchangeCoordinator: ObservableObject {
 
         // Listen for active journal changes
         PhoneJournalStore.shared.$activeJournalID
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] journalID in
                 self?.loadSnapshot(for: journalID)
             }

@@ -114,7 +114,6 @@ public final class MacroCalendarStore: ObservableObject {
         if feedIsStale(.earnings, key: key, date: date) {
             startFetch(.earnings, key: key, date: date)
         }
-        objectWillChange.send()
     }
 
     /// Explicit refresh of both feeds for a day, bypassing the TTL.

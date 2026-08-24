@@ -8,7 +8,7 @@ import WickTrading
 struct DayListView: View {
     @EnvironmentObject private var store: PhoneJournalStore
     @EnvironmentObject private var sync: PhoneSyncCoordinator
-    @StateObject private var exchangeCoordinator = PhoneExchangeCoordinator.shared
+    @EnvironmentObject private var exchangeCoordinator: PhoneExchangeCoordinator
     @Environment(\.appLanguage) private var language: AppLanguage
 
     @State private var selectedTag: String? = nil
