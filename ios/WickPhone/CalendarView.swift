@@ -214,7 +214,7 @@ private struct FlatCalendarView: View {
     private static func dateDisplay(for date: Date, language: AppLanguage) -> String {
         let formatter = DateFormatter()
         formatter.locale = language.locale
-        formatter.dateFormat = language == .chinese ? "M月d日 EEEE" : "MMM d, EEEE"
+        formatter.dateFormat = language == .chinese ? "M月d日 EEE" : "MMM d, EEE"
         return formatter.string(from: date)
     }
 }

@@ -117,7 +117,7 @@ struct MacroDayPageView: View {
 
     private var masthead: some View {
         VStack(spacing: 2 * s) {
-            Text("公历 \(year)年\(month)月\(day)日 · \(weekdayName)")
+            Text("公历 \(year)年\(month)月\(day)日 · 周\(weekdayName)")
                 .font(TradingCalendarTheme.mincho(9 * s))
                 .tracking(0.6 * s)
                 .foregroundStyle(TradingCalendarTheme.ink.opacity(0.85))

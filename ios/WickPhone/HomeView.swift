@@ -260,7 +260,7 @@ private struct TimeArcPaperCard: View {
     private static func weekdayDisplay(for date: Date, language: AppLanguage) -> String {
         let formatter = DateFormatter()
         formatter.locale = language.locale
-        formatter.dateFormat = "EEEE"
+        formatter.dateFormat = "EEE"
         return formatter.string(from: date)
     }
 }

@@ -159,6 +159,6 @@ public enum LunarLine {
         guard let lunar = LunarCalendar.lunar(from: date, calendar: calendar) else { return nil }
         let month = (lunar.isLeapMonth ? "闰" : "") + LunarCalendar.monthName(lunar.month)
         let day = LunarCalendar.dayName(lunar.day)
-        return "农历\(month)\(day) · \(LunarCalendar.ganzhiYear(lunar.year))年"
+        return "\(month)\(day) · \(LunarCalendar.ganzhiYear(lunar.year))年"
     }
 }

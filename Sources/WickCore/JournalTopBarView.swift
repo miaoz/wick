@@ -106,7 +106,7 @@ struct JournalTopBarView: View {
             date = Date()
         }
         let day = date.formatted(.dateTime.month().day().locale(settings.locale))
-        let weekday = date.formatted(.dateTime.weekday(.wide).locale(settings.locale))
+        let weekday = date.formatted(.dateTime.weekday(.abbreviated).locale(settings.locale))
         return "\(day) · \(weekday)"
     }
 

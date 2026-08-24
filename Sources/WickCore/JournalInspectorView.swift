@@ -103,7 +103,7 @@ struct JournalInspectorView: View {
     }
 
     private var weekdayStamp: String {
-        Date().formatted(.dateTime.weekday(.wide).locale(settings.locale))
+        Date().formatted(.dateTime.weekday(.abbreviated).locale(settings.locale))
     }
 
     /// 检查器大日期:「8月21日」/ "Aug 21",跟随 App 语言。

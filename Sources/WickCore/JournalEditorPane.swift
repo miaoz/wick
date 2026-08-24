@@ -440,10 +440,10 @@ struct JournalEditorPane: View {
         }
     }
 
-    /// 刻印小注:星期 · 农历干支(宋体);竖排两行,不折行。
+    /// 刻印小注:周几 · 农历干支(宋体);竖排两行,不折行。
     private func dayHeaderStamp(draft: JournalEntry) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(draft.date.formatted(.dateTime.weekday(.wide).locale(settings.locale)))
+            Text(draft.date.formatted(.dateTime.weekday(.abbreviated).locale(settings.locale)))
             if let lunar = LunarLine.string(for: draft.date) {
                 Text(lunar)
             }

@@ -518,7 +518,7 @@ struct JournalDayListColumn: View {
             .year()
             .month()
             .day()
-            .weekday(.wide)
+            .weekday(.abbreviated)
             .locale(settings.locale)
         )
     }
