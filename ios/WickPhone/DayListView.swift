@@ -107,7 +107,7 @@ struct DayListView: View {
                         if filteredEntries.isEmpty {
                             VStack(spacing: 8) {
                                 Text(L10n.string(.journalFilterEmptyTitle, language: language))
-                                    .font(.system(.subheadline, design: .serif))
+                                    .font(PhoneFont.preset(.subheadline))
                                     .foregroundColor(PhoneTheme.inkTertiary)
                             }
                             .frame(maxWidth: .infinity)

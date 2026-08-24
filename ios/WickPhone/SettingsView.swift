@@ -143,11 +143,11 @@ struct SettingsView: View {
                             } label: {
                                 HStack(spacing: 4) {
                                     Text(currentFontDisplayName)
-                                        .font(journalFontName.isEmpty ? .system(size: 11.5, weight: .medium, design: .serif) : .custom(journalFontName, size: 11.5))
+                                        .font(PhoneFont.paper(11.5, weight: .medium))
                                         .foregroundColor(PhoneTheme.cinnabar)
                                         .lineLimit(1)
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 9, weight: .semibold))
+                                        .font(PhoneFont.ui(9, weight: .semibold))
                                         .foregroundColor(PhoneTheme.inkTertiary)
                                 }
                                 .padding(.horizontal, 8)
@@ -198,7 +198,7 @@ struct SettingsView: View {
                             isLast: true
                         ) {
                             Text(language == .chinese ? "实时在线" : "Online")
-                                .font(.system(size: 11, weight: .medium, design: .serif))
+                                .font(PhoneFont.paper(11, weight: .medium))
                                 .foregroundColor(PhoneTheme.inkTertiary)
                         }
 
@@ -207,10 +207,10 @@ struct SettingsView: View {
                             HStack(alignment: .center, spacing: 12) {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(language == .chinese ? "拟物物理黄历 (彩蛋)" : "Physical Desk Calendar (Easter Egg)")
-                                        .font(.system(size: 13, weight: .bold, design: .serif))
+                                        .font(PhoneFont.paper(13, weight: .bold))
                                         .foregroundColor(PhoneTheme.cinnabar)
                                     Text(L10n.string(.calendarEasterEggNote, language: language))
-                                        .font(.system(size: 10.5, design: .serif))
+                                        .font(PhoneFont.paper(10.5))
                                         .foregroundColor(PhoneTheme.inkSecondary)
                                 }
                                 Spacer(minLength: 8)
@@ -245,8 +245,10 @@ struct SettingsView: View {
                                     } label: {
                                         HStack {
                                             Text(journal.name)
+                                                .font(PhoneFont.paper(13))
                                             if journal.id == store.activeJournalID {
                                                 Text(language == .chinese ? "(当前)" : "(Active)")
+                                                    .font(PhoneFont.paper(12))
                                             }
                                         }
                                     }
@@ -254,10 +256,10 @@ struct SettingsView: View {
                             } label: {
                                 HStack(spacing: 4) {
                                     Text(targetJournal?.name ?? (language == .chinese ? "未选择" : "None"))
-                                        .font(.system(size: 12, weight: .semibold, design: .serif))
+                                        .font(PhoneFont.paper(12, weight: .semibold))
                                         .foregroundColor(PhoneTheme.inkPrimary)
                                     Image(systemName: "chevron.up.chevron.down")
-                                        .font(.system(size: 9))
+                                        .font(PhoneFont.ui(9))
                                         .foregroundColor(PhoneTheme.cinnabar)
                                 }
                                 .padding(.horizontal, 8)
@@ -272,13 +274,13 @@ struct SettingsView: View {
                             if let binding = journal.exchangeBinding {
                                 SettingsRow(title: language == .chinese ? "当前绑定" : "Current Binding") {
                                     Text(venueName(binding.venue))
-                                        .font(.system(size: 12, weight: .semibold, design: .serif))
+                                        .font(PhoneFont.paper(12, weight: .semibold))
                                         .foregroundColor(PhoneTheme.inkPrimary)
                                 }
 
                                 SettingsRow(title: language == .chinese ? "账户标识" : "Account Label") {
                                     Text(binding.accountLabel)
-                                        .font(.system(size: 11, design: .monospaced))
+                                        .font(PhoneFont.ui(11, monospacedDigit: true))
                                         .foregroundColor(PhoneTheme.inkSecondary)
                                 }
 
@@ -288,25 +290,25 @@ struct SettingsView: View {
                                             ProgressView()
                                                 .scaleEffect(0.7)
                                             Text(L10n.string(.exchangeSyncing, language: language))
-                                                .font(.system(size: 11, design: .serif))
+                                                .font(PhoneFont.paper(11))
                                                 .foregroundColor(PhoneTheme.inkSecondary)
                                         }
                                     }
                                 } else if let error = exchangeCoordinator.error(for: journal.id) {
                                     SettingsRow(title: language == .chinese ? "同步失败" : "Sync Failed") {
                                         Text(error)
-                                            .font(.system(size: 10.5, design: .serif))
+                                            .font(PhoneFont.paper(10.5))
                                             .foregroundColor(PhoneTheme.cinnabar)
                                     }
                                 } else if let snap = exchangeCoordinator.snapshot(for: journal.id) {
                                     SettingsRow(title: language == .chinese ? "已聚合仓位" : "Aggregated Positions") {
                                         Text(String(format: language == .chinese ? "%d 笔" : "%d positions", snap.positions.count))
-                                            .font(.system(size: 11.5, weight: .bold, design: .monospaced))
+                                            .font(PhoneFont.ui(11.5, weight: .bold, monospacedDigit: true))
                                             .foregroundColor(PhoneTheme.cinnabar)
                                     }
                                     SettingsRow(title: language == .chinese ? "最新对账" : "Last Reconciled") {
                                         Text(snap.fetchedAt.formatted(date: .omitted, time: .shortened))
-                                            .font(.system(size: 11, design: .monospaced))
+                                            .font(PhoneFont.ui(11, monospacedDigit: true))
                                             .foregroundColor(PhoneTheme.inkSecondary)
                                     }
                                 }
@@ -316,7 +318,7 @@ struct SettingsView: View {
                                         exchangeCoordinator.syncNow(journalID: journal.id)
                                     } label: {
                                         Text(language == .chinese ? "立即刷新「\(journal.name)」" : "Refresh \"\(journal.name)\"")
-                                            .font(.system(size: 12, weight: .bold, design: .serif))
+                                            .font(PhoneFont.paper(12, weight: .bold))
                                             .foregroundColor(PhoneTheme.cinnabar)
                                     }
                                     .disabled(exchangeCoordinator.isSyncing(for: journal.id))
@@ -327,14 +329,14 @@ struct SettingsView: View {
                                         showUnbindConfirm = true
                                     } label: {
                                         Text(L10n.string(.exchangeDisconnect, language: language))
-                                            .font(.system(size: 12, weight: .medium, design: .serif))
+                                            .font(PhoneFont.paper(12, weight: .medium))
                                             .foregroundColor(PhoneTheme.cinnabar)
                                     }
                                 }
                             } else {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text(language == .chinese ? "「\(journal.name)」尚未绑定交易所。一本日记绑定一个交易所只读账户。Hyperliquid 仅需填写 0x 钱包地址，无需私钥。" : "\"\(journal.name)\" has no exchange linked. One journal binds one read-only account. Hyperliquid only requires a 0x address without private keys.")
-                                        .font(.system(size: 11, design: .serif))
+                                        .font(PhoneFont.paper(11))
                                         .foregroundColor(PhoneTheme.inkSecondary)
 
                                     Button {
@@ -347,9 +349,9 @@ struct SettingsView: View {
                                     } label: {
                                         HStack(spacing: 4) {
                                             Image(systemName: "link")
-                                                .font(.system(size: 11))
+                                                .font(PhoneFont.ui(11))
                                             Text(language == .chinese ? "为「\(journal.name)」绑定交易所…" : "Bind Exchange for \"\(journal.name)\"…")
-                                                .font(.system(size: 12, weight: .bold, design: .serif))
+                                                .font(PhoneFont.paper(12, weight: .bold))
                                         }
                                         .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
                                         .padding(.horizontal, 12)
@@ -381,7 +383,7 @@ struct SettingsView: View {
                         if sync.syncEnabled && sync.backend.isAuthorized {
                             SettingsRow(title: language == .chinese ? "Dropbox 账号" : "Dropbox Account") {
                                 Text(sync.accountEmail.isEmpty ? (language == .chinese ? "已授权" : "Authorized") : sync.accountEmail)
-                                    .font(.system(size: 11.5, design: .serif))
+                                    .font(PhoneFont.paper(11.5))
                                     .foregroundColor(PhoneTheme.inkSecondary)
                             }
 
@@ -394,7 +396,7 @@ struct SettingsView: View {
                                     sync.engine.syncNow()
                                 } label: {
                                     Text(L10n.string(.syncNow, language: language))
-                                        .font(.system(size: 12, weight: .bold, design: .serif))
+                                        .font(PhoneFont.paper(12, weight: .bold))
                                         .foregroundColor(PhoneTheme.cinnabar)
                                 }
                             }
@@ -404,14 +406,14 @@ struct SettingsView: View {
                                     showDisconnectConfirm = true
                                 } label: {
                                     Text(L10n.string(.syncDisconnect, language: language))
-                                        .font(.system(size: 12, weight: .medium, design: .serif))
+                                        .font(PhoneFont.paper(12, weight: .medium))
                                         .foregroundColor(PhoneTheme.cinnabar)
                                 }
                             }
                         } else {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(L10n.string(.syncExplanation, language: language))
-                                    .font(.system(size: 11, design: .serif))
+                                    .font(PhoneFont.paper(11))
                                     .foregroundColor(PhoneTheme.inkSecondary)
 
                                 Button {
@@ -419,9 +421,9 @@ struct SettingsView: View {
                                 } label: {
                                     HStack(spacing: 4) {
                                         Image(systemName: "arrow.triangle.2.circlepath")
-                                            .font(.system(size: 11))
+                                            .font(PhoneFont.ui(11))
                                         Text(isConnecting ? L10n.string(.syncConnecting, language: language) : L10n.string(.syncConnect, language: language))
-                                            .font(.system(size: 12, weight: .bold, design: .serif))
+                                            .font(PhoneFont.paper(12, weight: .bold))
                                     }
                                     .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
                                     .padding(.horizontal, 12)
@@ -434,12 +436,12 @@ struct SettingsView: View {
 
                                 if sync.syncEnabled, !sync.backend.isAuthorized {
                                     Text(L10n.string(.syncStatusNeedsAuth, language: language))
-                                        .font(.system(size: 10.5, design: .serif))
+                                        .font(PhoneFont.paper(10.5))
                                         .foregroundColor(PhoneTheme.cinnabar)
                                 }
                                 if let error = sync.lastAuthError {
                                     Text(error)
-                                        .font(.system(size: 10, design: .serif))
+                                        .font(PhoneFont.paper(10))
                                         .foregroundColor(PhoneTheme.inkTertiary)
                                 }
                             }
@@ -457,7 +459,7 @@ struct SettingsView: View {
                                     Button(L10n.string(.syncConflictDismiss, language: language)) {
                                         sync.engine.dismissConflict(id: conflict.id)
                                     }
-                                    .font(.system(size: 11, weight: .bold, design: .serif))
+                                    .font(PhoneFont.paper(11, weight: .bold))
                                     .foregroundColor(PhoneTheme.cinnabar)
                                 }
                             }
@@ -469,7 +471,7 @@ struct SettingsView: View {
                         if store.isReadOnlyDueToLoadFailure {
                             SettingsRow(title: L10n.string(.journalReadOnly, language: language)) {
                                 Text(L10n.string(.journalLoadFailureTitle, language: language))
-                                    .font(.system(size: 10.5, design: .serif))
+                                    .font(PhoneFont.paper(10.5))
                                     .foregroundColor(PhoneTheme.cinnabar)
                             }
                         }
@@ -483,7 +485,7 @@ struct SettingsView: View {
                                         recoveryErrorMessage = error.localizedDescription
                                     }
                                 }
-                                .font(.system(size: 11.5, weight: .bold, design: .serif))
+                                .font(PhoneFont.paper(11.5, weight: .bold))
                                 .foregroundColor(PhoneTheme.cinnabar)
                             }
                         }
@@ -496,9 +498,9 @@ struct SettingsView: View {
                                 ) {
                                     HStack(spacing: 4) {
                                         Text(language == .chinese ? "导出 journal.json" : "Export journal.json")
-                                            .font(.system(size: 11.5, weight: .bold, design: .serif))
+                                            .font(PhoneFont.paper(11.5, weight: .bold))
                                         Image(systemName: "square.and.arrow.up")
-                                            .font(.system(size: 10))
+                                            .font(PhoneFont.ui(10))
                                     }
                                     .foregroundColor(PhoneTheme.inkPrimary)
                                 }
@@ -509,7 +511,7 @@ struct SettingsView: View {
                             Button(language == .chinese ? "导入 journal.json…" : "Import journal.json…") {
                                 showJournalImporter = true
                             }
-                            .font(.system(size: 11.5, weight: .bold, design: .serif))
+                            .font(PhoneFont.paper(11.5, weight: .bold))
                             .foregroundColor(PhoneTheme.cinnabar)
                         }
                     }
@@ -517,7 +519,7 @@ struct SettingsView: View {
                     // 8. About
                     VStack(spacing: 4) {
                         Text(language == .chinese ? "Wick for iOS · 秉烛" : "Wick for iOS")
-                            .font(.system(size: 12, weight: .bold, design: .serif))
+                            .font(PhoneFont.paper(12, weight: .bold))
                             .foregroundColor(PhoneTheme.inkSecondary)
                     }
                     .padding(.top, 8)
@@ -641,28 +643,28 @@ struct SettingsView: View {
         switch sync.engine.status {
         case .syncing:
             Text(L10n.string(.syncStatusSyncing, language: language))
-                .font(.system(size: 11, design: .serif))
+                .font(PhoneFont.paper(11))
                 .foregroundColor(PhoneTheme.inkSecondary)
         case .offline:
             Text(L10n.string(.syncStatusOffline, language: language))
-                .font(.system(size: 11, design: .serif))
+                .font(PhoneFont.paper(11))
                 .foregroundColor(PhoneTheme.inkSecondary)
         case .needsAuth:
             Text(L10n.string(.syncStatusNeedsAuth, language: language))
-                .font(.system(size: 11, design: .serif))
+                .font(PhoneFont.paper(11))
                 .foregroundColor(PhoneTheme.cinnabar)
         case .error(let message):
             Text(message.contains("remote format") ? L10n.string(.syncRemoteTooNew, language: language) : message)
-                .font(.system(size: 10.5, design: .serif))
+                .font(PhoneFont.paper(10.5))
                 .foregroundColor(PhoneTheme.inkSecondary)
         case .idle:
             if let lastSyncAt = sync.engine.lastSyncAt {
                 Text(lastSyncAt.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(PhoneFont.ui(11, monospacedDigit: true))
                     .foregroundColor(PhoneTheme.inkSecondary)
             } else {
                 Text(L10n.string(.syncNeverSynced, language: language))
-                    .font(.system(size: 11, design: .serif))
+                    .font(PhoneFont.paper(11))
                     .foregroundColor(PhoneTheme.inkTertiary)
             }
         }
@@ -824,11 +826,11 @@ private struct ExchangeBindingSheet: View {
                     // Header Bar
                     HStack {
                         Text(L10n.string(.exchangeBind, language: language))
-                            .font(.system(size: 16, weight: .bold, design: .serif))
+                            .font(PhoneFont.paper(16, weight: .bold))
                             .foregroundColor(PhoneTheme.inkPrimary)
                         Spacer()
                         Button(L10n.string(.cancel, language: language)) { dismiss() }
-                            .font(.system(size: 13, design: .serif))
+                            .font(PhoneFont.paper(13))
                             .foregroundColor(PhoneTheme.inkSecondary)
                     }
                     .padding(.horizontal, 2)
@@ -839,17 +841,20 @@ private struct ExchangeBindingSheet: View {
                         SettingsRow(title: language == .chinese ? "目标日记本" : "Target Journal") {
                             Menu {
                                 ForEach(journals) { journal in
-                                    Button(journal.name) {
+                                    Button {
                                         selectedJournalID = journal.id
+                                    } label: {
+                                        Text(journal.name)
+                                            .font(PhoneFont.paper(13))
                                     }
                                 }
                             } label: {
                                 HStack(spacing: 4) {
                                     Text(journals.first(where: { $0.id == selectedJournalID })?.name ?? (language == .chinese ? "选择" : "Select"))
-                                        .font(.system(size: 12, weight: .semibold, design: .serif))
+                                        .font(PhoneFont.paper(12, weight: .semibold))
                                         .foregroundColor(PhoneTheme.inkPrimary)
                                     Image(systemName: "chevron.up.chevron.down")
-                                        .font(.system(size: 9))
+                                        .font(PhoneFont.ui(9))
                                         .foregroundColor(PhoneTheme.cinnabar)
                                 }
                                 .padding(.horizontal, 8)
@@ -868,10 +873,10 @@ private struct ExchangeBindingSheet: View {
                             } label: {
                                 HStack(spacing: 4) {
                                     Text(venueTitle(selectedVenue))
-                                        .font(.system(size: 12, weight: .semibold, design: .serif))
+                                        .font(PhoneFont.paper(12, weight: .semibold))
                                         .foregroundColor(PhoneTheme.inkPrimary)
                                     Image(systemName: "chevron.up.chevron.down")
-                                        .font(.system(size: 9))
+                                        .font(PhoneFont.ui(9))
                                         .foregroundColor(PhoneTheme.cinnabar)
                                 }
                                 .padding(.horizontal, 8)
@@ -888,10 +893,10 @@ private struct ExchangeBindingSheet: View {
                         if selectedVenue == .hyperliquid {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(L10n.string(.exchangeHyperliquidHint, language: language))
-                                    .font(.system(size: 11, design: .serif))
+                                    .font(PhoneFont.paper(11))
                                     .foregroundColor(PhoneTheme.inkSecondary)
                                 TextField("0x1234...abcd", text: $accountLabelDraft)
-                                    .font(.system(size: 12, design: .monospaced))
+                                    .font(PhoneFont.ui(12, monospacedDigit: true))
                                     .padding(8)
                                     .background(PhoneTheme.paper)
                                     .cornerRadius(4)
@@ -904,10 +909,10 @@ private struct ExchangeBindingSheet: View {
                             VStack(alignment: .leading, spacing: 10) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(L10n.string(.exchangeAccountLabel, language: language))
-                                        .font(.system(size: 11, design: .serif))
+                                        .font(PhoneFont.paper(11))
                                         .foregroundColor(PhoneTheme.inkSecondary)
                                     TextField(language == .chinese ? "如 主账号" : "e.g. Main", text: $accountLabelDraft)
-                                        .font(.system(size: 12, design: .serif))
+                                        .font(PhoneFont.paper(12))
                                         .padding(8)
                                         .background(PhoneTheme.paper)
                                         .cornerRadius(4)
@@ -916,10 +921,10 @@ private struct ExchangeBindingSheet: View {
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("\(L10n.string(.exchangeApiKey, language: language)) (\(language == .chinese ? "只读" : "Read-only"))")
-                                        .font(.system(size: 11, design: .serif))
+                                        .font(PhoneFont.paper(11))
                                         .foregroundColor(PhoneTheme.inkSecondary)
                                     TextField("API Key", text: $apiKeyDraft)
-                                        .font(.system(size: 12, design: .monospaced))
+                                        .font(PhoneFont.ui(12, monospacedDigit: true))
                                         .padding(8)
                                         .background(PhoneTheme.paper)
                                         .cornerRadius(4)
@@ -930,10 +935,10 @@ private struct ExchangeBindingSheet: View {
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(L10n.string(.exchangeSecretKey, language: language))
-                                        .font(.system(size: 11, design: .serif))
+                                        .font(PhoneFont.paper(11))
                                         .foregroundColor(PhoneTheme.inkSecondary)
                                     SecureField("Secret", text: $secretDraft)
-                                        .font(.system(size: 12, design: .monospaced))
+                                        .font(PhoneFont.ui(12, monospacedDigit: true))
                                         .padding(8)
                                         .background(PhoneTheme.paper)
                                         .cornerRadius(4)
@@ -945,10 +950,10 @@ private struct ExchangeBindingSheet: View {
                                 if selectedVenue == .okx {
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(L10n.string(.exchangePassphrase, language: language))
-                                            .font(.system(size: 11, design: .serif))
+                                            .font(PhoneFont.paper(11))
                                             .foregroundColor(PhoneTheme.inkSecondary)
                                         SecureField("Passphrase", text: $passphraseDraft)
-                                            .font(.system(size: 12, design: .monospaced))
+                                            .font(PhoneFont.ui(12, monospacedDigit: true))
                                             .padding(8)
                                             .background(PhoneTheme.paper)
                                             .cornerRadius(4)
@@ -967,7 +972,7 @@ private struct ExchangeBindingSheet: View {
                         onSave()
                     } label: {
                         Text(L10n.string(.exchangeSaveAndSync, language: language))
-                            .font(.system(size: 13, weight: .bold, design: .serif))
+                            .font(PhoneFont.paper(13, weight: .bold))
                             .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)

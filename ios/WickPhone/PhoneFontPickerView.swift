@@ -49,9 +49,9 @@ public struct PhoneFontPickerView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(PhoneFont.ui(13, weight: .bold))
                             Text(language == .chinese ? "从文件导入字体 (.ttf / .otf)…" : "Import font file (.ttf / .otf)…")
-                                .font(.system(size: 12.5, weight: .semibold, design: .serif))
+                                .font(PhoneFont.paper(12.5, weight: .semibold))
                         }
                         .foregroundColor(PhoneTheme.cinnabar)
                         .padding(.vertical, 8)
@@ -117,7 +117,7 @@ public struct PhoneFontPickerView: View {
                     Button(L10n.string(.ok, language: language)) {
                         dismiss()
                     }
-                    .font(.system(size: 14, weight: .bold, design: .serif))
+                    .font(PhoneFont.paper(14, weight: .bold))
                     .foregroundColor(PhoneTheme.cinnabar)
                 }
             }
@@ -144,11 +144,11 @@ public struct PhoneFontPickerView: View {
     private var searchBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 13))
+                .font(PhoneFont.ui(13))
                 .foregroundColor(PhoneTheme.inkTertiary)
 
             TextField(L10n.string(.fontSearchPlaceholder, language: language), text: $query)
-                .font(.system(size: 13, design: .serif))
+                .font(PhoneFont.paper(13))
                 .foregroundColor(PhoneTheme.inkPrimary)
 
             if !query.isEmpty {
@@ -156,7 +156,7 @@ public struct PhoneFontPickerView: View {
                     query = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13))
+                        .font(PhoneFont.ui(13))
                         .foregroundColor(PhoneTheme.inkTertiary)
                 }
             }
@@ -173,7 +173,7 @@ public struct PhoneFontPickerView: View {
     private func sectionHeader(title: String) -> some View {
         HStack {
             Text(title)
-                .font(.system(size: 11, weight: .bold, design: .serif))
+                .font(PhoneFont.paper(11, weight: .bold))
                 .foregroundColor(PhoneTheme.inkSecondary)
             Spacer()
         }
@@ -200,7 +200,7 @@ public struct PhoneFontPickerView: View {
 
                     if !name.isEmpty && name != display {
                         Text(name)
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(PhoneFont.ui(10, monospacedDigit: true))
                             .foregroundColor(PhoneTheme.inkTertiary)
                     }
                 }
@@ -213,7 +213,7 @@ public struct PhoneFontPickerView: View {
                         loadFonts()
                     } label: {
                         Image(systemName: "trash")
-                            .font(.system(size: 12))
+                            .font(PhoneFont.ui(12))
                             .foregroundColor(PhoneTheme.inkTertiary)
                             .padding(6)
                     }
@@ -222,7 +222,7 @@ public struct PhoneFontPickerView: View {
 
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(PhoneFont.ui(13, weight: .bold))
                         .foregroundColor(PhoneTheme.cinnabar)
                 }
             }

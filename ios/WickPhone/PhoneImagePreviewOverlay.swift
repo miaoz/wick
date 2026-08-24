@@ -173,10 +173,10 @@ public struct PhoneImagePreviewOverlay: View {
                 } else {
                     VStack(spacing: 12) {
                         Image(systemName: "photo")
-                            .font(.system(size: 44, weight: .light))
+                            .font(PhoneFont.ui(44, weight: .light))
                             .foregroundColor(.white.opacity(0.4))
                         Text(filename)
-                            .font(.system(size: 13, design: .monospaced))
+                            .font(PhoneFont.ui(13, monospacedDigit: true))
                             .foregroundColor(.white.opacity(0.6))
                     }
                 }
@@ -193,7 +193,7 @@ public struct PhoneImagePreviewOverlay: View {
             // Filename
             if let filename = currentFilename {
                 Text(filename)
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .font(PhoneFont.ui(12, weight: .medium, monospacedDigit: true))
                     .foregroundColor(.white.opacity(0.85))
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -207,7 +207,7 @@ public struct PhoneImagePreviewOverlay: View {
                 copyCurrentImage()
             } label: {
                 Image(systemName: didCopyFeedback ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(PhoneFont.ui(13, weight: .semibold))
                     .foregroundColor(didCopyFeedback ? Color.green : Color.white)
                     .frame(width: 34, height: 34)
                     .background(Color.white.opacity(0.12))
@@ -219,7 +219,7 @@ public struct PhoneImagePreviewOverlay: View {
                 isSharing = true
             } label: {
                 Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(PhoneFont.ui(13, weight: .semibold))
                     .foregroundColor(.white)
                     .frame(width: 34, height: 34)
                     .background(Color.white.opacity(0.12))
@@ -231,7 +231,7 @@ public struct PhoneImagePreviewOverlay: View {
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(PhoneFont.ui(13, weight: .bold))
                     .foregroundColor(.white)
                     .frame(width: 34, height: 34)
                     .background(Color.white.opacity(0.18))
@@ -252,7 +252,7 @@ public struct PhoneImagePreviewOverlay: View {
     private func bottomIndicator(current: Int, total: Int) -> some View {
         HStack(spacing: 6) {
             Text("\(current) / \(total)")
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .font(PhoneFont.ui(12, weight: .semibold, monospacedDigit: true))
                 .foregroundColor(.white.opacity(0.9))
         }
         .padding(.horizontal, 14)
