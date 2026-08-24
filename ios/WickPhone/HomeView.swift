@@ -24,19 +24,19 @@ struct HomeView: View {
                     // 1. Main Time & Candle Burn Card
                     TimeArcPaperCard(language: language)
 
-                    // 2. Upcoming Macro Event Radar Card
-                    MacroRadarAlertCard(calendarStore: calendarStore)
+                    // 2. 即将发布事件
+                    UpcomingEventsCard(calendarStore: calendarStore)
 
-                    // 3. Today's Trading & Ledger Brief
-                    TodayTradingBriefCard(
+                    // 3. 今日交易
+                    TodayTradingCard(
                         store: store,
                         exchangeCoordinator: exchangeCoordinator
                     ) {
                         showEditor = true
                     }
 
-                    // 4. Today's Journal Feed & Quick Capture
-                    TodayJournalFeedCard(
+                    // 4. 今日记录
+                    TodayJournalCard(
                         store: store,
                         quickText: $quickText,
                         onAddNote: addQuickNote,
@@ -207,25 +207,28 @@ private struct TimeArcPaperCard: View {
     }
 }
 
-// MARK: - 2. Macro Radar Alert Card
+// MARK: - 2. Upcoming Events Card (即将发布事件)
 
-private struct MacroRadarAlertCard: View {
+private struct UpcomingEventsCard: View {
     @ObservedObject var calendarStore: MacroCalendarStore
 
     var body: some View {
         let todayEvents = calendarStore.events(for: Date())
-        let nextEvent = todayEvents.first { $0.time >= Date() } ?? todayEvents.first
+        let upcoming = todayEvents.filter { $0.time >= Date() }
+        let displayEvents = upcoming.isEmpty ? Array(todayEvents.suffix(3)) : Array(upcoming.prefix(3))
+        let nextEvent = upcoming.first
 
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
+            // Header
             HStack {
-                HStack(spacing: 5) {
+                HStack(spacing: 6) {
                     Circle()
                         .fill(PhoneTheme.cinnabar)
                         .frame(width: 6, height: 6)
                         .shadow(color: PhoneTheme.cinnabar, radius: 3)
-                    Text("下个关键宏观发布")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(PhoneTheme.cinnabar)
+                    Text("即将发布事件")
+                        .font(.system(size: 12.5, weight: .bold, design: .serif))
+                        .foregroundColor(PhoneTheme.inkPrimary)
                 }
 
                 Spacer()
@@ -233,37 +236,71 @@ private struct MacroRadarAlertCard: View {
                 if let nextEvent {
                     Text(Self.countdownText(to: nextEvent.time))
                         .font(.system(size: 10.5, weight: .bold, design: .monospaced))
-                        .foregroundColor(PhoneTheme.inkSecondary)
+                        .foregroundColor(PhoneTheme.cinnabar)
+                } else if !todayEvents.isEmpty {
+                    Text("今日已公布完毕")
+                        .font(.system(size: 10.5, design: .serif))
+                        .foregroundColor(PhoneTheme.inkTertiary)
                 }
             }
 
-            if let nextEvent {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("\(MacroCalendarFormat.eventTime(nextEvent.time)) \(nextEvent.country) · \(nextEvent.title)")
-                        .font(.system(size: 12.5, weight: .bold, design: .serif))
-                        .foregroundColor(PhoneTheme.inkPrimary)
-                        .lineLimit(1)
-                }
-
-                HStack(spacing: 12) {
-                    if let prev = nextEvent.previous {
-                        Text("前值: \(String(format: "%.1f", prev))")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(PhoneTheme.inkTertiary)
-                    }
-                    if let fc = nextEvent.forecast {
-                        Text("预期: \(String(format: "%.1f", fc))")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(PhoneTheme.inkSecondary)
-                    }
-                }
-            } else {
-                Text("今日暂无待公布的高星宏观数据")
-                    .font(.system(size: 12, design: .serif))
+            if displayEvents.isEmpty {
+                Text("今日暂无宏观数据发布")
+                    .font(.system(size: 11.5, design: .serif))
                     .foregroundColor(PhoneTheme.inkTertiary)
+                    .padding(.vertical, 4)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(Array(displayEvents.enumerated()), id: \.element.id) { index, event in
+                        if index > 0 {
+                            Rectangle()
+                                .fill(PhoneTheme.rule)
+                                .frame(height: 0.5)
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(MacroCalendarFormat.eventTime(event.time))
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(PhoneTheme.cinnabar)
+
+                                Text("\(event.country) · \(event.title)")
+                                    .font(.system(size: 12, weight: .medium, design: .serif))
+                                    .foregroundColor(PhoneTheme.inkPrimary)
+                                    .lineLimit(1)
+
+                                Spacer(minLength: 4)
+
+                                if event.importance > 0 {
+                                    HStack(spacing: 1) {
+                                        ForEach(0..<min(event.importance, 3), id: \.self) { _ in
+                                            Text("★")
+                                                .font(.system(size: 8))
+                                                .foregroundColor(PhoneTheme.cinnabar)
+                                        }
+                                    }
+                                }
+                            }
+
+                            if event.previous != nil || event.forecast != nil {
+                                HStack(spacing: 10) {
+                                    if let prev = event.previous {
+                                        Text("前值: \(String(format: "%.1f", prev))")
+                                    }
+                                    if let fc = event.forecast {
+                                        Text("预期: \(String(format: "%.1f", fc))")
+                                            .foregroundColor(PhoneTheme.inkSecondary)
+                                    }
+                                }
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundColor(PhoneTheme.inkTertiary)
+                            }
+                        }
+                    }
+                }
             }
         }
-        .padding(12)
+        .padding(14)
         .background(PhoneTheme.paperHi)
         .cornerRadius(4)
         .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
@@ -282,18 +319,19 @@ private struct MacroRadarAlertCard: View {
     }
 }
 
-// MARK: - 3. Today's Trading Brief Card
+// MARK: - 3. Today's Trading Card (今日交易)
 
-private struct TodayTradingBriefCard: View {
+private struct TodayTradingCard: View {
     @ObservedObject var store: PhoneJournalStore
     @ObservedObject var exchangeCoordinator: PhoneExchangeCoordinator
     let onOpenEditor: () -> Void
 
     var body: some View {
         Button(action: onOpenEditor) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 10) {
+                // Header: "今日交易" + Realized PnL
                 HStack {
-                    Text("今日日记与实盘记录")
+                    Text("今日交易")
                         .font(.system(size: 12.5, weight: .bold, design: .serif))
                         .foregroundColor(PhoneTheme.inkPrimary)
 
@@ -311,45 +349,58 @@ private struct TodayTradingBriefCard: View {
                     }
                 }
 
-                let todayEntry = store.entries.first { Calendar.current.isDateInToday($0.date) }
-                let itemCount = todayEntry?.items.count ?? 0
-                let unreviewedCount = todayEntry?.items.filter { $0.review == nil }.count ?? 0
                 let closedCount = exchangeCoordinator.closedCount(for: JournalDayKey.make(from: Date()))
+                let journalID = PhoneJournalStore.shared.activeJournalID
+                let venueName = journalID.flatMap { exchangeCoordinator.binding(for: $0)?.venue }.map { Self.venueTitle($0) }
 
-                HStack(spacing: 12) {
-                    Text("今日记录 \(itemCount) 条")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(PhoneTheme.inkSecondary)
-
+                HStack(spacing: 10) {
                     if closedCount > 0 {
                         Text("\(closedCount) 笔平仓")
-                            .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
                             .foregroundColor(PhoneTheme.inkPrimary)
+                    } else {
+                        Text("暂无平仓成交")
+                            .font(.system(size: 11, design: .serif))
+                            .foregroundColor(PhoneTheme.inkTertiary)
                     }
 
-                    if unreviewedCount > 0 {
-                        Text("\(unreviewedCount) 条待复盘")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(PhoneTheme.cinnabar)
-                            .padding(.horizontal, 6)
+                    if let venueName {
+                        Text(venueName)
+                            .font(.system(size: 9.5, weight: .medium, design: .serif))
+                            .foregroundColor(PhoneTheme.inkSecondary)
+                            .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(PhoneTheme.cinnabarSoft)
-                            .cornerRadius(3)
+                            .background(PhoneTheme.paper)
+                            .cornerRadius(2)
                     }
+
+                    Spacer()
+
+                    Text("查看实盘 ›")
+                        .font(.system(size: 11, design: .serif))
+                        .foregroundColor(PhoneTheme.inkTertiary)
                 }
             }
-            .padding(12)
+            .padding(14)
             .background(PhoneTheme.paperHi)
             .cornerRadius(4)
             .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
+
+    private static func venueTitle(_ venue: ExchangeVenue) -> String {
+        switch venue {
+        case .hyperliquid: return "Hyperliquid"
+        case .binance: return "Binance USDⓈ-M"
+        case .okx: return "OKX SWAP"
+        }
+    }
 }
 
-// MARK: - 4. Today's Journal Feed & Quick Capture
+// MARK: - 4. Today's Journal Card (今日记录)
 
-private struct TodayJournalFeedCard: View {
+private struct TodayJournalCard: View {
     @ObservedObject var store: PhoneJournalStore
     @Binding var quickText: String
     let onAddNote: () -> Void
@@ -358,13 +409,32 @@ private struct TodayJournalFeedCard: View {
     var body: some View {
         let todayEntry = store.entries.first { Calendar.current.isDateInToday($0.date) }
         let items = todayEntry?.items ?? []
+        let unreviewedCount = items.filter { $0.review == nil }.count
 
         VStack(alignment: .leading, spacing: 10) {
+            // Header: "今日记录" + counts
             HStack {
-                Text("今日记录流水")
-                    .font(.system(size: 13, weight: .bold, design: .serif))
+                Text("今日记录")
+                    .font(.system(size: 12.5, weight: .bold, design: .serif))
                     .foregroundColor(PhoneTheme.inkPrimary)
+
                 Spacer()
+
+                HStack(spacing: 6) {
+                    Text("共 \(items.count) 条")
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundColor(PhoneTheme.inkSecondary)
+
+                    if unreviewedCount > 0 {
+                        Text("\(unreviewedCount) 待复盘")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(PhoneTheme.cinnabar)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(PhoneTheme.cinnabarSoft)
+                            .cornerRadius(3)
+                    }
+                }
             }
 
             if items.isEmpty {
