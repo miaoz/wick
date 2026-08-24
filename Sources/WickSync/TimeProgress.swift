@@ -116,7 +116,7 @@ public enum TimeProgressCalculator {
     private static func remainingZeroText(language: AppLanguage) -> String {
         switch language {
         case .chinese:
-            return "还剩 0 分钟"
+            return "剩 0 分钟"
         case .english:
             return "0m left"
         }
