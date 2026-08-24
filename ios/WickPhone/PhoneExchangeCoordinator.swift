@@ -28,7 +28,10 @@ final class PhoneExchangeCoordinator: ObservableObject {
         didSet { rebuildDerivedStats() }
     }
     @Published private(set) var isSyncing = false
+    @Published private(set) var syncingJournalIDs: Set<UUID> = []
     @Published private(set) var lastError: String?
+    @Published private(set) var errorsByJournal: [UUID: String] = [:]
+
     @Published var cloudSyncEnabled: Bool {
         didSet {
             UserDefaults.standard.set(cloudSyncEnabled, forKey: Self.cloudSyncEnabledKey)
@@ -78,6 +81,17 @@ final class PhoneExchangeCoordinator: ObservableObject {
         snapshot = loaded
     }
 
+    func snapshot(for journalID: UUID) -> TradingPositionSnapshot? {
+        if journalID == PhoneJournalStore.shared.activeJournalID {
+            return snapshot
+        }
+        let url = cacheDirectory.appendingPathComponent("\(journalID.uuidString).json")
+        guard let data = try? Data(contentsOf: url),
+              let loaded = try? JSONDecoder().decode(TradingPositionSnapshot.self, from: data)
+        else { return nil }
+        return loaded
+    }
+
     private func saveSnapshot(_ newSnapshot: TradingPositionSnapshot, for journalID: UUID) {
         let url = cacheDirectory.appendingPathComponent("\(journalID.uuidString).json")
         if let data = try? JSONEncoder().encode(newSnapshot) {
@@ -120,22 +134,43 @@ final class PhoneExchangeCoordinator: ObservableObject {
         closedCountByDayKey[dayKey] ?? 0
     }
 
+    func isConfigured(for journalID: UUID) -> Bool {
+        binding(for: journalID) != nil
+    }
+
+    func binding(for journalID: UUID) -> JournalExchangeBinding? {
+        PhoneJournalStore.shared.journals.first(where: { $0.id == journalID })?.exchangeBinding
+    }
+
+    func isSyncing(for journalID: UUID) -> Bool {
+        syncingJournalIDs.contains(journalID)
+    }
+
+    func error(for journalID: UUID) -> String? {
+        errorsByJournal[journalID]
+    }
+
     // MARK: - Fetch & Sync
 
-    func syncNow() {
-        guard let journal = PhoneJournalStore.shared.activeJournal,
+    func syncNow(journalID: UUID? = nil) {
+        let targetID = journalID ?? PhoneJournalStore.shared.activeJournalID
+        guard let targetID,
+              let journal = PhoneJournalStore.shared.journals.first(where: { $0.id == targetID }),
               let binding = journal.exchangeBinding
         else { return }
 
-        guard !isSyncing else { return }
-        isSyncing = true
+        guard !syncingJournalIDs.contains(targetID) else { return }
+        syncingJournalIDs.insert(targetID)
+        isSyncing = !syncingJournalIDs.isEmpty
         lastError = nil
+        errorsByJournal.removeValue(forKey: targetID)
 
-        let journalID = journal.id
         Task {
             do {
-                let client = try makeClient(for: binding, journalID: journalID)
-                let entries = PhoneJournalStore.shared.entries
+                let client = try makeClient(for: binding, journalID: targetID)
+                let entries = (targetID == PhoneJournalStore.shared.activeJournalID)
+                    ? PhoneJournalStore.shared.entries
+                    : []
                 let earliestDay = entries.map(\.date).min() ?? Date()
                 let windowStart = Calendar.current.startOfDay(for: earliestDay)
                 let windowEnd = Date()
@@ -155,11 +190,15 @@ final class PhoneExchangeCoordinator: ObservableObject {
                     sourceAccountLabel: binding.accountLabel
                 )
 
-                saveSnapshot(newSnapshot, for: journalID)
-                isSyncing = false
+                saveSnapshot(newSnapshot, for: targetID)
+                syncingJournalIDs.remove(targetID)
+                isSyncing = !syncingJournalIDs.isEmpty
             } catch {
-                lastError = error.localizedDescription
-                isSyncing = false
+                let msg = error.localizedDescription
+                errorsByJournal[targetID] = msg
+                lastError = msg
+                syncingJournalIDs.remove(targetID)
+                isSyncing = !syncingJournalIDs.isEmpty
             }
         }
     }
@@ -192,14 +231,16 @@ final class PhoneExchangeCoordinator: ObservableObject {
             saveSecret(secrets, for: journalID)
         }
         PhoneJournalStore.shared.setExchangeBinding(binding, for: journalID)
-        syncNow()
+        syncNow(journalID: journalID)
     }
 
     func removeBinding(for journalID: UUID) {
         deleteSecret(for: journalID)
         PhoneJournalStore.shared.setExchangeBinding(nil, for: journalID)
         removeCloudSnapshot(for: journalID)
-        snapshot = nil
+        if journalID == PhoneJournalStore.shared.activeJournalID {
+            snapshot = nil
+        }
     }
 
     private func tokenStore(for journalID: UUID) -> KeychainTokenStore {
@@ -251,7 +292,7 @@ final class PhoneExchangeCoordinator: ObservableObject {
             return
         }
 
-        let currentFetched = snapshot?.fetchedAt ?? .distantPast
+        let currentFetched = snapshot(for: journalID)?.fetchedAt ?? .distantPast
         if downloaded.fetchedAt >= currentFetched {
             saveSnapshot(downloaded, for: journalID)
         }

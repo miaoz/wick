@@ -1,10 +1,11 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import WickCalendarKit
 import WickSync
 import WickTrading
 
 /// Tab 4: "设置" (Settings & Preferences).
-/// Sync settings, exchange position binding & cloud snapshot sync, library management, and calendar Easter Egg.
+/// Sync settings, per-journal exchange position binding & cloud snapshot sync, library management, and calendar Easter Egg.
 struct SettingsView: View {
     @EnvironmentObject private var sync: PhoneSyncCoordinator
     @EnvironmentObject private var store: PhoneJournalStore
@@ -16,14 +17,24 @@ struct SettingsView: View {
     @State private var showJournalImporter = false
     @State private var recoveryErrorMessage: String?
 
-    // Exchange Bind Sheet
+    // Exchange Bind State
+    @State private var targetJournalID: UUID?
     @State private var showExchangeSheet = false
+    @State private var bindingSheetTargetJournalID: UUID?
     @State private var selectedVenue: ExchangeVenue = .hyperliquid
     @State private var accountLabelDraft = ""
     @State private var apiKeyDraft = ""
     @State private var secretDraft = ""
     @State private var passphraseDraft = ""
     @State private var showUnbindConfirm = false
+
+    private var targetJournal: JournalInfo? {
+        if let targetJournalID,
+           let match = store.journals.first(where: { $0.id == targetJournalID }) {
+            return match
+        }
+        return store.activeJournal ?? store.journals.first
+    }
 
     var body: some View {
         NavigationStack {
@@ -70,51 +81,71 @@ struct SettingsView: View {
                     .padding(.vertical, 4)
                 }
 
-                // Section 3: Exchange Positions & Cloud Snapshot Sync
+                // Section 3: Per-Journal Exchange Binding & Cloud Snapshot Sync
                 Section("交易所与实盘仓位") {
-                    if let binding = store.activeJournal?.exchangeBinding {
-                        LabeledContent("当前绑定", value: venueName(binding.venue))
-                        LabeledContent("账户标识", value: binding.accountLabel)
-
-                        if exchangeCoordinator.isSyncing {
+                    // Journal Target Picker
+                    Picker("绑定日记本", selection: Binding(
+                        get: { targetJournal?.id },
+                        set: { targetJournalID = $0 }
+                    )) {
+                        ForEach(store.journals) { journal in
                             HStack {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                Text("正在拉取成交…")
-                                    .font(.footnote)
-                                    .foregroundColor(PhoneTheme.inkSecondary)
+                                Text(journal.name)
+                                if journal.id == store.activeJournalID {
+                                    Text("(当前打开)")
+                                }
                             }
-                        } else if let error = exchangeCoordinator.lastError {
-                            Text("同步失败: \(error)")
-                                .font(.caption2)
-                                .foregroundColor(PhoneTheme.cinnabar)
-                        } else if let snap = exchangeCoordinator.snapshot {
-                            LabeledContent("已聚合仓位", value: "\(snap.positions.count) 笔")
-                            LabeledContent("最新对账", value: snap.fetchedAt.formatted(date: .omitted, time: .shortened))
+                            .tag(Optional(journal.id))
                         }
+                    }
+                    .pickerStyle(.menu)
 
-                        Button("立即刷新实盘仓位") {
-                            exchangeCoordinator.syncNow()
-                        }
-                        .foregroundColor(PhoneTheme.cinnabar)
-                        .disabled(exchangeCoordinator.isSyncing)
+                    if let journal = targetJournal {
+                        if let binding = journal.exchangeBinding {
+                            LabeledContent("当前绑定", value: venueName(binding.venue))
+                            LabeledContent("账户标识", value: binding.accountLabel)
 
-                        Button("解除交易所绑定", role: .destructive) {
-                            showUnbindConfirm = true
-                        }
-                    } else {
-                        Text("一本日记绑定一个交易所只读账户。Hyperliquid 仅需填写 0x 钱包地址，无需私钥。")
-                            .font(.footnote)
-                            .foregroundColor(PhoneTheme.inkSecondary)
+                            if exchangeCoordinator.isSyncing(for: journal.id) {
+                                HStack {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                    Text("正在拉取成交…")
+                                        .font(.footnote)
+                                        .foregroundColor(PhoneTheme.inkSecondary)
+                                }
+                            } else if let error = exchangeCoordinator.error(for: journal.id) {
+                                Text("同步失败: \(error)")
+                                    .font(.caption2)
+                                    .foregroundColor(PhoneTheme.cinnabar)
+                            } else if let snap = exchangeCoordinator.snapshot(for: journal.id) {
+                                LabeledContent("已聚合仓位", value: "\(snap.positions.count) 笔")
+                                LabeledContent("最新对账", value: snap.fetchedAt.formatted(date: .omitted, time: .shortened))
+                            }
 
-                        Button("绑定交易所账户…") {
-                            accountLabelDraft = ""
-                            apiKeyDraft = ""
-                            secretDraft = ""
-                            passphraseDraft = ""
-                            showExchangeSheet = true
+                            Button("立即刷新「\(journal.name)」仓位") {
+                                exchangeCoordinator.syncNow(journalID: journal.id)
+                            }
+                            .foregroundColor(PhoneTheme.cinnabar)
+                            .disabled(exchangeCoordinator.isSyncing(for: journal.id))
+
+                            Button("解除「\(journal.name)」交易所绑定", role: .destructive) {
+                                showUnbindConfirm = true
+                            }
+                        } else {
+                            Text("「\(journal.name)」尚未绑定交易所。一本日记绑定一个交易所只读账户。Hyperliquid 仅需填写 0x 钱包地址，无需私钥。")
+                                .font(.footnote)
+                                .foregroundColor(PhoneTheme.inkSecondary)
+
+                            Button("为「\(journal.name)」绑定交易所…") {
+                                bindingSheetTargetJournalID = journal.id
+                                accountLabelDraft = ""
+                                apiKeyDraft = ""
+                                secretDraft = ""
+                                passphraseDraft = ""
+                                showExchangeSheet = true
+                            }
+                            .foregroundColor(PhoneTheme.cinnabar)
                         }
-                        .foregroundColor(PhoneTheme.cinnabar)
                     }
 
                     Toggle("云端快照同步 (只读多端)", isOn: $exchangeCoordinator.cloudSyncEnabled)
@@ -218,15 +249,30 @@ struct SettingsView: View {
             }
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                if targetJournalID == nil {
+                    targetJournalID = store.activeJournalID ?? store.journals.first?.id
+                }
+            }
+            .onChange(of: store.journals.map(\.id)) { ids in
+                if let targetJournalID, !ids.contains(targetJournalID) {
+                    self.targetJournalID = store.activeJournalID ?? ids.first
+                }
+            }
             .sheet(isPresented: $showExchangeSheet) {
                 ExchangeBindingSheet(
+                    journals: store.journals,
+                    selectedJournalID: Binding(
+                        get: { bindingSheetTargetJournalID ?? targetJournal?.id ?? store.activeJournalID ?? store.journals.first?.id ?? UUID() },
+                        set: { bindingSheetTargetJournalID = $0 }
+                    ),
                     selectedVenue: $selectedVenue,
                     accountLabelDraft: $accountLabelDraft,
                     apiKeyDraft: $apiKeyDraft,
                     secretDraft: $secretDraft,
                     passphraseDraft: $passphraseDraft,
                     onSave: {
-                        guard let journalID = store.activeJournalID else { return }
+                        guard let journalID = bindingSheetTargetJournalID ?? targetJournal?.id ?? store.activeJournalID else { return }
                         let binding = JournalExchangeBinding(
                             venue: selectedVenue,
                             accountLabel: accountLabelDraft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -251,13 +297,13 @@ struct SettingsView: View {
                 titleVisibility: .visible
             ) {
                 Button("解除绑定", role: .destructive) {
-                    if let journalID = store.activeJournalID {
+                    if let journalID = targetJournal?.id {
                         exchangeCoordinator.removeBinding(for: journalID)
                     }
                 }
                 Button("取消", role: .cancel) {}
             } message: {
-                Text("将移除本日本地与云端的仓位快照，凭据将被安全清除。")
+                Text("将移除「\(targetJournal?.name ?? "")」本地与云端的仓位快照，凭据将被安全清除。")
             }
             .fileImporter(
                 isPresented: $showJournalImporter,
@@ -348,6 +394,8 @@ struct SettingsView: View {
 }
 
 private struct ExchangeBindingSheet: View {
+    let journals: [JournalInfo]
+    @Binding var selectedJournalID: UUID
     @Binding var selectedVenue: ExchangeVenue
     @Binding var accountLabelDraft: String
     @Binding var apiKeyDraft: String
@@ -359,7 +407,14 @@ private struct ExchangeBindingSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("选择交易所") {
+                Section("选择日记本与交易所") {
+                    Picker("绑定日记本", selection: $selectedJournalID) {
+                        ForEach(journals) { journal in
+                            Text(journal.name).tag(journal.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
                     Picker("交易所", selection: $selectedVenue) {
                         Text("Hyperliquid (0x 钱包)").tag(ExchangeVenue.hyperliquid)
                         Text("Binance USDⓈ-M").tag(ExchangeVenue.binance)
@@ -404,6 +459,6 @@ private struct ExchangeBindingSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 }
