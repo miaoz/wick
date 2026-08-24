@@ -38,9 +38,9 @@ struct DayListView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "plus")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(PhoneFont.ui(12, weight: .bold))
                             Text(L10n.string(.journalToday, language: language))
-                                .font(.system(size: 11.5, weight: .bold, design: .serif))
+                                .font(PhoneFont.paper(11.5, weight: .bold))
                         }
                         .foregroundColor(PhoneTheme.cinnabar)
                         .padding(.horizontal, 8)
@@ -206,10 +206,10 @@ struct DayListView: View {
         } label: {
             HStack(spacing: 3) {
                 Text(store.activeJournal?.name ?? L10n.string(.journalLibraryDefaultName, language: language))
-                    .font(.system(size: 15, weight: .bold, design: .serif))
+                    .font(PhoneFont.paper(15, weight: .bold))
                     .foregroundColor(PhoneTheme.inkPrimary)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(PhoneFont.ui(10, weight: .bold))
                     .foregroundColor(PhoneTheme.cinnabar)
             }
         }
@@ -240,7 +240,7 @@ private struct TagChipButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 11.5, weight: isActive ? .bold : .medium))
+                .font(PhoneFont.paper(11.5, weight: isActive ? .bold : .medium))
                 .foregroundColor(isActive ? Color(red: 0.98, green: 0.95, blue: 0.90) : PhoneTheme.inkSecondary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
@@ -279,7 +279,7 @@ private struct PnlHeatmapCard: View {
             // Header
             HStack {
                 Text(Self.monthDisplay(for: currentMonth, language: language))
-                    .font(.system(size: 13, weight: .bold, design: .serif))
+                    .font(PhoneFont.paper(13, weight: .bold))
                     .foregroundColor(PhoneTheme.inkPrimary)
 
                 Spacer()
@@ -289,7 +289,7 @@ private struct PnlHeatmapCard: View {
                         shiftMonth(by: -1)
                     } label: {
                         Image(systemName: "chevron.left")
-                            .font(.caption2.weight(.bold))
+                            .font(PhoneFont.preset(.caption2, weight: .bold))
                             .foregroundColor(PhoneTheme.inkSecondary)
                     }
 
@@ -297,7 +297,7 @@ private struct PnlHeatmapCard: View {
                         shiftMonth(by: 1)
                     } label: {
                         Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.bold))
+                            .font(PhoneFont.preset(.caption2, weight: .bold))
                             .foregroundColor(PhoneTheme.inkSecondary)
                     }
                 }
@@ -307,7 +307,7 @@ private struct PnlHeatmapCard: View {
             HStack {
                 ForEach(weekHeaders, id: \.self) { day in
                     Text(day)
-                        .font(.system(size: 8.5, weight: .semibold))
+                        .font(PhoneFont.ui(8.5, weight: .semibold))
                         .foregroundColor(PhoneTheme.inkTertiary)
                         .frame(maxWidth: .infinity)
                 }
@@ -350,7 +350,7 @@ private struct PnlHeatmapCard: View {
                     }
 
                     Text("\(dayNum)")
-                        .font(.system(size: 9.5, weight: (hasEntry || pnl != nil) ? .bold : .regular, design: .monospaced))
+                        .font(PhoneFont.ui(9.5, weight: (hasEntry || pnl != nil) ? .bold : .regular, monospacedDigit: true))
                         .foregroundColor(cellTextColor(hasEntry: hasEntry, pnl: pnl))
                 }
             }
@@ -431,10 +431,10 @@ private struct DayCardView: View {
             // Day num & relative text
             VStack(alignment: .leading, spacing: 2) {
                 Text(Self.dayNum(for: entry.date))
-                    .font(.system(size: 20, weight: .black, design: .serif))
+                    .font(PhoneFont.paper(20, weight: .black))
                     .foregroundColor(PhoneTheme.inkPrimary)
                 Text(Self.relativeDay(for: entry.date, language: language))
-                    .font(.system(size: 9.5))
+                    .font(PhoneFont.ui(9.5))
                     .foregroundColor(PhoneTheme.inkTertiary)
             }
             .frame(width: 44, alignment: .leading)
@@ -442,7 +442,7 @@ private struct DayCardView: View {
             // Content preview & tags
             VStack(alignment: .leading, spacing: 4) {
                 Text(entry.previewText.isEmpty ? (language == .chinese ? "（无正文）" : "(Empty)") : entry.previewText)
-                    .font(.system(size: 12.5, design: .serif))
+                    .font(PhoneFont.paper(12.5))
                     .foregroundColor(PhoneTheme.inkPrimary)
                     .lineLimit(1)
 
@@ -450,7 +450,7 @@ private struct DayCardView: View {
                     if let pnl {
                         let isGain = pnl >= 0
                         Text("\(isGain ? "+" : "")\(String(format: "%.1f", pnl))")
-                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                            .font(PhoneFont.ui(9.5, weight: .bold, monospacedDigit: true))
                             .foregroundColor(PhoneTheme.pnlColor(isGain: isGain))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
@@ -461,7 +461,7 @@ private struct DayCardView: View {
                     ForEach(Array(entry.items.prefix(2))) { item in
                         if !item.tag.isEmpty {
                             Text(item.tag)
-                                .font(.system(size: 9.5, weight: .bold, design: .serif))
+                                .font(PhoneFont.paper(9.5, weight: .bold))
                                 .foregroundColor(PhoneTheme.cinnabar)
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 1)
@@ -470,7 +470,7 @@ private struct DayCardView: View {
                         }
                     }
                     Text(String(format: L10n.string(.recordsCountFormat, language: language), entry.items.count))
-                        .font(.system(size: 9.5))
+                        .font(PhoneFont.ui(9.5))
                         .foregroundColor(PhoneTheme.inkTertiary)
                 }
             }

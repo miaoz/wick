@@ -51,11 +51,11 @@ struct PhoneReceiptCard: View {
             // Header: Symbol + Side + Time Range
             HStack(alignment: .firstTextBaseline) {
                 Text(position.symbol)
-                    .font(.system(size: 11.5, weight: .bold, design: .monospaced))
+                    .font(PhoneFont.ui(11.5, weight: .bold, monospacedDigit: true))
                     .foregroundColor(PhoneTheme.receiptInk)
 
                 Text(position.side == .long ? "多 LONG" : "空 SHORT")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(PhoneFont.ui(9, weight: .bold))
                     .foregroundColor(PhoneTheme.pnlColor(isGain: position.side == .long))
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
@@ -67,7 +67,7 @@ struct PhoneReceiptCard: View {
                 Spacer()
 
                 Text(timeString(for: position.openTime))
-                    .font(.system(size: 9.5, design: .monospaced))
+                    .font(PhoneFont.ui(9.5, monospacedDigit: true))
                     .foregroundColor(PhoneTheme.receiptInk.opacity(0.6))
             }
 
@@ -79,14 +79,14 @@ struct PhoneReceiptCard: View {
             // Price & Size row
             HStack {
                 Text("开仓 VWAP: \(formatPrice(position.entryPrice))")
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(PhoneFont.ui(10, monospacedDigit: true))
                     .foregroundColor(PhoneTheme.receiptInk.opacity(0.8))
 
                 Spacer()
 
                 if let exitPrice = position.exitPrice {
                     Text("平仓: \(formatPrice(exitPrice))")
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(PhoneFont.ui(10, monospacedDigit: true))
                         .foregroundColor(PhoneTheme.receiptInk.opacity(0.8))
                 }
             }
@@ -94,7 +94,7 @@ struct PhoneReceiptCard: View {
             // Realized PnL Row
             HStack {
                 Text("已实现盈亏")
-                    .font(.system(size: 10.5, weight: .semibold, design: .serif))
+                    .font(PhoneFont.paper(10.5, weight: .semibold))
                     .foregroundColor(PhoneTheme.receiptInk)
 
                 Spacer()
@@ -102,7 +102,7 @@ struct PhoneReceiptCard: View {
                 let pnl = position.realizedPnl
                 let isGain = pnl >= 0
                 Text(formatPnl(pnl))
-                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .font(PhoneFont.ui(12, weight: .bold, monospacedDigit: true))
                     .foregroundColor(PhoneTheme.pnlColor(isGain: isGain))
             }
         }

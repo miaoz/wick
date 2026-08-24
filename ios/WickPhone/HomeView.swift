@@ -138,12 +138,12 @@ private struct TimeArcPaperCard: View {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(Self.dateDisplay(for: date, language: language))
-                                .font(.system(size: 30, weight: .black, design: .serif))
+                                .font(PhoneFont.paper(30, weight: .black))
                                 .foregroundColor(PhoneTheme.inkPrimary)
 
                             if let lunar = LunarLine.string(for: date) {
                                 Text("\(Self.weekdayDisplay(for: date, language: language)) · \(lunar)")
-                                    .font(.system(size: 11, design: .serif))
+                                    .font(PhoneFont.paper(11))
                                     .foregroundColor(PhoneTheme.inkSecondary)
                             }
                         }
@@ -162,7 +162,7 @@ private struct TimeArcPaperCard: View {
                                 Text("K")
                             }
                         }
-                        .font(.system(size: language == .chinese ? 11.5 : 8.5, weight: .bold, design: language == .chinese ? .serif : .monospaced))
+                        .font(PhoneFont.paper(language == .chinese ? 11.5 : 8.5, weight: .bold))
                         .foregroundColor(PhoneTheme.cinnabar)
                         .padding(.horizontal, language == .chinese ? 6 : 5)
                         .padding(.vertical, 5)
@@ -180,7 +180,7 @@ private struct TimeArcPaperCard: View {
                         VStack(spacing: 6) {
                             HStack(alignment: .firstTextBaseline) {
                                 Text(L10n.string(.panelHeroToday, language: language))
-                                    .font(.system(size: 11, weight: .bold, design: .serif))
+                                    .font(PhoneFont.paper(11, weight: .bold))
                                     .foregroundColor(PhoneTheme.inkSecondary)
                                     .tracking(0.5)
 
@@ -188,11 +188,11 @@ private struct TimeArcPaperCard: View {
 
                                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                                     Text(dayProgress.percentageText)
-                                        .font(.system(size: 24, weight: .bold, design: .serif))
+                                        .font(PhoneFont.paper(24, weight: .bold))
                                         .foregroundColor(PhoneTheme.inkPrimary)
 
                                     Text(dayProgress.remainingText)
-                                        .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                                        .font(PhoneFont.ui(10.5, weight: .medium, monospacedDigit: true))
                                         .foregroundColor(PhoneTheme.cinnabar)
                                 }
                             }
@@ -212,11 +212,11 @@ private struct TimeArcPaperCard: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
                                     Text(item.subtitle)
-                                        .font(.system(size: 10, weight: .bold, design: .serif))
+                                        .font(PhoneFont.paper(10, weight: .bold))
                                         .foregroundColor(PhoneTheme.inkSecondary)
                                     Spacer()
                                     Text(item.percentageText)
-                                        .font(.system(size: 10.5, weight: .bold, design: .serif))
+                                        .font(PhoneFont.paper(10.5, weight: .bold))
                                         .foregroundColor(PhoneTheme.inkPrimary)
                                 }
 
@@ -228,7 +228,7 @@ private struct TimeArcPaperCard: View {
                                 .frame(height: 4)
 
                                 Text(item.remainingText)
-                                    .font(.system(size: 9, design: .serif))
+                                    .font(PhoneFont.paper(9))
                                     .foregroundColor(PhoneTheme.inkTertiary)
                                     .lineLimit(1)
                             }
@@ -286,7 +286,7 @@ private struct UpcomingEventsCard: View {
                         .frame(width: 6, height: 6)
                         .shadow(color: PhoneTheme.cinnabar, radius: 3)
                     Text(L10n.string(.upcomingEventsTitle, language: language))
-                        .font(.system(size: 12.5, weight: .bold, design: .serif))
+                        .font(PhoneFont.paper(12.5, weight: .bold))
                         .foregroundColor(PhoneTheme.inkPrimary)
                 }
 
@@ -294,18 +294,18 @@ private struct UpcomingEventsCard: View {
 
                 if let nextEvent {
                     Text(Self.countdownText(to: nextEvent.time, language: language))
-                        .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                        .font(PhoneFont.ui(10.5, weight: .bold, monospacedDigit: true))
                         .foregroundColor(PhoneTheme.cinnabar)
                 } else if !todayEvents.isEmpty {
                     Text(L10n.string(.allEventsPublished, language: language))
-                        .font(.system(size: 10.5, design: .serif))
+                        .font(PhoneFont.paper(10.5))
                         .foregroundColor(PhoneTheme.inkTertiary)
                 }
             }
 
             if displayEvents.isEmpty {
                 Text(L10n.string(.noUpcomingEvents, language: language))
-                    .font(.system(size: 11.5, design: .serif))
+                    .font(PhoneFont.paper(11.5))
                     .foregroundColor(PhoneTheme.inkTertiary)
                     .padding(.vertical, 4)
             } else {
@@ -320,11 +320,11 @@ private struct UpcomingEventsCard: View {
                         VStack(alignment: .leading, spacing: 3) {
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
                                 Text(MacroCalendarFormat.eventTime(event.time))
-                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .font(PhoneFont.ui(11, weight: .bold, monospacedDigit: true))
                                     .foregroundColor(PhoneTheme.cinnabar)
 
                                 Text("\(event.country) · \(event.title)")
-                                    .font(.system(size: 12, weight: .medium, design: .serif))
+                                    .font(PhoneFont.paper(12, weight: .medium))
                                     .foregroundColor(PhoneTheme.inkPrimary)
                                     .lineLimit(1)
 
@@ -334,7 +334,7 @@ private struct UpcomingEventsCard: View {
                                     HStack(spacing: 1) {
                                         ForEach(0..<min(event.importance, 3), id: \.self) { _ in
                                             Text("★")
-                                                .font(.system(size: 8))
+                                                .font(PhoneFont.ui(8))
                                                 .foregroundColor(PhoneTheme.cinnabar)
                                         }
                                     }
@@ -351,7 +351,7 @@ private struct UpcomingEventsCard: View {
                                             .foregroundColor(PhoneTheme.inkSecondary)
                                     }
                                 }
-                                .font(.system(size: 10, design: .monospaced))
+                                .font(PhoneFont.ui(10, monospacedDigit: true))
                                 .foregroundColor(PhoneTheme.inkTertiary)
                             }
                         }
@@ -394,7 +394,7 @@ private struct TodayTradingCard: View {
                 // Header: "今日交易" + Realized PnL
                 HStack {
                     Text(L10n.string(.todayTradingTitle, language: language))
-                        .font(.system(size: 12.5, weight: .bold, design: .serif))
+                        .font(PhoneFont.paper(12.5, weight: .bold))
                         .foregroundColor(PhoneTheme.inkPrimary)
 
                     Spacer()
@@ -402,11 +402,11 @@ private struct TodayTradingCard: View {
                     if let pnl = exchangeCoordinator.pnl(for: Date()) {
                         let isGain = pnl >= 0
                         Text("\(isGain ? "+" : "")\(String(format: "%.2f", pnl)) USDT")
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .font(PhoneFont.ui(12, weight: .bold, monospacedDigit: true))
                             .foregroundColor(PhoneTheme.pnlColor(isGain: isGain))
                     } else {
                         Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.bold))
+                            .font(PhoneFont.preset(.caption2, weight: .bold))
                             .foregroundColor(PhoneTheme.inkTertiary)
                     }
                 }
@@ -418,17 +418,17 @@ private struct TodayTradingCard: View {
                 HStack(spacing: 10) {
                     if closedCount > 0 {
                         Text(String(format: language == .chinese ? "%d 笔平仓" : "%d closed", closedCount))
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .font(PhoneFont.ui(11, weight: .bold, monospacedDigit: true))
                             .foregroundColor(PhoneTheme.inkPrimary)
                     } else {
                         Text(L10n.string(.noClosedTrades, language: language))
-                            .font(.system(size: 11, design: .serif))
+                            .font(PhoneFont.paper(11))
                             .foregroundColor(PhoneTheme.inkTertiary)
                     }
 
                     if let venueName {
                         Text(venueName)
-                            .font(.system(size: 9.5, weight: .medium, design: .serif))
+                            .font(PhoneFont.paper(9.5, weight: .medium))
                             .foregroundColor(PhoneTheme.inkSecondary)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
@@ -439,7 +439,7 @@ private struct TodayTradingCard: View {
                     Spacer()
 
                     Text(L10n.string(.viewTradingDetails, language: language))
-                        .font(.system(size: 11, design: .serif))
+                        .font(PhoneFont.paper(11))
                         .foregroundColor(PhoneTheme.inkTertiary)
                 }
             }
@@ -478,19 +478,19 @@ private struct TodayJournalCard: View {
             // Header: "今日记录" + counts
             HStack {
                 Text(L10n.string(.todayRecordsTitle, language: language))
-                    .font(.system(size: 12.5, weight: .bold, design: .serif))
+                    .font(PhoneFont.paper(12.5, weight: .bold))
                     .foregroundColor(PhoneTheme.inkPrimary)
 
                 Spacer()
 
                 HStack(spacing: 6) {
                     Text(String(format: L10n.string(.recordsCountFormat, language: language), items.count))
-                        .font(.system(size: 10.5, design: .monospaced))
+                        .font(PhoneFont.ui(10.5, monospacedDigit: true))
                         .foregroundColor(PhoneTheme.inkSecondary)
 
                     if unreviewedCount > 0 {
                         Text(String(format: L10n.string(.unreviewedCountBadgeFormat, language: language), unreviewedCount))
-                            .font(.system(size: 10, weight: .bold))
+                            .font(PhoneFont.ui(10, weight: .bold))
                             .foregroundColor(PhoneTheme.cinnabar)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
@@ -502,7 +502,7 @@ private struct TodayJournalCard: View {
 
             if items.isEmpty {
                 Text(L10n.string(.emptyTodayJournalHint, language: language))
-                    .font(.system(size: 11.5, design: .serif))
+                    .font(PhoneFont.paper(11.5))
                     .foregroundColor(PhoneTheme.inkTertiary)
                     .padding(.vertical, 4)
             } else {
@@ -510,7 +510,7 @@ private struct TodayJournalCard: View {
                     ForEach(Array(items.prefix(3))) { item in
                         HStack(alignment: .top, spacing: 8) {
                             Text(item.tag.isEmpty ? (language == .chinese ? "笔记" : "Note") : item.tag)
-                                .font(.system(size: 9.5, weight: .bold, design: .serif))
+                                .font(PhoneFont.paper(9.5, weight: .bold))
                                 .foregroundColor(PhoneTheme.cinnabar)
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 1)
@@ -518,7 +518,7 @@ private struct TodayJournalCard: View {
                                 .cornerRadius(2)
 
                             Text(item.body.isEmpty ? (language == .chinese ? "（空）" : "(Empty)") : item.body)
-                                .font(.system(size: 12, design: .serif))
+                                .font(PhoneFont.paper(12))
                                 .foregroundColor(PhoneTheme.inkPrimary)
                                 .lineLimit(2)
 
@@ -531,7 +531,7 @@ private struct TodayJournalCard: View {
                                     onReviewTap(item)
                                 } label: {
                                     Text(L10n.string(.journalReview, language: language))
-                                        .font(.system(size: 10, weight: .bold, design: .serif))
+                                        .font(PhoneFont.paper(10, weight: .bold))
                                         .foregroundColor(PhoneTheme.cinnabar.opacity(0.85))
                                         .rotationEffect(.degrees(-3))
                                 }
@@ -545,7 +545,7 @@ private struct TodayJournalCard: View {
             // Quick capture input bar
             HStack(spacing: 8) {
                 TextField(L10n.string(.quickNotePlaceholder, language: language), text: $quickText)
-                    .font(.system(size: 12, design: .serif))
+                    .font(PhoneFont.paper(12))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .background(PhoneTheme.paper)
@@ -555,7 +555,7 @@ private struct TodayJournalCard: View {
 
                 Button(action: onAddNote) {
                     Image(systemName: "arrow.up")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(PhoneFont.ui(12, weight: .bold))
                         .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
                         .frame(width: 30, height: 30)
                         .background(PhoneTheme.ember)

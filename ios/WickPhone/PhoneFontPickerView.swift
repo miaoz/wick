@@ -187,6 +187,7 @@ public struct PhoneFontPickerView: View {
     private func fontRow(name: String, display: String, isSelected: Bool, isCustom: Bool) -> some View {
         Button {
             selectedFontName = name
+            PhoneFont.selectedFontName = name
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             dismiss()
         } label: {
@@ -248,6 +249,7 @@ public struct PhoneFontPickerView: View {
                 let item = try PhoneFontManager.importFont(from: url)
                 loadFonts()
                 selectedFontName = item.postScriptName
+                PhoneFont.selectedFontName = item.postScriptName
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             } catch {
                 importErrorMessage = error.localizedDescription

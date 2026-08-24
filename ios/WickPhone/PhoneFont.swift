@@ -1,6 +1,8 @@
+import CoreGraphics
 import CoreText
 import SwiftUI
 import UIKit
+import WickCalendarKit
 import WickSync
 
 // MARK: - Installed Font Model
@@ -37,19 +39,24 @@ public enum PhoneFontManager {
         for file in files where ["ttf", "otf", "ttc"].contains(file.pathExtension.lowercased()) {
             _ = registerFont(at: file)
         }
+        syncCalendarThemeFont()
     }
 
-    /// Registers a font file dynamically with CoreText.
-    public static func registerFont(at url: URL) -> String? {
-        var error: Unmanaged<CFError>?
-        CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error)
-
-        guard let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
-              let first = descriptors.first else {
+    /// Registers a font file dynamically with CoreText & UIKit.
+    public static func registerFont(at url: URL) -> (postScriptName: String, displayName: String)? {
+        guard let data = try? Data(contentsOf: url),
+              let provider = CGDataProvider(data: data as CFData),
+              let cgFont = CGFont(provider) else {
             return nil
         }
-        let postScriptName = CTFontDescriptorCopyAttribute(first, kCTFontNameAttribute) as? String
-        return postScriptName
+        var error: Unmanaged<CFError>?
+        CTFontManagerRegisterGraphicsFont(cgFont, &error)
+        CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error)
+
+        let psName = (cgFont.postScriptName as String?) ?? url.deletingPathExtension().lastPathComponent
+        let displayName = (cgFont.fullName as String?) ?? (UIFont(name: psName, size: 12)?.familyName) ?? url.deletingPathExtension().lastPathComponent
+
+        return (psName, displayName)
     }
 
     /// Imports a font file from user document picker into the app's private font folder.
@@ -66,20 +73,19 @@ public enum PhoneFontManager {
         }
         try FileManager.default.copyItem(at: sourceURL, to: dest)
 
-        let psName = registerFont(at: dest) ?? sourceURL.deletingPathExtension().lastPathComponent
-        let familyName = (UIFont(name: psName, size: 12)?.familyName) ?? sourceURL.deletingPathExtension().lastPathComponent
+        guard let (psName, displayName) = registerFont(at: dest) else {
+            let fallbackName = sourceURL.deletingPathExtension().lastPathComponent
+            return InstalledFontItem(postScriptName: fallbackName, displayName: fallbackName, isCustomImported: true)
+        }
 
-        return InstalledFontItem(postScriptName: psName, displayName: familyName, isCustomImported: true)
+        return InstalledFontItem(postScriptName: psName, displayName: displayName, isCustomImported: true)
     }
 
     /// Deletes an imported custom font.
     public static func deleteCustomFont(postScriptName: String) {
         guard let files = try? FileManager.default.contentsOfDirectory(at: fontsDirectory, includingPropertiesForKeys: nil) else { return }
         for file in files {
-            if let descriptors = CTFontManagerCreateFontDescriptorsFromURL(file as CFURL) as? [CTFontDescriptor],
-               let first = descriptors.first,
-               let name = CTFontDescriptorCopyAttribute(first, kCTFontNameAttribute) as? String,
-               name == postScriptName {
+            if let (psName, _) = registerFont(at: file), psName == postScriptName {
                 var error: Unmanaged<CFError>?
                 CTFontManagerUnregisterFontsForURL(file as CFURL, .process, &error)
                 try? FileManager.default.removeItem(at: file)
@@ -96,11 +102,8 @@ public enum PhoneFontManager {
         var customFonts: [InstalledFontItem] = []
         if let files = try? FileManager.default.contentsOfDirectory(at: fontsDirectory, includingPropertiesForKeys: nil) {
             for file in files where ["ttf", "otf", "ttc"].contains(file.pathExtension.lowercased()) {
-                if let descriptors = CTFontManagerCreateFontDescriptorsFromURL(file as CFURL) as? [CTFontDescriptor],
-                   let first = descriptors.first,
-                   let psName = CTFontDescriptorCopyAttribute(first, kCTFontNameAttribute) as? String {
-                    let familyName = (UIFont(name: psName, size: 12)?.familyName) ?? file.deletingPathExtension().lastPathComponent
-                    customFonts.append(InstalledFontItem(postScriptName: psName, displayName: familyName, isCustomImported: true))
+                if let (psName, displayName) = registerFont(at: file) {
+                    customFonts.append(InstalledFontItem(postScriptName: psName, displayName: displayName, isCustomImported: true))
                 }
             }
         }
@@ -134,6 +137,11 @@ public enum PhoneFontManager {
 
         return (customFonts, systemFonts)
     }
+
+    public static func syncCalendarThemeFont() {
+        let font = PhoneFont.selectedFontName
+        TradingCalendarTheme.fontStyle = font.isEmpty ? .default : .custom(postScriptName: font)
+    }
 }
 
 // MARK: - App-Wide Unified Font Resolution (iOS)
@@ -149,6 +157,7 @@ public enum PhoneFont {
         }
         set {
             UserDefaults.standard.set(newValue, forKey: key)
+            PhoneFontManager.syncCalendarThemeFont()
         }
     }
 
@@ -177,6 +186,32 @@ public enum PhoneFont {
             font = font.monospacedDigit()
         }
         return font
+    }
+
+    /// Preset text styles (.caption, .headline, ...).
+    public static func preset(_ style: Font.TextStyle, weight: Font.Weight? = nil) -> Font {
+        let name = selectedFontName
+        if !name.isEmpty {
+            return .custom(name, size: pointSize(for: style)).weight(weight ?? .regular)
+        }
+        return Font.system(style, weight: weight)
+    }
+
+    private static func pointSize(for style: Font.TextStyle) -> CGFloat {
+        switch style {
+        case .caption: return 12
+        case .caption2: return 11
+        case .callout: return 16
+        case .headline: return 17
+        case .footnote: return 13
+        case .body: return 17
+        case .subheadline: return 15
+        case .title: return 28
+        case .title2: return 22
+        case .title3: return 20
+        case .largeTitle: return 34
+        @unknown default: return 17
+        }
     }
 
     /// UIFont resolution for UIKit views.

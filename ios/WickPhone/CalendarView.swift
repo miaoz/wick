@@ -54,7 +54,7 @@ private struct FlatCalendarView: View {
                         shiftDate(by: -1)
                     } label: {
                         Image(systemName: "chevron.left")
-                            .font(.subheadline.weight(.semibold))
+                            .font(PhoneFont.ui(13, weight: .semibold))
                             .foregroundColor(PhoneTheme.inkSecondary)
                             .frame(width: 32, height: 32)
                             .background(PhoneTheme.paperHi)
@@ -66,12 +66,12 @@ private struct FlatCalendarView: View {
 
                     VStack(spacing: 2) {
                         Text(Self.dateDisplay(for: selectedDate, language: language))
-                            .font(.system(size: 18, weight: .bold, design: .serif))
+                            .font(PhoneFont.paper(18, weight: .bold))
                             .foregroundColor(PhoneTheme.inkPrimary)
 
                         if let lunar = LunarLine.string(for: selectedDate) {
                             Text(lunar)
-                                .font(.system(size: 10.5, design: .serif))
+                                .font(PhoneFont.paper(10.5))
                                 .foregroundColor(PhoneTheme.inkTertiary)
                         }
                     }
@@ -82,7 +82,7 @@ private struct FlatCalendarView: View {
                         shiftDate(by: 1)
                     } label: {
                         Image(systemName: "chevron.right")
-                            .font(.subheadline.weight(.semibold))
+                            .font(PhoneFont.ui(13, weight: .semibold))
                             .foregroundColor(PhoneTheme.inkSecondary)
                             .frame(width: 32, height: 32)
                             .background(PhoneTheme.paperHi)
@@ -95,7 +95,7 @@ private struct FlatCalendarView: View {
                             selectedDate = Date()
                             calendarStore.loadIfNeeded(for: selectedDate)
                         }
-                        .font(.caption.weight(.bold))
+                        .font(PhoneFont.preset(.caption, weight: .bold))
                         .foregroundColor(PhoneTheme.cinnabar)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
@@ -110,14 +110,14 @@ private struct FlatCalendarView: View {
                 HStack {
                     HStack(spacing: 4) {
                         Text(language == .chinese ? "宜" : "DO")
-                            .font(.system(size: 10, weight: .black, design: .serif))
+                            .font(PhoneFont.paper(10, weight: .black))
                             .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(PhoneTheme.cinnabar)
                             .cornerRadius(2)
                         Text(language == .chinese ? "止盈 · 依纪复盘" : "Take Profit · Review Strategy")
-                            .font(.system(size: 11.5, design: .serif))
+                            .font(PhoneFont.paper(11.5))
                             .foregroundColor(PhoneTheme.inkSecondary)
                     }
 
@@ -125,14 +125,14 @@ private struct FlatCalendarView: View {
 
                     HStack(spacing: 4) {
                         Text(language == .chinese ? "忌" : "AVOID")
-                            .font(.system(size: 10, weight: .black, design: .serif))
+                            .font(PhoneFont.paper(10, weight: .black))
                             .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(PhoneTheme.char)
                             .cornerRadius(2)
                         Text(language == .chinese ? "追涨 · 扛单违规" : "FOMO · Hold Losing Trades")
-                            .font(.system(size: 11.5, design: .serif))
+                            .font(PhoneFont.paper(11.5))
                             .foregroundColor(PhoneTheme.inkSecondary)
                     }
                 }
@@ -227,7 +227,7 @@ private struct TabButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 12.5, weight: .bold, design: .serif))
+                .font(PhoneFont.paper(12.5, weight: .bold))
                 .foregroundColor(isActive ? Color(red: 0.98, green: 0.95, blue: 0.90) : PhoneTheme.inkSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
@@ -254,13 +254,13 @@ private struct MacroEventCard: View {
             // Time & Importance
             VStack(spacing: 2) {
                 Text(MacroCalendarFormat.eventTime(event.time))
-                    .font(.system(.caption, design: .monospaced).weight(.bold))
+                    .font(PhoneFont.ui(11, weight: .bold, monospacedDigit: true))
                     .foregroundColor(PhoneTheme.cinnabar)
 
                 HStack(spacing: 1) {
                     ForEach(0..<max(1, min(3, event.importance)), id: \.self) { _ in
                         Image(systemName: "star.fill")
-                            .font(.system(size: 7))
+                            .font(PhoneFont.ui(7))
                             .foregroundColor(PhoneTheme.ember)
                     }
                 }
@@ -272,7 +272,7 @@ private struct MacroEventCard: View {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     if !event.country.isEmpty {
                         Text(event.country)
-                            .font(.system(size: 9.5, weight: .bold, design: .serif))
+                            .font(PhoneFont.paper(9.5, weight: .bold))
                             .foregroundColor(PhoneTheme.inkSecondary)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
@@ -280,7 +280,7 @@ private struct MacroEventCard: View {
                             .cornerRadius(2)
                     }
                     Text(event.title)
-                        .font(.system(size: 12.5, weight: .semibold, design: .serif))
+                        .font(PhoneFont.paper(12.5, weight: .semibold))
                         .foregroundColor(PhoneTheme.inkPrimary)
                         .lineLimit(isExpanded ? nil : 2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -289,17 +289,17 @@ private struct MacroEventCard: View {
                 HStack(spacing: 12) {
                     if let prev = event.previous {
                         Text("\(language == .chinese ? "前" : "Prev") \(formatNumber(prev))")
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(PhoneFont.ui(10, monospacedDigit: true))
                             .foregroundColor(PhoneTheme.inkTertiary)
                     }
                     if let fc = event.forecast {
                         Text("\(language == .chinese ? "预" : "Fcst") \(formatNumber(fc))")
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(PhoneFont.ui(10, monospacedDigit: true))
                             .foregroundColor(PhoneTheme.inkSecondary)
                     }
                     if let act = event.actual {
                         Text("\(language == .chinese ? "今" : "Act") \(formatNumber(act))")
-                            .font(.system(size: 10.5, design: .monospaced).weight(.bold))
+                            .font(PhoneFont.ui(10.5, weight: .bold, monospacedDigit: true))
                             .foregroundColor(PhoneTheme.cinnabar)
                     }
                 }
@@ -335,7 +335,7 @@ private struct EarningsReportCard: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Text(report.callTime.badge(language: language))
-                .font(.system(size: 9.5, weight: .bold, design: .serif))
+                .font(PhoneFont.paper(9.5, weight: .bold))
                 .foregroundColor(PhoneTheme.cinnabar)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
@@ -346,11 +346,11 @@ private struct EarningsReportCard: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(report.code)
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(PhoneFont.ui(11, weight: .bold, monospacedDigit: true))
                         .foregroundColor(PhoneTheme.cinnabar)
                         .fixedSize()
                     Text(report.companyName)
-                        .font(.system(size: 12.5, weight: .semibold, design: .serif))
+                        .font(PhoneFont.paper(12.5, weight: .semibold))
                         .foregroundColor(PhoneTheme.inkPrimary)
                         .lineLimit(isExpanded ? nil : 1)
                         .fixedSize(horizontal: false, vertical: true)
@@ -358,7 +358,7 @@ private struct EarningsReportCard: View {
 
                 if let eps = report.epsEstimate {
                     Text("\(language == .chinese ? "EPS 预期" : "EPS Est"): \(String(format: "%.2f", eps))")
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(PhoneFont.ui(10, monospacedDigit: true))
                         .foregroundColor(PhoneTheme.inkTertiary)
                 }
             }
@@ -389,14 +389,14 @@ private struct EmptyDayStampView: View {
                     .stroke(PhoneTheme.cinnabar.opacity(0.4), lineWidth: 1.5)
                     .frame(width: 88, height: 44)
                 Text(stamp)
-                    .font(.system(size: 14, weight: .bold, design: .serif))
+                    .font(PhoneFont.paper(14, weight: .bold))
                     .foregroundColor(PhoneTheme.cinnabar.opacity(0.8))
             }
             .rotationEffect(.degrees(-3))
             .padding(.top, 36)
 
             Text(text)
-                .font(.system(size: 12, design: .serif))
+                .font(PhoneFont.paper(12))
                 .foregroundColor(PhoneTheme.inkTertiary)
         }
         .frame(maxWidth: .infinity)

@@ -692,7 +692,7 @@ private struct SettingsCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 11, weight: .bold, design: .serif))
+                .font(PhoneFont.paper(11, weight: .bold))
                 .foregroundColor(PhoneTheme.inkTertiary)
                 .tracking(1.2)
                 .textCase(.uppercase)
@@ -737,11 +737,11 @@ private struct SettingsRow<Content: View>: View {
             HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 13, weight: .medium, design: .serif))
+                        .font(PhoneFont.paper(13, weight: .medium))
                         .foregroundColor(PhoneTheme.inkPrimary)
                     if let subtitle, !subtitle.isEmpty {
                         Text(subtitle)
-                            .font(.system(size: 10.5, design: .serif))
+                            .font(PhoneFont.paper(10.5))
                             .foregroundColor(PhoneTheme.inkTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -779,7 +779,7 @@ private struct SettingsSegmentedPicker<T: Hashable & Identifiable>: View {
                     }
                 } label: {
                     Text(titleForOption(option))
-                        .font(.system(size: 11, weight: isSelected ? .bold : .medium, design: .serif))
+                        .font(PhoneFont.paper(11, weight: isSelected ? .bold : .medium))
                         .foregroundColor(isSelected ? Color(red: 0.98, green: 0.95, blue: 0.90) : PhoneTheme.inkSecondary)
                         .padding(.horizontal, 9)
                         .padding(.vertical, 4.5)

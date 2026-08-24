@@ -37,9 +37,9 @@ struct EditorView: View {
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "chevron.left")
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(PhoneFont.ui(13, weight: .semibold))
                                 Text(L10n.string(.back, language: language))
-                                    .font(.system(size: 12.5, weight: .medium, design: .serif))
+                                    .font(PhoneFont.paper(12.5, weight: .medium))
                             }
                             .foregroundColor(PhoneTheme.inkSecondary)
                             .padding(.horizontal, 6)
@@ -59,12 +59,12 @@ struct EditorView: View {
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(Self.dateDisplay(for: draft.date, language: language))
-                                    .font(.system(size: 28, weight: .black, design: .serif))
+                                    .font(PhoneFont.paper(28, weight: .black))
                                     .foregroundColor(PhoneTheme.inkPrimary)
 
                                 if let lunar = LunarLine.string(for: draft.date) {
                                     Text(lunar)
-                                        .font(.system(size: 11, design: .serif))
+                                        .font(PhoneFont.paper(11))
                                         .foregroundColor(PhoneTheme.inkSecondary)
                                 }
                             }
@@ -76,17 +76,17 @@ struct EditorView: View {
                                 if let pnl = exchangeCoordinator.pnl(for: draft.date) {
                                     let isGain = pnl >= 0
                                     Text(L10n.string(.exchangePositionRealizedPnl, language: language))
-                                        .font(.caption2)
+                                        .font(PhoneFont.preset(.caption2))
                                         .foregroundColor(PhoneTheme.inkTertiary)
                                     Text("\(isGain ? "+" : "")\(String(format: "%.2f", pnl)) USDT")
-                                        .font(.system(.subheadline, design: .monospaced).weight(.bold))
+                                        .font(PhoneFont.ui(13, weight: .bold, monospacedDigit: true))
                                         .foregroundColor(PhoneTheme.pnlColor(isGain: isGain))
                                 } else {
                                     Text(L10n.string(.todayRecordsTitle, language: language))
-                                        .font(.caption2)
+                                        .font(PhoneFont.preset(.caption2))
                                         .foregroundColor(PhoneTheme.inkTertiary)
                                     Text(String(format: L10n.string(.recordsCountFormat, language: language), draft.items.count))
-                                        .font(.system(.subheadline, design: .monospaced).weight(.bold))
+                                        .font(PhoneFont.ui(13, weight: .bold, monospacedDigit: true))
                                         .foregroundColor(PhoneTheme.cinnabar)
                                 }
                             }
@@ -110,10 +110,10 @@ struct EditorView: View {
                         if draft.items.isEmpty {
                             VStack(spacing: 8) {
                                 Text(L10n.string(.journalEmptyTitle, language: language))
-                                    .font(.system(.subheadline, design: .serif))
+                                    .font(PhoneFont.paper(15))
                                     .foregroundColor(PhoneTheme.inkTertiary)
                                 Text(language == .chinese ? "点击右下角按钮写下第一笔交易想法…" : "Tap the plus button to add an entry…")
-                                    .font(.caption)
+                                    .font(PhoneFont.preset(.caption))
                                     .foregroundColor(PhoneTheme.inkTertiary)
                             }
                             .frame(maxWidth: .infinity)
@@ -291,7 +291,7 @@ private struct ItemRowView: View {
                 // Tag chip + quick edit
                 HStack {
                     TextField(language == .chinese ? "标签" : "Tag", text: $item.tag)
-                        .font(.system(size: 11, weight: .bold, design: .serif))
+                        .font(PhoneFont.paper(11, weight: .bold))
                         .foregroundColor(PhoneTheme.cinnabar)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -307,7 +307,7 @@ private struct ItemRowView: View {
 
                 // Body editor
                 TextEditor(text: $item.body)
-                    .font(.system(size: 13.5, design: .serif))
+                    .font(PhoneFont.paper(13.5))
                     .foregroundColor(PhoneTheme.inkPrimary)
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 56)
@@ -357,7 +357,7 @@ private struct ItemRowView: View {
                             .fill(review.verdict == .correct ? PhoneTheme.cinnabar : PhoneTheme.dai)
                             .frame(width: 2)
                         Text(review.note)
-                            .font(.system(size: 11, design: .serif))
+                            .font(PhoneFont.paper(11))
                             .foregroundColor(PhoneTheme.inkSecondary)
                             .padding(.vertical, 2)
                     }
@@ -373,7 +373,7 @@ private struct ItemRowView: View {
                     JournalReviewBadge(verdict: review.verdict, style: .mini, size: 36, language: language)
                 } else {
                     Text(L10n.string(.journalReview, language: language))
-                        .font(.system(size: 11, weight: .bold, design: .serif))
+                        .font(PhoneFont.paper(11, weight: .bold))
                         .foregroundColor(PhoneTheme.cinnabar.opacity(0.85))
                         .frame(width: 36, height: 36)
                         .rotationEffect(.degrees(-3))

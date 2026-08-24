@@ -36,7 +36,7 @@ struct ReviewSheet: View {
 
                 // Header
                 Text(L10n.string(.journalReview, language: language))
-                    .font(.system(size: 16, weight: .bold, design: .serif))
+                    .font(PhoneFont.paper(16, weight: .bold))
                     .foregroundColor(PhoneTheme.inkPrimary)
 
                 // Pure Seal Stamp Choice
@@ -64,13 +64,13 @@ struct ReviewSheet: View {
                 // Optional note area
                 VStack(alignment: .leading, spacing: 6) {
                     Text(L10n.string(.reviewNoteLabel, language: language))
-                        .font(.system(size: 11, weight: .medium, design: .serif))
+                        .font(PhoneFont.paper(11, weight: .medium))
                         .foregroundColor(PhoneTheme.inkTertiary)
 
                     ZStack(alignment: .topLeading) {
                         if noteDraft.isEmpty {
                             Text(L10n.string(.journalReviewNotePlaceholder, language: language))
-                                .font(.system(size: 13, design: .serif))
+                                .font(PhoneFont.paper(13))
                                 .foregroundColor(PhoneTheme.inkTertiary)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 10)
@@ -78,7 +78,7 @@ struct ReviewSheet: View {
                         }
 
                         TextEditor(text: $noteDraft)
-                            .font(.system(size: 13, design: .serif))
+                            .font(PhoneFont.paper(13))
                             .foregroundColor(PhoneTheme.inkPrimary)
                             .frame(height: 72)
                             .padding(8)
@@ -107,7 +107,7 @@ struct ReviewSheet: View {
                         dismiss()
                     } label: {
                         Text(L10n.string(.stampReview, language: language))
-                            .font(.system(size: 14, weight: .bold, design: .serif))
+                            .font(PhoneFont.paper(14, weight: .bold))
                             .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 11)
@@ -123,7 +123,7 @@ struct ReviewSheet: View {
                             dismiss()
                         } label: {
                             Text(L10n.string(.journalReviewClear, language: language))
-                                .font(.system(size: 12, weight: .medium, design: .serif))
+                                .font(PhoneFont.paper(12, weight: .medium))
                                 .foregroundColor(PhoneTheme.inkTertiary)
                         }
                     }
@@ -135,7 +135,7 @@ struct ReviewSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(L10n.string(.cancel, language: language)) { dismiss() }
-                        .font(.system(size: 13, design: .serif))
+                        .font(PhoneFont.paper(13))
                         .foregroundColor(PhoneTheme.inkSecondary)
                 }
             }
