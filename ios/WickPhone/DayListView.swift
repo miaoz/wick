@@ -26,99 +26,111 @@ struct DayListView: View {
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            ScrollView {
-                VStack(spacing: 14) {
-                    // 1. Compact PnL Heatmap Card
-                    PnlHeatmapCard(
-                        currentMonth: $heatmapMonth,
-                        entries: store.entries,
-                        exchangeCoordinator: exchangeCoordinator,
-                        onSelectDay: { dayKey in
-                            if let entry = store.entries.first(where: { $0.dayKey == dayKey }) {
-                                navigationPath.append(entry.dayKey)
-                            } else {
-                                let newEntry = store.openOrCreateToday()
-                                navigationPath.append(newEntry.dayKey)
+            VStack(spacing: 0) {
+                // Top Custom Header (dl-topbar)
+                HStack {
+                    journalMenu
+                    Spacer()
+                    Button {
+                        let entry = store.openOrCreateToday()
+                        navigationPath.append(entry.dayKey)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 12, weight: .bold))
+                            Text("今日")
+                                .font(.system(size: 11.5, weight: .bold, design: .serif))
+                        }
+                        .foregroundColor(PhoneTheme.cinnabar)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(PhoneTheme.cinnabarSoft)
+                        .cornerRadius(4)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.top, 4)
+                .padding(.bottom, 6)
+
+                ScrollView {
+                    VStack(spacing: 14) {
+                        // 1. Compact PnL Heatmap Card
+                        PnlHeatmapCard(
+                            currentMonth: $heatmapMonth,
+                            entries: store.entries,
+                            exchangeCoordinator: exchangeCoordinator,
+                            onSelectDay: { dayKey in
+                                if let entry = store.entries.first(where: { $0.dayKey == dayKey }) {
+                                    navigationPath.append(entry.dayKey)
+                                } else {
+                                    let newEntry = store.openOrCreateToday()
+                                    navigationPath.append(newEntry.dayKey)
+                                }
+                            }
+                        )
+                        .padding(.horizontal, 14)
+                        .padding(.top, 6)
+
+                        // 2. Tag Filter Flow
+                        let allTags = extractTags(from: store.entries)
+                        if !allTags.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 6) {
+                                    TagChipButton(
+                                        title: "全部",
+                                        isActive: selectedTag == nil
+                                    ) {
+                                        selectedTag = nil
+                                    }
+
+                                    ForEach(allTags, id: \.self) { tag in
+                                        TagChipButton(
+                                            title: tag,
+                                            isActive: selectedTag == tag
+                                        ) {
+                                            selectedTag = (selectedTag == tag) ? nil : tag
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 14)
                             }
                         }
-                    )
-                    .padding(.horizontal, 14)
-                    .padding(.top, 6)
 
-                    // 2. Tag Filter Flow
-                    let allTags = extractTags(from: store.entries)
-                    if !allTags.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 6) {
-                                TagChipButton(
-                                    title: "全部",
-                                    isActive: selectedTag == nil
-                                ) {
-                                    selectedTag = nil
-                                }
+                        // 3. Month-Sectioned Day Cards
+                        let filteredEntries = store.entries.filter { entry in
+                            guard let tag = selectedTag else { return true }
+                            return entry.items.contains { $0.tag == tag }
+                        }
 
-                                ForEach(allTags, id: \.self) { tag in
-                                    TagChipButton(
-                                        title: tag,
-                                        isActive: selectedTag == tag
-                                    ) {
-                                        selectedTag = (selectedTag == tag) ? nil : tag
+                        if filteredEntries.isEmpty {
+                            VStack(spacing: 8) {
+                                Text("无匹配日记")
+                                    .font(.system(.subheadline, design: .serif))
+                                    .foregroundColor(PhoneTheme.inkTertiary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 40)
+                        } else {
+                            LazyVStack(spacing: 8) {
+                                ForEach(filteredEntries) { entry in
+                                    NavigationLink(value: entry.dayKey) {
+                                        DayCardView(
+                                            entry: entry,
+                                            pnl: exchangeCoordinator.pnl(for: entry.date),
+                                            closedCount: exchangeCoordinator.closedCount(for: entry.dayKey)
+                                        )
                                     }
+                                    .buttonStyle(.plain)
                                 }
                             }
                             .padding(.horizontal, 14)
                         }
                     }
-
-                    // 3. Month-Sectioned Day Cards
-                    let filteredEntries = store.entries.filter { entry in
-                        guard let tag = selectedTag else { return true }
-                        return entry.items.contains { $0.tag == tag }
-                    }
-
-                    if filteredEntries.isEmpty {
-                        VStack(spacing: 8) {
-                            Text("无匹配日记")
-                                .font(.system(.subheadline, design: .serif))
-                                .foregroundColor(PhoneTheme.inkTertiary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
-                    } else {
-                        LazyVStack(spacing: 8) {
-                            ForEach(filteredEntries) { entry in
-                                NavigationLink(value: entry.dayKey) {
-                                    DayCardView(
-                                        entry: entry,
-                                        pnl: exchangeCoordinator.pnl(for: entry.date),
-                                        closedCount: exchangeCoordinator.closedCount(for: entry.dayKey)
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, 14)
-                    }
+                    .padding(.bottom, 24)
                 }
-                .padding(.bottom, 24)
             }
             .background(PhoneTheme.paper.ignoresSafeArea())
-            .navigationTitle(store.activeJournal?.name ?? "日记")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    journalMenu
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        let entry = store.openOrCreateToday()
-                        navigationPath.append(entry.dayKey)
-                    } label: {
-                        Image(systemName: "square.and.pencil")
-                            .foregroundColor(PhoneTheme.cinnabar)
-                    }
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: String.self) { dayKey in
                 if let entry = store.entries.first(where: { $0.dayKey == dayKey }) {
                     EditorView(entry: entry)

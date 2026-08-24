@@ -295,8 +295,7 @@ struct SettingsView: View {
                     }
                 }
             }
-            .navigationTitle("设置")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
             .onAppear {
                 if targetJournalID == nil {
                     targetJournalID = store.activeJournalID ?? store.journals.first?.id

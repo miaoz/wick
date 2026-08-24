@@ -50,8 +50,7 @@ struct HomeView: View {
                 .padding(.bottom, 24)
             }
             .background(PhoneTheme.paper.ignoresSafeArea())
-            .navigationTitle("Wick · 今日")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showEditor) {
                 let entry = store.openOrCreateToday()
                 EditorView(entry: entry)

@@ -10,20 +10,47 @@ struct EditorView: View {
     @EnvironmentObject private var store: PhoneJournalStore
     @StateObject private var exchangeCoordinator = PhoneExchangeCoordinator.shared
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dismiss) private var dismiss
 
     @State private var draft: JournalEntry
+    @State private var originalEntry: JournalEntry
     @State private var saveTask: Task<Void, Never>?
     @State private var isDirty = false
     @State private var reviewingItemIndex: Int?
 
     init(entry: JournalEntry) {
         _draft = State(initialValue: entry)
+        _originalEntry = State(initialValue: entry)
     }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             ScrollView {
                 VStack(spacing: 16) {
+                    // Back button navigation
+                    HStack {
+                        Button {
+                            saveNow()
+                            dismiss()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 13, weight: .semibold))
+                                Text("返回")
+                                    .font(.system(size: 12.5, weight: .medium, design: .serif))
+                            }
+                            .foregroundColor(PhoneTheme.inkSecondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 4)
+                            .background(PhoneTheme.paperHi)
+                            .cornerRadius(4)
+                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 2)
+                    .padding(.top, 2)
+
                     // Main Paper Sheet Card
                     VStack(alignment: .leading, spacing: 14) {
                         // Header
@@ -158,8 +185,7 @@ struct EditorView: View {
             .padding(.bottom, 24)
         }
         .background(PhoneTheme.paper.ignoresSafeArea())
-        .navigationTitle(Self.headerTitle(for: draft.date))
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .scrollDismissesKeyboard(.interactively)
         .sheet(item: Binding(
             get: {

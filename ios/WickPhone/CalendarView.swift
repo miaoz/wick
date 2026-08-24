@@ -22,17 +22,15 @@ struct CalendarView: View {
             Group {
                 if physicalEasterEgg {
                     PhysicalCalendarView()
-                        .toolbar(.hidden, for: .navigationBar)
                 } else {
                     FlatCalendarView(
                         selectedDate: $selectedDate,
                         activeTab: $activeTab,
                         calendarStore: calendarStore
                     )
-                    .navigationTitle("交易黄历")
-                    .navigationBarTitleDisplayMode(.inline)
                 }
             }
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 }
