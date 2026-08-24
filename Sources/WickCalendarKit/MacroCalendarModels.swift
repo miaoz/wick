@@ -1,4 +1,5 @@
 import Foundation
+import WickSync
 
 /// A single global-macro calendar event, mirroring what akshare's `macro_info_ws`
 /// returns (time, country, title, importance, actual/forecast/previous, link).
@@ -137,11 +138,22 @@ enum MacroCalendarPayloadDecoder {
 // MARK: - Earnings calendar (DDC service)
 
 /// When in the (local) trading day the report drops.
-public enum EarningsCallTime: String, Codable {
+public enum EarningsCallTime: String, Codable, Sendable {
     case beforeOpen = "BMO"   // 盘前
     case afterClose = "AMC"   // 盘后
     /// TNS / TAS / unknown — the feed has more codes than it documents.
     case unspecified
+
+    /// Localized compact badge text across macOS and iOS:
+    /// Chinese: "盘前" / "盘后" / "未定"
+    /// English: "BMO" / "AMC" / "TBD"
+    public func badge(language: AppLanguage) -> String {
+        switch self {
+        case .beforeOpen: return L10n.string(.earningsBeforeOpen, language: language)
+        case .afterClose: return L10n.string(.earningsAfterClose, language: language)
+        case .unspecified: return L10n.string(.earningsTimeTbd, language: language)
+        }
+    }
 }
 
 /// A single earnings-calendar entry from the WallStreetCN DDC service.

@@ -359,11 +359,7 @@ struct JournalInspectorView: View {
     }
 
     private func earningsCallMark(_ report: EarningsReport) -> String {
-        switch report.callTime {
-        case .beforeOpen: return L10n.string(.earningsBeforeOpen, language: settings.language)
-        case .afterClose: return L10n.string(.earningsAfterClose, language: settings.language)
-        case .unspecified: return L10n.string(.earningsTimeTbd, language: settings.language)
-        }
+        report.callTime.badge(language: settings.language)
     }
 
     private static let eventTimeFormatter: DateFormatter = {

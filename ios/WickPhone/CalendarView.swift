@@ -334,15 +334,14 @@ private struct EarningsReportCard: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            VStack {
-                Text(report.callTime.rawValue)
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(PhoneTheme.inkSecondary)
-                Text(report.callTime == .beforeOpen ? (language == .chinese ? "盘前" : "BMO") : (report.callTime == .afterClose ? (language == .chinese ? "盘后" : "AMC") : "—"))
-                    .font(.system(size: 8.5))
-                    .foregroundColor(PhoneTheme.inkTertiary)
-            }
-            .frame(width: 36)
+            Text(report.callTime.badge(language: language))
+                .font(.system(size: 9.5, weight: .bold, design: .serif))
+                .foregroundColor(PhoneTheme.cinnabar)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(PhoneTheme.cinnabarSoft)
+                .cornerRadius(2)
+                .frame(width: 34, alignment: .leading)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {

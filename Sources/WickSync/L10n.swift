@@ -872,8 +872,8 @@ public enum L10n {
             case .macroEventsFirstPage: return "First page"
             case .macroEventsFlipHint: return "Tap / scroll / ↑↓ to flip · ←→ to switch tab"
             case .earningsSection: return "Earnings"
-            case .earningsBeforeOpen: return "Pre-market"
-            case .earningsAfterClose: return "After-hours"
+            case .earningsBeforeOpen: return "BMO"
+            case .earningsAfterClose: return "AMC"
             case .earningsTimeTbd: return "TBD"
             case .macroEventsFlipHintTouch: return "Tap to flip · tap a tab to switch"
 

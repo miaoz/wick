@@ -591,11 +591,7 @@ struct MacroDayPageView: View {
     }
 
     private func callTimeText(_ callTime: EarningsCallTime) -> String {
-        switch callTime {
-        case .beforeOpen: return L10n.string(.earningsBeforeOpen, language: language)
-        case .afterClose: return L10n.string(.earningsAfterClose, language: language)
-        case .unspecified: return L10n.string(.earningsTimeTbd, language: language)
-        }
+        callTime.badge(language: language)
     }
 
     @ViewBuilder
