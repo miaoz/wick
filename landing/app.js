@@ -40,11 +40,10 @@
     "dl.meta": "macOS 13 Ventura or later · Universal (Apple Silicon & Intel)",
     "dl.ios.text": "📱 iOS version ready (pending release)",
     "dl.ios.link": "Check iOS progress & wishlist ›",
+    "dl.ios.plusone": "I want this",
     "dl.ios.ph": "Enter email (optional, for alerts)",
-    "dl.ios.submit": "Notify Me",
-    "dl.ios.plusone": "+1 Vote",
-    "dl.ios.hint": "You'll be notified via email when available; or simply click +1 to register demand.",
-    "dl.ios.source": "GitHub source progress ›",
+    "dl.ios.submit": "Notify me",
+    "dl.ios.source": "Check source progress ›",
     "dl.ios.done": "✓ Added to wishlist",
     "footer.brand": "Wick",
     "footer.note": "秉烛日记"
@@ -187,6 +186,8 @@
         }
       })
       .catch(function () { /* 离线或限流:不显示版本号 */ });
+  }
+
   /* ---------------- iOS 愿望清单 (+1 与邮箱登记) ---------------- */
   var wishTrigger = document.getElementById("ios-wish-trigger");
   var stripDefault = document.getElementById("ios-strip-default");
@@ -222,14 +223,9 @@
       .then(function (res) {
         if (res && typeof res.count === "number") {
           latestWishCount = res.count;
-          if (hasWished) showDone(res.count);
         }
       })
       .catch(function () {});
-  }
-
-  if (hasWished) {
-    showDone();
   }
 
   if (wishTrigger) {

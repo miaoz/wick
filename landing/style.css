@@ -506,6 +506,9 @@ main.container { position: relative; z-index: 1; }
   color: var(--ink-3);
   text-align: center;
 }
+/* ---------- 通用 hidden 属性防覆盖 ---------- */
+[hidden] { display: none !important; }
+
 .pitch-ios-strip {
   margin-top: 24px;
   padding: 18px 0;
@@ -560,9 +563,26 @@ main.container { position: relative; z-index: 1; }
   flex-wrap: wrap;
   justify-content: center;
 }
+.ios-plusone-btn {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--ember);
+  color: #fff;
+  border: 1px solid var(--ember);
+  transition: filter 150ms ease;
+  white-space: nowrap;
+}
+.ios-plusone-btn:hover {
+  filter: brightness(1.08);
+}
 .ios-email-input {
   flex: 1;
-  min-width: 180px;
+  min-width: 160px;
   height: 30px;
   padding: 0 10px;
   background: var(--paper-hi);
@@ -580,7 +600,7 @@ main.container { position: relative; z-index: 1; }
 .ios-email-input::placeholder {
   color: var(--ink-3);
 }
-.ios-submit-btn, .ios-plusone-btn {
+.ios-submit-btn {
   height: 30px;
   padding: 0 12px;
   border-radius: 4px;
@@ -588,23 +608,13 @@ main.container { position: relative; z-index: 1; }
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 150ms ease;
-  white-space: nowrap;
-}
-.ios-submit-btn {
-  background: var(--ember);
-  color: #fff;
-  border: 1px solid var(--ember);
-}
-.ios-submit-btn:hover {
-  filter: brightness(1.08);
-}
-.ios-plusone-btn {
   background: var(--paper-hi);
   color: var(--ink-1);
   border: 1px solid var(--rule);
+  transition: all 150ms ease;
+  white-space: nowrap;
 }
-.ios-plusone-btn:hover {
+.ios-submit-btn:hover {
   border-color: var(--ink-2);
   background: var(--paper);
 }
@@ -618,16 +628,6 @@ main.container { position: relative; z-index: 1; }
 }
 .ios-close-btn:hover {
   color: var(--ink-1);
-}
-.ios-form-hint {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  font-size: 11px;
-  color: var(--ink-3);
-  gap: 8px;
-  flex-wrap: wrap;
 }
 .done-seal {
   display: inline-flex;
