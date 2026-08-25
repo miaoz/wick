@@ -1,11 +1,14 @@
-# Wick
+# Wick（秉烛日记）
 
 [![Build and Release](https://github.com/miaoz/wick/actions/workflows/release.yml/badge.svg)](https://github.com/miaoz/wick/actions/workflows/release.yml)
 [![Latest Release](https://img.shields.io/github/v/release/miaoz/wick)](https://github.com/miaoz/wick/releases/latest)
-[![Platform](https://img.shields.io/badge/platform-macOS%2013%2B-black)](https://github.com/miaoz/wick)
+[![Platform](https://img.shields.io/badge/platform-macOS%2013%2B%20%7C%20iOS%2016%2B-black)](https://github.com/miaoz/wick)
 [![Swift](https://img.shields.io/badge/Swift-6.1%2B-F05138)](https://www.swift.org)
 
-**Wick** 是一款原生 macOS 菜单栏应用：在状态栏显示蜡烛图标，点击后弹出面板，展示**日 / 周 / 月 / 年**还剩多少时间；内置**日记**用标签与图片按条目记录与回顾，可把**交易所仓位**挂到对应日记条目上，并可选开启撕页**交易日历**（全球宏观 + 财报）贴到桌面上。
+**Wick**（中文名「**秉烛日记**」，英文名「**Wick**」）是一款专为交易者与记录者打造的原生应用（macOS / iOS）：
+- **macOS 菜单栏**：在状态栏显示蜡烛图标，点击后弹出面板，实时展示**日 / 周 / 月 / 年**还剩多少时间；
+- **日记（一天一页纸）**：一天一篇日记、篇内多条目（标签 + 正文 + 图片），条目级检索、复盘白文方章与全套字体自适应排版，可把**交易所仓位**挂到对应日记条目上；
+- **交易日历（彩蛋）**：撕页物理「黄历」（全球宏观 + 财报），桌面透明贴窗与手机撕页交互。
 
 <p align="center">
   <img src="assets/AppIcon-master.png" alt="Wick icon" width="128" height="128">

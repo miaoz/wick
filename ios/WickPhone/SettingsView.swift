@@ -527,7 +527,7 @@ struct SettingsView: View {
 
                     // 8. About
                     VStack(spacing: 4) {
-                        Text(language == .chinese ? "Wick for iOS · 秉烛" : "Wick for iOS")
+                        Text(language == .chinese ? "Wick for iOS · 秉烛日记" : "Wick for iOS")
                             .font(PhoneFont.paper(12, weight: .bold))
                             .foregroundColor(PhoneTheme.inkSecondary)
                     }
