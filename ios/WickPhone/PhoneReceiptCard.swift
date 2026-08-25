@@ -45,6 +45,12 @@ struct ReceiptShape: Shape {
 /// Exchange trade receipt component attached to journal item cards.
 struct PhoneReceiptCard: View {
     let position: TradingPosition
+    var language: AppLanguage? = nil
+    @Environment(\.appLanguage) private var envLanguage: AppLanguage
+
+    private var currentLanguage: AppLanguage {
+        language ?? envLanguage
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -54,13 +60,14 @@ struct PhoneReceiptCard: View {
                     .font(PhoneFont.ui(11.5, weight: .bold, monospacedDigit: true))
                     .foregroundColor(PhoneTheme.receiptInk)
 
-                Text(position.side == .long ? "多 LONG" : "空 SHORT")
+                let isLong = position.side == .long
+                Text(L10n.string(isLong ? .exchangePositionLong : .exchangePositionShort, language: currentLanguage))
                     .font(PhoneFont.ui(9, weight: .bold))
-                    .foregroundColor(PhoneTheme.pnlColor(isGain: position.side == .long))
+                    .foregroundColor(PhoneTheme.pnlColor(isGain: isLong))
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
                     .background(
-                        PhoneTheme.pnlColorSoft(isGain: position.side == .long)
+                        PhoneTheme.pnlColorSoft(isGain: isLong)
                     )
                     .cornerRadius(2)
 
@@ -78,14 +85,15 @@ struct PhoneReceiptCard: View {
 
             // Price & Size row
             HStack {
-                Text("开仓 VWAP: \(formatPrice(position.entryPrice))")
+                Text("\(L10n.string(.exchangePositionVwap, language: currentLanguage)): \(formatPrice(position.entryPrice))")
                     .font(PhoneFont.ui(10, monospacedDigit: true))
                     .foregroundColor(PhoneTheme.receiptInk.opacity(0.8))
 
                 Spacer()
 
                 if let exitPrice = position.exitPrice {
-                    Text("平仓: \(formatPrice(exitPrice))")
+                    let exitLabel = currentLanguage == .chinese ? "平仓" : "Exit"
+                    Text("\(exitLabel): \(formatPrice(exitPrice))")
                         .font(PhoneFont.ui(10, monospacedDigit: true))
                         .foregroundColor(PhoneTheme.receiptInk.opacity(0.8))
                 }
@@ -93,7 +101,7 @@ struct PhoneReceiptCard: View {
 
             // Realized PnL Row
             HStack {
-                Text("已实现盈亏")
+                Text(L10n.string(.exchangePositionRealizedPnl, language: currentLanguage))
                     .font(PhoneFont.paper(10.5, weight: .semibold))
                     .foregroundColor(PhoneTheme.receiptInk)
 
