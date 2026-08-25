@@ -596,7 +596,9 @@ private struct DayListJournalMenu: View {
         Menu {
             ForEach(journals) { journal in
                 Button {
-                    onSelectJournal(journal.id)
+                    DispatchQueue.main.async {
+                        onSelectJournal(journal.id)
+                    }
                 } label: {
                     if journal.id == activeJournalID {
                         Label(journal.name, systemImage: "checkmark")
@@ -609,13 +611,19 @@ private struct DayListJournalMenu: View {
             Divider()
 
             Button("\(L10n.string(.journalLibraryNewTitle, language: language))…") {
-                onNewJournal()
+                DispatchQueue.main.async {
+                    onNewJournal()
+                }
             }
             Button("\(L10n.string(.journalLibraryRenameTitle, language: language))…") {
-                onRenameJournal(activeJournalName)
+                DispatchQueue.main.async {
+                    onRenameJournal(activeJournalName)
+                }
             }
             Button("\(L10n.string(.journalLibraryDelete, language: language))…", role: .destructive) {
-                onDeleteJournal()
+                DispatchQueue.main.async {
+                    onDeleteJournal()
+                }
             }
             .disabled(journals.count <= 1)
         } label: {
