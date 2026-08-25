@@ -50,6 +50,8 @@ enum FallingPageOverlay {
             + 60
         let host = NSHostingView(
             rootView: FallingPageView(page: piece, fallDistance: distance, headroom: headroom)
+                .environment(\.pnlColorConvention, piece.convention)
+                .environment(\.appLanguage, piece.language)
         )
         host.frame = NSRect(origin: .zero, size: frame.size)
         window.contentView = host

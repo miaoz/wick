@@ -721,11 +721,11 @@ public enum TraderAlmanac: Sendable {
 /// Traditional square cinnabar seal stamp (e.g. 「大吉」, 「摸鱼」, 「知行」).
 public struct TraderAlmanacSealBadge: View {
     public let text: String
-    public var accent: Color = TradingCalendarTheme.red
+    public var accent: Color = TradingCalendarTheme.accent
     public var scale: CGFloat = 1
     public var angle: Double = -3
 
-    public init(text: String, accent: Color = TradingCalendarTheme.red, scale: CGFloat = 1, angle: Double = -3) {
+    public init(text: String, accent: Color = TradingCalendarTheme.accent, scale: CGFloat = 1, angle: Double = -3) {
         self.text = text
         self.accent = accent
         self.scale = scale
@@ -820,7 +820,7 @@ public struct TraderYiJiRow: View {
     public init(
         entry: TraderAlmanacEntry,
         language: AppLanguage,
-        yiColor: Color = TradingCalendarTheme.red,
+        yiColor: Color = TradingCalendarTheme.accent,
         jiColor: Color = TradingCalendarTheme.ink,
         yiInk: Color = Color(red: 0.98, green: 0.92, blue: 0.85),
         jiInk: Color = Color(red: 0.98, green: 0.95, blue: 0.90),
@@ -882,14 +882,14 @@ public struct TraderYiJiRow: View {
 public struct TraderAlmanacMetaRow: View {
     public let entry: TraderAlmanacEntry
     public let language: AppLanguage
-    public var accentColor: Color = TradingCalendarTheme.red
+    public var accentColor: Color = TradingCalendarTheme.accent
     public var textInk: Color = TradingCalendarTheme.dimInk
     public var font: Font = TradingCalendarTheme.mincho(8.5)
 
     public init(
         entry: TraderAlmanacEntry,
         language: AppLanguage,
-        accentColor: Color = TradingCalendarTheme.red,
+        accentColor: Color = TradingCalendarTheme.accent,
         textInk: Color = TradingCalendarTheme.dimInk,
         font: Font = TradingCalendarTheme.mincho(8.5)
     ) {

@@ -135,8 +135,7 @@ final class TradingCalendarWindowController: NSObject, NSWindowDelegate, Observa
             return window
         }
 
-        let root = TradingCalendarRootView(
-            language: AppSettings.shared.language,
+        let root = TradingCalendarHostView(
             onClose: { [weak self] in self?.closeCalendar() },
             onPageTorn: { [weak self] piece in
                 guard let window = self?.window else { return }
@@ -255,3 +254,21 @@ final class TradingCalendarWindowController: NSObject, NSWindowDelegate, Observa
         )
     }
 }
+
+/// Dynamic hosting wrapper that forwards active PnL convention and language into SwiftUI environment.
+private struct TradingCalendarHostView: View {
+    @ObservedObject private var settings = AppSettings.shared
+    let onClose: () -> Void
+    let onPageTorn: (FallingPage) -> Void
+
+    var body: some View {
+        TradingCalendarRootView(
+            language: settings.language,
+            onClose: onClose,
+            onPageTorn: onPageTorn
+        )
+        .environment(\.pnlColorConvention, settings.pnlColorConvention)
+        .environment(\.appLanguage, settings.language)
+    }
+}
+

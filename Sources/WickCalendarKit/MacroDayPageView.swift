@@ -47,7 +47,7 @@ struct MacroDayPageView: View {
     /// Which compartment the pane shows.
     let tab: MacroCalendarTab
     let layout: PaperLayout
-    var convention: PnlColorConvention = .redUp
+    var convention: PnlColorConvention = TradingCalendarTheme.pnlConvention
 
     private let calendar = Calendar.current
 

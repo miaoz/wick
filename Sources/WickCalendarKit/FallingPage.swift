@@ -24,6 +24,7 @@ public struct FallingPage: Identifiable {
     public let layout: PaperLayout
     public let convention: PnlColorConvention
 
+    @MainActor
     public init(
         date: Date,
         events: [MacroCalendarEvent],
@@ -37,7 +38,7 @@ public struct FallingPage: Identifiable {
         upward: Bool,
         throwVelocity: CGSize,
         layout: PaperLayout = .desktop,
-        convention: PnlColorConvention = .redUp
+        convention: PnlColorConvention = TradingCalendarTheme.pnlConvention
     ) {
         self.date = date
         self.events = events

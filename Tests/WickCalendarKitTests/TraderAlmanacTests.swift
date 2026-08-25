@@ -101,4 +101,79 @@ final class TraderAlmanacTests: XCTestCase {
         XCTAssertEqual(entry.shaText(language: .english), "1m noise · Doom-scroll")
         XCTAssertEqual(entry.sealText(language: .english), "CHILL")
     }
+
+    @MainActor
+    func testAccentColorForConvention() {
+        XCTAssertEqual(TradingCalendarTheme.accentColor(for: .redUp), TradingCalendarTheme.red)
+        XCTAssertEqual(TradingCalendarTheme.accentColor(for: .greenUp), TradingCalendarTheme.green)
+    }
+
+    @MainActor
+    func testDynamicAccentFollowsPnlConvention() {
+        TradingCalendarTheme.pnlConvention = .redUp
+        XCTAssertEqual(TradingCalendarTheme.accent, TradingCalendarTheme.red)
+
+        TradingCalendarTheme.pnlConvention = .greenUp
+        XCTAssertEqual(TradingCalendarTheme.accent, TradingCalendarTheme.green)
+
+        // Restore default
+        TradingCalendarTheme.pnlConvention = .redUp
+    }
+
+    @MainActor
+    func testTraderAlmanacComponentsDefaultToAccentColor() {
+        TradingCalendarTheme.pnlConvention = .greenUp
+        let badge = TraderAlmanacSealBadge(text: "大吉")
+        XCTAssertEqual(badge.accent, TradingCalendarTheme.green)
+
+        let entry = TraderAlmanac.entry(for: Date())
+        let yiJiRow = TraderYiJiRow(entry: entry, language: .chinese)
+        XCTAssertEqual(yiJiRow.yiColor, TradingCalendarTheme.green)
+
+        let metaRow = TraderAlmanacMetaRow(entry: entry, language: .chinese)
+        XCTAssertEqual(metaRow.accentColor, TradingCalendarTheme.green)
+
+        // Switch to redUp and verify
+        TradingCalendarTheme.pnlConvention = .redUp
+        let badgeRed = TraderAlmanacSealBadge(text: "大吉")
+        XCTAssertEqual(badgeRed.accent, TradingCalendarTheme.red)
+
+        let yiJiRowRed = TraderYiJiRow(entry: entry, language: .chinese)
+        XCTAssertEqual(yiJiRowRed.yiColor, TradingCalendarTheme.red)
+
+        let metaRowRed = TraderAlmanacMetaRow(entry: entry, language: .chinese)
+        XCTAssertEqual(metaRowRed.accentColor, TradingCalendarTheme.red)
+    }
+
+    @MainActor
+    func testMacroDayPageViewDefaultConvention() {
+        TradingCalendarTheme.pnlConvention = .greenUp
+        let pageGreen = MacroDayPageView(
+            date: Date(),
+            events: [],
+            earnings: [],
+            isLoading: false,
+            errorText: nil,
+            language: .chinese,
+            eventsPage: 0,
+            tab: .macro,
+            layout: .desktop
+        )
+        XCTAssertEqual(pageGreen.convention, .greenUp)
+
+        TradingCalendarTheme.pnlConvention = .redUp
+        let pageRed = MacroDayPageView(
+            date: Date(),
+            events: [],
+            earnings: [],
+            isLoading: false,
+            errorText: nil,
+            language: .chinese,
+            eventsPage: 0,
+            tab: .macro,
+            layout: .desktop
+        )
+        XCTAssertEqual(pageRed.convention, .redUp)
+    }
 }
+

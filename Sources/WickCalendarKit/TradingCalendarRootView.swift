@@ -75,7 +75,6 @@ public struct TradingCalendarRootView: View {
         }
         .frame(width: layout.windowW, height: layout.windowH, alignment: .top)
         .onAppear {
-            TradingCalendarTheme.pnlConvention = envPnlConvention
             paperScene.sim = sim
             store.loadIfNeeded(for: currentDate)
             store.loadIfNeeded(for: nextDate)
@@ -199,7 +198,7 @@ public struct TradingCalendarRootView: View {
                 eventsPage: 0,
                 tab: activeTab,
                 layout: layout,
-                convention: envPnlConvention
+                convention: TradingCalendarTheme.pnlConvention
             )
             .overlay(nextPageShading)
             .padding(.top, layout.pageTopInset)
@@ -251,7 +250,7 @@ public struct TradingCalendarRootView: View {
             }
 
             // The stapled binding across the top; drag it to move the pad (macOS).
-            CalendarPadBinding(onClose: onClose, layout: layout)
+            CalendarPadBinding(onClose: onClose, layout: layout, convention: TradingCalendarTheme.pnlConvention)
 
             tearHitLayer
         }
@@ -434,7 +433,7 @@ public struct TradingCalendarRootView: View {
             eventsPage: eventsPage,
             tab: activeTab,
             layout: layout,
-            convention: envPnlConvention
+            convention: TradingCalendarTheme.pnlConvention
         )
         if let cg = CalendarSnapshot.cgImage(of: page, scale: 2) {
             paperScene.setPageTexture(SKTexture(cgImage: cg))
@@ -461,7 +460,7 @@ public struct TradingCalendarRootView: View {
             upward: upward,
             throwVelocity: lastVelocity,
             layout: layout,
-            convention: envPnlConvention
+            convention: TradingCalendarTheme.pnlConvention
         )
         TearSound.shared.playRip()
         Haptics.rip()
@@ -516,6 +515,7 @@ private struct CalendarPadStack: View {
 private struct CalendarPadBinding: View {
     let onClose: () -> Void
     let layout: PaperLayout
+    var convention: PnlColorConvention = .redUp
 
     var body: some View {
         let s = layout.contentScale
@@ -532,7 +532,7 @@ private struct CalendarPadBinding: View {
                 .overlay(alignment: .top) {
                     // The spine tape peeking over the top.
                     Rectangle()
-                        .fill(TradingCalendarTheme.accent.opacity(0.9))
+                        .fill(TradingCalendarTheme.accentColor(for: convention).opacity(0.9))
                         .frame(height: 2.5 * s)
                         .padding(.horizontal, 2 * s)
                         .padding(.top, 0.5 * s)
