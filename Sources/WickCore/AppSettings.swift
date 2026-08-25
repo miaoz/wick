@@ -22,9 +22,11 @@ final class AppSettings: ObservableObject {
         static let journalReminderMinute = "wick.journal.reminderMinute"
         static let showMenuBarPercentage = "wick.menubar.showPercentage"
         static let launchAtLogin = "wick.launchAtLogin"
-        static let checkForUpdatesOnLaunch = "wick.updates.checkOnLaunch"
+        static let checkForUpdatesAutomatically = "wick.updates.checkAutomatically"
+        static let legacyCheckForUpdatesOnLaunch = "wick.updates.checkOnLaunch"
         static let lastKnownRemoteVersion = "wick.updates.lastKnownRemoteVersion"
         static let lastKnownRemoteURL = "wick.updates.lastKnownRemoteURL"
+        static let lastNotifiedUpdateVersion = "wick.updates.lastNotifiedVersion"
         static let weekStartsOnMonday = "wick.calendar.weekStartsOnMonday"
         static let physicalCalendar = "wick.calendar.physicalEasterEgg"
         static let journalInspectorVisible = "wick.journal.inspectorVisible"
@@ -117,9 +119,24 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    @Published var checkForUpdatesOnLaunch: Bool {
+    @Published var checkForUpdatesAutomatically: Bool {
         didSet {
-            UserDefaults.standard.set(checkForUpdatesOnLaunch, forKey: Keys.checkForUpdatesOnLaunch)
+            UserDefaults.standard.set(checkForUpdatesAutomatically, forKey: Keys.checkForUpdatesAutomatically)
+            if checkForUpdatesAutomatically {
+                UpdateCheckerPresenter.shared.startPeriodicChecks()
+            }
+        }
+    }
+
+    /// Backwards compatibility alias for older references.
+    var checkForUpdatesOnLaunch: Bool {
+        get { checkForUpdatesAutomatically }
+        set { checkForUpdatesAutomatically = newValue }
+    }
+
+    @Published var lastNotifiedUpdateVersion: String {
+        didSet {
+            UserDefaults.standard.set(lastNotifiedUpdateVersion, forKey: Keys.lastNotifiedUpdateVersion)
         }
     }
 
@@ -276,11 +293,15 @@ final class AppSettings: ObservableObject {
             launchAtLoginDesired = UserDefaults.standard.bool(forKey: Keys.launchAtLogin)
         }
 
-        if UserDefaults.standard.object(forKey: Keys.checkForUpdatesOnLaunch) == nil {
-            checkForUpdatesOnLaunch = true
+        if let explicit = UserDefaults.standard.object(forKey: Keys.checkForUpdatesAutomatically) as? Bool {
+            checkForUpdatesAutomatically = explicit
+        } else if let legacy = UserDefaults.standard.object(forKey: Keys.legacyCheckForUpdatesOnLaunch) as? Bool {
+            checkForUpdatesAutomatically = legacy
         } else {
-            checkForUpdatesOnLaunch = UserDefaults.standard.bool(forKey: Keys.checkForUpdatesOnLaunch)
+            checkForUpdatesAutomatically = true
         }
+
+        lastNotifiedUpdateVersion = UserDefaults.standard.string(forKey: Keys.lastNotifiedUpdateVersion) ?? ""
 
         syncEnabled = UserDefaults.standard.bool(forKey: Keys.syncEnabled)
         syncAccountEmail = UserDefaults.standard.string(forKey: Keys.syncAccountEmail) ?? ""

@@ -170,9 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ExchangePositionCoordinator.shared.start()
             }
             JournalReminderScheduler.shared.configure()
-            if AppSettings.shared.checkForUpdatesOnLaunch {
-                await UpdateCheckerPresenter.shared.checkInBackgroundIfNeeded()
-            }
+            UpdateCheckerPresenter.shared.startPeriodicChecks()
         }
     }
 
@@ -216,25 +214,5 @@ private func applyAppearance(_ appearance: AppAppearance) {
     // Avoid redundant assignment (can kick off extra layout / notifications).
     if NSApp.appearance?.name != desired?.name {
         NSApp.appearance = desired
-    }
-}
-
-/// Lightweight background update probe (no UI spam; settings shows manual check).
-@MainActor
-final class UpdateCheckerPresenter {
-    static let shared = UpdateCheckerPresenter()
-
-    private var lastAutomaticCheck: Date?
-
-    func checkInBackgroundIfNeeded() async {
-        if let last = lastAutomaticCheck, Date().timeIntervalSince(last) < 60 * 60 * 12 {
-            return
-        }
-        lastAutomaticCheck = Date()
-        let result = await UpdateChecker.check()
-        if case .updateAvailable(let version, let url) = result.kind {
-            AppSettings.shared.lastKnownRemoteVersion = version
-            AppSettings.shared.lastKnownRemoteURL = url.absoluteString
-        }
     }
 }

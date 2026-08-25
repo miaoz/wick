@@ -309,6 +309,10 @@ public enum L10n {
         case updateCheckFailed
         case openReleasePage
         case checkUpdatesOnLaunch
+        case checkForUpdatesAutomatically
+        case updateNotificationTitle
+        case updateNotificationBody
+        case downloadUpdateAction
         case dataSection
 
         // iOS mobile specific
@@ -596,11 +600,15 @@ public enum L10n {
             case .versionLabel: return "版本"
             case .checkForUpdates: return "检查更新"
             case .checkingForUpdates: return "正在检查…"
-            case .updateAvailableFormat: return "发现新版本 %@，点击打开下载页"
+            case .updateAvailableFormat: return "发现新版本 %@，点击立即下载"
             case .upToDate: return "已是最新版本"
             case .updateCheckFailed: return "检查更新失败"
             case .openReleasePage: return "打开发布页"
             case .checkUpdatesOnLaunch: return "启动时检查更新"
+            case .checkForUpdatesAutomatically: return "自动检查更新"
+            case .updateNotificationTitle: return "发现 Wick 新版本 %@"
+            case .updateNotificationBody: return "点击立即下载最新更新包"
+            case .downloadUpdateAction: return "立即下载"
             case .dataSection: return "数据"
 
             // iOS mobile specific
@@ -890,11 +898,15 @@ public enum L10n {
             case .versionLabel: return "Version"
             case .checkForUpdates: return "Check for Updates"
             case .checkingForUpdates: return "Checking…"
-            case .updateAvailableFormat: return "Update %@ available — click to open downloads"
+            case .updateAvailableFormat: return "Update %@ available — click to download"
             case .upToDate: return "You’re up to date"
             case .updateCheckFailed: return "Update check failed"
             case .openReleasePage: return "Open Releases"
             case .checkUpdatesOnLaunch: return "Check for updates on launch"
+            case .checkForUpdatesAutomatically: return "Check for updates automatically"
+            case .updateNotificationTitle: return "Wick %@ Available"
+            case .updateNotificationBody: return "Click to download the latest update package"
+            case .downloadUpdateAction: return "Download Now"
             case .dataSection: return "Data"
 
             // iOS mobile specific

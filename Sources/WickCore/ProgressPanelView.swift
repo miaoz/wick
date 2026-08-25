@@ -608,8 +608,8 @@ struct SettingsContentView: View {
                             .textSelection(.enabled)
                     }
 
-                    Toggle(isOn: $settings.checkForUpdatesOnLaunch) {
-                        Text(L10n.string(.checkUpdatesOnLaunch, language: language))
+                    Toggle(isOn: $settings.checkForUpdatesAutomatically) {
+                        Text(L10n.string(.checkForUpdatesAutomatically, language: language))
                             .font(AppFont.ui(13, weight: .medium, design: .rounded))
                             .foregroundStyle(theme.primaryText)
                     }
@@ -649,7 +649,7 @@ struct SettingsContentView: View {
                             if let url = URL(string: settings.lastKnownRemoteURL) {
                                 NSWorkspace.shared.open(url)
                             } else {
-                                NSWorkspace.shared.open(UpdateChecker.releasesPageURL)
+                                NSWorkspace.shared.open(UpdateChecker.r2LatestDownloadURL)
                             }
                         } label: {
                             Text(
@@ -809,17 +809,17 @@ struct SettingsContentView: View {
             updateStatusText = L10n.string(.upToDate, language: language)
             settings.lastKnownRemoteVersion = ""
             settings.lastKnownRemoteURL = ""
-        case .updateAvailable(let version, let url):
+        case .updateAvailable(let version, let downloadURL, _):
             updateStatusText = String(
                 format: L10n.string(.updateAvailableFormat, language: language),
                 version
             )
-            updateOpenURL = url
+            updateOpenURL = downloadURL
             settings.lastKnownRemoteVersion = version
-            settings.lastKnownRemoteURL = url.absoluteString
+            settings.lastKnownRemoteURL = downloadURL.absoluteString
         case .unavailable:
             updateStatusText = L10n.string(.updateCheckFailed, language: language)
-            updateOpenURL = UpdateChecker.releasesPageURL
+            updateOpenURL = UpdateChecker.r2LatestDownloadURL
         }
     }
 

@@ -189,6 +189,19 @@ final class JournalReminderScheduler: NSObject, UNUserNotificationCenterDelegate
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let action = response.actionIdentifier
+        let userInfo = response.notification.request.content.userInfo
+        let downloadURLString = userInfo["downloadURL"] as? String
+
+        if (userInfo["action"] as? String) == "downloadUpdate" || action == UpdateCheckerPresenter.IDs.downloadActionID {
+            nonisolated(unsafe) let finish = completionHandler
+            Task { @MainActor in
+                let targetURL = downloadURLString.flatMap(URL.init(string:)) ?? UpdateChecker.r2LatestDownloadURL
+                NSWorkspace.shared.open(targetURL)
+                finish()
+            }
+            return
+        }
+
         let shouldOpen =
             action == UNNotificationDefaultActionIdentifier
             || action == IDs.openAction
@@ -210,18 +223,33 @@ final class JournalReminderScheduler: NSObject, UNUserNotificationCenterDelegate
     private func registerCategories() {
         guard let center else { return }
 
-        let open = UNNotificationAction(
+        let language = AppSettings.shared.language
+
+        let openJournal = UNNotificationAction(
             identifier: IDs.openAction,
-            title: L10n.string(.journalOpenAction, language: AppSettings.shared.language),
+            title: L10n.string(.journalOpenAction, language: language),
             options: [.foreground]
         )
-        let category = UNNotificationCategory(
+        let reminderCategory = UNNotificationCategory(
             identifier: IDs.category,
-            actions: [open],
+            actions: [openJournal],
             intentIdentifiers: [],
             options: []
         )
-        center.setNotificationCategories([category])
+
+        let downloadUpdate = UNNotificationAction(
+            identifier: UpdateCheckerPresenter.IDs.downloadActionID,
+            title: L10n.string(.downloadUpdateAction, language: language),
+            options: [.foreground]
+        )
+        let updateCategory = UNNotificationCategory(
+            identifier: UpdateCheckerPresenter.IDs.categoryID,
+            actions: [downloadUpdate],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        center.setNotificationCategories([reminderCategory, updateCategory])
     }
 
     private func mapAuthorization(_ status: UNAuthorizationStatus) -> AuthorizationState {
