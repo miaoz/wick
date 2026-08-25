@@ -69,19 +69,13 @@
     applyLang();
   });
 
-  /* ---------------- 亮 / 暗 ---------------- */
-  var schemeBtn = document.getElementById("scheme-toggle");
-  schemeBtn.addEventListener("click", function () {
-    var next = root.getAttribute("data-scheme") === "dark" ? "light" : "dark";
-    root.setAttribute("data-scheme", next);
-    localStorage.setItem("wick-lp-scheme", next);
-  });
-  /* 未手动选择时跟随系统 */
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function (e) {
-    if (!localStorage.getItem("wick-lp-scheme")) {
+  /* ---------------- 亮 / 暗:跟随系统(?theme= 强制时不动) ---------------- */
+  var forcedScheme = new URLSearchParams(location.search).get("theme");
+  if (forcedScheme !== "light" && forcedScheme !== "dark") {
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function (e) {
       root.setAttribute("data-scheme", e.matches ? "dark" : "light");
-    }
-  });
+    });
+  }
 
   /* ---------------- 顶栏滚动态 ---------------- */
   var header = document.querySelector(".site-header");

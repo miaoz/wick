@@ -203,22 +203,6 @@ main.container { position: relative; z-index: 1; }
   transition: color 150ms ease;
 }
 .site-nav a:hover { color: var(--ember); }
-.icon-btn {
-  width: 30px; height: 30px; margin-left: 6px;
-  display: inline-grid; place-items: center;
-  background: transparent;
-  border: 1px solid var(--rule);
-  border-radius: 8px;
-  color: var(--ink-2);
-  cursor: pointer;
-  transition: all 150ms ease;
-}
-.icon-btn:hover { border-color: var(--ember); color: var(--ember); box-shadow: 0 0 8px var(--glow); }
-.icon-btn svg { width: 14px; height: 14px; }
-[data-scheme="light"] .icon-moon { display: block; }
-[data-scheme="light"] .icon-sun { display: none; }
-[data-scheme="dark"] .icon-moon { display: none; }
-[data-scheme="dark"] .icon-sun { display: block; }
 .lang-btn {
   margin-left: 6px;
   padding: 5px 11px;
