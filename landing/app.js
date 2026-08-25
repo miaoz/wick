@@ -37,6 +37,7 @@
     "dl.title": "Download",
     "dl.pill": "Local Storage · Read-only Sync · Open Source",
     "dl.pitch.title": "Why not roam by candlelight",
+    "dl.pitch.desc": "Review today's trades today, trade tomorrow's setups tomorrow. Bring time progress, macro events, and trade history into your Mac menu bar.",
     "dl.meta": "macOS 13 Ventura or later · Universal (Apple Silicon & Intel)",
     "dl.ios.text": "📱 iOS version ready (pending release)",
     "dl.ios.link": "Check iOS progress & wishlist ›",
