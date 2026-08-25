@@ -307,8 +307,13 @@ private struct PnlHeatmapCard: View {
                             .font(PhoneFont.preset(.caption2, weight: .bold))
                             .foregroundColor(PhoneTheme.inkSecondary)
                     }
+                    .disabled(!canGoForward)
+                    .opacity(canGoForward ? 1 : 0.3)
                 }
             }
+
+            // Month Total Row (已实现合计)
+            monthTotalRow
 
             // Mon-Sun Week Header
             HStack {
@@ -417,6 +422,52 @@ private struct PnlHeatmapCard: View {
             idCounter += 1
         }
         return cells
+    }
+
+    /// 「已实现合计 +1,204.6」(单据等宽数字,红盈黛亏;全零不占版)。
+    @ViewBuilder
+    private var monthTotalRow: some View {
+        if let total = monthTotal {
+            HStack {
+                Text(L10n.string(.inspectorMonthTotal, language: language))
+                    .font(PhoneFont.ui(10, weight: .medium, monospacedDigit: true))
+                    .foregroundColor(PhoneTheme.inkTertiary)
+                Spacer()
+                Text(Self.format(pnl: total))
+                    .font(PhoneFont.ui(12.5, weight: .bold, monospacedDigit: true))
+                    .foregroundColor(PhoneTheme.pnlColor(isGain: total >= 0))
+            }
+            .padding(.top, -2)
+        }
+    }
+
+    private var monthTotal: Double? {
+        let calendar = Calendar.current
+        let days = exchangeCoordinator.pnlByDay
+        let values = days.filter { calendar.isDate($0.key, equalTo: currentMonth, toGranularity: .month) }
+            .map(\.value)
+        guard !values.isEmpty else { return nil }
+        return values.reduce(0, +)
+    }
+
+    private var canGoForward: Bool {
+        let calendar = Calendar.current
+        let currentMonthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: currentMonth)) ?? currentMonth
+        let thisMonthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
+        return currentMonthStart < thisMonthStart
+    }
+
+    private static let pnlFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 2
+        return formatter
+    }()
+
+    private static func format(pnl: Double) -> String {
+        let sign = pnl >= 0 ? "+" : "−"
+        let digits = pnlFormatter.string(from: NSNumber(value: pnl.magnitude)) ?? "0"
+        return sign + digits
     }
 
     private static func monthDisplay(for date: Date, language: AppLanguage) -> String {
