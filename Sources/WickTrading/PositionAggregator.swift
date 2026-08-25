@@ -52,6 +52,13 @@ public enum PositionAggregator {
             if nextNet == net { continue }
 
             if session == nil {
+                // The history window can begin in the middle of a position.
+                // A known close at flat is the missing opening session's tail,
+                // not a new position in the opposite direction.
+                guard fill.effect != .close else {
+                    net = 0
+                    continue
+                }
                 // Flat before this fill: it purely opens a new session.
                 var fresh = SessionBuilder(
                     symbol: fill.symbol,

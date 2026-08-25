@@ -106,6 +106,7 @@ public struct HyperliquidInfoClient: ExchangeTradeClient, Sendable {
     struct FillRow: Decodable {
         var closedPnl: String?
         var coin: String
+        var dir: String?
         var px: String?
         var side: String?
         var sz: String?
@@ -122,6 +123,12 @@ public struct HyperliquidInfoClient: ExchangeTradeClient, Sendable {
             default:
                 sideNorm = "BUY"
             }
+            let effect: TradingFillEffect = {
+                let normalized = (dir ?? "").lowercased()
+                if normalized.hasPrefix("open ") { return .open }
+                if normalized.hasPrefix("close ") { return .close }
+                return .unknown
+            }()
             return TradingFill(
                 id: tid ?? time,
                 symbol: coin,
@@ -133,6 +140,7 @@ public struct HyperliquidInfoClient: ExchangeTradeClient, Sendable {
                 commission: Double(fee ?? "") ?? 0,
                 commissionAsset: feeToken ?? "USDC",
                 realizedPnl: Double(closedPnl ?? "") ?? 0,
+                effect: effect,
                 time: time
             )
         }

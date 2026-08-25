@@ -35,8 +35,8 @@ final class HyperliquidInfoClientTests: XCTestCase {
                 XCTAssertEqual(request.httpMethod, "POST")
                 captured.value = request.httpBody
                 let body = #"""
-                [{"closedPnl":"1.25","coin":"BTC","px":"40000","side":"B","sz":"0.5","time":1700000000000,"fee":"0.01","feeToken":"USDC","tid":99},
-                 {"closedPnl":"0","coin":"ETH","px":"2000","side":"A","sz":"2","time":1700000001000,"fee":"0","feeToken":"USDC","tid":100}]
+                [{"closedPnl":"1.25","coin":"BTC","dir":"Close Long","px":"40000","side":"B","sz":"0.5","time":1700000000000,"fee":"0.01","feeToken":"USDC","tid":99},
+                 {"closedPnl":"0","coin":"ETH","dir":"Open Short","px":"2000","side":"A","sz":"2","time":1700000001000,"fee":"0","feeToken":"USDC","tid":100}]
                 """#
                 return (Data(body.utf8), Self.http(200))
             },
@@ -52,8 +52,10 @@ final class HyperliquidInfoClientTests: XCTestCase {
         XCTAssertEqual(fills[0].positionSide, "BOTH")
         XCTAssertEqual(fills[0].id, 99)
         XCTAssertEqual(fills[0].realizedPnl, 1.25, accuracy: 0.0001)
+        XCTAssertEqual(fills[0].effect, .close)
         XCTAssertEqual(fills[1].side, "SELL")
         XCTAssertEqual(fills[1].symbol, "ETH")
+        XCTAssertEqual(fills[1].effect, .open)
 
         let object = try JSONSerialization.jsonObject(with: captured.value!) as? [String: Any]
         XCTAssertEqual(object?["type"] as? String, "userFillsByTime")

@@ -12,6 +12,7 @@ private func fill(
     realizedPnl: Double = 0,
     commission: Double = 0,
     commissionAsset: String = "USDT",
+    effect: TradingFillEffect? = nil,
     time: Int64
 ) -> TradingFill {
     TradingFill(
@@ -24,6 +25,7 @@ private func fill(
         commission: commission,
         commissionAsset: commissionAsset,
         realizedPnl: realizedPnl,
+        effect: effect,
         time: time
     )
 }
@@ -123,6 +125,56 @@ final class PositionAggregatorTests: XCTestCase {
         XCTAssertFalse(positions[0].isClosed)
         XCTAssertNil(positions[0].closeTime)
         XCTAssertNil(positions[0].exitPrice)
+    }
+
+    func testOrphanOneWayCloseDoesNotCreatePhantomPosition() {
+        let positions = PositionAggregator.aggregate(fills: [
+            fill(
+                1,
+                side: "SELL",
+                price: 110,
+                qty: 1,
+                realizedPnl: 10,
+                time: 2000
+            )
+        ])
+
+        XCTAssertTrue(positions.isEmpty)
+    }
+
+    func testOrphanHedgeCloseAtBreakEvenDoesNotCreatePhantomPosition() {
+        let positions = PositionAggregator.aggregate(fills: [
+            fill(
+                1,
+                side: "SELL",
+                positionSide: "LONG",
+                price: 100,
+                qty: 1,
+                realizedPnl: 0,
+                time: 2000
+            )
+        ])
+
+        XCTAssertTrue(positions.isEmpty)
+    }
+
+    func testRealOpenAfterOrphanCloseUsesOnlyOpeningFill() {
+        let positions = PositionAggregator.aggregate(fills: [
+            fill(
+                1,
+                side: "SELL",
+                price: 110,
+                qty: 1,
+                realizedPnl: 10,
+                time: 2000
+            ),
+            fill(2, side: "BUY", price: 90, qty: 0.5, time: 3000)
+        ])
+
+        XCTAssertEqual(positions.count, 1)
+        XCTAssertEqual(positions[0].openTime, Date(timeIntervalSince1970: 3))
+        XCTAssertEqual(positions[0].entryPrice, 90, accuracy: 1e-9)
+        XCTAssertEqual(positions[0].peakSize, 0.5, accuracy: 1e-9)
     }
 
     func testSequentialSessionsInOneLane() {
@@ -379,6 +431,16 @@ final class TradingModelTests: XCTestCase {
         XCTAssertEqual(fills[0].commission, -0.07819010, accuracy: 1e-9)
         XCTAssertEqual(fills[0].realizedPnl, -0.91539999, accuracy: 1e-9)
         XCTAssertEqual(fills[0].time, 1706261372000)
+    }
+
+    func testOldOneWayFillWithoutEffectInfersCloseFromRealizedPnl() throws {
+        let json = """
+        {"id":1,"symbol":"BTCUSDT","side":"SELL","positionSide":"BOTH",
+        "price":110,"qty":1,"realizedPnl":10,"time":2000}
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(TradingFill.self, from: json)
+        XCTAssertEqual(decoded.effect, .close)
     }
 
     func testSnapshotRoundTrip() throws {

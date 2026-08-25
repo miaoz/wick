@@ -901,7 +901,19 @@ final class ExchangePositionCoordinator: ObservableObject {
         guard let data = try? Data(contentsOf: url),
               let decoded = try? JSONDecoder().decode(TradingPositionSnapshot.self, from: data)
         else { return nil }
-        return decoded
+        return rebuildingDerivedPositions(in: decoded)
+    }
+
+    private func rebuildingDerivedPositions(
+        in snapshot: TradingPositionSnapshot
+    ) -> TradingPositionSnapshot {
+        guard !snapshot.fills.isEmpty else { return snapshot }
+        var rebuilt = snapshot
+        rebuilt.positions = FundingAttributor.attach(
+            positions: PositionAggregator.aggregate(fills: snapshot.fills),
+            funding: snapshot.funding
+        )
+        return rebuilt
     }
 
     private func saveCache(_ snapshot: TradingPositionSnapshot, for journalID: UUID) {
@@ -955,6 +967,7 @@ final class ExchangePositionCoordinator: ObservableObject {
 
         let existing = loadSnapshot(at: Self.cacheURL(for: journalID))
         if let existing, decoded.fetchedAt < existing.fetchedAt { return }
+        decoded = rebuildingDerivedPositions(in: decoded)
         decoded.sourceVenue = document.venue
         decoded.sourceAccountLabel = document.accountLabel
         saveCache(decoded, for: journalID)

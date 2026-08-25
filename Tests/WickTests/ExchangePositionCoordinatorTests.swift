@@ -209,6 +209,50 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: cacheFile(for: journalID).path))
     }
 
+    func testCloudSnapshotRebuildsDerivedPositionsBeforeCreatingEntries() throws {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = store.activeJournalID!
+        let fetchedAt = Date()
+        let closeOnlyFill = TradingFill(
+            id: 7,
+            symbol: "BTCUSDT",
+            side: "SELL",
+            price: 110,
+            qty: 1,
+            realizedPnl: 10,
+            time: Self.ms(fetchedAt.addingTimeInterval(-60))
+        )
+        let stalePhantom = TradingPosition(
+            id: "stale-phantom",
+            symbol: "BTCUSDT",
+            side: .short,
+            openTime: fetchedAt.addingTimeInterval(-60),
+            closeTime: nil,
+            entryPrice: 110,
+            exitPrice: nil,
+            peakSize: 1,
+            realizedPnl: 10
+        )
+        let cached = TradingPositionSnapshot(
+            fetchedAt: fetchedAt,
+            windowStart: Calendar.current.startOfDay(for: fetchedAt),
+            positions: [stalePhantom],
+            fills: [closeOnlyFill]
+        )
+        let document = JournalTradingSnapshotDocument(
+            journalID: journalID,
+            venue: ExchangeVenue.binance.rawValue,
+            accountLabel: "Binance",
+            fetchedAt: fetchedAt,
+            payload: try JSONEncoder().encode(cached)
+        )
+
+        coordinator.applyCloudSnapshotDocument(document, journalID: journalID)
+
+        XCTAssertTrue(coordinator.snapshot?.positions.isEmpty == true)
+        XCTAssertTrue(store.entries.isEmpty)
+    }
+
     func testLocalOnlyDisconnectPreservesReadOnlySnapshot() throws {
         let coordinator = ExchangePositionCoordinator()
         let journalID = bindActiveJournal()
@@ -258,6 +302,30 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
         let updated = store.entries.first { $0.id == entry.id }
         XCTAssertEqual(updated?.items.map(\.tag), ["BTC", "SKHYNIX"])
         XCTAssertEqual(updated?.items.first?.body, "keep this note")
+    }
+
+    func testCloseOnlySyncDoesNotCreateJournalEntry() async {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = bindActiveJournal()
+        let now = Date()
+        let closeOnlyFill = TradingFill(
+            id: 1,
+            symbol: "BTCUSDT",
+            side: "SELL",
+            price: 110,
+            qty: 1,
+            realizedPnl: 10,
+            time: Self.ms(now.addingTimeInterval(-60))
+        )
+        ExchangePositionCoordinator.clientFactoryOverride = { _, _ in
+            StubTradeClient(fills: [closeOnlyFill])
+        }
+
+        coordinator.syncNow(journalID: journalID)
+        await awaitRunCompletion(coordinator)
+
+        XCTAssertTrue(store.entries.isEmpty)
+        XCTAssertTrue(coordinator.snapshot?.positions.isEmpty == true)
     }
 
     func testSyncCollapsesPairsCoveredBySamePreferredBaseTag() async {
@@ -325,6 +393,45 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(store.entries.count, 1)
         XCTAssertEqual(store.entries.first?.items.map(\.tag), ["XAU"])
+    }
+
+    func testCacheLoadRebuildsDerivedPositionsAndIgnoresOrphanClose() throws {
+        let coordinator = ExchangePositionCoordinator()
+        let journalID = bindActiveJournal()
+        let now = Date()
+        let closeOnlyFill = TradingFill(
+            id: 7,
+            symbol: "BTCUSDT",
+            side: "SELL",
+            price: 110,
+            qty: 1,
+            realizedPnl: 10,
+            time: Self.ms(now.addingTimeInterval(-60))
+        )
+        let stalePhantom = TradingPosition(
+            id: "BTCUSDT|BOTH|\(closeOnlyFill.time)|7",
+            symbol: "BTCUSDT",
+            side: .short,
+            openTime: now.addingTimeInterval(-60),
+            closeTime: nil,
+            entryPrice: 110,
+            exitPrice: nil,
+            peakSize: 1,
+            realizedPnl: 10
+        )
+        let cached = TradingPositionSnapshot(
+            fetchedAt: now,
+            windowStart: Calendar.current.startOfDay(for: now),
+            positions: [stalePhantom],
+            fills: [closeOnlyFill],
+            fundingBackfilled: true
+        )
+        try JSONEncoder().encode(cached).write(to: cacheFile(for: journalID))
+
+        coordinator.activeJournalDidChange()
+
+        XCTAssertTrue(coordinator.snapshot?.positions.isEmpty == true)
+        XCTAssertTrue(store.entries.isEmpty)
     }
 
     func testCacheLoadMatchesDisplayedDateWhenStableDayKeyDiffers() throws {

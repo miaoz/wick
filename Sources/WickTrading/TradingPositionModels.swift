@@ -6,6 +6,13 @@ public enum TradingPositionSide: String, Codable, Sendable {
     case short
 }
 
+/// Exchange-provided or safely inferred effect of a fill on its position lane.
+public enum TradingFillEffect: String, Codable, Sendable {
+    case unknown
+    case open
+    case close
+}
+
 /// One fill from the exchange's account trade list. Field semantics mirror
 /// Binance USDⓈ-M `GET /fapi/v1/userTrades`.
 public struct TradingFill: Codable, Equatable, Hashable, Sendable {
@@ -21,6 +28,8 @@ public struct TradingFill: Codable, Equatable, Hashable, Sendable {
     public var commission: Double
     public var commissionAsset: String
     public var realizedPnl: Double
+    /// Used to reject a close fill whose opening history is outside the window.
+    public var effect: TradingFillEffect
     /// Fill time, milliseconds since the Unix epoch (UTC).
     public var time: Int64
 
@@ -35,6 +44,7 @@ public struct TradingFill: Codable, Equatable, Hashable, Sendable {
         commission: Double = 0,
         commissionAsset: String = "",
         realizedPnl: Double = 0,
+        effect: TradingFillEffect? = nil,
         time: Int64
     ) {
         self.id = id
@@ -47,12 +57,17 @@ public struct TradingFill: Codable, Equatable, Hashable, Sendable {
         self.commission = commission
         self.commissionAsset = commissionAsset
         self.realizedPnl = realizedPnl
+        self.effect = effect ?? Self.inferredEffect(
+            side: side,
+            positionSide: positionSide,
+            realizedPnl: realizedPnl
+        )
         self.time = time
     }
 
     public enum CodingKeys: String, CodingKey {
         case id, symbol, side, positionSide, price, qty, quoteQty
-        case commission, commissionAsset, realizedPnl, time
+        case commission, commissionAsset, realizedPnl, effect, time
     }
 
     public init(from decoder: Decoder) throws {
@@ -68,7 +83,26 @@ public struct TradingFill: Codable, Equatable, Hashable, Sendable {
         commission = Self.flexibleNumber(container, .commission)
         commissionAsset = try container.decodeIfPresent(String.self, forKey: .commissionAsset) ?? ""
         realizedPnl = Self.flexibleNumber(container, .realizedPnl)
+        effect = try container.decodeIfPresent(TradingFillEffect.self, forKey: .effect)
+            ?? Self.inferredEffect(side: side, positionSide: positionSide, realizedPnl: realizedPnl)
         time = try container.decode(Int64.self, forKey: .time)
+    }
+
+    private static func inferredEffect(
+        side: String,
+        positionSide: String,
+        realizedPnl: Double
+    ) -> TradingFillEffect {
+        switch (positionSide.uppercased(), side.uppercased()) {
+        case ("LONG", "BUY"), ("SHORT", "SELL"):
+            return .open
+        case ("LONG", "SELL"), ("SHORT", "BUY"):
+            return .close
+        default:
+            // One-way account trade feeds omit reduce-only/open-close intent.
+            // Non-zero realized PnL is nevertheless an unambiguous reduction.
+            return realizedPnl != 0 ? .close : .unknown
+        }
     }
 
     private static func flexibleNumber(
