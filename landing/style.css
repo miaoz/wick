@@ -29,7 +29,7 @@
   --receipt-ink: #33291A;
   --sh-page: 0 1px 2px rgba(43, 32, 20, 0.1), 0 10px 26px rgba(43, 32, 20, 0.14);
   --sh-lift: 0 2px 6px rgba(43, 32, 20, 0.12), 0 22px 50px rgba(43, 32, 20, 0.22);
-  --f-print: "STSongti-SC-Regular", "Songti SC", "STSong", "HiraMinProN-W6", "Noto Serif SC", serif;
+  --f-print: "Songti SC", "STSong", "HiraMinProN-W6", "Noto Serif SC", serif;
   --f-disp: ui-serif, "New York", "Songti SC", serif;
   --f-ui: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
   --f-mono: ui-monospace, "SF Mono", "Menlo", monospace;
@@ -137,11 +137,7 @@
    基座布局
    ========================================================================== */
 *, *::before, *::after { box-sizing: border-box; }
-html {
-  scroll-behavior: smooth;
-  -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
-}
+html { scroll-behavior: smooth; }
 body {
   margin: 0;
   background: var(--desk);
@@ -241,7 +237,6 @@ main.container { position: relative; z-index: 1; }
   letter-spacing: 0.2em;
   color: var(--ink-3);
 }
-[lang="zh"] .eyebrow { font-family: var(--f-print); }
 .hero h1 {
   margin: 0;
   font-family: var(--f-print);
@@ -340,11 +335,6 @@ main.container { position: relative; z-index: 1; }
 .strip-row .lbl { flex: none; min-width: 2.4em; font-family: var(--f-print); font-size: 13px; font-weight: 700; }
 .strip-row .burnstrip { flex: 1; height: 14px; }
 .strip-row .val { flex: none; width: 84px; text-align: right; font-family: var(--f-mono); font-size: 10.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-[lang="zh"] .slip-clock,
-[lang="zh"] .strip-row .val {
-  font-family: var(--f-print);
-  font-variant-numeric: tabular-nums;
-}
 
 /* ---------- 章节 ---------- */
 .section { padding: 40px 0; scroll-margin-top: 80px; }
@@ -458,7 +448,6 @@ main.container { position: relative; z-index: 1; }
 .dl-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; }
 .dl-col { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 .dl-meta { margin: 0; font-family: var(--f-mono); font-size: 12px; color: var(--ink-2); text-align: center; }
-[lang="zh"] .dl-meta { font-family: var(--f-print); }
 .dl-cta { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
 .btn-primary.big { padding: 15px 30px; font-size: 15px; }
 .btn-ghost.big { padding: 14px 30px; font-size: 15px; }
@@ -474,19 +463,6 @@ main.container { position: relative; z-index: 1; }
 .footer-links { display: flex; gap: 16px; }
 .footer-links a { color: var(--ink-2); text-decoration: none; }
 .footer-links a:hover { color: var(--ember); }
-
-/* iOS Songti Bold/Black contains inconsistent simplified glyph forms. Keep the
-   Chinese page on one physical face; hierarchy comes from size and color. */
-html[lang="zh"] body,
-html[lang="zh"] body * {
-  font-family: var(--f-print) !important;
-  font-weight: 400 !important;
-  font-synthesis: none;
-}
-html[lang="zh"] .hero h1 { -webkit-text-stroke: 0.35px currentColor; }
-html[lang="zh"] .hero-live,
-html[lang="zh"] .sec-head h2,
-html[lang="zh"] .feat h3 { -webkit-text-stroke: 0.15px currentColor; }
 
 /* ---------- 入场显影(JS 加 .rv,入视加 .in) ---------- */
 .rv { opacity: 0; transform: translateY(10px); }
