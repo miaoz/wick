@@ -213,7 +213,7 @@ public struct WickPalette: Equatable, Sendable {
     public var accentText: WickRGB
     /// Soft accent tint for selected fills.
     public var accentSoft: WickRGB
-    /// Review seals: 白文朱砂方章,永远红色,靠字表意(对/错同色)。
+    /// Accent ink for review notes and the unreviewed placeholder.
     public var reviewCorrect: WickRGB
     public var reviewWrong: WickRGB
     public var divider: WickRGB

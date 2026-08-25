@@ -229,7 +229,7 @@ struct JournalItemEditorCard: View {
     /// (figures, text) underneath it.
     private static let sealOpacity = 0.82
 
-    /// 复盘批注:朱砂左边线引文(e-note),章本身只表对/错。
+    /// 复盘批注:朱砂左边线引文(e-note),章本身只表 ✓/✗。
     private var noteRow: some View {
         let noteSpacing = AppFont.paperLineSpacing(11.5)
         return HStack(alignment: .top, spacing: 9) {

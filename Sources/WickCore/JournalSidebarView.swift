@@ -604,7 +604,7 @@ struct JournalDayTimelineRow: View {
         }
     }
 
-    /// 当日复盘的对/错章集合:同时有对错则并列两个,只有一种则一个(取去重后的集合,
+    /// 当日复盘的 ✓/✗ 章集合:两种都有则并列两个,只有一种则一个(取去重后的集合,
     /// 不再用「最后复盘的那个」近似)。
     private var dayVerdicts: [JournalReviewVerdict] {
         let reviews = entry.items.compactMap(\.review)

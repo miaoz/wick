@@ -1,11 +1,11 @@
 import SwiftUI
 import WickSync
 
-// MARK: - Review seal · 对错方章
+// MARK: - Review seal
 
 /// Verdict mark for a reviewed journal item — a square white-character seal
-/// (白文篆刻). The ink follows the 涨跌配色 convention: 对 = the gain color,
-/// 错 = the loss color (red-up: 对 red / 错 green; green-up: reversed).
+/// (白文篆刻). The glyph is always ✓/✗ in every language. Ink follows the
+/// 涨跌配色 convention: ✓ = gain, ✗ = loss.
 /// Three layers: distressed seal body (silhouette-only wobble), uneven ink
 /// shading, crisp character. Stamps in with a 0.3s slam on appear.
 public struct JournalReviewBadge: View {
@@ -81,18 +81,10 @@ public struct JournalReviewBadge: View {
     }
 
     private var glyph: String {
-        let isChinese = (language == .chinese) || (language == .system && Locale.current.language.languageCode?.identifier == "zh")
-        switch verdict {
-        case .correct: return isChinese ? "对" : "✓"
-        case .wrong: return isChinese ? "错" : "✗"
-        }
+        verdict.reviewSealGlyph
     }
 
     private var glyphFont: Font {
-        let isChinese = (language == .chinese) || (language == .system && Locale.current.language.languageCode?.identifier == "zh")
-        if isChinese {
-            return TradingCalendarTheme.kanji(size * 0.46, weight: .bold)
-        }
         return TradingCalendarTheme.kanji(size * 0.44, weight: .heavy)
     }
 
@@ -153,8 +145,17 @@ public struct SealBodyShape: Shape {
     }
 }
 
+extension JournalReviewVerdict {
+    var reviewSealGlyph: String {
+        switch self {
+        case .correct: return "✓"
+        case .wrong: return "✗"
+        }
+    }
+}
+
 public extension JournalReviewVerdict {
-    /// 对 = 涨色、错 = 跌色 —— 印章颜色跟随「涨跌配色」配置。
+    /// ✓ = gain, ✗ = loss; seal ink follows the configured PnL convention.
     func inkColor(in palette: WickPalette, convention: PnlColorConvention = .redUp) -> WickRGB {
         let pair = palette.upDownColors(convention)
         switch self {

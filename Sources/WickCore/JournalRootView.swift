@@ -90,6 +90,7 @@ struct JournalRootView: View {
             }
         }
         .environment(\.wickPalette, palette)
+        .environment(\.pnlColorConvention, settings.pnlColorConvention)
         .tint(palette.accent.color)
         .frame(minWidth: Self.editorMinWidth, minHeight: 480)
         .preferredColorScheme(settings.preferredColorScheme)
