@@ -4,12 +4,12 @@ import WickSync
 
 /// Schedules a daily local notification for journaling and review on iOS.
 @MainActor
-final class PhoneReminderScheduler: ObservableObject {
+final class PhoneReminderScheduler {
     static let shared = PhoneReminderScheduler()
 
     private static let identifier = "wick.journal.daily-reminder"
 
-    @Published private(set) var isAuthorized = false
+    private(set) var isAuthorized = false
 
     private init() {
         Task { await checkAuthorization() }

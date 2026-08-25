@@ -140,4 +140,21 @@ final class PaperSimTests: XCTestCase {
         let lastRow = (PaperSim.rows - 1) * PaperSim.cols
         XCTAssertGreaterThan(sim.pos[lastRow].y, Float(TradingCalendarGeometry.pageH) - 1)
     }
+
+    func testPaperLayoutEventsPaneMetrics() {
+        XCTAssertEqual(TradingCalendarGeometry.eventsPaneTopY, 204)
+        XCTAssertEqual(PaperLayout.desktop.eventsPaneTopY, 204)
+
+        let phoneLayout = PaperLayout.fullScreen(
+            size: CGSize(width: 393, height: 852),
+            safeTop: 59,
+            safeBottom: 34
+        )
+        let s = 393.0 / 300.0
+        XCTAssertEqual(phoneLayout.contentScale, s, accuracy: 0.001)
+        // eventsPaneTopY should clear masthead + hero + lunar + almanac
+        let expectedHeaderH = (29.0 + 82.0 + 21.0 + 46.0) * s
+        XCTAssertEqual(phoneLayout.eventsPaneTopY, phoneLayout.contentTopInset + expectedHeaderH, accuracy: 0.01)
+        XCTAssertGreaterThan(phoneLayout.eventPaneHeight, 150)
+    }
 }

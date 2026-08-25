@@ -359,23 +359,7 @@ struct SettingsContentView: View {
                     .tint(theme.selectionAccent)
 
                     if settings.journalReminderEnabled {
-                        HStack {
-                            Text(L10n.string(.journalReminderTime, language: language))
-                                .font(AppFont.ui(12.5, weight: .medium, design: .rounded))
-                                .foregroundStyle(theme.secondaryText)
-                            Spacer()
-                            DatePicker(
-                                "",
-                                selection: Binding(
-                                    get: { settings.journalReminderTime },
-                                    set: { settings.journalReminderTime = $0 }
-                                ),
-                                displayedComponents: .hourAndMinute
-                            )
-                            .labelsHidden()
-                            .datePickerStyle(.field)
-                        }
-                        .padding(.horizontal, 2)
+                        ReminderTimePickerSettingRow(theme: theme, language: language)
 
                         reminderPermissionFooter
                     }
@@ -934,6 +918,68 @@ struct SettingsContentView: View {
             .shadow(color: isSelected ? theme.palette.glow.color.opacity(0.6) : .clear, radius: 3)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct ReminderTimePickerSettingRow: View {
+    let theme: PanelTheme
+    let language: AppLanguage
+    @ObservedObject private var settings = AppSettings.shared
+    @State private var showPicker = false
+
+    var body: some View {
+        HStack {
+            Text(L10n.string(.journalReminderTime, language: language))
+                .font(AppFont.ui(12.5, weight: .medium, design: .rounded))
+                .foregroundStyle(theme.secondaryText)
+            Spacer()
+            Button {
+                showPicker = true
+            } label: {
+                HStack(spacing: 4) {
+                    Text(formattedTime(settings.journalReminderTime))
+                        .font(AppFont.paper(12.5, weight: .medium))
+                        .foregroundStyle(theme.primaryText)
+                    Image(systemName: "clock")
+                        .font(AppFont.ui(10))
+                        .foregroundStyle(theme.tertiaryText)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(theme.controlBackground.opacity(0.45))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(theme.palette.divider.color.opacity(0.8), lineWidth: 0.8)
+                }
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showPicker, arrowEdge: .top) {
+                VStack(spacing: 6) {
+                    DatePicker(
+                        "",
+                        selection: Binding(
+                            get: { settings.journalReminderTime },
+                            set: { settings.journalReminderTime = $0 }
+                        ),
+                        displayedComponents: .hourAndMinute
+                    )
+                    .labelsHidden()
+                    .datePickerStyle(.stepperField)
+                }
+                .padding(10)
+            }
+        }
+        .padding(.horizontal, 2)
+    }
+
+    private func formattedTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
     }
 }
 

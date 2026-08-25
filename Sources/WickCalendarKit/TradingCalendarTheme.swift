@@ -23,8 +23,8 @@ public enum TradingCalendarGeometry {
     /// Fraction of the page (from the bottom) that responds to the tear gesture.
     public static let tearZone: CGFloat = 0.93
     /// Page-local y where the events compartment begins (≈ top pad + masthead +
-    /// hero + lunar line). Only used to hit-test taps that flip event pages.
-    public static let eventsPaneTopY: CGFloat = 170
+    /// hero + lunar line + almanac). Only used to hit-test taps that flip event pages.
+    public static let eventsPaneTopY: CGFloat = 204
     /// Transparent margin around the top page so the sheet can swing/droop unclipped.
     public static let overhangX: CGFloat = 70
     public static let overhangBottom: CGFloat = 210
@@ -145,10 +145,10 @@ public struct PaperLayout: Sendable, Equatable, Hashable {
         let contentTopInset = frameTop + 10 * s
         let contentBottomInset = frameBottom + 10 * s
         let frameSide = 12 * s
-        // Printed matter above the events pane (masthead + hero + lunar line),
+        // Printed matter above the events pane (masthead + hero + lunar line + almanac),
         // estimated in desktop units - only used for tap hit-testing.
-        let headerH = (24.5 + 82 + 30) * s
-        let footerH = 20 * s
+        let headerH = (29 + 82 + 21 + 46) * s
+        let footerH = 23 * s
         let paneH = height - contentTopInset - headerH - footerH - contentBottomInset
         // One printed row (meta + title + values at full-bleed print) runs
         // ~51 desktop-units tall (the desktop page's rhythm); rows-per-page

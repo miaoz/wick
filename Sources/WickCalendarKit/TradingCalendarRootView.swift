@@ -153,6 +153,18 @@ public struct TradingCalendarRootView: View {
         Haptics.tick()
     }
 
+    /// Selects a specific compartment tab; resets page if switched or if on an overflow page.
+    private func selectTab(_ tab: MacroCalendarTab) {
+        if activeTab != tab {
+            activeTab = tab
+            eventsPage = 0
+            Haptics.tick()
+        } else if eventsPage != 0 {
+            eventsPage = 0
+            Haptics.tick()
+        }
+    }
+
     /// The active tab's error text for a day (the two feeds fail independently).
     private func errorText(for date: Date) -> String? {
         activeTab == .macro ? store.errorText(for: date) : store.earningsErrorText(for: date)
@@ -361,18 +373,12 @@ public struct TradingCalendarRootView: View {
                     return
                 }
                 // A tap inside the events pane never tears: taps on the tab
-                // strip (the pane's header row) switch tabs, taps on the rows
+                // strip (the pane's header row) switch or select tabs, taps on the rows
                 // below flip pages. Either way the gesture falls through to
                 // the settle path (pulled ≈ 0), so the sheet just springs back.
                 if abs(value.translation.width) < 8, abs(value.translation.height) < 8 {
                     let pageY = value.startLocation.y + layout.pageH * (1 - layout.tearZone)
-                    if pageY >= layout.eventsPaneTopY {
-                        if pageY < layout.eventsPaneTopY + 30 * layout.contentScale {
-                            switchTab()
-                        } else {
-                            flipEventsPage(by: 1)
-                        }
-                    }
+                    handleEventsPaneTap(at: value.startLocation, pageY: pageY)
                 }
                 // Velocity flicks feel right with a mouse but would let a
                 // careless phone swipe skip a day with no tearing at all -
@@ -390,6 +396,26 @@ public struct TradingCalendarRootView: View {
                     settleWithoutTearing(pulled: pulled, amplified: amplified)
                 }
             }
+    }
+
+    private func handleEventsPaneTap(at point: CGPoint, pageY: CGFloat) {
+        let s = layout.contentScale
+        // Generous vertical hit target for the tab header strip (from divider line through chips)
+        let tabHeaderH = 38 * s
+        if pageY >= layout.eventsPaneTopY - 4 * s, pageY < layout.eventsPaneTopY + tabHeaderH {
+            let leftPad = layout.isFullBleed ? layout.frameSideInset + 11 * s : 18 * s
+            let macroBoundary = leftPad + 50 * s
+            let earningsBoundary = leftPad + 130 * s
+            if point.x < macroBoundary {
+                selectTab(.macro)
+            } else if point.x < earningsBoundary {
+                selectTab(.earnings)
+            } else {
+                switchTab()
+            }
+        } else if pageY >= layout.eventsPaneTopY + tabHeaderH {
+            flipEventsPage(by: 1)
+        }
     }
 
     private func beginGrab(at start: CGPoint) {

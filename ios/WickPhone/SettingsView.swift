@@ -12,7 +12,7 @@ struct SettingsView: View {
     @EnvironmentObject private var sync: PhoneSyncCoordinator
     @EnvironmentObject private var store: PhoneJournalStore
     @EnvironmentObject private var exchangeCoordinator: PhoneExchangeCoordinator
-    @ObservedObject private var reminderScheduler = PhoneReminderScheduler.shared
+    private let reminderScheduler = PhoneReminderScheduler.shared
 
     // Language Setting
     @AppStorage("wick.language") private var languageRaw = AppLanguage.chinese.rawValue
@@ -24,7 +24,8 @@ struct SettingsView: View {
 
     // Reminder Settings
     @AppStorage("wick.journal.reminder.enabled") private var reminderEnabled = false
-    @State private var reminderTime = Calendar.current.date(bySettingHour: 21, minute: 0, second: 0, of: Date()) ?? Date()
+    @AppStorage("wick.journal.reminder.hour") private var reminderHour = 21
+    @AppStorage("wick.journal.reminder.minute") private var reminderMinute = 0
 
     // Dropbox / Recovery States
     @State private var isConnecting = false
@@ -45,6 +46,7 @@ struct SettingsView: View {
 
     @AppStorage("wick.journal.fontName") private var journalFontName = ""
     @State private var showFontPicker = false
+    @State private var showTimePickerSheet = false
 
     private var language: AppLanguage {
         AppLanguage(rawValue: languageRaw) ?? .chinese
@@ -87,6 +89,22 @@ struct SettingsView: View {
         Binding(
             get: { PnlColorConvention(rawValue: pnlConventionRaw) ?? .redUp },
             set: { pnlConventionRaw = $0.rawValue }
+        )
+    }
+
+    private var reminderDate: Date {
+        Calendar.current.date(bySettingHour: reminderHour, minute: reminderMinute, second: 0, of: Date()) ?? Date()
+    }
+
+    private var reminderDateBinding: Binding<Date> {
+        Binding(
+            get: { reminderDate },
+            set: { newDate in
+                let comps = Calendar.current.dateComponents([.hour, .minute], from: newDate)
+                reminderHour = comps.hour ?? 21
+                reminderMinute = comps.minute ?? 0
+                reminderScheduler.schedule(enabled: reminderEnabled, time: newDate)
+            }
         )
     }
 
@@ -170,22 +188,33 @@ struct SettingsView: View {
                                 .labelsHidden()
                                 .tint(PhoneTheme.ember)
                                 .onChange(of: reminderEnabled) { enabled in
-                                    reminderScheduler.schedule(enabled: enabled, time: reminderTime)
+                                    reminderScheduler.schedule(enabled: enabled, time: reminderDate)
                                 }
                         }
 
                         if reminderEnabled {
                             SettingsRow(title: L10n.string(.journalReminderTime, language: language), isLast: true) {
-                                DatePicker(
-                                    "",
-                                    selection: $reminderTime,
-                                    displayedComponents: .hourAndMinute
-                                )
-                                .labelsHidden()
-                                .colorMultiply(PhoneTheme.inkPrimary)
-                                .onChange(of: reminderTime) { time in
-                                    reminderScheduler.schedule(enabled: reminderEnabled, time: time)
+                                Button {
+                                    showTimePickerSheet = true
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Text(formattedReminderTime(reminderDate))
+                                            .font(PhoneFont.paper(12.5, weight: .bold))
+                                            .foregroundColor(PhoneTheme.inkPrimary)
+                                        Image(systemName: "chevron.up.chevron.down")
+                                            .font(PhoneFont.ui(8.5, weight: .semibold))
+                                            .foregroundColor(PhoneTheme.inkTertiary)
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4.5)
+                                    .background(PhoneTheme.paper)
+                                    .cornerRadius(4)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .stroke(PhoneTheme.rule, lineWidth: 1)
+                                    )
                                 }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -603,6 +632,35 @@ struct SettingsView: View {
             .sheet(isPresented: $showFontPicker) {
                 PhoneFontPickerView()
             }
+            .sheet(isPresented: $showTimePickerSheet) {
+                NavigationStack {
+                    VStack(spacing: 0) {
+                        DatePicker(
+                            "",
+                            selection: reminderDateBinding,
+                            displayedComponents: .hourAndMinute
+                        )
+                        .datePickerStyle(.wheel)
+                        .labelsHidden()
+                        .padding(.top, 12)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(PhoneTheme.paper.ignoresSafeArea())
+                    .navigationTitle(L10n.string(.journalReminderTime, language: language))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button(language == .chinese ? "完成" : "Done") {
+                                showTimePickerSheet = false
+                            }
+                            .font(PhoneFont.paper(13, weight: .bold))
+                            .foregroundColor(PhoneTheme.cinnabar)
+                        }
+                    }
+                }
+                .presentationDetents([.height(280)])
+                .presentationDragIndicator(.visible)
+            }
         }
     }
 
@@ -653,6 +711,13 @@ struct SettingsView: View {
             await sync.connectDropbox()
             isConnecting = false
         }
+    }
+
+    private func formattedReminderTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
     }
 }
 
