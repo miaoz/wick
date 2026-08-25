@@ -195,9 +195,26 @@ public enum TradingCalendarTheme {
     public static let dimInk = ink.opacity(0.75)
     public static let faintInk = ink.opacity(0.5)
 
+    @MainActor
+    private static var _pnlConvention: PnlColorConvention?
+
     /// Currently active PnL convention driving the physical calendar accent color.
     @MainActor
-    public static var pnlConvention: PnlColorConvention = .redUp
+    public static var pnlConvention: PnlColorConvention {
+        get {
+            if let _pnlConvention {
+                return _pnlConvention
+            }
+            if let raw = UserDefaults.standard.string(forKey: "wick.pnlColorConvention"),
+               let conv = PnlColorConvention(rawValue: raw) {
+                return conv
+            }
+            return .redUp
+        }
+        set {
+            _pnlConvention = newValue
+        }
+    }
 
     /// Dynamic theme accent color: Cinnabar Red when `redUp`, Pine Green when `greenUp`.
     @MainActor

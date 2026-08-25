@@ -88,7 +88,11 @@ struct SettingsView: View {
     private var pnlConventionBinding: Binding<PnlColorConvention> {
         Binding(
             get: { PnlColorConvention(rawValue: pnlConventionRaw) ?? .redUp },
-            set: { pnlConventionRaw = $0.rawValue }
+            set: {
+                pnlConventionRaw = $0.rawValue
+                TradingCalendarTheme.pnlConvention = $0
+                NotificationCenter.default.post(name: .wickCalendarPnlConventionChanged, object: nil)
+            }
         )
     }
 

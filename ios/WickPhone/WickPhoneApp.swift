@@ -30,6 +30,10 @@ struct WickPhoneApp: App {
 
     init() {
         PhoneFontManager.registerCustomFonts()
+        if let raw = UserDefaults.standard.string(forKey: "wick.pnlColorConvention"),
+           let conv = PnlColorConvention(rawValue: raw) {
+            TradingCalendarTheme.pnlConvention = conv
+        }
     }
 
     var body: some Scene {

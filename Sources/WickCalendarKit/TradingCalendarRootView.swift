@@ -78,6 +78,7 @@ public struct TradingCalendarRootView: View {
             paperScene.sim = sim
             store.loadIfNeeded(for: currentDate)
             store.loadIfNeeded(for: nextDate)
+            TradingCalendarTheme.pnlConvention = envPnlConvention
             refreshPageTexture()
         }
         .onChange(of: currentDate) { _ in
@@ -210,7 +211,7 @@ public struct TradingCalendarRootView: View {
                 eventsPage: 0,
                 tab: activeTab,
                 layout: layout,
-                convention: TradingCalendarTheme.pnlConvention
+                convention: envPnlConvention
             )
             .overlay(nextPageShading)
             .padding(.top, layout.pageTopInset)
@@ -262,7 +263,7 @@ public struct TradingCalendarRootView: View {
             }
 
             // The stapled binding across the top; drag it to move the pad (macOS).
-            CalendarPadBinding(onClose: onClose, layout: layout, convention: TradingCalendarTheme.pnlConvention)
+            CalendarPadBinding(onClose: onClose, layout: layout, convention: envPnlConvention)
 
             tearHitLayer
         }
@@ -459,7 +460,7 @@ public struct TradingCalendarRootView: View {
             eventsPage: eventsPage,
             tab: activeTab,
             layout: layout,
-            convention: TradingCalendarTheme.pnlConvention
+            convention: envPnlConvention
         )
         if let cg = CalendarSnapshot.cgImage(of: page, scale: 2) {
             paperScene.setPageTexture(SKTexture(cgImage: cg))
@@ -486,7 +487,7 @@ public struct TradingCalendarRootView: View {
             upward: upward,
             throwVelocity: lastVelocity,
             layout: layout,
-            convention: TradingCalendarTheme.pnlConvention
+            convention: envPnlConvention
         )
         TearSound.shared.playRip()
         Haptics.rip()
