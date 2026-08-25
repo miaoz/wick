@@ -88,6 +88,7 @@ final class PhoneJournalStore: ObservableObject {
     private func bootstrap() {
         try? fileManager.createDirectory(at: librariesRoot, withIntermediateDirectories: true)
         loadOrCreateCatalog()
+        migrateJournalSnapshotsToCurrentVersion()
         if let activeJournalID {
             bindPaths(for: activeJournalID)
             ensureDirectories()
@@ -130,6 +131,33 @@ final class PhoneJournalStore: ObservableObject {
         activeJournalID = catalog.journals.contains(where: { $0.id == catalog.activeJournalID })
             ? catalog.activeJournalID
             : journals.first?.id
+    }
+
+    /// Hard-cuts supported v1 snapshots to UUID-only v2 while preserving the
+    /// original primary as `journal.json.bak` before the atomic replacement.
+    private func migrateJournalSnapshotsToCurrentVersion() {
+        guard !isCatalogReadOnly else { return }
+        for journal in journals {
+            let directory = librariesRoot.appendingPathComponent(journal.id.uuidString, isDirectory: true)
+            let url = directory.appendingPathComponent("journal.json", isDirectory: false)
+            guard fileManager.fileExists(atPath: url.path) else { continue }
+            do {
+                let data = try Data(contentsOf: url)
+                let snapshot = try JournalSyncEncoding.decoder.decode(JournalSnapshot.self, from: data)
+                guard snapshot.version < JournalSnapshot.currentVersion else { continue }
+                let upgraded = JournalSnapshot(
+                    version: JournalSnapshot.currentVersion,
+                    entries: snapshot.entries
+                )
+                let upgradedData = try JournalSyncEncoding.encoder.encode(upgraded)
+                let backup = directory.appendingPathComponent("journal.json.bak", isDirectory: false)
+                try? fileManager.removeItem(at: backup)
+                try fileManager.copyItem(at: url, to: backup)
+                try upgradedData.write(to: url, options: .atomic)
+            } catch {
+                NSLog("Wick iOS journal v2 migration skipped for %@: %@", journal.id.uuidString, error.localizedDescription)
+            }
+        }
     }
 
     /// Explicit recovery: quarantine a corrupt/newer-format catalog, seed a
@@ -615,8 +643,7 @@ final class PhoneJournalStore: ObservableObject {
     /// Opens today's entry if present, otherwise creates it.
     @discardableResult
     func openOrCreateToday() -> JournalEntry {
-        let todayKey = JournalDayKey.make(from: Date())
-        if let existing = entries.first(where: { $0.dayKey == todayKey }) {
+        if let existing = entries.first(where: { Calendar.current.isDateInToday($0.date) }) {
             return existing
         }
         let entry = JournalEntry(date: Calendar.current.startOfDay(for: Date()))
@@ -625,7 +652,7 @@ final class PhoneJournalStore: ObservableObject {
         return entry
     }
 
-    /// Upserts an entry (editor save path). One entry per day key; bumps updatedAt.
+    /// Updates an entry by permanent UUID; bumps updatedAt.
     func updateEntry(_ entry: JournalEntry) {
         guard !isReadOnlyDueToLoadFailure else { return }
         var updated = entry
@@ -633,7 +660,9 @@ final class PhoneJournalStore: ObservableObject {
         if updated.items.isEmpty {
             updated.items = [JournalItem()]
         }
-        if let index = entries.firstIndex(where: { $0.dayKey == updated.dayKey }) {
+        updated.date = Calendar.current.startOfDay(for: updated.date)
+        mergeLocalDateCollision(into: &updated)
+        if let index = entries.firstIndex(where: { $0.id == updated.id }) {
             entries[index] = updated
         } else {
             entries.insert(updated, at: 0)
@@ -641,9 +670,9 @@ final class PhoneJournalStore: ObservableObject {
         persist()
     }
 
-    func deleteEntry(dayKey: String) {
+    func deleteEntry(entryID: UUID) {
         guard !isReadOnlyDueToLoadFailure else { return }
-        guard let index = entries.firstIndex(where: { $0.dayKey == dayKey }) else { return }
+        guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
         for filename in entries[index].allImageFilenames {
             removeImageFile(filename)
         }
@@ -858,61 +887,55 @@ extension PhoneJournalStore: JournalLocalSource {
 
     var syncIsWritable: Bool { !isReadOnlyDueToLoadFailure }
 
-    func syncDaySnapshots() -> [String: JournalEntry] {
-        var result: [String: JournalEntry] = [:]
-        for entry in entries {
-            if let existing = result[entry.dayKey], existing.updatedAt >= entry.updatedAt {
-                continue
-            }
-            result[entry.dayKey] = entry
-        }
-        return result
+    func syncEntrySnapshots() -> [UUID: JournalEntry] {
+        Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
     }
 
     /// Commits the currently open editor page's draft before the sync engine's
     /// freshness check, mirroring the macOS store.
-    func prepareForRemoteApply(dayKey: String) {
+    func prepareForRemoteApply(entryID: UUID) {
         NotificationCenter.default.post(name: .wickWillFlushJournalDrafts, object: nil)
     }
 
     /// Applies a whole cycle's remote changes in ONE pass (one persist). Each
     /// mutation is re-verified against its decision-time local hash right
-    /// before committing; a day edited since the decision is skipped and only
-    /// actually-applied day keys are returned (AC-P1-05).
+    /// before committing; an entry edited since the decision is skipped and only
+    /// actually-applied entry ids are returned (AC-P1-05).
     @discardableResult
-    func applySyncedChanges(_ changes: [JournalSyncMutation], journalID: UUID) -> Set<String> {
+    func applySyncedChanges(_ changes: [JournalSyncMutation], journalID: UUID) -> Set<UUID> {
         guard journalID == activeJournalID else { return [] }
         guard !isReadOnlyDueToLoadFailure else { return [] }
         guard !changes.isEmpty else { return [] }
         NotificationCenter.default.post(name: .wickWillFlushJournalDrafts, object: nil)
 
-        var applied: Set<String> = []
+        var applied: Set<UUID> = []
         var appliedEvents: [JournalRemoteApply] = []
         for change in changes {
-            let dayKey = change.dayKey
-            guard localDayStillMatches(dayKey: dayKey, expectedHash: change.expectedLocalHash) else { continue }
+            let entryID = change.entryID
+            guard localEntryStillMatches(entryID: entryID, expectedHash: change.expectedLocalHash) else { continue }
             switch change {
             case .upsert(let entry, _):
                 var appliedEntry = entry
                 if appliedEntry.items.isEmpty {
                     appliedEntry.items = [JournalItem()]
                 }
-                if let index = entries.firstIndex(where: { $0.dayKey == appliedEntry.dayKey }) {
+                if let index = entries.firstIndex(where: { $0.id == appliedEntry.id }) {
                     entries[index] = appliedEntry
                 } else {
+                    appliedEntry = mergeSyncedDateCollision(with: appliedEntry)
                     entries.append(appliedEntry)
                 }
-                applied.insert(dayKey)
+                applied.insert(entryID)
                 appliedEvents.append(
-                    JournalRemoteApply(journalID: journalID, dayKey: dayKey, entryID: appliedEntry.id)
+                    JournalRemoteApply(journalID: journalID, entryID: appliedEntry.id)
                 )
             case .remove(_, _):
-                guard let index = entries.firstIndex(where: { $0.dayKey == dayKey }) else { continue }
+                guard let index = entries.firstIndex(where: { $0.id == entryID }) else { continue }
                 for filename in entries[index].allImageFilenames {
                     removeImageFile(filename)
                 }
                 entries.remove(at: index)
-                applied.insert(dayKey)
+                applied.insert(entryID)
             }
         }
         guard !applied.isEmpty else { return [] }
@@ -924,8 +947,54 @@ extension PhoneJournalStore: JournalLocalSource {
         return applied
     }
 
-    private func localDayStillMatches(dayKey: String, expectedHash: String?) -> Bool {
-        let current = entries.first { $0.dayKey == dayKey }
+    /// Local date edits keep the UUID of the entry the user moved.
+    private func mergeLocalDateCollision(into incoming: inout JournalEntry) {
+        guard let collisionIndex = entries.firstIndex(where: {
+            $0.id != incoming.id && Calendar.current.isDate($0.date, inSameDayAs: incoming.date)
+        }) else { return }
+        let collision = entries[collisionIndex]
+        for item in collision.items where !item.isEmpty || collision.items.count == 1 {
+            if !incoming.items.contains(where: { $0.id == item.id }) {
+                incoming.items.append(item)
+            }
+        }
+        if incoming.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            incoming.title = collision.title
+        }
+        incoming.createdAt = min(incoming.createdAt, collision.createdAt)
+        incoming.updatedAt = max(incoming.updatedAt, collision.updatedAt)
+        entries.remove(at: collisionIndex)
+    }
+
+    /// Sync collisions converge on the same survivor across devices.
+    private func mergeSyncedDateCollision(with incoming: JournalEntry) -> JournalEntry {
+        guard let collisionIndex = entries.firstIndex(where: {
+            $0.id != incoming.id && Calendar.current.isDate($0.date, inSameDayAs: incoming.date)
+        }) else { return incoming }
+
+        let collision = entries[collisionIndex]
+        let incomingSurvives = incoming.id.uuidString < collision.id.uuidString
+        var survivor = incomingSurvives ? incoming : collision
+        let absorbed = incomingSurvives ? collision : incoming
+        for item in absorbed.items where !item.isEmpty || absorbed.items.count == 1 {
+            if !survivor.items.contains(where: { $0.id == item.id }) {
+                survivor.items.append(item)
+            }
+        }
+        if survivor.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            survivor.title = absorbed.title
+        }
+        survivor.createdAt = min(incoming.createdAt, collision.createdAt)
+        survivor.updatedAt = max(incoming.updatedAt, collision.updatedAt)
+        if survivor.items.isEmpty {
+            survivor.items = [JournalItem()]
+        }
+        entries.remove(at: collisionIndex)
+        return survivor
+    }
+
+    private func localEntryStillMatches(entryID: UUID, expectedHash: String?) -> Bool {
+        let current = entries.first { $0.id == entryID }
         guard let expectedHash else { return current == nil }
         guard let current else { return false }
         return (try? JournalSyncEncoding.contentHash(for: current)) == expectedHash
@@ -939,16 +1008,17 @@ extension PhoneJournalStore: JournalLocalSource {
         if applied.items.isEmpty {
             applied.items = [JournalItem()]
         }
-        if let index = entries.firstIndex(where: { $0.dayKey == applied.dayKey }) {
+        if let index = entries.firstIndex(where: { $0.id == applied.id }) {
             entries[index] = applied
         } else {
+            applied = mergeSyncedDateCollision(with: applied)
             entries.append(applied)
         }
         // Applies arrive in ascending day order; the day list is newest-first.
         entries.sort { $0.date > $1.date }
         persist()
         remoteEntryDidApply.send(
-            JournalRemoteApply(journalID: journalID, dayKey: applied.dayKey, entryID: applied.id)
+            JournalRemoteApply(journalID: journalID, entryID: applied.id)
         )
     }
 
@@ -971,10 +1041,10 @@ extension PhoneJournalStore: JournalLocalSource {
         return resolved
     }
 
-    func removeSyncedDay(dayKey: String, journalID: UUID) {
+    func removeSyncedEntry(entryID: UUID, journalID: UUID) {
         guard journalID == activeJournalID else { return }
         guard !isReadOnlyDueToLoadFailure else { return }
-        guard let index = entries.firstIndex(where: { $0.dayKey == dayKey }) else { return }
+        guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
         for filename in entries[index].allImageFilenames {
             removeImageFile(filename)
         }

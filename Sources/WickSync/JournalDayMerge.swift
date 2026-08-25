@@ -1,7 +1,7 @@
 import Foundation
 
-/// Outcome of merging two device versions of the same journal day.
-public struct JournalDayMergeResult: Equatable {
+/// Outcome of merging two device versions of the same UUID-identified entry.
+public struct JournalEntryMergeResult: Equatable {
     /// The union entry both devices should converge to.
     public var merged: JournalEntry
     /// Same-item-id conflicts whose contents differed — the losing copies.
@@ -11,18 +11,20 @@ public struct JournalDayMergeResult: Equatable {
     public var losingTitle: String?
 }
 
-/// Merges two versions of one day (same `dayKey`) that diverged on two devices.
+/// Merges two versions of one entry (same `id`) that diverged on two devices.
 ///
 /// Rules (deterministic so all devices converge to the same result):
-/// - Entry identity (id/date/dayKey) comes from the older entry by `createdAt`.
+/// - Entry identity is the permanent UUID; a concurrently edited date follows
+///   the side with the newer `updatedAt`.
 /// - Items are unioned by item id — the data model's one-day-many-items shape
 ///   means concurrent edits usually touch different items and merge cleanly.
 /// - Same item id with different contents: the side with the newer
 ///   `entry.updatedAt` wins; the loser is preserved in `losingItems`.
 /// - Title: identical or one-sided-empty resolves trivially; two different
 ///   non-empty titles go to the newer side, loser recorded in `losingTitle`.
-public enum JournalDayMerge {
-    public static func merge(local: JournalEntry, remote: JournalEntry) -> JournalDayMergeResult {
+public enum JournalEntryMerge {
+    public static func merge(local: JournalEntry, remote: JournalEntry) -> JournalEntryMergeResult {
+        precondition(local.id == remote.id, "Only versions of the same entry may merge")
         let localIsBase = local.createdAt <= remote.createdAt
         let base = localIsBase ? local : remote
         let other = localIsBase ? remote : local
@@ -84,11 +86,13 @@ public enum JournalDayMerge {
         }
 
         var merged = base
+        merged.id = local.id
+        merged.date = localWinsConflicts ? local.date : remote.date
         merged.title = title
         merged.items = items
         merged.createdAt = min(local.createdAt, remote.createdAt)
         merged.updatedAt = max(local.updatedAt, remote.updatedAt)
 
-        return JournalDayMergeResult(merged: merged, losingItems: losingItems, losingTitle: losingTitle)
+        return JournalEntryMergeResult(merged: merged, losingItems: losingItems, losingTitle: losingTitle)
     }
 }

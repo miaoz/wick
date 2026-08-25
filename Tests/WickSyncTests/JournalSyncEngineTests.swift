@@ -181,54 +181,57 @@ final class FakeLocalSource: JournalLocalSource {
     var syncJournalName: String { journalName }
     var syncIsWritable: Bool { writable }
 
-    func syncDaySnapshots() -> [String: JournalEntry] {
+    func syncEntrySnapshots() -> [UUID: JournalEntry] {
         snapshotCount += 1
         if snapshotCount.isMultiple(of: 2), let mutate = mutateOnFreshnessCheck {
             mutateOnFreshnessCheck = nil
             mutate(&days)
         }
-        return days
+        return Dictionary(uniqueKeysWithValues: days.values.map { ($0.id, $0) })
     }
-    func prepareForRemoteApply(dayKey: String) {
-        if let pending = pendingDraft, pending.dayKey == dayKey {
+    func prepareForRemoteApply(entryID: UUID) {
+        if let pending = pendingDraft, pending.entry.id == entryID {
             pendingDraft = nil
-            days[dayKey] = pending.entry
+            days[pending.dayKey] = pending.entry
         }
     }
-    func applySyncedChanges(_ changes: [JournalSyncMutation], journalID: UUID) -> Set<String> {
+    func applySyncedChanges(_ changes: [JournalSyncMutation], journalID: UUID) -> Set<UUID> {
         guard journalID == self.journalID else { return [] }
         applyBatchCount += 1
         applyMutationCount += changes.count
-        var applied: Set<String> = []
+        var applied: Set<UUID> = []
         for change in changes {
-            let dayKey = change.dayKey
-            guard localDayStillMatches(dayKey: dayKey, expectedHash: change.expectedLocalHash) else { continue }
+            let entryID = change.entryID
+            guard localEntryStillMatches(entryID: entryID, expectedHash: change.expectedLocalHash) else { continue }
             switch change {
             case .upsert(let entry, _):
-                days[entry.dayKey] = entry
+                days[JournalDayKey.make(from: entry.date, timeZone: .gmt)] = entry
             case .remove(_, _):
-                days.removeValue(forKey: dayKey)
-                removedDayKeys.append(dayKey)
+                if let key = days.first(where: { $0.value.id == entryID })?.key {
+                    days.removeValue(forKey: key)
+                    removedDayKeys.append(key)
+                }
             }
-            applied.insert(dayKey)
+            applied.insert(entryID)
         }
         return applied
     }
 
-    private func localDayStillMatches(dayKey: String, expectedHash: String?) -> Bool {
-        let current = days[dayKey]
+    private func localEntryStillMatches(entryID: UUID, expectedHash: String?) -> Bool {
+        let current = days.values.first { $0.id == entryID }
         guard let expectedHash else { return current == nil }
         guard let current else { return false }
         return (try? JournalSyncEncoding.contentHash(for: current)) == expectedHash
     }
     func applySyncedEntry(_ entry: JournalEntry, journalID: UUID) {
         guard journalID == self.journalID else { return }
-        days[entry.dayKey] = entry
+        days[JournalDayKey.make(from: entry.date, timeZone: .gmt)] = entry
     }
-    func removeSyncedDay(dayKey: String, journalID: UUID) {
+    func removeSyncedEntry(entryID: UUID, journalID: UUID) {
         guard journalID == self.journalID else { return }
-        days.removeValue(forKey: dayKey)
-        removedDayKeys.append(dayKey)
+        guard let key = days.first(where: { $0.value.id == entryID })?.key else { return }
+        days.removeValue(forKey: key)
+        removedDayKeys.append(key)
     }
 
     @discardableResult
@@ -300,8 +303,8 @@ final class JournalSyncEngineTests: XCTestCase {
 
     private func entry(dayKey: String, body: String, updatedAt: Date? = nil) -> JournalEntry {
         JournalEntry(
-            date: t0,
-            dayKey: dayKey,
+            id: entryID(dayKey),
+            date: date(dayKey),
             items: [JournalItem(body: body)],
             createdAt: t0,
             updatedAt: updatedAt ?? t0
@@ -309,7 +312,25 @@ final class JournalSyncEngineTests: XCTestCase {
     }
 
     private func dayPath(_ dayKey: String) -> String {
-        JournalSyncLayout.dayPath(for: journalID, dayKey: dayKey)
+        JournalSyncLayout.entryPath(for: journalID, entryID: entryID(dayKey))
+    }
+
+    private func entryID(_ dayKey: String) -> UUID {
+        let hex = SHA256.hash(data: Data(dayKey.utf8))
+            .prefix(16)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        let value = "\(hex.prefix(8))-\(hex.dropFirst(8).prefix(4))-\(hex.dropFirst(12).prefix(4))-\(hex.dropFirst(16).prefix(4))-\(hex.dropFirst(20).prefix(12))"
+        return UUID(uuidString: value)!
+    }
+
+    private func date(_ dayKey: String) -> Date {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .gmt
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: dayKey)!
     }
 
     private func decodeRemoteDay(_ dayKey: String) throws -> JournalEntry {
@@ -342,6 +363,49 @@ final class JournalSyncEngineTests: XCTestCase {
         XCTAssertTrue(backend.hasFile(JournalSyncLayout.manifestPath(for: journalID)))
         XCTAssertEqual(try decodeRemoteDay("2026-08-01").items.first?.body, "one")
         XCTAssertEqual(try decodeRemoteDay("2026-08-02").items.first?.body, "two")
+    }
+
+    func testLegacyRemoteIsHardCutToUUIDEntriesUsingLocalAuthority() async throws {
+        let source = makeSource(name: "Local Authority")
+        let local = JournalEntry(
+            id: UUID(),
+            date: date("2026-08-20"),
+            items: [JournalItem(body: "keep local")],
+            createdAt: t0,
+            updatedAt: t0
+        )
+        source.days["2026-08-20"] = local
+
+        let legacyManifest = JournalSyncManifest(
+            formatVersion: 1,
+            journalID: journalID,
+            journalName: "Legacy Remote",
+            createdAt: t0,
+            deviceID: "old"
+        )
+        let legacyDayPath = "\(JournalSyncLayout.journalRoot(for: journalID))/days/2026-08-22.json"
+        backend.seedFile(
+            JournalSyncLayout.manifestPath(for: journalID),
+            data: try JournalSyncEncoding.encoder.encode(legacyManifest)
+        )
+        backend.seedFile(
+            legacyDayPath,
+            data: try JournalSyncEncoding.encoder.encode(entry(dayKey: "2026-08-22", body: "discard remote"))
+        )
+
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        await engine.performSyncCycle()
+
+        let manifest = try decodeRemoteManifest()
+        XCTAssertEqual(manifest.formatVersion, JournalSyncLayout.formatVersion)
+        XCTAssertEqual(manifest.journalName, "Local Authority")
+        XCTAssertFalse(backend.hasFile(legacyDayPath))
+        let newPath = JournalSyncLayout.entryPath(for: journalID, entryID: local.id)
+        let remoteData = try XCTUnwrap(backend.fileData(newPath))
+        let remote = try JournalSyncEncoding.decoder.decode(JournalEntry.self, from: remoteData)
+        XCTAssertEqual(remote.id, local.id)
+        XCTAssertEqual(remote.date, local.date)
+        XCTAssertEqual(remote.items.first?.body, "keep local")
     }
 
     func testSecondCycleIsNoOp() async {
@@ -402,8 +466,8 @@ final class JournalSyncEngineTests: XCTestCase {
         // Device A publishes a day whose entry carries a traversal image name.
         let a = makeSource()
         let poisoned = JournalEntry(
-            date: t0,
-            dayKey: "2026-08-01",
+            id: entryID("2026-08-01"),
+            date: date("2026-08-01"),
             items: [JournalItem(body: "safe looking", imageFilenames: ["../sentinel.txt"])],
             createdAt: t0,
             updatedAt: t0
@@ -459,8 +523,8 @@ final class JournalSyncEngineTests: XCTestCase {
         let b = makeSource()
         b.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "ok")
         b.days["2026-08-02"] = JournalEntry(
-            date: t0,
-            dayKey: "2026-08-02",
+            id: entryID("2026-08-02"),
+            date: date("2026-08-02"),
             items: [JournalItem(body: "poisoned", imageFilenames: ["../evil.png"])],
             createdAt: t0,
             updatedAt: t0
@@ -596,7 +660,13 @@ final class JournalSyncEngineTests: XCTestCase {
     func testConcurrentDifferentItemsMergeAsUnion() async throws {
         let sharedItem = JournalItem(body: "shared")
         let a = makeSource()
-        a.days["2026-08-01"] = JournalEntry(date: t0, dayKey: "2026-08-01", items: [sharedItem], createdAt: t0, updatedAt: t0)
+        a.days["2026-08-01"] = JournalEntry(
+            id: entryID("2026-08-01"),
+            date: date("2026-08-01"),
+            items: [sharedItem],
+            createdAt: t0,
+            updatedAt: t0
+        )
         let engineA = makeEngine(source: a, stateDir: "a", device: "A")
         await engineA.performSyncCycle()
 
@@ -627,8 +697,8 @@ final class JournalSyncEngineTests: XCTestCase {
         let itemID = UUID()
         let a = makeSource()
         a.days["2026-08-01"] = JournalEntry(
-            date: t0,
-            dayKey: "2026-08-01",
+            id: entryID("2026-08-01"),
+            date: date("2026-08-01"),
             items: [JournalItem(id: itemID, body: "original")],
             createdAt: t0,
             updatedAt: t0
@@ -803,8 +873,8 @@ final class JournalSyncEngineTests: XCTestCase {
         let itemID = UUID()
         let a = makeSource()
         a.days["2026-08-01"] = JournalEntry(
-            date: t0,
-            dayKey: "2026-08-01",
+            id: entryID("2026-08-01"),
+            date: date("2026-08-01"),
             items: [JournalItem(id: itemID, body: "original")],
             createdAt: t0,
             updatedAt: t0
@@ -848,8 +918,8 @@ final class JournalSyncEngineTests: XCTestCase {
         let engineB = makeEngine(source: b, stateDir: "b", device: "B")
 
         a.days["2026-08-01"] = JournalEntry(
-            date: t0,
-            dayKey: "2026-08-01",
+            id: entryID("2026-08-01"),
+            date: date("2026-08-01"),
             items: [JournalItem(id: itemID, body: "v1")],
             createdAt: t0,
             updatedAt: t0
@@ -1054,14 +1124,18 @@ final class JournalSyncEngineTests: XCTestCase {
         // A marker whose hash matches nothing on the remote (a settlement for a
         // different version of the day) must not clear B's record.
         let stale = JournalSettlementMarker(
-            dayKey: "2026-08-01",
+            entryID: entryID("2026-08-01"),
             settledHash: "deadbeefdeadbeef",
             deviceID: "X",
             stamp: Date()
         )
         let data = try JournalSyncEncoding.encoder.encode(stale)
         backend.seedFile(
-            JournalSyncLayout.settlementPath(for: journalID, dayKey: "2026-08-01", stamp: Date()),
+            JournalSyncLayout.settlementPath(
+                for: journalID,
+                entryID: entryID("2026-08-01"),
+                stamp: Date()
+            ),
             data: data
         )
 
@@ -1174,7 +1248,7 @@ final class JournalSyncEngineTests: XCTestCase {
         a.days.removeValue(forKey: "2026-08-01")
         await engineA.performSyncCycle()
         XCTAssertFalse(backend.hasFile(dayPath("2026-08-01")))
-        XCTAssertTrue(backend.hasFile(JournalSyncLayout.tombstonePath(for: journalID, dayKey: "2026-08-01")))
+        XCTAssertTrue(backend.hasFile(JournalSyncLayout.entryTombstonePath(for: journalID, entryID: entryID("2026-08-01"))))
 
         await engineB.performSyncCycle()
         XCTAssertNil(b.days["2026-08-01"])
@@ -1189,7 +1263,7 @@ final class JournalSyncEngineTests: XCTestCase {
 
         source.days.removeValue(forKey: "2026-08-01")
         await engine.performSyncCycle()
-        let tombPath = JournalSyncLayout.tombstonePath(for: journalID, dayKey: "2026-08-01")
+        let tombPath = JournalSyncLayout.entryTombstonePath(for: journalID, entryID: entryID("2026-08-01"))
         XCTAssertTrue(backend.hasFile(tombPath))
 
         let stale = entry(
@@ -1251,7 +1325,7 @@ final class JournalSyncEngineTests: XCTestCase {
         await engineB.performSyncCycle()
         // B's edit wins: day restored remotely, tombstone cleared.
         XCTAssertEqual(try decodeRemoteDay("2026-08-01").items.first?.body, "B edit")
-        XCTAssertFalse(backend.hasFile(JournalSyncLayout.tombstonePath(for: journalID, dayKey: "2026-08-01")))
+        XCTAssertFalse(backend.hasFile(JournalSyncLayout.entryTombstonePath(for: journalID, entryID: entryID("2026-08-01"))))
 
         // A then pulls the resurrected day back.
         await engineA.performSyncCycle()
@@ -1279,7 +1353,13 @@ final class JournalSyncEngineTests: XCTestCase {
         let imageData = Data([0x89, 0x50, 0x4E, 0x47, 1, 2, 3])
         let item = JournalItem(body: "with image", imageFilenames: ["PHOTO.PNG"])
         let a = makeSource()
-        a.days["2026-08-01"] = JournalEntry(date: t0, dayKey: "2026-08-01", items: [item], createdAt: t0, updatedAt: t0)
+        a.days["2026-08-01"] = JournalEntry(
+            id: entryID("2026-08-01"),
+            date: date("2026-08-01"),
+            items: [item],
+            createdAt: t0,
+            updatedAt: t0
+        )
         a.images["PHOTO.PNG"] = imageData
         let engineA = makeEngine(source: a, stateDir: "a", device: "A")
         await engineA.performSyncCycle()
@@ -1366,7 +1446,7 @@ final class JournalSyncEngineTests: XCTestCase {
         // The new journal gets its own fresh remote root; nothing from the old
         // journal leaks into it.
         XCTAssertEqual(engine.status, .idle)
-        XCTAssertFalse(backend.hasFile(JournalSyncLayout.dayPath(for: otherID, dayKey: "2026-08-01")))
+        XCTAssertFalse(backend.hasFile(JournalSyncLayout.entryPath(for: otherID, entryID: entryID("2026-08-01"))))
         XCTAssertTrue(backend.hasFile(JournalSyncLayout.manifestPath(for: otherID)))
     }
 
@@ -1395,7 +1475,7 @@ final class JournalSyncEngineTests: XCTestCase {
         XCTAssertTrue(backend.hasFile(dayPath("2026-08-01")), "the previous journal's remote days must remain")
         XCTAssertTrue(backend.hasFile(dayPath("2026-08-02")))
         XCTAssertFalse(
-            backend.hasFile(JournalSyncLayout.dayPath(for: otherID, dayKey: "2026-08-01")),
+            backend.hasFile(JournalSyncLayout.entryPath(for: otherID, entryID: entryID("2026-08-01"))),
             "the previous journal's days must not be pushed under the new id"
         )
 
@@ -1411,7 +1491,7 @@ final class JournalSyncEngineTests: XCTestCase {
         // Another device's journal exists on the remote.
         let otherID = UUID()
         let otherManifest = JournalSyncManifest(
-            formatVersion: 1,
+            formatVersion: JournalSyncLayout.formatVersion,
             journalID: otherID,
             journalName: "Mac 13 Journal",
             createdAt: t0,
@@ -1449,7 +1529,7 @@ final class JournalSyncEngineTests: XCTestCase {
     func testDiscoveredRecordPrunedWhenManifestVanishes() async throws {
         let otherID = UUID()
         let manifest = JournalSyncManifest(
-            formatVersion: 1,
+            formatVersion: JournalSyncLayout.formatVersion,
             journalID: otherID,
             journalName: "Gone Soon",
             createdAt: t0,
@@ -1486,7 +1566,7 @@ final class JournalSyncEngineTests: XCTestCase {
         await engineA.performSyncCycle()
 
         XCTAssertFalse(backend.hasFile(JournalSyncLayout.manifestPath(for: doomedID)))
-        XCTAssertFalse(backend.hasFile(JournalSyncLayout.dayPath(for: doomedID, dayKey: "2026-08-01")))
+        XCTAssertFalse(backend.hasFile(JournalSyncLayout.entryPath(for: doomedID, entryID: entryID("2026-08-01"))))
         XCTAssertTrue(backend.hasFile(JournalSyncLayout.journalTombstonePath(for: doomedID)))
     }
 
@@ -1524,7 +1604,7 @@ final class JournalSyncEngineTests: XCTestCase {
     func testFreshDeviceSkipsTombstonedJournalInDiscovery() async throws {
         let deadID = UUID()
         let manifest = JournalSyncManifest(
-            formatVersion: 1,
+            formatVersion: JournalSyncLayout.formatVersion,
             journalID: deadID,
             journalName: "Deleted",
             createdAt: t0,
@@ -1765,7 +1845,7 @@ final class JournalSyncEngineTests: XCTestCase {
         await resumed.performSyncCycle()
 
         XCTAssertTrue(
-            backend.hasFile(JournalSyncLayout.tombstonePath(for: journalID, dayKey: "2026-08-01")),
+            backend.hasFile(JournalSyncLayout.entryTombstonePath(for: journalID, entryID: entryID("2026-08-01"))),
             "stale baseline turns an empty local copy into a delete propagation"
         )
         XCTAssertFalse(backend.hasFile(dayPath("2026-08-01")))
@@ -1786,7 +1866,7 @@ final class JournalSyncEngineTests: XCTestCase {
 
         XCTAssertEqual(wiped.days["2026-08-01"]?.items.first?.body, "precious")
         XCTAssertTrue(backend.hasFile(dayPath("2026-08-01")))
-        XCTAssertFalse(backend.hasFile(JournalSyncLayout.tombstonePath(for: journalID, dayKey: "2026-08-01")))
+        XCTAssertFalse(backend.hasFile(JournalSyncLayout.entryTombstonePath(for: journalID, entryID: entryID("2026-08-01"))))
     }
 
     // MARK: journal name sync

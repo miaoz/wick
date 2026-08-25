@@ -6,18 +6,18 @@ import Foundation
 ///   /journals/<uuid>/
 ///     manifest.json               format gate + journal identity (renames
 ///                                 propagate by rewriting it, rev-guarded)
-///     days/<dayKey>.json          one canonical JournalEntry per file
+///     entries/<entryUUID>.json    one canonical JournalEntry per file
 ///     images/<uuid>.png|jpg|...   content-addressed, immutable
 ///     trading/snapshot.json       optional derived trading cache (no secrets)
 ///     trading/deleted.json        explicit snapshot-deletion marker
-///     tombstones/<dayKey>.json    deletion marker (GC'd after retention)
-///     conflicts/<dayKey>-<ts>.json  losing side of an item-level conflict
-///     settlements/<dayKey>-….json  conflict-settlement marker for peers
-///   /journal-tombstones/<uuid>.json  journal-level deletion marker - lives
+///     entry-tombstones/<entryUUID>.json  deletion marker (GC'd after retention)
+///     conflicts/<entryUUID>-<ts>.json    losing side of an item-level conflict
+///     settlements/<entryUUID>-….json    conflict-settlement marker for peers
+///   /journal-tombstones-v2/<uuid>.json  journal-level deletion marker - lives
 ///                                 OUTSIDE the journal folder so deleting the
 ///                                 folder cannot take the marker with it
 public enum JournalSyncLayout {
-    public static let formatVersion = 1
+    public static let formatVersion = 2
     public static let tombstoneRetention: TimeInterval = 30 * 24 * 3600
 
     public static func journalRoot(for journalID: UUID) -> String {
@@ -28,8 +28,8 @@ public enum JournalSyncLayout {
         "\(journalRoot(for: journalID))/manifest.json"
     }
 
-    public static func dayPath(for journalID: UUID, dayKey: String) -> String {
-        "\(journalRoot(for: journalID))/days/\(dayKey).json"
+    public static func entryPath(for journalID: UUID, entryID: UUID) -> String {
+        "\(journalRoot(for: journalID))/entries/\(entryID.uuidString.lowercased()).json"
     }
 
     public static func imagePath(for journalID: UUID, filename: String) -> String {
@@ -44,43 +44,43 @@ public enum JournalSyncLayout {
         "\(journalRoot(for: journalID))/trading/deleted.json"
     }
 
-    public static func tombstonePath(for journalID: UUID, dayKey: String) -> String {
-        "\(journalRoot(for: journalID))/tombstones/\(dayKey).json"
+    public static func entryTombstonePath(for journalID: UUID, entryID: UUID) -> String {
+        "\(journalRoot(for: journalID))/entry-tombstones/\(entryID.uuidString.lowercased()).json"
     }
 
-    /// Deletion marker for a whole journal: `/journal-tombstones/<uuid>.json`.
+    /// Deletion marker for a whole journal in the UUID-based v2 protocol.
     public static func journalTombstonePath(for journalID: UUID) -> String {
-        "/journal-tombstones/\(journalID.uuidString.lowercased()).json"
+        "/journal-tombstones-v2/\(journalID.uuidString.lowercased()).json"
     }
 
-    /// Extracts the journal id from a `/journal-tombstones/<uuid>.json` path,
+    /// Extracts the journal id from a `/journal-tombstones-v2/<uuid>.json` path,
     /// nil for anything else.
     public static func journalTombstoneID(from path: String) -> UUID? {
-        guard path.hasPrefix("/journal-tombstones/"), path.hasSuffix(".json") else { return nil }
-        let middle = path.dropFirst("/journal-tombstones/".count).dropLast(".json".count)
+        guard path.hasPrefix("/journal-tombstones-v2/"), path.hasSuffix(".json") else { return nil }
+        let middle = path.dropFirst("/journal-tombstones-v2/".count).dropLast(".json".count)
         return UUID(uuidString: String(middle))
     }
 
-    /// A settlement marker file for a day: `settlements/<dayKey>-<stamp>-<uuid>.json`.
-    /// Uploaded by the device that resolved the day's conflict; other devices use
+    /// A settlement marker file for an entry.
+    /// Uploaded by the device that resolved the entry's conflict; other devices use
     /// it to drop their stale pending-conflict records without manual action.
-    public static func settlementPath(for journalID: UUID, dayKey: String, stamp: Date, uniqueID: UUID = UUID()) -> String {
+    public static func settlementPath(for journalID: UUID, entryID: UUID, stamp: Date, uniqueID: UUID = UUID()) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.timeZone = TimeZone(identifier: "UTC")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         let suffix = uniqueID.uuidString.prefix(8)
-        return "\(journalRoot(for: journalID))/settlements/\(dayKey)-\(formatter.string(from: stamp))-\(suffix).json"
+        return "\(journalRoot(for: journalID))/settlements/\(entryID.uuidString.lowercased())-\(formatter.string(from: stamp))-\(suffix).json"
     }
 
-    /// Extracts the day key from a settlements/ path, nil for anything else.
-    public static func settlementDayKey(from path: String, journalID: UUID) -> String? {
+    /// Extracts the entry UUID from a settlements/ path, nil for anything else.
+    public static func settlementEntryID(from path: String, journalID: UUID) -> UUID? {
         let prefix = "\(journalRoot(for: journalID))/settlements/"
         guard path.hasPrefix(prefix), path.hasSuffix(".json") else { return nil }
-        let key = path.dropFirst(prefix.count).dropLast(".json".count)
-        guard key.range(of: #"^\d{4}-\d{2}-\d{2}-"#, options: .regularExpression) != nil else { return nil }
-        return String(key.prefix(10))
+        let name = path.dropFirst(prefix.count).dropLast(".json".count)
+        guard name.count > 36 else { return nil }
+        return UUID(uuidString: String(name.prefix(36)))
     }
 
     /// True for any file inside `settlements/` (used by marker GC).
@@ -88,7 +88,7 @@ public enum JournalSyncLayout {
         path.hasPrefix("\(journalRoot(for: journalID))/settlements/") && path.hasSuffix(".json")
     }
 
-    public static func conflictPath(for journalID: UUID, dayKey: String, stamp: Date, uniqueID: UUID = UUID()) -> String {
+    public static func conflictPath(for journalID: UUID, entryID: UUID, stamp: Date, uniqueID: UUID = UUID()) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
@@ -97,17 +97,15 @@ public enum JournalSyncLayout {
         // The unique suffix keeps two same-second archives (e.g. two devices
         // merging the same day) from colliding on one remote path.
         let suffix = uniqueID.uuidString.prefix(8)
-        return "\(journalRoot(for: journalID))/conflicts/\(dayKey)-\(formatter.string(from: stamp))-\(suffix).json"
+        return "\(journalRoot(for: journalID))/conflicts/\(entryID.uuidString.lowercased())-\(formatter.string(from: stamp))-\(suffix).json"
     }
 
-    /// Extracts the day key from a remote days/ path, nil for anything else.
-    public static func dayKey(fromDayPath path: String, journalID: UUID) -> String? {
-        let prefix = "\(journalRoot(for: journalID))/days/"
+    /// Extracts the UUID from a remote entries/ path, nil for anything else.
+    public static func entryID(fromEntryPath path: String, journalID: UUID) -> UUID? {
+        let prefix = "\(journalRoot(for: journalID))/entries/"
         guard path.hasPrefix(prefix), path.hasSuffix(".json") else { return nil }
-        let key = path.dropFirst(prefix.count).dropLast(".json".count)
-        return key.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil
-            ? String(key)
-            : nil
+        let value = path.dropFirst(prefix.count).dropLast(".json".count)
+        return UUID(uuidString: String(value))
     }
 }
 
@@ -131,17 +129,17 @@ public struct JournalSyncManifest: Codable, Equatable {
     }
 }
 
-/// Deletion marker — the only way a day delete propagates. A missing day file
+/// Deletion marker — the only way an entry delete propagates. A missing entry file
 /// without a tombstone is treated as an accident and re-uploaded, never mirrored.
 public struct JournalTombstone: Codable, Equatable {
-    public var schemaVersion: Int
-    public var dayKey: String
+    public var formatVersion: Int
+    public var entryID: UUID
     public var deletedAt: Date
     public var deviceID: String
 
-    public init(dayKey: String, deletedAt: Date, deviceID: String) {
-        self.schemaVersion = 1
-        self.dayKey = dayKey
+    public init(entryID: UUID, deletedAt: Date, deviceID: String) {
+        self.formatVersion = JournalSyncLayout.formatVersion
+        self.entryID = entryID
         self.deletedAt = deletedAt
         self.deviceID = deviceID
     }
@@ -174,14 +172,14 @@ public struct JournalDeletionTombstone: Codable, Equatable {
 /// `settledHash`. Markers are tiny, best-effort, and GC'd after
 /// `tombstoneRetention`.
 public struct JournalSettlementMarker: Codable, Equatable {
-    public var dayKey: String
+    public var entryID: UUID
     /// Canonical hash of the day content the remote holds after the settlement.
     public var settledHash: String
     public var deviceID: String
     public var stamp: Date
 
-    public init(dayKey: String, settledHash: String, deviceID: String, stamp: Date) {
-        self.dayKey = dayKey
+    public init(entryID: UUID, settledHash: String, deviceID: String, stamp: Date) {
+        self.entryID = entryID
         self.settledHash = settledHash
         self.deviceID = deviceID
         self.stamp = stamp
@@ -192,7 +190,7 @@ public struct JournalSettlementMarker: Codable, Equatable {
 /// settles the conflict (keep local/remote/merged); once settled, the next
 /// sync cycle deletes the archive - the chosen version supersedes it.
 public struct JournalConflictPayload: Codable, Equatable {
-    public var dayKey: String
+    public var entryID: UUID
     public var detectedAt: Date
     public var deviceID: String
     public var reason: String
@@ -200,14 +198,14 @@ public struct JournalConflictPayload: Codable, Equatable {
     public var losingTitle: String?
 
     public init(
-        dayKey: String,
+        entryID: UUID,
         detectedAt: Date,
         deviceID: String,
         reason: String,
         losingItems: [JournalItem],
         losingTitle: String?
     ) {
-        self.dayKey = dayKey
+        self.entryID = entryID
         self.detectedAt = detectedAt
         self.deviceID = deviceID
         self.reason = reason
@@ -218,10 +216,10 @@ public struct JournalConflictPayload: Codable, Equatable {
 
 // MARK: - Per-device sync state (never synced itself)
 
-/// How the user settled a day's conflict. Recorded in `DaySyncState` and
+/// How the user settled an entry's conflict. Recorded in `EntrySyncState` and
 /// executed authoritatively by the next sync cycle - the decision bypasses
 /// the divergence matrix so it can never re-record the conflict it resolves.
-public enum DaySettlement: Codable, Equatable {
+public enum EntrySettlement: Codable, Equatable {
     /// "Keep local": canonical hash of the chosen version; the next cycle
     /// pushes exactly this content (overwriting whatever is remote).
     case pushSettled(String)
@@ -233,7 +231,7 @@ public enum DaySettlement: Codable, Equatable {
     case markSettled(String)
 }
 
-/// What this device last agreed on for one day.
+/// What this device last agreed on for one entry.
 ///
 /// Hash conventions are strictly one-sided and never cross-compared:
 /// - `localHash` / `remoteContentHash` / `pushedHashes` are canonical hashes
@@ -242,22 +240,22 @@ public enum DaySettlement: Codable, Equatable {
 /// - remote change detection uses `remoteRev` only - the device's own
 ///   uploads record the rev the server returned, so the delta echo of a
 ///   self-write carries the same rev and reads as "unchanged".
-public struct DaySyncState: Codable, Equatable {
+public struct EntrySyncState: Codable, Equatable {
     /// Canonical hash of the local entry at last sync; nil means "known to be absent locally".
     public var localHash: String?
     public var remoteRev: String?
-    /// Canonical hash of the remote day content as last known from bytes this
+    /// Canonical hash of the remote entry content as last known from bytes this
     /// device itself pushed or downloaded (settlement markers compare against this).
     public var remoteContentHash: String?
     /// Rev of the remote tombstone already processed; prevents re-processing.
     public var tombstoneRev: String?
     public var tombstoneDeletedAt: Date?
-    /// Recent canonical hashes this device pushed for the day (newest last,
+    /// Recent canonical hashes this device pushed for the entry (newest last,
     /// capped). The delta echo of an older own push racing newer local edits
     /// must converge by re-pushing local, never by merging against itself.
     public var pushedHashes: [String]
-    /// User's pending conflict decision for the day, executed next cycle.
-    public var settlement: DaySettlement?
+    /// User's pending conflict decision for the entry, executed next cycle.
+    public var settlement: EntrySettlement?
 
     public init(
         localHash: String? = nil,
@@ -266,7 +264,7 @@ public struct DaySyncState: Codable, Equatable {
         tombstoneRev: String? = nil,
         tombstoneDeletedAt: Date? = nil,
         pushedHashes: [String] = [],
-        settlement: DaySettlement? = nil
+        settlement: EntrySettlement? = nil
     ) {
         self.localHash = localHash
         self.remoteRev = remoteRev
@@ -296,7 +294,7 @@ public struct DaySyncState: Codable, Equatable {
         tombstoneRev = try container.decodeIfPresent(String.self, forKey: .tombstoneRev)
         tombstoneDeletedAt = try container.decodeIfPresent(Date.self, forKey: .tombstoneDeletedAt)
         pushedHashes = try container.decodeIfPresent([String].self, forKey: .pushedHashes) ?? []
-        if let settlement = try? container.decodeIfPresent(DaySettlement.self, forKey: .settlement) {
+        if let settlement = try? container.decodeIfPresent(EntrySettlement.self, forKey: .settlement) {
             self.settlement = settlement
         } else if let pushHash = try container.decodeIfPresent(String.self, forKey: .settledPushHash) {
             settlement = .pushSettled(pushHash)
@@ -343,7 +341,8 @@ public struct RemoteFileRecord: Codable, Equatable {
 /// have no meaningful choice and only carry the summary.
 public struct SyncConflictRecord: Codable, Equatable, Identifiable {
     public var id: UUID
-    public var dayKey: String
+    public var entryID: UUID
+    public var displayDay: String
     /// Remote path of the archived losing side.
     public var remotePath: String
     public var summary: String
@@ -356,7 +355,8 @@ public struct SyncConflictRecord: Codable, Equatable, Identifiable {
 
     public init(
         id: UUID = UUID(),
-        dayKey: String,
+        entryID: UUID,
+        displayDay: String,
         remotePath: String,
         summary: String,
         detectedAt: Date,
@@ -365,7 +365,8 @@ public struct SyncConflictRecord: Codable, Equatable, Identifiable {
         mergedEntry: JournalEntry? = nil
     ) {
         self.id = id
-        self.dayKey = dayKey
+        self.entryID = entryID
+        self.displayDay = displayDay
         self.remotePath = remotePath
         self.summary = summary
         self.detectedAt = detectedAt
@@ -399,13 +400,16 @@ public struct JournalSyncState: Codable, Equatable {
     /// This device's view of the remote file set (path -> record), maintained
     /// from full listings + cursor deltas.
     public var remoteFiles: [String: RemoteFileRecord]
-    public var days: [String: DaySyncState]
+    public var entries: [UUID: EntrySyncState]
     public var pendingConflicts: [SyncConflictRecord]
     /// Remote `conflicts/` archives whose conflict was settled - deleted on
     /// the next cycle. Queued (not deleted inline) so offline resolutions
     /// survive relaunches.
     public var pendingConflictCleanups: [String]
     public var manifestRev: String?
+    /// Remote manifest protocol version last inspected by this device. This
+    /// avoids downloading an already-known v2 manifest on every idle cycle.
+    public var manifestFormatVersion: Int?
     /// Journal name this device last agreed on with the remote manifest - the
     /// baseline rename detection compares `syncJournalName` against. Nil in
     /// state files written before journal names synced (seeded once from the
@@ -425,10 +429,11 @@ public struct JournalSyncState: Codable, Equatable {
     public init(
         cursor: String? = nil,
         remoteFiles: [String: RemoteFileRecord] = [:],
-        days: [String: DaySyncState] = [:],
+        entries: [UUID: EntrySyncState] = [:],
         pendingConflicts: [SyncConflictRecord] = [],
         pendingConflictCleanups: [String] = [],
         manifestRev: String? = nil,
+        manifestFormatVersion: Int? = nil,
         manifestName: String? = nil,
         tradingSnapshotRev: String? = nil,
         tradingSnapshotFetchedAtMilliseconds: Int64? = nil,
@@ -439,10 +444,11 @@ public struct JournalSyncState: Codable, Equatable {
     ) {
         self.cursor = cursor
         self.remoteFiles = remoteFiles
-        self.days = days
+        self.entries = entries
         self.pendingConflicts = pendingConflicts
         self.pendingConflictCleanups = pendingConflictCleanups
         self.manifestRev = manifestRev
+        self.manifestFormatVersion = manifestFormatVersion
         self.manifestName = manifestName
         self.tradingSnapshotRev = tradingSnapshotRev
         self.tradingSnapshotFetchedAtMilliseconds = tradingSnapshotFetchedAtMilliseconds
@@ -453,8 +459,9 @@ public struct JournalSyncState: Codable, Equatable {
     }
 
     public enum CodingKeys: String, CodingKey {
-        case cursor, remoteFiles, days, pendingConflicts, pendingConflictCleanups
-        case manifestRev, manifestName, tradingSnapshotRev, tradingSnapshotFetchedAtMilliseconds
+        case cursor, remoteFiles, entries, pendingConflicts, pendingConflictCleanups
+        case manifestRev, manifestFormatVersion, manifestName
+        case tradingSnapshotRev, tradingSnapshotFetchedAtMilliseconds
         case tradingSnapshotTombstoneRev, tradingSnapshotDeletedAtMilliseconds
         case lastSyncAt, discoveredJournals
     }
@@ -466,10 +473,11 @@ public struct JournalSyncState: Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         cursor = try container.decodeIfPresent(String.self, forKey: .cursor)
         remoteFiles = try container.decodeIfPresent([String: RemoteFileRecord].self, forKey: .remoteFiles) ?? [:]
-        days = try container.decodeIfPresent([String: DaySyncState].self, forKey: .days) ?? [:]
+        entries = try container.decodeIfPresent([UUID: EntrySyncState].self, forKey: .entries) ?? [:]
         pendingConflicts = try container.decodeIfPresent([SyncConflictRecord].self, forKey: .pendingConflicts) ?? []
         pendingConflictCleanups = try container.decodeIfPresent([String].self, forKey: .pendingConflictCleanups) ?? []
         manifestRev = try container.decodeIfPresent(String.self, forKey: .manifestRev)
+        manifestFormatVersion = try container.decodeIfPresent(Int.self, forKey: .manifestFormatVersion)
         manifestName = try container.decodeIfPresent(String.self, forKey: .manifestName)
         tradingSnapshotRev = try container.decodeIfPresent(String.self, forKey: .tradingSnapshotRev)
         tradingSnapshotFetchedAtMilliseconds = try container.decodeIfPresent(
@@ -553,7 +561,7 @@ public struct JournalSyncStateStore {
     }
 
     public func stateURL(for journalID: UUID) -> URL {
-        directory.appendingPathComponent("\(journalID.uuidString.lowercased()).json")
+        directory.appendingPathComponent("\(journalID.uuidString.lowercased())-v2.json")
     }
 
     /// True when this device has ever synced the journal - the signal that a
@@ -592,7 +600,7 @@ public struct JournalSyncStateStore {
     // MARK: Device-scoped state (journal deletion propagation)
 
     private var deviceStateURL: URL {
-        directory.appendingPathComponent("device.json")
+        directory.appendingPathComponent("device-v2.json")
     }
 
     public func loadDeviceState() -> JournalDeviceSyncState {

@@ -8,6 +8,13 @@ final class JournalStoreSyncTests: XCTestCase {
     private var tempRoot: URL!
     private var store: JournalStore!
 
+    private func testDate(_ value: String) -> Date {
+        let parts = value.split(separator: "-").compactMap { Int($0) }
+        return Calendar.current.date(from: DateComponents(
+            year: parts[0], month: parts[1], day: parts[2]
+        ))!
+    }
+
     override func setUp() async throws {
         tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("WickSyncStoreTests-\(UUID().uuidString)", isDirectory: true)
@@ -113,7 +120,7 @@ final class JournalStoreSyncTests: XCTestCase {
             // Remove image, then delete the entry and the day.
             store.removeImage(filename: filename, from: entry.id, itemID: itemID)
             store.deleteItem(itemID: itemID, from: entry.id)
-            store.removeSyncedDay(dayKey: entry.dayKey)
+            store.removeSyncedEntry(entryID: entry.id)
         } else {
             store.deleteItem(itemID: itemID, from: entry.id)
         }
@@ -128,7 +135,7 @@ final class JournalStoreSyncTests: XCTestCase {
         for day in 1...50 {
             changes.append(
                 .upsert(
-                    JournalEntry(dayKey: String(format: "2026-03-%02d", day), title: "d\(day)"),
+                    JournalEntry(date: testDate(String(format: "2026-03-%02d", day)), title: "d\(day)"),
                     expectedLocalHash: nil
                 )
             )
@@ -139,12 +146,12 @@ final class JournalStoreSyncTests: XCTestCase {
 
         let reloaded = JournalStore(rootDirectory: tempRoot)
         XCTAssertEqual(reloaded.entries.count, 50)
-        XCTAssertEqual(reloaded.entries.first { $0.dayKey == "2026-03-25" }?.title, "d25")
+        XCTAssertEqual(reloaded.entries.first { Calendar.current.isDate($0.date, inSameDayAs: testDate("2026-03-25")) }?.title, "d25")
     }
 
     func testApplySyncedChangesBatchRemove() throws {
-        let a = JournalEntry(dayKey: "2026-03-01", title: "a")
-        let b = JournalEntry(dayKey: "2026-03-02", title: "b")
+        let a = JournalEntry(date: testDate("2026-03-01"), title: "a")
+        let b = JournalEntry(date: testDate("2026-03-02"), title: "b")
         store.applySyncedChanges(
             [.upsert(a, expectedLocalHash: nil), .upsert(b, expectedLocalHash: nil)],
             journalID: store.activeJournalID!
@@ -153,11 +160,33 @@ final class JournalStoreSyncTests: XCTestCase {
 
         let aHash = try JournalSyncEncoding.contentHash(for: a)
         store.applySyncedChanges(
-            [.remove(dayKey: "2026-03-01", expectedLocalHash: aHash)],
+            [.remove(entryID: a.id, expectedLocalHash: aHash)],
             journalID: store.activeJournalID!
         )
         XCTAssertEqual(store.entries.count, 1)
-        XCTAssertEqual(store.entries.first?.dayKey, "2026-03-02")
+        XCTAssertTrue(Calendar.current.isDate(store.entries.first!.date, inSameDayAs: testDate("2026-03-02")))
+    }
+
+    func testSameDateDifferentUUIDsConvergeOnDeterministicSurvivor() throws {
+        let rootB = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WickSyncStorePeer-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: rootB) }
+        let storeB = JournalStore(rootDirectory: rootB)
+        let day = testDate("2026-03-03")
+        let lowerID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        let higherID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+        let lower = JournalEntry(id: lowerID, date: day, items: [JournalItem(tag: "A", body: "one")])
+        let higher = JournalEntry(id: higherID, date: day, items: [JournalItem(tag: "B", body: "two")])
+        store.applySyncedEntry(lower)
+        storeB.applySyncedEntry(higher)
+
+        store.applySyncedEntry(higher)
+        storeB.applySyncedEntry(lower)
+
+        XCTAssertEqual(store.entries.map(\.id), [lowerID])
+        XCTAssertEqual(storeB.entries.map(\.id), [lowerID])
+        XCTAssertEqual(Set(store.entries[0].items.map(\.body)), ["one", "two"])
+        XCTAssertEqual(Set(storeB.entries[0].items.map(\.body)), ["one", "two"])
     }
 
     func testApplySyncedChangesIgnoresNonActiveJournal() {
@@ -167,7 +196,7 @@ final class JournalStoreSyncTests: XCTestCase {
         let before = store.persistCount
 
         store.applySyncedChanges(
-            [.upsert(JournalEntry(dayKey: "2026-09-01", title: "no"), expectedLocalHash: nil)],
+            [.upsert(JournalEntry(date: testDate("2026-09-01"), title: "no"), expectedLocalHash: nil)],
             journalID: second.id
         )
         XCTAssertEqual(store.persistCount, before)
@@ -177,14 +206,14 @@ final class JournalStoreSyncTests: XCTestCase {
     // MARK: - AC-P1-05 final freshness re-verification
 
     func testApplySyncedChangesSkipsEditedDay() throws {
-        let entry = JournalEntry(dayKey: "2026-04-01", title: "local v1")
+        let entry = JournalEntry(date: testDate("2026-04-01"), title: "local v1")
         store.applySyncedEntry(entry)
         let staleHash = try JournalSyncEncoding.contentHash(for: entry)
         var edited = entry
         edited.title = "local v2"
         store.applySyncedEntry(edited)
 
-        let remote = JournalEntry(dayKey: "2026-04-01", title: "remote")
+        let remote = JournalEntry(id: entry.id, date: entry.date, title: "remote")
         let applied = store.applySyncedChanges(
             [.upsert(remote, expectedLocalHash: staleHash)],
             journalID: store.activeJournalID!
@@ -198,7 +227,7 @@ final class JournalStoreSyncTests: XCTestCase {
             [.upsert(remote, expectedLocalHash: freshHash)],
             journalID: store.activeJournalID!
         )
-        XCTAssertEqual(applied2, ["2026-04-01"])
+        XCTAssertEqual(applied2, [remote.id])
         XCTAssertEqual(store.entries.first?.title, "remote")
     }
 
@@ -232,7 +261,7 @@ final class JournalStoreSyncTests: XCTestCase {
         // in-memory snapshot, not copy databaseURL.
         let stale = JournalSnapshot(
             version: 1,
-            entries: [JournalEntry(dayKey: "2026-01-01", title: "STALE")]
+            entries: [JournalEntry(date: testDate("2026-01-01"), title: "STALE")]
         )
         try JournalSyncEncoding.encoder.encode(stale).write(to: store.databaseURL, options: .atomic)
 
@@ -304,13 +333,13 @@ final class JournalStoreSyncTests: XCTestCase {
 
     // MARK: - applySyncedEntry
 
-    func testApplySyncedEntryInsertsThenReplacesByDayKey() {
-        let first = JournalEntry(dayKey: "2026-08-01", title: "v1")
+    func testApplySyncedEntryInsertsThenReplacesByUUID() {
+        let first = JournalEntry(date: testDate("2026-08-01"), title: "v1")
         store.applySyncedEntry(first)
         XCTAssertEqual(store.entries.count, 1)
         XCTAssertEqual(store.entries.first?.title, "v1")
 
-        let replacement = JournalEntry(dayKey: "2026-08-01", title: "v2")
+        let replacement = JournalEntry(id: first.id, date: first.date, title: "v2")
         store.applySyncedEntry(replacement)
 
         XCTAssertEqual(store.entries.count, 1, "same day key must replace, not duplicate")
@@ -320,7 +349,7 @@ final class JournalStoreSyncTests: XCTestCase {
 
     func testApplySyncedEntryKeepsRemoteUpdatedAt() {
         let remoteStamp = Date(timeIntervalSince1970: 1_700_000_000)
-        let entry = JournalEntry(dayKey: "2026-08-02", updatedAt: remoteStamp)
+        let entry = JournalEntry(date: testDate("2026-08-02"), updatedAt: remoteStamp)
         store.applySyncedEntry(entry)
         XCTAssertEqual(store.entries.first?.updatedAt, remoteStamp)
     }
@@ -329,7 +358,7 @@ final class JournalStoreSyncTests: XCTestCase {
         let local = store.createEntry()
         store.selectDay(local.id)
 
-        let remote = JournalEntry(dayKey: local.dayKey, title: "from other device")
+        let remote = JournalEntry(id: local.id, date: local.date, title: "from other device")
         store.applySyncedEntry(remote)
 
         XCTAssertEqual(store.selection, .day(remote.id))
@@ -337,10 +366,10 @@ final class JournalStoreSyncTests: XCTestCase {
     }
 
     func testApplySyncedEntryPersistsAcrossReload() {
-        store.applySyncedEntry(JournalEntry(dayKey: "2026-08-03", title: "persisted"))
+        store.applySyncedEntry(JournalEntry(date: testDate("2026-08-03"), title: "persisted"))
         let reloaded = JournalStore(rootDirectory: tempRoot)
         XCTAssertEqual(reloaded.entries.count, 1)
-        XCTAssertEqual(reloaded.entries.first?.dayKey, "2026-08-03")
+        XCTAssertTrue(Calendar.current.isDate(reloaded.entries.first!.date, inSameDayAs: testDate("2026-08-03")))
     }
 
     func testApplySyncedEntryIsBlockedInReadOnlyMode() throws {
@@ -348,11 +377,11 @@ final class JournalStoreSyncTests: XCTestCase {
         let reloaded = JournalStore(rootDirectory: tempRoot)
         XCTAssertTrue(reloaded.isReadOnlyDueToLoadFailure)
 
-        reloaded.applySyncedEntry(JournalEntry(dayKey: "2026-08-04", title: "nope"))
+        reloaded.applySyncedEntry(JournalEntry(date: testDate("2026-08-04"), title: "nope"))
         XCTAssertTrue(reloaded.entries.isEmpty)
     }
 
-    // MARK: - removeSyncedDay
+    // MARK: - removeSyncedEntry
 
     func testRemoveSyncedDayDeletesEntryAndItsImages() {
         let entry = store.createEntry()
@@ -361,7 +390,7 @@ final class JournalStoreSyncTests: XCTestCase {
         let imagePath = store.imageURL(for: filename!)!.path
         XCTAssertTrue(FileManager.default.fileExists(atPath: imagePath))
 
-        store.removeSyncedDay(dayKey: entry.dayKey)
+        store.removeSyncedEntry(entryID: entry.id)
 
         XCTAssertTrue(store.entries.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: imagePath))
@@ -381,11 +410,12 @@ final class JournalStoreSyncTests: XCTestCase {
         XCTAssertFalse(store.hasSyncedImage(filename: "../evil.png"))
     }
 
-    func testSyncDaySnapshotsKeyedByDayKey() {
+    func testSyncEntrySnapshotsKeyedByUUID() {
         let a = store.createEntry()
-        store.applySyncedEntry(JournalEntry(dayKey: "2026-01-01", title: "old"))
-        let snapshots = store.syncDaySnapshots()
-        XCTAssertEqual(Set(snapshots.keys), Set([a.dayKey, "2026-01-01"]))
+        let old = JournalEntry(date: testDate("2026-01-01"), title: "old")
+        store.applySyncedEntry(old)
+        let snapshots = store.syncEntrySnapshots()
+        XCTAssertEqual(Set(snapshots.keys), Set([a.id, old.id]))
     }
 
     // MARK: - adoptRemoteJournal
@@ -483,7 +513,7 @@ final class JournalStoreSyncTests: XCTestCase {
         XCTAssertEqual(store.entries.count, 0)
 
         store.applySyncedEntry(
-            JournalEntry(dayKey: "2026-08-01", title: "from previous"),
+            JournalEntry(date: testDate("2026-08-01"), title: "from previous"),
             journalID: firstID
         )
         XCTAssertTrue(store.entries.isEmpty, "must not write the previous journal's days into the active one")

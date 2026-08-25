@@ -1,15 +1,13 @@
 import Foundation
 
-/// Typed notification that a remote entry was successfully applied to a day.
+/// Typed notification that a remote entry was successfully applied.
 /// Editors observe this to rebase their (clean) drafts onto the new store value.
 public struct JournalRemoteApply: Sendable, Equatable {
     public let journalID: UUID
-    public let dayKey: String
     public let entryID: UUID
 
-    public init(journalID: UUID, dayKey: String, entryID: UUID) {
+    public init(journalID: UUID, entryID: UUID) {
         self.journalID = journalID
-        self.dayKey = dayKey
         self.entryID = entryID
     }
 }
@@ -25,19 +23,19 @@ public extension Notification.Name {
 /// a whole cycle's worth as a single `applySyncedChanges` batch so a first pull
 /// of N days does constant-time full-snapshot persistence instead of N.
 ///
-/// Each mutation carries the canonical hash of the local day at decision time
+/// Each mutation carries the canonical hash of the local entry at decision time
 /// (nil = locally absent). The store re-verifies against it right before
 /// committing, so a mid-cycle edit skips the stale mutation (AC-P1-05).
 public enum JournalSyncMutation: Sendable, Equatable {
     case upsert(JournalEntry, expectedLocalHash: String?)
-    case remove(dayKey: String, expectedLocalHash: String?)
+    case remove(entryID: UUID, expectedLocalHash: String?)
 
-    public var dayKey: String {
+    public var entryID: UUID {
         switch self {
         case .upsert(let entry, _):
-            return entry.dayKey
-        case .remove(let dayKey, _):
-            return dayKey
+            return entry.id
+        case .remove(let entryID, _):
+            return entryID
         }
     }
 
@@ -106,7 +104,7 @@ public struct JournalTradingSnapshotTombstone: Codable, Equatable, Sendable {
 /// Implemented by `JournalStore` on macOS (and by a future iOS store). All calls
 /// run on the main actor, matching the store's own isolation. The engine uses
 /// this boundary to stay platform- and persistence-agnostic: it only ever sees
-/// day-keyed entries and content-addressed images.
+/// UUID-keyed entries and content-addressed images.
 @MainActor
 public protocol JournalLocalSource: AnyObject {
     /// Identity of the journal currently exposed for syncing; nil while no
@@ -117,40 +115,39 @@ public protocol JournalLocalSource: AnyObject {
     /// engine must treat every mutation as a no-op in that state.
     var syncIsWritable: Bool { get }
 
-    /// All locally present days keyed by `JournalEntry.dayKey`. When (corrupt
-    /// legacy) duplicates share a day key, the newest `updatedAt` wins.
-    func syncDaySnapshots() -> [String: JournalEntry]
+    /// All locally present entries keyed by their permanent UUID identity.
+    func syncEntrySnapshots() -> [UUID: JournalEntry]
 
-    /// Called before a remote day apply so the platform can commit any
-    /// in-flight editor draft for that day. The engine runs this BEFORE its
-    /// freshness check: once the draft is on disk, re-hashing the day shows
+    /// Called before a remote entry apply so the platform can commit any
+    /// in-flight editor draft for that entry. The engine runs this BEFORE its
+    /// freshness check: once the draft is on disk, re-hashing the entry shows
     /// whether the user edited mid-cycle, and the apply is skipped if so
     /// (the next cycle then merges instead of clobbering).
-    func prepareForRemoteApply(dayKey: String)
+    func prepareForRemoteApply(entryID: UUID)
 
     /// Applies a whole cycle's remote-sourced changes in ONE pass: the store
     /// does a single sort, selection reconcile, persist, catalog touch, and UI
-    /// publish (instead of one full-snapshot write per day). Must not bump
+    /// publish (instead of one full-snapshot write per entry). Must not bump
     /// `updatedAt` (the remote timestamp drives last-writer-wins decisions).
     /// No-op when `journalID` is not the currently active journal.
     ///
     /// Each mutation is re-verified against its `expectedLocalHash` right
-    /// before committing; a day edited since the decision is skipped. Returns
-    /// the day keys actually applied so the engine only advances baselines for
+    /// before committing; an entry edited since the decision is skipped. Returns
+    /// the entry ids actually applied so the engine only advances baselines for
     /// those (AC-P1-05).
     @discardableResult
-    func applySyncedChanges(_ changes: [JournalSyncMutation], journalID: UUID) -> Set<String>
+    func applySyncedChanges(_ changes: [JournalSyncMutation], journalID: UUID) -> Set<UUID>
 
-    /// Inserts or replaces the day with the same day key. Must not bump
+    /// Inserts or replaces the entry with the same UUID. Must not bump
     /// `updatedAt` (the remote timestamp drives last-writer-wins decisions).
     /// No-op when `journalID` is not the currently active journal — a cycle
     /// that outlives a user switch must not write the previous journal's
-    /// remote days into the one now on screen.
+    /// remote entries into the one now on screen.
     func applySyncedEntry(_ entry: JournalEntry, journalID: UUID)
 
-    /// Removes the day with the given key together with its image files.
+    /// Removes the entry with the given UUID together with its image files.
     /// Same active-journal guard as `applySyncedEntry`.
-    func removeSyncedDay(dayKey: String, journalID: UUID)
+    func removeSyncedEntry(entryID: UUID, journalID: UUID)
 
     /// Renames the journal identified by `journalID` to the remote manifest's
     /// name and returns the name actually applied (stores may uniquify on

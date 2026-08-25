@@ -700,7 +700,6 @@ final class JournalStore: ObservableObject {
             remoteEntryDidApply.send(
                 JournalRemoteApply(
                     journalID: activeJournalID,
-                    dayKey: change.entry.dayKey,
                     entryID: change.entry.id
                 )
             )
@@ -859,10 +858,6 @@ final class JournalStore: ObservableObject {
             return
         }
 
-        // Entry moved to another day: re-key it (plain edits never touch dayKey).
-        if !Calendar.current.isDate(updated.date, inSameDayAs: entries[index].date) {
-            updated.dayKey = JournalDayKey.make(from: updated.date)
-        }
         guard Self.hasContentChange(from: entries[index], to: updated) else { return }
 
         let structural = Self.isStructuralChange(from: entries[index], to: updated)
@@ -880,7 +875,6 @@ final class JournalStore: ObservableObject {
     /// must not become a sync edit merely because a window or journal closed.
     private static func hasContentChange(from old: JournalEntry, to new: JournalEntry) -> Bool {
         old.date != new.date
-            || old.dayKey != new.dayKey
             || old.title != new.title
             || old.items != new.items
     }
@@ -888,7 +882,7 @@ final class JournalStore: ObservableObject {
     /// True when the change should rebuild the journal UI (list, tags, seals).
     /// Body-only typing stays in drafts + disk and must not fan out (P2).
     private static func isStructuralChange(from old: JournalEntry, to new: JournalEntry) -> Bool {
-        if old.date != new.date || old.dayKey != new.dayKey || old.title != new.title {
+        if old.date != new.date || old.title != new.title {
             return true
         }
         if old.items.count != new.items.count {
@@ -1430,6 +1424,7 @@ final class JournalStore: ObservableObject {
         try? fileManager.createDirectory(at: librariesRoot, withIntermediateDirectories: true)
         migrateLegacySingleJournalIfNeeded()
         loadOrCreateCatalog()
+        migrateJournalSnapshotsToCurrentVersion()
         guard let activeID = activeJournalID else { return }
         bindPaths(for: activeID)
         ensureDirectories()
@@ -1481,6 +1476,30 @@ final class JournalStore: ObservableObject {
         } catch {
             NSLog("Wick: legacy journal migration failed: \(error.localizedDescription)")
             // Best-effort: if move succeeded but catalog write failed, try to leave data recoverable.
+        }
+    }
+
+    /// Rewrites every supported pre-v2 journal before normal loading. The
+    /// standard writer first copies the original primary to `journal.json.bak`
+    /// and then atomically writes UUID-only entries, so the hard cut remains
+    /// recoverable if the process is interrupted.
+    private func migrateJournalSnapshotsToCurrentVersion() {
+        guard !isCatalogReadOnly else { return }
+        for journal in journals {
+            let url = librariesRoot
+                .appendingPathComponent(journal.id.uuidString, isDirectory: true)
+                .appendingPathComponent("journal.json", isDirectory: false)
+            guard fileManager.fileExists(atPath: url.path) else { continue }
+            do {
+                let data = try Data(contentsOf: url)
+                let snapshot = try decoder.decode(JournalSnapshot.self, from: data)
+                guard snapshot.version < JournalSnapshot.currentVersion else { continue }
+                try persistEntries(snapshot.entries, journalID: journal.id)
+            } catch {
+                // Normal load applies the existing corrupt/future-version
+                // read-only protections if this is the active journal.
+                NSLog("Wick journal v2 migration skipped for %@: %@", journal.id.uuidString, error.localizedDescription)
+            }
         }
     }
 
@@ -1775,32 +1794,33 @@ final class JournalStore: ObservableObject {
             .first
     }
 
-    /// Merge source entry into the destination day entry, using `preferring` as the latest
-    /// field values for the source.
+    /// Merge the destination day's contents into the source entry while keeping
+    /// the source UUID. Moving an entry never changes its identity.
     private func merge(entryAt sourceIndex: Int, into destinationIndex: Int, preferring source: JournalEntry) {
-        let destID = entries[destinationIndex].id
-        var dest = entries[destinationIndex]
-        for item in source.items where !item.isEmpty || source.items.count == 1 {
-            if !dest.items.contains(where: { $0.id == item.id }) {
-                dest.items.append(item)
+        let destination = entries[destinationIndex]
+        var merged = source
+        for item in destination.items where !item.isEmpty || destination.items.count == 1 {
+            if !merged.items.contains(where: { $0.id == item.id }) {
+                merged.items.append(item)
             }
         }
-        if dest.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            dest.title = source.title
+        if merged.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            merged.title = destination.title
         }
-        dest.updatedAt = Date()
-        if dest.items.isEmpty {
-            dest.items = [JournalItem()]
+        merged.updatedAt = Date()
+        if merged.items.isEmpty {
+            merged.items = [JournalItem()]
         }
 
-        let sourceID = entries[sourceIndex].id
-        entries.removeAll { $0.id == sourceID }
-        if let newDest = entries.firstIndex(where: { $0.id == destID }) {
-            entries[newDest] = dest
+        let sourceID = source.id
+        let destinationID = destination.id
+        entries.removeAll { $0.id == destinationID }
+        if let newSource = entries.firstIndex(where: { $0.id == sourceID }) {
+            entries[newSource] = merged
         } else {
-            entries.insert(dest, at: 0)
+            entries.insert(merged, at: 0)
         }
-        selection = .day(destID)
+        selection = .day(sourceID)
         persist()
         touchActiveJournalMetadata()
         reconcileSelectionAfterChange()
@@ -2167,8 +2187,8 @@ enum JournalStoreError: LocalizedError {
 // MARK: - Sync engine bridge
 
 /// The sync engine (`WickSync.JournalSyncEngine`) talks to the store only through
-/// this surface: day-keyed snapshots in, whole-day applies/removals out. Applies
-/// replace the same-keyed day wholesale and never bump `updatedAt`, so remote
+/// this surface: UUID-keyed snapshots in, whole-entry applies/removals out. Applies
+/// replace the same UUID wholesale and never bump `updatedAt`, so remote
 /// timestamps keep driving last-writer-wins decisions.
 extension JournalStore: JournalLocalSource {
     var syncJournalID: UUID? { activeJournalID }
@@ -2177,16 +2197,8 @@ extension JournalStore: JournalLocalSource {
 
     var syncIsWritable: Bool { !isReadOnlyDueToLoadFailure }
 
-    func syncDaySnapshots() -> [String: JournalEntry] {
-        var result: [String: JournalEntry] = [:]
-        for entry in entries {
-            // Defensive: legacy data could hold duplicate days — newest wins.
-            if let existing = result[entry.dayKey], existing.updatedAt >= entry.updatedAt {
-                continue
-            }
-            result[entry.dayKey] = entry
-        }
-        return result
+    func syncEntrySnapshots() -> [UUID: JournalEntry] {
+        Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
     }
 
     /// Test helper: apply against the currently active journal.
@@ -2198,10 +2210,10 @@ extension JournalStore: JournalLocalSource {
     /// Applies a whole cycle's remote changes in ONE pass: one persist, one
     /// catalog touch, one selection reconcile, one UI publish (PF-01). Each
     /// mutation is re-verified against its decision-time local hash right
-    /// before committing; a day edited since the decision is skipped and only
-    /// actually-applied day keys are returned (AC-P1-05).
+    /// before committing; an entry edited since the decision is skipped and only
+    /// actually-applied entry ids are returned (AC-P1-05).
     @discardableResult
-    func applySyncedChanges(_ changes: [JournalSyncMutation], journalID: UUID) -> Set<String> {
+    func applySyncedChanges(_ changes: [JournalSyncMutation], journalID: UUID) -> Set<UUID> {
         guard journalID == activeJournalID else { return [] }
         guard !isReadOnlyDueToLoadFailure else { return [] }
         guard !changes.isEmpty else { return [] }
@@ -2209,45 +2221,35 @@ extension JournalStore: JournalLocalSource {
         // sees uncommitted typing before the batch overwrites it.
         NotificationCenter.default.post(name: .wickWillFlushJournalDrafts, object: nil)
 
-        var applied: Set<String> = []
+        var applied: Set<UUID> = []
         var appliedEntries: [JournalRemoteApply] = []
         for change in changes {
-            let dayKey = change.dayKey
-            guard localDayStillMatches(dayKey: dayKey, expectedHash: change.expectedLocalHash) else { continue }
+            let entryID = change.entryID
+            guard localEntryStillMatches(entryID: entryID, expectedHash: change.expectedLocalHash) else { continue }
             switch change {
             case .upsert(let entry, _):
                 var appliedEntry = entry
                 if appliedEntry.items.isEmpty {
                     appliedEntry.items = [JournalItem()]
                 }
-                if let index = entries.firstIndex(where: { $0.dayKey == appliedEntry.dayKey }) {
-                    let replacedID = entries[index].id
+                if let index = entries.firstIndex(where: { $0.id == appliedEntry.id }) {
                     entries[index] = appliedEntry
-                    if replacedID != appliedEntry.id {
-                        switch selection {
-                        case .day(let id) where id == replacedID:
-                            selection = .day(appliedEntry.id)
-                        case .item(let ref) where ref.entryID == replacedID:
-                            selection = .item(JournalItemRef(entryID: appliedEntry.id, itemID: ref.itemID))
-                        default:
-                            break
-                        }
-                    }
                 } else {
+                    appliedEntry = mergeSyncedDateCollision(with: appliedEntry)
                     entries.append(appliedEntry)
                 }
-                applied.insert(dayKey)
+                applied.insert(entryID)
                 appliedEntries.append(
-                    JournalRemoteApply(journalID: journalID, dayKey: dayKey, entryID: appliedEntry.id)
+                    JournalRemoteApply(journalID: journalID, entryID: appliedEntry.id)
                 )
             case .remove(_, _):
-                guard let index = entries.firstIndex(where: { $0.dayKey == dayKey }) else { continue }
+                guard let index = entries.firstIndex(where: { $0.id == entryID }) else { continue }
                 let entry = entries[index]
                 for filename in entry.allImageFilenames {
                     removeImageFile(filename)
                 }
                 entries.remove(at: index)
-                applied.insert(dayKey)
+                applied.insert(entryID)
                 if selectedEntryID == entry.id {
                     selection = defaultSelection()
                 }
@@ -2264,10 +2266,47 @@ extension JournalStore: JournalLocalSource {
         return applied
     }
 
-    /// True when the local day still matches the decision-time hash — the
+    /// Converges two UUIDs that independently claimed the same displayed day.
+    /// The lexicographically smaller UUID survives on every device; the other
+    /// UUID becomes a normal local deletion and is tombstoned next cycle.
+    private func mergeSyncedDateCollision(with incoming: JournalEntry) -> JournalEntry {
+        guard let collisionIndex = entries.firstIndex(where: {
+            $0.id != incoming.id && Calendar.current.isDate($0.date, inSameDayAs: incoming.date)
+        }) else { return incoming }
+
+        let collision = entries[collisionIndex]
+        let incomingSurvives = incoming.id.uuidString < collision.id.uuidString
+        var survivor = incomingSurvives ? incoming : collision
+        let absorbed = incomingSurvives ? collision : incoming
+        for item in absorbed.items where !item.isEmpty || absorbed.items.count == 1 {
+            if !survivor.items.contains(where: { $0.id == item.id }) {
+                survivor.items.append(item)
+            }
+        }
+        if survivor.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            survivor.title = absorbed.title
+        }
+        survivor.createdAt = min(incoming.createdAt, collision.createdAt)
+        survivor.updatedAt = max(incoming.updatedAt, collision.updatedAt)
+        if survivor.items.isEmpty {
+            survivor.items = [JournalItem()]
+        }
+        entries.remove(at: collisionIndex)
+        switch selection {
+        case .day(let id) where id == collision.id:
+            selection = .day(survivor.id)
+        case .item(let ref) where ref.entryID == collision.id:
+            selection = .item(JournalItemRef(entryID: survivor.id, itemID: ref.itemID))
+        default:
+            break
+        }
+        return survivor
+    }
+
+    /// True when the local entry still matches the decision-time hash — the
     /// final freshness gate before a queued remote mutation is committed.
-    private func localDayStillMatches(dayKey: String, expectedHash: String?) -> Bool {
-        let current = entries.first { $0.dayKey == dayKey }
+    private func localEntryStillMatches(entryID: UUID, expectedHash: String?) -> Bool {
+        let current = entries.first { $0.id == entryID }
         guard let expectedHash else { return current == nil }
         guard let current else { return false }
         return (try? JournalSyncEncoding.contentHash(for: current)) == expectedHash
@@ -2275,9 +2314,9 @@ extension JournalStore: JournalLocalSource {
 
     /// Commits any in-flight editor draft so the sync engine's freshness check
     /// sees real local content instead of a stale store snapshot. Runs before
-    /// the engine's per-day freshness guard; re-hashing after the commit
+    /// the engine's per-entry freshness guard; re-hashing after the commit
     /// detects mid-cycle edits and skips the apply.
-    func prepareForRemoteApply(dayKey: String) {
+    func prepareForRemoteApply(entryID: UUID) {
         NotificationCenter.default.post(name: .wickWillFlushJournalDrafts, object: nil)
     }
 
@@ -2292,22 +2331,10 @@ extension JournalStore: JournalLocalSource {
             applied.items = [JournalItem()]
         }
 
-        if let index = entries.firstIndex(where: { $0.dayKey == applied.dayKey }) {
-            let replacedID = entries[index].id
+        if let index = entries.firstIndex(where: { $0.id == applied.id }) {
             entries[index] = applied
-            // The merged entry may carry another device's entry id; keep the
-            // user's selection on the same day instead of snapping to the top.
-            if replacedID != applied.id {
-                switch selection {
-                case .day(let id) where id == replacedID:
-                    selection = .day(applied.id)
-                case .item(let ref) where ref.entryID == replacedID:
-                    selection = .item(JournalItemRef(entryID: applied.id, itemID: ref.itemID))
-                default:
-                    break
-                }
-            }
         } else {
+            applied = mergeSyncedDateCollision(with: applied)
             entries.append(applied)
         }
 
@@ -2316,19 +2343,19 @@ extension JournalStore: JournalLocalSource {
         reconcileSelectionAfterChange()
         // Typed event so editors rebase their clean drafts onto the new value.
         remoteEntryDidApply.send(
-            JournalRemoteApply(journalID: journalID, dayKey: applied.dayKey, entryID: applied.id)
+            JournalRemoteApply(journalID: journalID, entryID: applied.id)
         )
     }
 
-    func removeSyncedDay(dayKey: String) {
+    func removeSyncedEntry(entryID: UUID) {
         guard let activeJournalID else { return }
-        removeSyncedDay(dayKey: dayKey, journalID: activeJournalID)
+        removeSyncedEntry(entryID: entryID, journalID: activeJournalID)
     }
 
-    func removeSyncedDay(dayKey: String, journalID: UUID) {
+    func removeSyncedEntry(entryID: UUID, journalID: UUID) {
         guard journalID == activeJournalID else { return }
         guard !isReadOnlyDueToLoadFailure else { return }
-        guard let index = entries.firstIndex(where: { $0.dayKey == dayKey }) else { return }
+        guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
         let entry = entries[index]
         for filename in entry.allImageFilenames {
             removeImageFile(filename)

@@ -802,18 +802,15 @@ struct JournalEditorPane: View {
         }
     }
 
-    /// A remote apply replaced the store entry for `apply.dayKey`. Rebasing the
+    /// A remote apply replaced the store entry for `apply.entryID`. Rebasing the
     /// local draft is only safe when it is clean (no uncommitted typing); a
     /// dirty draft stays put and commits/merges on its own later.
     private func rebaseDraftIfClean(_ apply: JournalRemoteApply) {
         guard apply.journalID == store.activeJournalID else { return }
         guard let fresh = store.entries.first(where: { $0.id == apply.entryID }) else { return }
-        // The draft may still be keyed by the pre-merge entry id on the same day.
-        guard let draftKey = drafts.first(where: { $0.value.dayKey == apply.dayKey })?.key,
-              !dirtyEntryIDs.contains(draftKey)
-        else { return }
-        cancelSave(for: draftKey)
-        drafts[draftKey] = nil
+        guard !dirtyEntryIDs.contains(apply.entryID) else { return }
+        cancelSave(for: apply.entryID)
+        drafts[apply.entryID] = nil
         drafts[fresh.id] = fresh
     }
 

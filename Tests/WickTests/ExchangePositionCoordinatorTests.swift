@@ -340,9 +340,6 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
         var entry = store.createEntry(on: day)
         let xau = JournalItem(tag: "XAU", body: "keep the original note")
         entry.items = [xau]
-        entry.dayKey = JournalDayKey.make(
-            from: try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: day))
-        )
         store.updateEntry(entry)
 
         let fills = [TradingFill(

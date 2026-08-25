@@ -34,7 +34,7 @@ struct DayListView: View {
                     Spacer()
                     Button {
                         let entry = store.openOrCreateToday()
-                        navigationPath.append(entry.dayKey)
+                        navigationPath.append(entry.id)
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "plus")
@@ -62,11 +62,13 @@ struct DayListView: View {
                             exchangeCoordinator: exchangeCoordinator,
                             language: language,
                             onSelectDay: { dayKey in
-                                if let entry = store.entries.first(where: { $0.dayKey == dayKey }) {
-                                    navigationPath.append(entry.dayKey)
+                                if let entry = store.entries.first(where: {
+                                    JournalDayKey.make(from: $0.date) == dayKey
+                                }) {
+                                    navigationPath.append(entry.id)
                                 } else {
                                     let newEntry = store.openOrCreateToday()
-                                    navigationPath.append(newEntry.dayKey)
+                                    navigationPath.append(newEntry.id)
                                 }
                             }
                         )
@@ -115,11 +117,13 @@ struct DayListView: View {
                         } else {
                             LazyVStack(spacing: 8) {
                                 ForEach(filteredEntries) { entry in
-                                    NavigationLink(value: entry.dayKey) {
+                                    NavigationLink(value: entry.id) {
                                         DayCardView(
                                             entry: entry,
                                             pnl: exchangeCoordinator.pnl(for: entry.date),
-                                            closedCount: exchangeCoordinator.closedCount(for: entry.dayKey),
+                                            closedCount: exchangeCoordinator.closedCount(
+                                                for: JournalDayKey.make(from: entry.date)
+                                            ),
                                             language: language
                                         )
                                     }
@@ -134,8 +138,8 @@ struct DayListView: View {
             }
             .background(PhoneTheme.paper.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(for: String.self) { dayKey in
-                if let entry = store.entries.first(where: { $0.dayKey == dayKey }) {
+            .navigationDestination(for: UUID.self) { entryID in
+                if let entry = store.entries.first(where: { $0.id == entryID }) {
                     EditorView(entry: entry)
                 }
             }
@@ -312,7 +316,7 @@ private struct PnlHeatmapCard: View {
     private func gridCellView(for cell: MonthGridCell) -> some View {
         if let date = cell.date {
             let dayKey = JournalDayKey.make(from: date)
-            let hasEntry = entries.contains { $0.dayKey == dayKey }
+            let hasEntry = entries.contains { JournalDayKey.make(from: $0.date) == dayKey }
             let isToday = Calendar.current.isDateInToday(date)
             let dayNum = Calendar.current.component(.day, from: date)
             let pnl = exchangeCoordinator.pnl(for: date)

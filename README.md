@@ -213,9 +213,9 @@ git push origin v1.2
 wick/
 ├── Package.swift                 # Swift Package 清单（WickSync + WickCalendarKit + WickTrading + WickCore + Wick + 测试）
 ├── Sources/WickSync/             # 平台无关（纯 Foundation）日记模型 + 同步引擎 + Dropbox 后端
-│   ├── JournalModels.swift       # 日记数据模型（含 dayKey 同步主键）
-│   ├── JournalSyncEngine.swift   # 按天对账引擎（推/拉/合并/墓碑/自愈 + 日记名对账）
-│   ├── JournalDayMerge.swift     # 同日两版本的条目级并集合并
+│   ├── JournalModels.swift       # 日记数据模型（UUID 身份 + 可编辑日期）
+│   ├── JournalSyncEngine.swift   # 按 UUID 对账引擎（推/拉/合并/墓碑/自愈 + 日记名对账）
+│   ├── JournalDayMerge.swift     # 同一 UUID 两版本的条目级并集合并
 │   ├── DropboxSyncBackend.swift  # Dropbox API v2 + PKCE OAuth
 │   ├── L10n.swift / TimeProgress.swift  # 文案与进度计算（iOS 复用）
 │   └── …                         # 状态/布局/协议/Keychain 等

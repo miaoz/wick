@@ -196,9 +196,12 @@ struct JournalPnlCalendarView: View {
         coordinator.pnlByDay
     }
 
-    /// dayKey -> entry id, for the journaled state and tap-to-select.
+    /// Display-day string -> entry UUID, for journal state and tap-to-select.
     private var entryByDayKey: [String: UUID] {
-        Dictionary(store.entries.map { ($0.dayKey, $0.id) }, uniquingKeysWith: { first, _ in first })
+        Dictionary(
+            store.entries.map { (JournalDayKey.make(from: $0.date), $0.id) },
+            uniquingKeysWith: { first, _ in first }
+        )
     }
 
     private func cellState(for day: Date) -> CellState {

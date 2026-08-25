@@ -1,10 +1,8 @@
 import Foundation
 
-/// Stable per-day key ("yyyy-MM-dd") used as the sync-layer identity of a `JournalEntry`.
-///
-/// The key is generated once at creation (or when the entry is explicitly moved to
-/// another day) and then stored on the entry — never derived on the fly — so a
-/// device crossing timezones cannot silently re-key existing days.
+/// Formats a date as a local Gregorian day ("yyyy-MM-dd") for display,
+/// grouping, and trading attribution. It is never persisted as entry identity;
+/// `JournalEntry.id` is the sole stable sync key and `date` remains editable.
 public enum JournalDayKey {
     public static func make(from date: Date, timeZone: TimeZone = .current) -> String {
         let formatter = DateFormatter()

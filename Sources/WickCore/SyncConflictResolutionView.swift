@@ -111,7 +111,7 @@ private struct SyncConflictRow: View {
         VStack(alignment: .leading, spacing: 8) {
             Button(action: onToggle) {
                 HStack(spacing: 6) {
-                    Text(conflict.dayKey)
+                    Text(conflict.displayDay)
                         .font(AppFont.ui(12.5, weight: .semibold, design: .rounded, monospacedDigit: true))
                         .foregroundStyle(theme.primaryText)
 

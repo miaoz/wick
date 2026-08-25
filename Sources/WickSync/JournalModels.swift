@@ -132,11 +132,6 @@ public struct JournalEntry: Identifiable, Codable, Equatable, Hashable, Sendable
     public var id: UUID
     /// Calendar day this entry is about (start-of-day in local time when created).
     public var date: Date
-    /// Stable cross-device identity ("yyyy-MM-dd" in the local timezone when the
-    /// entry was created or moved). Never recomputed on plain edits, so timezone
-    /// travel cannot silently re-key a day; `JournalStore.updateEntry` refreshes
-    /// it only when the entry is actually moved to a different day.
-    public var dayKey: String
     /// Optional day-level title.
     public var title: String
     public var items: [JournalItem]
@@ -146,7 +141,6 @@ public struct JournalEntry: Identifiable, Codable, Equatable, Hashable, Sendable
     public init(
         id: UUID = UUID(),
         date: Date = Date(),
-        dayKey: String? = nil,
         title: String = "",
         items: [JournalItem] = [JournalItem()],
         createdAt: Date = Date(),
@@ -154,31 +148,10 @@ public struct JournalEntry: Identifiable, Codable, Equatable, Hashable, Sendable
     ) {
         self.id = id
         self.date = date
-        self.dayKey = dayKey ?? JournalDayKey.make(from: date)
         self.title = title
         self.items = items.isEmpty ? [JournalItem()] : items
         self.createdAt = createdAt
         self.updatedAt = updatedAt
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case id, date, dayKey, title, items, createdAt, updatedAt
-    }
-
-    /// Pre-sync snapshots have no `dayKey`; derive it from `date` once. It is
-    /// frozen into the file on the next persist, so this fallback runs at most once.
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(UUID.self, forKey: .id)
-        let decodedDate = try container.decode(Date.self, forKey: .date)
-        date = decodedDate
-        dayKey = try container.decodeIfPresent(String.self, forKey: .dayKey)
-            ?? JournalDayKey.make(from: decodedDate)
-        title = try container.decode(String.self, forKey: .title)
-        let decodedItems = try container.decode([JournalItem].self, forKey: .items)
-        items = decodedItems.isEmpty ? [JournalItem()] : decodedItems
-        createdAt = try container.decode(Date.self, forKey: .createdAt)
-        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
 
     /// Tags collected from all non-empty item tags.
@@ -244,7 +217,9 @@ public struct JournalSnapshot: Codable, Equatable, Sendable {
     public var version: Int
     public var entries: [JournalEntry]
 
-    public static let currentVersion = 1
+    /// v2 removes the persisted date-derived `dayKey`; entry UUID is the only
+    /// stable identity and `date` remains freely editable.
+    public static let currentVersion = 2
 
     public static var empty: JournalSnapshot {
         JournalSnapshot(version: currentVersion, entries: [])

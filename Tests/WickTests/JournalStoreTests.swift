@@ -336,7 +336,7 @@ final class JournalStoreTests: XCTestCase {
         let past = Calendar.current.date(byAdding: .day, value: -10, to: Date())!
         let seed = JournalSnapshot(
             version: 1,
-            entries: [JournalEntry(date: past, dayKey: "2026-01-01", title: "existing")]
+            entries: [JournalEntry(date: past, title: "existing")]
         )
         try JournalSyncEncoding.encoder.encode(seed).write(to: journalJSONURL(second.id), options: .atomic)
 
@@ -370,7 +370,7 @@ final class JournalStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(changed, [day])
-        let updated = store.entries.first { $0.dayKey == existing.dayKey }
+        let updated = store.entries.first { $0.id == existing.id }
         XCTAssertEqual(updated?.items.map(\.tag), ["DRAM", "SKHYNIX"])
         XCTAssertEqual(updated?.items.first?.body, "keep this note")
     }
@@ -555,7 +555,7 @@ final class JournalStoreTests: XCTestCase {
 
         let snapshot = JournalSnapshot(
             version: 1,
-            entries: [JournalEntry(dayKey: "2026-05-01", title: "imported")]
+            entries: [JournalEntry(date: Date(timeIntervalSince1970: 1_777_593_600), title: "imported")]
         )
         let importURL = tempRoot.appendingPathComponent("import.json", isDirectory: false)
         try JournalSyncEncoding.encoder.encode(snapshot).write(to: importURL, options: .atomic)
@@ -713,6 +713,30 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.journals.count, 1)
     }
 
+    func testV1SnapshotMigratesToV2AndKeepsOriginalBackup() throws {
+        store.flushPendingWrites()
+        let entryID = UUID()
+        let itemID = UUID()
+        let legacy = """
+        {"version":1,"entries":[{"id":"\(entryID.uuidString)","date":"2026-08-19T16:00:00Z",\
+        "dayKey":"2026-08-22","title":"authoritative date",\
+        "items":[{"id":"\(itemID.uuidString)","tag":"BTC","body":"keep","imageFilenames":[]}],\
+        "createdAt":"2026-08-19T16:00:00Z","updatedAt":"2026-08-22T00:00:00Z"}]}
+        """
+        let legacyData = Data(legacy.utf8)
+        try legacyData.write(to: store.databaseURL, options: .atomic)
+
+        let migrated = JournalStore(rootDirectory: tempRoot)
+
+        XCTAssertEqual(migrated.entries.first?.id, entryID)
+        XCTAssertEqual(migrated.entries.first?.items.first?.body, "keep")
+        XCTAssertEqual(try Data(contentsOf: migrated.backupURL), legacyData)
+        let upgradedData = try Data(contentsOf: migrated.databaseURL)
+        let upgraded = try JournalSyncEncoding.decoder.decode(JournalSnapshot.self, from: upgradedData)
+        XCTAssertEqual(upgraded.version, JournalSnapshot.currentVersion)
+        XCTAssertFalse(String(decoding: upgradedData, as: UTF8.self).contains("dayKey"))
+    }
+
     // MARK: - Entries (active journal)
 
     func testOneEntryPerDay() {
@@ -720,6 +744,21 @@ final class JournalStoreTests: XCTestCase {
         let second = store.createEntry(on: Date())
         XCTAssertEqual(first.id, second.id)
         XCTAssertEqual(store.entries.count, 1)
+    }
+
+    func testChangingDateKeepsUUIDAndAllowsPastDate() {
+        var entry = store.createEntry(on: Date())
+        let originalID = entry.id
+        entry.items = [JournalItem(tag: "BTC", body: "keep this")]
+        let past = Calendar.current.date(byAdding: .day, value: -30, to: Date())!
+        entry.date = past
+
+        store.updateEntry(entry)
+
+        XCTAssertEqual(store.entries.count, 1)
+        XCTAssertEqual(store.entries.first?.id, originalID)
+        XCTAssertEqual(store.entries.first?.items.first?.body, "keep this")
+        XCTAssertTrue(Calendar.current.isDate(store.entries.first!.date, inSameDayAs: past))
     }
 
     func testTagFilterIsItemScoped() {

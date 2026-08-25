@@ -5,7 +5,7 @@ final class JournalSyncModelTests: XCTestCase {
     private var decoder: JSONDecoder { JournalSyncEncoding.decoder }
     private var encoder: JSONEncoder { JournalSyncEncoding.encoder }
 
-    // MARK: - dayKey
+    // MARK: - Date indexing
 
     func testDayKeyFormatIsGregorianLocalDate() {
         let epoch = Date(timeIntervalSince1970: 0)
@@ -17,32 +17,15 @@ final class JournalSyncModelTests: XCTestCase {
         XCTAssertEqual(JournalDayKey.make(from: evening, timeZone: zonePlus14), "1970-01-02")
     }
 
-    func testExplicitDayKeySurvivesRoundTrip() throws {
-        // Whole-second dates: ISO-8601 encoding drops fractional seconds.
-        let stamp = Date(timeIntervalSince1970: 1_754_000_000)
-        let entry = JournalEntry(
-            date: stamp,
-            dayKey: "2026-08-06",
-            title: "Keyed",
-            createdAt: stamp,
-            updatedAt: stamp
-        )
-        let data = try encoder.encode(entry)
-        let decoded = try decoder.decode(JournalEntry.self, from: data)
-        XCTAssertEqual(decoded.dayKey, "2026-08-06")
-        XCTAssertEqual(decoded, entry)
-    }
-
-    func testLegacyEntryWithoutDayKeyDerivesFromDate() throws {
+    func testLegacyDayKeyIsIgnoredAndNotReencoded() throws {
         let json = """
-        {"id":"\(UUID().uuidString)","date":"2026-01-15T12:00:00Z","title":"Legacy",\
+        {"id":"\(UUID().uuidString)","date":"2026-01-15T12:00:00Z","dayKey":"2099-12-31","title":"Legacy",\
         "items":[{"id":"\(UUID().uuidString)","tag":"","body":"b","imageFilenames":[]}],\
         "createdAt":"2026-01-15T12:00:00Z","updatedAt":"2026-01-15T12:00:00Z"}
         """
-        let date = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-01-15T12:00:00Z"))
         let decoded = try decoder.decode(JournalEntry.self, from: Data(json.utf8))
-        XCTAssertEqual(decoded.dayKey, JournalDayKey.make(from: date))
-        XCTAssertTrue(decoded.dayKey.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil)
+        let reencoded = try encoder.encode(decoded)
+        XCTAssertFalse(String(decoding: reencoded, as: UTF8.self).contains("dayKey"))
     }
 
     // MARK: - JournalImageFilename
@@ -248,28 +231,28 @@ final class JournalSyncModelTests: XCTestCase {
 
     // MARK: - Sync state (legacy migration)
 
-    func testLegacyDaySyncStateDecodesIntoSettlementEnum() throws {
+    func testLegacyEntrySyncStateDecodesIntoSettlementEnum() throws {
         let pushSettled = try decoder.decode(
-            DaySyncState.self,
+            EntrySyncState.self,
             from: Data(#"{"localHash":"h1","remoteRev":"r1","settledPushHash":"chosen"}"#.utf8)
         )
         XCTAssertEqual(pushSettled.settlement, .pushSettled("chosen"))
         XCTAssertEqual(pushSettled.pushedHashes, [])
 
         let adopter = try decoder.decode(
-            DaySyncState.self,
+            EntrySyncState.self,
             from: Data(#"{"localHash":"h1","settleAdoptRemote":true}"#.utf8)
         )
         XCTAssertEqual(adopter.settlement, .adoptRemote)
 
         let marker = try decoder.decode(
-            DaySyncState.self,
+            EntrySyncState.self,
             from: Data(#"{"localHash":"h1","settleMarkHash":"hm"}"#.utf8)
         )
         XCTAssertEqual(marker.settlement, .markSettled("hm"))
 
         // Round-trip drops the legacy keys and keeps the migrated settlement.
-        let decoded = try decoder.decode(DaySyncState.self, from: try encoder.encode(pushSettled))
+        let decoded = try decoder.decode(EntrySyncState.self, from: try encoder.encode(pushSettled))
         XCTAssertEqual(decoded, pushSettled)
     }
 }

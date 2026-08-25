@@ -255,8 +255,8 @@ struct EditorView: View {
     }
 
     private func rebaseIfClean(_ apply: JournalRemoteApply) {
-        guard apply.dayKey == draft.dayKey, !isDirty else { return }
-        if let fresh = store.entries.first(where: { $0.dayKey == apply.dayKey }) {
+        guard apply.entryID == draft.id, !isDirty else { return }
+        if let fresh = store.entries.first(where: { $0.id == apply.entryID }) {
             draft = fresh
         }
     }

@@ -431,7 +431,7 @@ struct SettingsView: View {
                     if !sync.engine.pendingConflicts.isEmpty {
                         SettingsCard(title: language == .chinese ? "对账冲突" : "Sync Conflicts") {
                             ForEach(sync.engine.pendingConflicts) { conflict in
-                                SettingsRow(title: conflict.dayKey, subtitle: language == .chinese ? "双方内容均已合并保留" : "Merged and preserved both versions") {
+                                SettingsRow(title: conflict.displayDay, subtitle: language == .chinese ? "双方内容均已合并保留" : "Merged and preserved both versions") {
                                     Button(L10n.string(.syncConflictDismiss, language: language)) {
                                         sync.engine.dismissConflict(id: conflict.id)
                                     }

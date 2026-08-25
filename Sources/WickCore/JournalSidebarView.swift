@@ -295,7 +295,7 @@ struct JournalDayListColumn: View {
                                     JournalDayTimelineRow(
                                         entry: entry,
                                         dayPnL: pnlByDay[Calendar.current.startOfDay(for: entry.date)],
-                                        closedPositions: closedPositionsByDayKey[entry.dayKey],
+                                        closedPositions: closedPositionsByDayKey[JournalDayKey.make(from: entry.date)],
                                         showsPositionStats: positionCoordinator.snapshot != nil
                                     )
                                 }
