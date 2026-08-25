@@ -102,6 +102,20 @@ func macOSIconMaskPath(canvasSize: CGFloat) -> (rect: CGRect, path: CGPath) {
     return (rect, path)
 }
 
+/// Web/Favicon app-icon silhouette: edge-to-edge rounded rect (no outer transparent margin, fills entire square).
+func webIconMaskPath(canvasSize: CGFloat) -> (rect: CGRect, path: CGPath) {
+    let rect = CGRect(x: 0, y: 0, width: canvasSize, height: canvasSize)
+    // Continuous Apple-style corner radius ≈ 22.4% of the icon shape edge.
+    let radius = canvasSize * (224.0 / 1024.0)
+    let path = CGPath(
+        roundedRect: rect,
+        cornerWidth: radius,
+        cornerHeight: radius,
+        transform: nil
+    )
+    return (rect, path)
+}
+
 /// Zero-out alpha outside the icon mask so Launchpad never shows square corners.
 func applyIconMask(to bitmap: NSBitmapImageRep, path: CGPath, size: Int) {
     guard let maskBitmap = NSBitmapImageRep(
@@ -161,14 +175,15 @@ func applyIconMask(to bitmap: NSBitmapImageRep, path: CGPath, size: Int) {
 }
 
 guard CommandLine.arguments.count > 1 else {
-    fputs("usage: generate_icon.swift <output-png-path> [--ios]\n", stderr)
+    fputs("usage: generate_icon.swift <output-png-path> [--ios] [--web]\n", stderr)
     exit(1)
 }
 
 let outputURL = URL(fileURLWithPath: CommandLine.arguments[1])
-/// iOS icons are full-bleed (the system applies its own mask), unlike the
-/// macOS silhouette with its transparent margin.
+/// iOS icons are full-bleed (the system applies its own mask).
 let isIOS = CommandLine.arguments.contains("--ios")
+/// Web/Favicon icons are edge-to-edge with continuous rounded corners (no outer transparent padding).
+let isWeb = CommandLine.arguments.contains("--web")
 let size = 1024
 
 guard let bitmap = NSBitmapImageRep(
@@ -200,22 +215,33 @@ context.setAllowsAntialiasing(true)
 context.interpolationQuality = .high
 context.clear(CGRect(x: 0, y: 0, width: size, height: size))
 
-let iconMask = macOSIconMaskPath(canvasSize: CGFloat(size))
-let canvas = iconMask.rect
+let iconMask = isWeb
+    ? webIconMaskPath(canvasSize: CGFloat(size))
+    : macOSIconMaskPath(canvasSize: CGFloat(size))
+let canvas = isWeb
+    ? CGRect(x: 96, y: 96, width: 832, height: 832)
+    : iconMask.rect
 let roundedCanvas = iconMask.path
 
 // Clip every paint operation to the icon silhouette so unclipped gradients
-// cannot fill the transparent corners (that previously made Launchpad show a square).
+// cannot fill the transparent corners.
 context.saveGState()
 if isIOS {
-    // Full bleed: the artwork is composed for the macOS 832pt inner box;
-    // expand it to cover the whole canvas (iOS masks the corners itself).
-    // Scale about the canvas center so the inner box maps exactly to [0, size].
+    // Full bleed: artwork expands to cover the whole canvas (iOS masks corners dynamically).
     let scale = CGFloat(size) / 832.0
     context.translateBy(x: CGFloat(size) / 2, y: CGFloat(size) / 2)
     context.scaleBy(x: scale, y: scale)
     context.translateBy(x: -CGFloat(size) / 2, y: -CGFloat(size) / 2)
     context.clip(to: CGRect(x: 0, y: 0, width: size, height: size))
+} else if isWeb {
+    // Edge-to-edge rounded rect: artwork expands to fill the 1024 canvas with rounded corners.
+    context.addPath(roundedCanvas)
+    context.clip()
+
+    let scale = CGFloat(size) / 832.0
+    context.translateBy(x: CGFloat(size) / 2, y: CGFloat(size) / 2)
+    context.scaleBy(x: scale, y: scale)
+    context.translateBy(x: -CGFloat(size) / 2, y: -CGFloat(size) / 2)
 } else {
     context.addPath(roundedCanvas)
     context.clip()
@@ -273,8 +299,8 @@ drawLinearGradient(
 context.setLineWidth(4)
 context.addPath(roundedCanvas)
 context.setStrokeColor(NSColor(hex: 0xFFD6A4, alpha: 0.18).cgColor)
-if !isIOS {
-    // Squircle rim highlight — meaningless once iOS applies its own mask.
+if !isIOS && !isWeb {
+    // Squircle rim highlight for macOS desktop icon
     context.strokePath()
 }
 
@@ -450,6 +476,17 @@ drawRadialGradient(
 )
 
 context.restoreGState()
+
+if isWeb {
+    // Edge-to-edge rounded rect highlight
+    context.saveGState()
+    context.setLineWidth(4)
+    context.addPath(roundedCanvas)
+    context.setStrokeColor(NSColor(hex: 0xFFD6A4, alpha: 0.20).cgColor)
+    context.strokePath()
+    context.restoreGState()
+}
+
 NSGraphicsContext.restoreGraphicsState()
 
 if isIOS {
