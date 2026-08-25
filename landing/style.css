@@ -553,18 +553,24 @@ main.container { position: relative; z-index: 1; }
   align-items: center;
   gap: 8px;
   width: 100%;
-  max-width: 480px;
+  max-width: 500px;
 }
 .ios-form-row {
   display: flex;
   align-items: center;
   gap: 6px;
   width: 100%;
-  flex-wrap: wrap;
   justify-content: center;
 }
+.ios-email-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 220px;
+}
 .ios-plusone-btn {
-  height: 30px;
+  height: 32px;
   padding: 0 14px;
   border-radius: 4px;
   font-family: inherit;
@@ -576,20 +582,21 @@ main.container { position: relative; z-index: 1; }
   border: 1px solid var(--ember);
   transition: filter 150ms ease;
   white-space: nowrap;
+  touch-action: manipulation;
 }
 .ios-plusone-btn:hover {
   filter: brightness(1.08);
 }
 .ios-email-input {
   flex: 1;
-  min-width: 160px;
-  height: 30px;
+  min-width: 120px;
+  height: 32px;
   padding: 0 10px;
   background: var(--paper-hi);
   border: 1px solid var(--rule);
   border-radius: 4px;
   font-family: var(--f-mono);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ink-1);
   outline: none;
   transition: border-color 150ms ease;
@@ -601,7 +608,7 @@ main.container { position: relative; z-index: 1; }
   color: var(--ink-3);
 }
 .ios-submit-btn {
-  height: 30px;
+  height: 32px;
   padding: 0 12px;
   border-radius: 4px;
   font-family: inherit;
@@ -613,6 +620,7 @@ main.container { position: relative; z-index: 1; }
   border: 1px solid var(--rule);
   transition: all 150ms ease;
   white-space: nowrap;
+  touch-action: manipulation;
 }
 .ios-submit-btn:hover {
   border-color: var(--ink-2);
@@ -622,9 +630,10 @@ main.container { position: relative; z-index: 1; }
   background: none;
   border: none;
   color: var(--ink-3);
-  font-size: 13px;
+  font-size: 14px;
   padding: 4px 6px;
   cursor: pointer;
+  touch-action: manipulation;
 }
 .ios-close-btn:hover {
   color: var(--ink-1);
@@ -639,6 +648,37 @@ main.container { position: relative; z-index: 1; }
 .done-count {
   color: var(--ink-2);
   font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .ios-form-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .ios-plusone-btn {
+    flex: 1;
+    height: 38px;
+    font-size: 14px;
+  }
+  .ios-email-wrap {
+    width: 100%;
+    min-width: 100%;
+    gap: 6px;
+  }
+  .ios-email-input {
+    height: 38px;
+    font-size: 16px; /* 16px 彻底杜绝 iOS Safari 聚焦输入框时强制页面放大 */
+    padding: 0 12px;
+  }
+  .ios-submit-btn {
+    height: 38px;
+    font-size: 13px;
+    padding: 0 14px;
+  }
+  .ios-close-btn {
+    height: 38px;
+    padding: 0 8px;
+  }
 }
 
 

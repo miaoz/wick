@@ -232,7 +232,6 @@
     wishTrigger.addEventListener("click", function () {
       if (stripDefault) stripDefault.hidden = true;
       if (stripForm) stripForm.hidden = false;
-      if (emailInput) emailInput.focus();
     });
   }
 
