@@ -265,7 +265,7 @@ private struct TagChipButton: View {
 }
 
 private struct MonthGridCell: Identifiable {
-    let id: Int
+    let id: String
     let date: Date?
 }
 
@@ -283,33 +283,39 @@ private struct PnlHeatmapCard: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            // Header
+            // Header: Left Chevron + Centered Month Title + Right Chevron
             HStack {
+                Button {
+                    shiftMonth(by: -1)
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(PhoneFont.ui(11.5, weight: .bold))
+                        .foregroundColor(PhoneTheme.inkSecondary)
+                        .frame(width: 36, height: 28, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+
+                Spacer(minLength: 8)
+
                 Text(Self.monthDisplay(for: currentMonth, language: language))
                     .font(PhoneFont.paper(13, weight: .bold))
                     .foregroundColor(PhoneTheme.inkPrimary)
 
-                Spacer()
+                Spacer(minLength: 8)
 
-                HStack(spacing: 8) {
-                    Button {
-                        shiftMonth(by: -1)
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(PhoneFont.preset(.caption2, weight: .bold))
-                            .foregroundColor(PhoneTheme.inkSecondary)
-                    }
-
-                    Button {
-                        shiftMonth(by: 1)
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .font(PhoneFont.preset(.caption2, weight: .bold))
-                            .foregroundColor(PhoneTheme.inkSecondary)
-                    }
-                    .disabled(!canGoForward)
-                    .opacity(canGoForward ? 1 : 0.3)
+                Button {
+                    shiftMonth(by: 1)
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(PhoneFont.ui(11.5, weight: .bold))
+                        .foregroundColor(PhoneTheme.inkSecondary)
+                        .frame(width: 36, height: 28, alignment: .trailing)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.borderless)
+                .disabled(!canGoForward)
+                .opacity(canGoForward ? 1 : 0.25)
             }
 
             // Month Total Row (已实现合计)
@@ -391,8 +397,12 @@ private struct PnlHeatmapCard: View {
     }
 
     private func shiftMonth(by delta: Int) {
-        if let newMonth = Calendar.current.date(byAdding: .month, value: delta, to: currentMonth) {
+        let cal = Calendar.current
+        let start = Self.monthStart(of: currentMonth, calendar: cal)
+        if let newMonth = cal.date(byAdding: .month, value: delta, to: start) {
             currentMonth = newMonth
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
         }
     }
 
@@ -400,26 +410,21 @@ private struct PnlHeatmapCard: View {
         var cal = Calendar.current
         cal.firstWeekday = 2 // Monday start
 
-        guard let monthInterval = cal.dateInterval(of: .month, for: month),
-              let firstDay = cal.date(from: cal.dateComponents([.year, .month], from: monthInterval.start))
-        else { return [] }
-
+        let firstDay = Self.monthStart(of: month, calendar: cal)
+        let monthKey = Self.monthKey(for: firstDay)
         let firstWeekday = cal.component(.weekday, from: firstDay) // Sunday = 1, Monday = 2
         let offset = (firstWeekday + 5) % 7 // Days before 1st of month in Monday-first layout
 
-        let numberOfDays = cal.range(of: .day, in: .month, for: month)?.count ?? 30
+        let numberOfDays = cal.range(of: .day, in: .month, for: firstDay)?.count ?? 30
         var cells: [MonthGridCell] = []
-        var idCounter = 0
 
-        for _ in 0..<offset {
-            cells.append(MonthGridCell(id: idCounter, date: nil))
-            idCounter += 1
+        for i in 0..<offset {
+            cells.append(MonthGridCell(id: "\(monthKey)-pad-\(i)", date: nil))
         }
 
         for day in 1...numberOfDays {
             let date = cal.date(byAdding: .day, value: day - 1, to: firstDay)
-            cells.append(MonthGridCell(id: idCounter, date: date))
-            idCounter += 1
+            cells.append(MonthGridCell(id: "\(monthKey)-day-\(day)", date: date))
         }
         return cells
     }
@@ -452,9 +457,19 @@ private struct PnlHeatmapCard: View {
 
     private var canGoForward: Bool {
         let calendar = Calendar.current
-        let currentMonthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: currentMonth)) ?? currentMonth
-        let thisMonthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
+        let currentMonthStart = Self.monthStart(of: currentMonth, calendar: calendar)
+        let thisMonthStart = Self.monthStart(of: Date(), calendar: calendar)
         return currentMonthStart < thisMonthStart
+    }
+
+    private static func monthStart(of date: Date, calendar: Calendar = .current) -> Date {
+        calendar.date(from: calendar.dateComponents([.year, .month], from: date)) ?? date
+    }
+
+    private static func monthKey(for date: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM"
+        return fmt.string(from: date)
     }
 
     private static let pnlFormatter: NumberFormatter = {
