@@ -411,7 +411,6 @@ final class PhoneJournalStore: ObservableObject {
         )
         seedJournalDirectory(for: id)
         journals.append(info)
-        journals.sort { $0.createdAt < $1.createdAt }
         persistCatalog()
         return info
     }
@@ -427,13 +426,19 @@ final class PhoneJournalStore: ObservableObject {
         )
         seedJournalDirectory(for: info.id)
         journals.append(info)
-        journals.sort { $0.createdAt < $1.createdAt }
         activeJournalID = info.id
         bindPaths(for: info.id)
         isReadOnlyDueToLoadFailure = false
         entries = []
         persistCatalog()
         return info
+    }
+
+    /// Reorders journals in the catalog (e.g. from drag-and-drop) and persists the new order.
+    func moveJournal(from source: IndexSet, to destination: Int) {
+        guard !isCatalogReadOnly else { return }
+        journals.move(fromOffsets: source, toOffset: destination)
+        persistCatalog()
     }
 
     func renameJournal(id: UUID, to name: String) {

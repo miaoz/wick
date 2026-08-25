@@ -14,6 +14,7 @@ struct DayListView: View {
     @State private var selectedTag: String? = nil
     @State private var heatmapMonth = Date()
     @State private var navigationPath = NavigationPath()
+    @State private var showJournalManager = false
 
     private enum NameAlert {
         case new
@@ -30,7 +31,25 @@ struct DayListView: View {
             VStack(spacing: 0) {
                 // Top Custom Header (dl-topbar)
                 HStack {
-                    journalMenu
+                    Button {
+                        showJournalManager = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(store.activeJournal?.name ?? L10n.string(.journalLibraryDefaultName, language: language))
+                                .font(PhoneFont.paper(15, weight: .bold))
+                                .foregroundColor(PhoneTheme.inkPrimary)
+                            Image(systemName: "chevron.down")
+                                .font(PhoneFont.ui(10, weight: .bold))
+                                .foregroundColor(PhoneTheme.cinnabar)
+                        }
+                        .padding(.vertical, 3)
+                        .padding(.horizontal, 6)
+                        .background(PhoneTheme.paperHi)
+                        .cornerRadius(4)
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+
                     Spacer()
                     Button {
                         let entry = store.openOrCreateToday()
@@ -165,61 +184,10 @@ struct DayListView: View {
                     EditorView(entry: entry)
                 }
             }
-            .alert(
-                nameAlertMode == .rename ? L10n.string(.journalLibraryRenameTitle, language: language) : L10n.string(.journalLibraryNewTitle, language: language),
-                isPresented: $showNameAlert
-            ) {
-                TextField(L10n.string(.journalLibraryNamePlaceholder, language: language), text: $nameDraft)
-                Button(nameAlertMode == .rename ? L10n.string(.journalLibrarySaveName, language: language) : L10n.string(.journalLibraryCreate, language: language)) {
-                    switch nameAlertMode {
-                    case .rename:
-                        if let id = store.activeJournalID {
-                            store.renameJournal(id: id, to: nameDraft)
-                        }
-                    case .new:
-                        store.createJournal(name: nameDraft)
-                    }
-                }
-                Button(L10n.string(.cancel, language: language), role: .cancel) {}
-            }
-            .confirmationDialog(
-                L10n.string(.journalLibraryDeleteConfirm, language: language),
-                isPresented: $showDeleteConfirm,
-                titleVisibility: .visible
-            ) {
-                Button(L10n.string(.journalLibraryDelete, language: language), role: .destructive) {
-                    if let id = store.activeJournalID {
-                        _ = store.deleteJournal(id: id)
-                    }
-                }
-                Button(L10n.string(.cancel, language: language), role: .cancel) {}
-            } message: {
-                Text(language == .chinese ? "将删除「\(store.activeJournal?.name ?? "")」在本机的全部内容，且不可撤销。" : "This will permanently delete \"\(store.activeJournal?.name ?? "")\" on this device.")
+            .sheet(isPresented: $showJournalManager) {
+                JournalManagerSheet(store: store, language: language)
             }
         }
-    }
-
-    private var journalMenu: some View {
-        DayListJournalMenu(
-            journals: store.journals,
-            activeJournalID: store.activeJournalID,
-            activeJournalName: store.activeJournal?.name ?? L10n.string(.journalLibraryDefaultName, language: language),
-            language: language,
-            onSelectJournal: { id in store.switchToJournal(id: id) },
-            onNewJournal: {
-                nameAlertMode = .new
-                nameDraft = ""
-                showNameAlert = true
-            },
-            onRenameJournal: { currentName in
-                nameAlertMode = .rename
-                nameDraft = currentName
-                showNameAlert = true
-            },
-            onDeleteJournal: {
-                showDeleteConfirm = true
-            }
-        )
     }
 
     private func extractTags(from entries: [JournalEntry]) -> [String] {
@@ -582,58 +550,188 @@ private struct DayCardView: View {
     }
 }
 
-private struct DayListJournalMenu: View {
-    let journals: [JournalInfo]
-    let activeJournalID: UUID?
-    let activeJournalName: String
+private struct JournalManagerSheet: View {
+    @ObservedObject var store: PhoneJournalStore
     let language: AppLanguage
-    let onSelectJournal: (UUID) -> Void
-    let onNewJournal: () -> Void
-    let onRenameJournal: (String) -> Void
-    let onDeleteJournal: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var showNewJournalAlert = false
+    @State private var newJournalName = ""
+    @State private var renamingJournal: JournalInfo?
+    @State private var renameJournalDraft = ""
+    @State private var deletingJournal: JournalInfo?
+    @State private var showDeleteConfirm = false
 
     var body: some View {
-        Menu {
-            ForEach(journals) { journal in
-                Button {
-                    DispatchQueue.main.async {
-                        onSelectJournal(journal.id)
-                    }
-                } label: {
-                    if journal.id == activeJournalID {
-                        Label(journal.name, systemImage: "checkmark")
-                    } else {
-                        Text(journal.name)
-                    }
-                }
-            }
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(store.journals) { journal in
+                        let isActive = journal.id == store.activeJournalID
+                        HStack(spacing: 12) {
+                            // Active status icon
+                            if isActive {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(PhoneFont.ui(14, weight: .bold))
+                                    .foregroundColor(PhoneTheme.cinnabar)
+                            } else {
+                                Image(systemName: "circle")
+                                    .font(PhoneFont.ui(14))
+                                    .foregroundColor(PhoneTheme.inkTertiary.opacity(0.4))
+                            }
 
-            Divider()
+                            // Journal Name in user's custom selected font!
+                            Text(journal.name)
+                                .font(PhoneFont.paper(16, weight: isActive ? .bold : .medium))
+                                .foregroundColor(isActive ? PhoneTheme.inkPrimary : PhoneTheme.inkSecondary)
 
-            Button("\(L10n.string(.journalLibraryNewTitle, language: language))…") {
-                DispatchQueue.main.async {
-                    onNewJournal()
+                            Spacer()
+
+                            if isActive {
+                                Text(language == .chinese ? "当前使用" : "Active")
+                                    .font(PhoneFont.ui(10.5, weight: .medium))
+                                    .foregroundColor(PhoneTheme.cinnabar)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(PhoneTheme.cinnabarSoft)
+                                    .cornerRadius(3)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if store.activeJournalID != journal.id {
+                                store.switchToJournal(id: journal.id)
+                                let generator = UIImpactFeedbackGenerator(style: .light)
+                                generator.impactOccurred()
+                            }
+                            dismiss()
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if store.journals.count > 1 {
+                                Button(role: .destructive) {
+                                    deletingJournal = journal
+                                    showDeleteConfirm = true
+                                } label: {
+                                    Label(L10n.string(.journalLibraryDelete, language: language), systemImage: "trash")
+                                }
+                            }
+
+                            Button {
+                                renamingJournal = journal
+                                renameJournalDraft = journal.name
+                            } label: {
+                                Label(L10n.string(.journalLibraryRenameTitle, language: language), systemImage: "pencil")
+                            }
+                            .tint(PhoneTheme.char)
+                        }
+                        .contextMenu {
+                            Button {
+                                renamingJournal = journal
+                                renameJournalDraft = journal.name
+                            } label: {
+                                Label(L10n.string(.journalLibraryRenameTitle, language: language), systemImage: "pencil")
+                            }
+
+                            if store.journals.count > 1 {
+                                Button(role: .destructive) {
+                                    deletingJournal = journal
+                                    showDeleteConfirm = true
+                                } label: {
+                                    Label(L10n.string(.journalLibraryDelete, language: language), systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+                    .onMove { indices, newOffset in
+                        store.moveJournal(from: indices, to: newOffset)
+                    }
+                } footer: {
+                    Text(language == .chinese ? "长按并拖拽可调整日记本排序；左滑可重命名或删除。" : "Long press and drag to reorder journals; swipe left to rename or delete.")
+                        .font(PhoneFont.paper(11))
+                        .foregroundColor(PhoneTheme.inkTertiary)
+                        .padding(.top, 6)
                 }
             }
-            Button("\(L10n.string(.journalLibraryRenameTitle, language: language))…") {
-                DispatchQueue.main.async {
-                    onRenameJournal(activeJournalName)
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(PhoneTheme.paper.ignoresSafeArea())
+            .navigationTitle(Text(language == .chinese ? "日记本" : "Journals"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        newJournalName = ""
+                        showNewJournalAlert = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus")
+                                .font(PhoneFont.ui(11, weight: .bold))
+                            Text(L10n.string(.journalLibraryNewTitle, language: language))
+                                .font(PhoneFont.paper(13, weight: .bold))
+                        }
+                        .foregroundColor(PhoneTheme.cinnabar)
+                    }
                 }
-            }
-            Button("\(L10n.string(.journalLibraryDelete, language: language))…", role: .destructive) {
-                DispatchQueue.main.async {
-                    onDeleteJournal()
-                }
-            }
-            .disabled(journals.count <= 1)
-        } label: {
-            HStack(spacing: 3) {
-                Text(activeJournalName)
-                    .font(PhoneFont.paper(15, weight: .bold))
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L10n.string(.ok, language: language)) {
+                        dismiss()
+                    }
+                    .font(PhoneFont.paper(13, weight: .bold))
                     .foregroundColor(PhoneTheme.inkPrimary)
-                Image(systemName: "chevron.down")
-                    .font(PhoneFont.ui(10, weight: .bold))
-                    .foregroundColor(PhoneTheme.cinnabar)
+                }
+            }
+            .alert(
+                L10n.string(.journalLibraryNewTitle, language: language),
+                isPresented: $showNewJournalAlert
+            ) {
+                TextField(L10n.string(.journalLibraryNamePlaceholder, language: language), text: $newJournalName)
+                Button(L10n.string(.journalLibraryCreate, language: language)) {
+                    let trimmed = newJournalName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        _ = store.createJournal(name: trimmed)
+                    }
+                }
+                Button(L10n.string(.cancel, language: language), role: .cancel) {}
+            }
+            .alert(
+                L10n.string(.journalLibraryRenameTitle, language: language),
+                isPresented: Binding(
+                    get: { renamingJournal != nil },
+                    set: { if !$0 { renamingJournal = nil } }
+                )
+            ) {
+                TextField(L10n.string(.journalLibraryNamePlaceholder, language: language), text: $renameJournalDraft)
+                Button(L10n.string(.journalLibrarySaveName, language: language)) {
+                    if let target = renamingJournal {
+                        let trimmed = renameJournalDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            store.renameJournal(id: target.id, to: trimmed)
+                        }
+                        renamingJournal = nil
+                    }
+                }
+                Button(L10n.string(.cancel, language: language), role: .cancel) {
+                    renamingJournal = nil
+                }
+            }
+            .confirmationDialog(
+                L10n.string(.journalLibraryDeleteConfirm, language: language),
+                isPresented: $showDeleteConfirm,
+                titleVisibility: .visible
+            ) {
+                Button(L10n.string(.journalLibraryDelete, language: language), role: .destructive) {
+                    if let target = deletingJournal {
+                        _ = store.deleteJournal(id: target.id)
+                        deletingJournal = nil
+                    }
+                }
+                Button(L10n.string(.cancel, language: language), role: .cancel) {
+                    deletingJournal = nil
+                }
+            } message: {
+                Text(language == .chinese ? "将删除「\(deletingJournal?.name ?? "")」在本机的全部内容，且不可撤销。" : "This will permanently delete \"\(deletingJournal?.name ?? "")\" on this device.")
             }
         }
     }
