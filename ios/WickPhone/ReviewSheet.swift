@@ -79,6 +79,7 @@ struct ReviewSheet: View {
 
                         TextEditor(text: $noteDraft)
                             .font(PhoneFont.paper(13))
+                            .lineSpacing(PhoneFont.paperLineSpacing(13))
                             .foregroundColor(PhoneTheme.inkPrimary)
                             .frame(height: 72)
                             .padding(8)

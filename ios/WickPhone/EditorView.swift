@@ -399,6 +399,7 @@ private struct ItemRowView: View {
             // Body editor
             TextEditor(text: $item.body)
                 .font(PhoneFont.paper(13.5))
+                .lineSpacing(PhoneFont.paperLineSpacing(13.5))
                 .foregroundColor(PhoneTheme.inkPrimary)
                 .scrollContentBackground(.hidden)
                 .frame(minHeight: 56)
@@ -450,6 +451,7 @@ private struct ItemRowView: View {
                             .frame(width: 2)
                         Text(review.note)
                             .font(PhoneFont.paper(11))
+                            .lineSpacing(PhoneFont.paperLineSpacing(11))
                             .foregroundColor(PhoneTheme.inkSecondary)
                             .padding(.vertical, 2)
                     }

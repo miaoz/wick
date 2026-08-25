@@ -521,6 +521,7 @@ private struct TodayJournalCard: View {
 
                             Text(item.body.isEmpty ? (language == .chinese ? "（空）" : "(Empty)") : item.body)
                                 .font(PhoneFont.paper(12))
+                                .lineSpacing(PhoneFont.paperLineSpacing(12))
                                 .foregroundColor(PhoneTheme.inkPrimary)
                                 .lineLimit(2)
 
