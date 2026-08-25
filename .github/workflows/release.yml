@@ -158,6 +158,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Upload release to Cloudflare R2
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          ZIP_FILE="dist/Wick-macOS-${VERSION}.zip"
+          echo "Uploading ${ZIP_FILE} to Cloudflare R2 (application-releases/wick)..."
+          npx wrangler r2 object put "application-releases/wick/Wick-macOS-${VERSION}.zip" --file="${ZIP_FILE}" --remote
+          npx wrangler r2 object put "application-releases/wick/Wick.zip" --file="${ZIP_FILE}" --remote
+
       # Keep only the 10 newest releases; older ones are deleted (git tags stay,
       # so any old version can still be checked out and rebuilt if needed).
       - name: Prune old releases (keep latest 10)
