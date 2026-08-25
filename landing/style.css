@@ -152,7 +152,6 @@ body {
   -webkit-font-smoothing: antialiased;
   text-wrap: pretty;
 }
-[lang="zh"] body { font-family: var(--f-print); }
 ::selection { background: color-mix(in srgb, var(--ember) 24%, transparent); }
 :focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; border-radius: 2px; }
 
@@ -374,29 +373,6 @@ main.container { position: relative; z-index: 1; }
 .feat h3 { margin: 0 0 6px; font-family: var(--f-print); font-size: 17px; font-weight: 900; }
 .feat p { margin: 0; font-size: 13px; line-height: 1.85; color: var(--ink-2); }
 
-/* Songti SC Bold/Black mixes a few simplified glyphs with sans-style forms on iOS. */
-[lang="zh"] .site-nav a,
-[lang="zh"] .eyebrow,
-[lang="zh"] .hero h1,
-[lang="zh"] .hero-live,
-[lang="zh"] .btn-primary,
-[lang="zh"] .btn-ghost,
-[lang="zh"] .btn-ghost .soon,
-[lang="zh"] .slip-title,
-[lang="zh"] .strip-row .lbl,
-[lang="zh"] .sec-head h2,
-[lang="zh"] .feat h3 {
-  font-weight: 400;
-}
-[lang="zh"] .hero h1 { -webkit-text-stroke: 0.35px currentColor; }
-[lang="zh"] .hero-live,
-[lang="zh"] .sec-head h2,
-[lang="zh"] .feat h3 { -webkit-text-stroke: 0.15px currentColor; }
-[lang="zh"] .shot .cap-no {
-  font-family: var(--f-print);
-  font-weight: 400;
-}
-
 /* ---------- 实拍:洗出来贴在纸上的照片 ---------- */
 .shots-grid {
   display: grid;
@@ -498,6 +474,19 @@ main.container { position: relative; z-index: 1; }
 .footer-links { display: flex; gap: 16px; }
 .footer-links a { color: var(--ink-2); text-decoration: none; }
 .footer-links a:hover { color: var(--ember); }
+
+/* iOS Songti Bold/Black contains inconsistent simplified glyph forms. Keep the
+   Chinese page on one physical face; hierarchy comes from size and color. */
+html[lang="zh"] body,
+html[lang="zh"] body * {
+  font-family: var(--f-print) !important;
+  font-weight: 400 !important;
+  font-synthesis: none;
+}
+html[lang="zh"] .hero h1 { -webkit-text-stroke: 0.35px currentColor; }
+html[lang="zh"] .hero-live,
+html[lang="zh"] .sec-head h2,
+html[lang="zh"] .feat h3 { -webkit-text-stroke: 0.15px currentColor; }
 
 /* ---------- 入场显影(JS 加 .rv,入视加 .in) ---------- */
 .rv { opacity: 0; transform: translateY(10px); }
