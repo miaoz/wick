@@ -4,6 +4,17 @@
    ========================================================================== */
 
 /* ---------- 秉烛 tokens(与 designs/wick-design-language/tokens-v2.css 一致) ---------- */
+/* 自托管宋体子集(Noto Serif SC 可变字重,OFL 许可,见 assets/fonts/OFL.txt):
+   iOS 的 Songti SC 是按需下载资产,真机上常缺席 → 会落到日文 HiraMinProN,
+   简体特有字(图/载/烛…)再掉系统回退,同页字体混杂。子集置顶保证全平台一致 */
+@font-face {
+  font-family: "Wick Print";
+  src: url("assets/fonts/wick-print.woff2") format("woff2");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --desk: #E7DCC6;
   --paper: #FBF4E6;
@@ -29,8 +40,8 @@
   --receipt-ink: #33291A;
   --sh-page: 0 1px 2px rgba(43, 32, 20, 0.1), 0 10px 26px rgba(43, 32, 20, 0.14);
   --sh-lift: 0 2px 6px rgba(43, 32, 20, 0.12), 0 22px 50px rgba(43, 32, 20, 0.22);
-  --f-print: "Songti SC", "STSong", "HiraMinProN-W6", "Noto Serif SC", serif;
-  --f-disp: ui-serif, "New York", "Songti SC", serif;
+  --f-print: "Wick Print", "Songti SC", "STSong", "HiraMinProN-W6", "Noto Serif SC", serif;
+  --f-disp: ui-serif, "New York", "Wick Print", "Songti SC", serif;
   --f-ui: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
   --f-mono: ui-monospace, "SF Mono", "Menlo", monospace;
   --grain-opacity: 0.06;
