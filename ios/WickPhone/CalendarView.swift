@@ -51,6 +51,7 @@ private struct FlatCalendarView: View {
                 // Tall, Breathing Almanac Hero Card
                 FlatCalendarHeroCard(
                     date: selectedDate,
+                    events: calendarStore.events(for: selectedDate),
                     language: language,
                     onPreviousDay: { shiftDate(by: -1) },
                     onNextDay: { shiftDate(by: 1) },
@@ -133,6 +134,7 @@ private struct FlatCalendarView: View {
 
 private struct FlatCalendarHeroCard: View {
     let date: Date
+    var events: [MacroCalendarEvent] = []
     let language: AppLanguage
     let onPreviousDay: () -> Void
     let onNextDay: () -> Void
@@ -303,37 +305,56 @@ private struct FlatCalendarHeroCard: View {
                     .padding(.bottom, 8)
             }
 
-            // 5. Integrated Yi / Ji Guidance Bar
-            HStack(spacing: 12) {
-                HStack(spacing: 5) {
-                    Text(language == .chinese ? "宜" : "DO")
-                        .font(PhoneFont.paper(9.5, weight: .black))
-                        .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1.5)
-                        .background(PhoneTheme.cinnabar)
-                        .cornerRadius(2)
-                    Text(language == .chinese ? "止盈 · 依纪复盘" : "Take Profit · Review")
-                        .font(PhoneFont.paper(11))
-                        .foregroundColor(PhoneTheme.inkSecondary)
+            // 5. Integrated Yi / Ji Guidance Bar with Lucky / Taboo & Seal
+            let entry = TraderAlmanac.entry(for: date, events: events)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .center, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        TraderYiJiChip(
+                            mark: language == .chinese ? "宜" : "DO",
+                            text: entry.yiText(language: language),
+                            markBackground: PhoneTheme.cinnabar,
+                            markInk: Color(red: 0.98, green: 0.95, blue: 0.90),
+                            textInk: PhoneTheme.inkPrimary,
+                            markFont: PhoneFont.paper(9.5, weight: .black),
+                            textFont: PhoneFont.paper(11),
+                            cornerRadius: 2,
+                            paddingH: 4,
+                            paddingV: 1.5
+                        )
+                        TraderYiJiChip(
+                            mark: language == .chinese ? "忌" : "AVOID",
+                            text: entry.jiText(language: language),
+                            markBackground: PhoneTheme.char,
+                            markInk: Color(red: 0.98, green: 0.95, blue: 0.90),
+                            textInk: PhoneTheme.inkPrimary,
+                            markFont: PhoneFont.paper(9.5, weight: .black),
+                            textFont: PhoneFont.paper(11),
+                            cornerRadius: 2,
+                            paddingH: 4,
+                            paddingV: 1.5
+                        )
+                    }
+
+                    Spacer(minLength: 4)
+
+                    if let seal = entry.sealText(language: language) {
+                        TraderAlmanacSealBadge(text: seal, accent: PhoneTheme.cinnabar, scale: 1.15, angle: -3)
+                    }
                 }
 
-                Spacer()
-
-                HStack(spacing: 5) {
-                    Text(language == .chinese ? "忌" : "AVOID")
-                        .font(PhoneFont.paper(9.5, weight: .black))
-                        .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1.5)
-                        .background(PhoneTheme.char)
-                        .cornerRadius(2)
-                    Text(language == .chinese ? "追涨 · 扛单违规" : "FOMO · Hold Loss")
-                        .font(PhoneFont.paper(11))
-                        .foregroundColor(PhoneTheme.inkSecondary)
+                if entry.luckyText(language: language) != nil || entry.shaText(language: language) != nil {
+                    TraderAlmanacMetaRow(
+                        entry: entry,
+                        language: language,
+                        accentColor: PhoneTheme.cinnabar,
+                        textInk: PhoneTheme.inkTertiary,
+                        font: PhoneFont.paper(9.5)
+                    )
+                    .padding(.top, 2)
                 }
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(PhoneTheme.paper)
             .cornerRadius(4)

@@ -49,36 +49,58 @@ struct JournalInspectorView: View {
 
             if !eventsCollapsed {
                 VStack(alignment: .leading, spacing: 8) {
-                    // 报头:大日期 + 农历,与黄历同字态(语言跟随 App 设置;
-                    // Text(date, format:) 不吃注入 locale,走 DateFormatter)。
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(inspectorBigDate)
-                            .font(AppFont.ui(24, weight: .black, design: .serif))
-                            .foregroundStyle(palette.textPrimary.color)
-                        if let lunar = LunarLine.string(for: Date()) {
-                            Text(lunar)
-                                .font(AppFont.paper(10))
-                                .foregroundStyle(palette.textSecondary.color)
-                                .lineLimit(1)
+                    let entry = TraderAlmanac.entry(for: Date(), events: calendarStore.events(for: Date()))
+
+                    // 报头:大日期 + 农历 + 右上角朱砂方印(方案 A)。
+                    HStack(alignment: .center, spacing: 8) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(inspectorBigDate)
+                                .font(AppFont.ui(24, weight: .black, design: .serif))
+                                .foregroundStyle(palette.textPrimary.color)
+                            if let lunar = LunarLine.string(for: Date()) {
+                                Text(lunar)
+                                    .font(AppFont.paper(10))
+                                    .foregroundStyle(palette.textSecondary.color)
+                                    .lineLimit(1)
+                            }
+                        }
+                        Spacer(minLength: 4)
+                        if let seal = entry.sealText(language: settings.language) {
+                            TraderAlmanacSealBadge(text: seal, accent: palette.pnlUp.color, scale: 1.1, angle: -3)
                         }
                     }
 
-                    // 宜忌行:朱砂「宜」/ 烟墨「忌」小方印 + 宋体小字(秉烛 §03)。
-                    HStack(spacing: 9) {
-                        yijiChip(
+                    // 宜忌双行舒适排布:朱砂「宜」/ 烟墨「忌」小方印 + 宋体小字(秉烛 §03)。
+                    VStack(alignment: .leading, spacing: 5) {
+                        TraderYiJiChip(
                             mark: L10n.string(.inspectorYiLabel, language: settings.language),
-                            text: L10n.string(.inspectorYiText, language: settings.language),
+                            text: entry.yiText(language: settings.language),
                             markBackground: palette.pnlUp.color,
-                            markInk: Color(red: 0.98, green: 0.92, blue: 0.85)
+                            markInk: Color(red: 0.98, green: 0.92, blue: 0.85),
+                            textInk: palette.textSecondary.color,
+                            markFont: AppFont.paper(8.5, weight: .bold),
+                            textFont: AppFont.paper(9.5)
                         )
-                        yijiChip(
+
+                        TraderYiJiChip(
                             mark: L10n.string(.inspectorJiLabel, language: settings.language),
-                            text: L10n.string(.inspectorJiText, language: settings.language),
+                            text: entry.jiText(language: settings.language),
                             markBackground: palette.textPrimary.color,
-                            // 「忌」章底随烟墨反相,章字吃纸面色才读得出。
-                            markInk: palette.columnPaper.color
+                            markInk: palette.columnPaper.color,
+                            textInk: palette.textSecondary.color,
+                            markFont: AppFont.paper(8.5, weight: .bold),
+                            textFont: AppFont.paper(9.5)
                         )
                     }
+
+                    // 吉神 / 煞方行
+                    TraderAlmanacMetaRow(
+                        entry: entry,
+                        language: settings.language,
+                        accentColor: palette.pnlUp.color,
+                        textInk: palette.textSecondary.color.opacity(0.85),
+                        font: AppFont.paper(8.5)
+                    )
 
                     // 栏目签条:宏观 / 财报
                     HStack(spacing: 6) {

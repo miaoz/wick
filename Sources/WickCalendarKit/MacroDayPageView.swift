@@ -72,6 +72,7 @@ struct MacroDayPageView: View {
             masthead
             hero
             lunarLine
+            almanacCompartment
             eventsSection
             footer
         }
@@ -211,7 +212,61 @@ struct MacroDayPageView: View {
                 .font(TradingCalendarTheme.mincho(7.5 * s))
                 .foregroundStyle(TradingCalendarTheme.dimInk)
         }
-        .padding(.vertical, 7 * s)
+        .padding(.top, 5 * s)
+        .padding(.bottom, 3 * s)
+    }
+
+    // MARK: - Almanac (Yi/Ji, Seal, Lucky & Sha)
+
+    private var almanacCompartment: some View {
+        let entry = TraderAlmanac.entry(for: date, events: events)
+        return VStack(alignment: .leading, spacing: 3 * s) {
+            HStack(alignment: .center, spacing: 6 * s) {
+                VStack(alignment: .leading, spacing: 2.5 * s) {
+                    TraderYiJiChip(
+                        mark: language == .chinese ? "宜" : "DO",
+                        text: entry.yiText(language: language),
+                        markBackground: accent,
+                        markInk: TradingCalendarTheme.paper,
+                        textInk: TradingCalendarTheme.ink,
+                        markFont: TradingCalendarTheme.kanji(7.5 * s, weight: .bold),
+                        textFont: TradingCalendarTheme.mincho(8.5 * s),
+                        cornerRadius: 2 * s,
+                        paddingH: 4 * s,
+                        paddingV: 1 * s
+                    )
+                    TraderYiJiChip(
+                        mark: language == .chinese ? "忌" : "AVOID",
+                        text: entry.jiText(language: language),
+                        markBackground: TradingCalendarTheme.ink.opacity(0.85),
+                        markInk: TradingCalendarTheme.paper,
+                        textInk: TradingCalendarTheme.ink,
+                        markFont: TradingCalendarTheme.kanji(7.5 * s, weight: .bold),
+                        textFont: TradingCalendarTheme.mincho(8.5 * s),
+                        cornerRadius: 2 * s,
+                        paddingH: 4 * s,
+                        paddingV: 1 * s
+                    )
+                }
+                Spacer(minLength: 4 * s)
+                if let seal = entry.sealText(language: language) {
+                    TraderAlmanacSealBadge(text: seal, accent: accent, scale: s * 1.15, angle: -3)
+                }
+            }
+
+            if entry.luckyText(language: language) != nil || entry.shaText(language: language) != nil {
+                TraderAlmanacMetaRow(
+                    entry: entry,
+                    language: language,
+                    accentColor: accent,
+                    textInk: TradingCalendarTheme.dimInk,
+                    font: TradingCalendarTheme.mincho(7 * s)
+                )
+                .padding(.top, 1 * s)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.bottom, 5 * s)
     }
 
     // MARK: - Events
