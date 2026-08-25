@@ -427,11 +427,12 @@ main.container { position: relative; z-index: 1; }
 }
 
 /* ---------- 下载 (方案 B · 极简居中 · 终章号召) ---------- */
+.dl-section { padding-bottom: 0; }
 .dl-pitch {
   max-width: 720px;
   margin: 16px auto 0;
   text-align: center;
-  padding: 16px 0 8px;
+  padding: 16px 0 0;
 }
 .pitch-pill {
   display: inline-flex;
@@ -507,7 +508,7 @@ main.container { position: relative; z-index: 1; }
 }
 .pitch-ios-strip {
   margin-top: 24px;
-  padding-top: 18px;
+  padding: 18px 0;
   border-top: 1px solid var(--rule);
   display: flex;
   align-items: center;
@@ -529,7 +530,7 @@ main.container { position: relative; z-index: 1; }
 
 
 /* ---------- 页脚 ---------- */
-.site-footer { margin-top: 56px; border-top: 1px solid var(--rule); }
+.site-footer { margin-top: 0; border-top: 1px solid var(--rule); }
 .footer-inner {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
   padding: 18px 24px 32px;
