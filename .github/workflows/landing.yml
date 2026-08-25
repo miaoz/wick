@@ -2,10 +2,12 @@ name: Deploy Landing
 
 on:
   push:
-    branches: [main]
     paths:
       - "landing/**"
+      - "functions/**"
+      - "wrangler.toml"
       - ".github/workflows/landing.yml"
+    branches: [main]
   workflow_dispatch:
 
 concurrency:

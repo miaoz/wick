@@ -198,10 +198,30 @@
         <p class="dl-meta" data-i18n="dl.meta">macOS 13 Ventura 或更高 · Universal（Apple Silicon 与 Intel）</p>
       </div>
 
-      <div class="pitch-ios-strip">
-        <span data-i18n="dl.ios.text">📱 iOS 版即将上架 App Store</span>
-        <span class="sep">·</span>
-        <a href="https://github.com/miaoz/wick/tree/main/ios" target="_blank" rel="noopener" data-i18n="dl.ios.link">查看 iOS 进展 ›</a>
+      <div class="pitch-ios-strip" id="ios-wishlist-box">
+        <div class="ios-strip-default" id="ios-strip-default">
+          <span data-i18n="dl.ios.text">📱 iOS 版已就绪（暂未上架）</span>
+          <span class="sep">·</span>
+          <button type="button" class="ios-link-btn" id="ios-wish-trigger" data-i18n="dl.ios.link">查看 iOS 进展与预约 ›</button>
+        </div>
+        <div class="ios-strip-form" id="ios-strip-form" hidden>
+          <div class="ios-form-row">
+            <input type="email" class="ios-email-input" id="ios-email-input" placeholder="输入邮箱（可选，用于接收通知）" data-i18n-ph="dl.ios.ph" autocomplete="email" autocorrect="off" autocapitalize="off" spellcheck="false">
+            <button type="button" class="ios-submit-btn" id="ios-submit-btn" data-i18n="dl.ios.submit">预约通知</button>
+            <button type="button" class="ios-plusone-btn" id="ios-plusone-btn" data-i18n="dl.ios.plusone">直接 +1</button>
+            <button type="button" class="ios-close-btn" id="ios-close-btn" aria-label="Close">✕</button>
+          </div>
+          <div class="ios-form-hint">
+            <span class="hint-text" data-i18n="dl.ios.hint">无需证书可体验时将第一时间邮件通知；也可直接点击 +1 登记需求。</span>
+            <a href="https://github.com/miaoz/wick/tree/main/ios" target="_blank" rel="noopener" class="ios-github-link" data-i18n="dl.ios.source">GitHub 源码进展 ›</a>
+          </div>
+        </div>
+        <div class="ios-strip-done" id="ios-strip-done" hidden>
+          <span class="done-seal" data-i18n="dl.ios.done">✓ 已加入愿望清单</span>
+          <span class="done-count" id="ios-done-count"></span>
+          <span class="sep">·</span>
+          <a href="https://github.com/miaoz/wick/tree/main/ios" target="_blank" rel="noopener" data-i18n="dl.ios.source">查看源码进展 ›</a>
+        </div>
       </div>
     </div>
   </section>

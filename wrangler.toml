@@ -3,3 +3,8 @@
 name = "wick"
 compatibility_date = "2026-08-25"
 pages_build_output_dir = "landing"
+
+[[r2_buckets]]
+binding = "WISH_BUCKET"
+bucket_name = "application-releases"
+

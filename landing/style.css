@@ -511,22 +511,135 @@ main.container { position: relative; z-index: 1; }
   padding: 18px 0;
   border-top: 1px solid var(--rule);
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.ios-strip-default, .ios-strip-done {
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  font-size: 12.5px;
-  color: var(--ink-2);
   flex-wrap: wrap;
 }
 .pitch-ios-strip .sep { color: var(--rule); }
-.pitch-ios-strip a {
+.pitch-ios-strip a, .ios-link-btn {
   color: var(--ink-1);
   text-decoration: underline;
   text-underline-offset: 3px;
   font-weight: 600;
   transition: color 150ms ease;
 }
-.pitch-ios-strip a:hover { color: var(--ember); }
+.ios-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+.pitch-ios-strip a:hover, .ios-link-btn:hover { color: var(--ember); }
+
+.ios-strip-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 480px;
+}
+.ios-form-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.ios-email-input {
+  flex: 1;
+  min-width: 180px;
+  height: 30px;
+  padding: 0 10px;
+  background: var(--paper-hi);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  font-family: var(--f-mono);
+  font-size: 12px;
+  color: var(--ink-1);
+  outline: none;
+  transition: border-color 150ms ease;
+}
+.ios-email-input:focus {
+  border-color: var(--ember);
+}
+.ios-email-input::placeholder {
+  color: var(--ink-3);
+}
+.ios-submit-btn, .ios-plusone-btn {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 150ms ease;
+  white-space: nowrap;
+}
+.ios-submit-btn {
+  background: var(--ember);
+  color: #fff;
+  border: 1px solid var(--ember);
+}
+.ios-submit-btn:hover {
+  filter: brightness(1.08);
+}
+.ios-plusone-btn {
+  background: var(--paper-hi);
+  color: var(--ink-1);
+  border: 1px solid var(--rule);
+}
+.ios-plusone-btn:hover {
+  border-color: var(--ink-2);
+  background: var(--paper);
+}
+.ios-close-btn {
+  background: none;
+  border: none;
+  color: var(--ink-3);
+  font-size: 13px;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+.ios-close-btn:hover {
+  color: var(--ink-1);
+}
+.ios-form-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 11px;
+  color: var(--ink-3);
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.done-seal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ember);
+  font-weight: 600;
+}
+.done-count {
+  color: var(--ink-2);
+  font-size: 12px;
+}
 
 
 /* ---------- 页脚 ---------- */

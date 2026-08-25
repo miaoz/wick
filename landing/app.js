@@ -37,10 +37,15 @@
     "dl.title": "Download",
     "dl.pill": "Local Storage · Read-only Sync · Open Source",
     "dl.pitch.title": "Why not roam by candlelight",
-    "dl.pitch.desc": "Review today's trades today, trade tomorrow's setups tomorrow. Bring time progress, macro events, and trade history into your Mac menu bar.",
     "dl.meta": "macOS 13 Ventura or later · Universal (Apple Silicon & Intel)",
-    "dl.ios.text": "📱 iOS version coming soon to the App Store",
-    "dl.ios.link": "Check iOS progress ›",
+    "dl.ios.text": "📱 iOS version ready (pending release)",
+    "dl.ios.link": "Check iOS progress & wishlist ›",
+    "dl.ios.ph": "Enter email (optional, for alerts)",
+    "dl.ios.submit": "Notify Me",
+    "dl.ios.plusone": "+1 Vote",
+    "dl.ios.hint": "You'll be notified via email when available; or simply click +1 to register demand.",
+    "dl.ios.source": "GitHub source progress ›",
+    "dl.ios.done": "✓ Added to wishlist",
     "footer.brand": "Wick",
     "footer.note": "秉烛日记"
   };
@@ -49,6 +54,10 @@
   var i18nEls = [];
   document.querySelectorAll("[data-i18n]").forEach(function (el) {
     i18nEls.push({ el: el, zh: el.textContent, en: I18N_EN[el.getAttribute("data-i18n")] });
+  });
+  var i18nPhEls = [];
+  document.querySelectorAll("[data-i18n-ph]").forEach(function (el) {
+    i18nPhEls.push({ el: el, zh: el.getAttribute("placeholder") || "", en: I18N_EN[el.getAttribute("data-i18n-ph")] });
   });
 
   var lang = root.getAttribute("lang") === "en" ? "en" : "zh";
@@ -60,9 +69,14 @@
       var t = lang === "zh" ? it.zh : it.en;
       if (t != null) it.el.textContent = t;
     });
+    i18nPhEls.forEach(function (it) {
+      var t = lang === "zh" ? it.zh : it.en;
+      if (t != null) it.el.setAttribute("placeholder", t);
+    });
     langBtn.textContent = lang === "zh" ? "EN" : "中文";
     document.title = lang === "zh" ? ZH_TITLE : EN_TITLE;
     tick(); // 条带数值与时钟也随语言重排
+    if (typeof refreshWishCount === "function") refreshWishCount();
   }
 
   langBtn.addEventListener("click", function () {
@@ -173,7 +187,112 @@
         }
       })
       .catch(function () { /* 离线或限流:不显示版本号 */ });
+  /* ---------------- iOS 愿望清单 (+1 与邮箱登记) ---------------- */
+  var wishTrigger = document.getElementById("ios-wish-trigger");
+  var stripDefault = document.getElementById("ios-strip-default");
+  var stripForm = document.getElementById("ios-strip-form");
+  var stripDone = document.getElementById("ios-strip-done");
+  var emailInput = document.getElementById("ios-email-input");
+  var submitBtn = document.getElementById("ios-submit-btn");
+  var plusoneBtn = document.getElementById("ios-plusone-btn");
+  var closeBtn = document.getElementById("ios-close-btn");
+  var doneCountEl = document.getElementById("ios-done-count");
+
+  var WISH_STORAGE_KEY = "wick-ios-wished";
+  var hasWished = localStorage.getItem(WISH_STORAGE_KEY) === "true";
+  var latestWishCount = null;
+
+  function refreshWishCount() {
+    if (typeof latestWishCount === "number" && latestWishCount > 0 && doneCountEl) {
+      doneCountEl.textContent = (lang === "zh" ? "（已有 " + latestWishCount + " 位期待）" : " (" + latestWishCount + " waiting)");
+    }
+  }
+
+  function showDone(count) {
+    if (typeof count === "number") latestWishCount = count;
+    if (stripDefault) stripDefault.hidden = true;
+    if (stripForm) stripForm.hidden = true;
+    if (stripDone) stripDone.hidden = false;
+    refreshWishCount();
+  }
+
+  if (window.fetch) {
+    fetch("/api/wishlist")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (res) {
+        if (res && typeof res.count === "number") {
+          latestWishCount = res.count;
+          if (hasWished) showDone(res.count);
+        }
+      })
+      .catch(function () {});
+  }
+
+  if (hasWished) {
+    showDone();
+  }
+
+  if (wishTrigger) {
+    wishTrigger.addEventListener("click", function () {
+      if (stripDefault) stripDefault.hidden = true;
+      if (stripForm) stripForm.hidden = false;
+      if (emailInput) emailInput.focus();
+    });
+  }
+
+  if (closeBtn) {
+    closeBtn.addEventListener("click", function () {
+      if (stripForm) stripForm.hidden = true;
+      if (stripDefault) stripDefault.hidden = false;
+    });
+  }
+
+  function submitWish(email) {
+    if (submitBtn) submitBtn.disabled = true;
+    if (plusoneBtn) plusoneBtn.disabled = true;
+    fetch("/api/wishlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email || "" })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        localStorage.setItem(WISH_STORAGE_KEY, "true");
+        showDone(res && res.count);
+      })
+      .catch(function () {
+        localStorage.setItem(WISH_STORAGE_KEY, "true");
+        showDone();
+      })
+      .finally(function () {
+        if (submitBtn) submitBtn.disabled = false;
+        if (plusoneBtn) plusoneBtn.disabled = false;
+      });
+  }
+
+  if (submitBtn) {
+    submitBtn.addEventListener("click", function () {
+      var val = emailInput ? emailInput.value.trim() : "";
+      submitWish(val);
+    });
+  }
+
+  if (emailInput) {
+    emailInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        var val = emailInput.value.trim();
+        submitWish(val);
+      }
+    });
+  }
+
+  if (plusoneBtn) {
+    plusoneBtn.addEventListener("click", function () {
+      submitWish("");
+    });
   }
 
   applyLang();
 })();
+
