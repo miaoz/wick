@@ -55,52 +55,40 @@ struct JournalNavigationSidebar: View {
 
     @ViewBuilder
     private func journalRow(_ journal: JournalInfo) -> some View {
-        let row = journalRowLabel(journal)
-
-        Group {
-            if #available(macOS 14.0, *) {
-                Button {
-                    store.switchToJournal(id: journal.id)
-                } label: {
-                    row
-                }
-                .buttonStyle(.plain)
-            } else {
-                // On Ventura a Button consumes the mouse sequence before
-                // SwiftUI's onDrag can establish its AppKit dragging session.
-                row
-                    .onTapGesture {
-                        store.switchToJournal(id: journal.id)
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityAction {
-                        store.switchToJournal(id: journal.id)
-                    }
+        // Native Button can consume the initial mouse sequence on older
+        // SwiftUI runtimes, preventing AppKit from starting the drag session.
+        // Keep this gesture-driven so reordering is OS-version independent.
+        journalRowLabel(journal)
+            .onTapGesture {
+                store.switchToJournal(id: journal.id)
             }
-        }
-        .padding(.horizontal, 4)
-        .onDrag {
-            journalDragSession.begin(journalID: journal.id)
-        }
-        .onDrop(
-            of: [UTType.text, UTType.plainText],
-            delegate: JournalDropDelegate(
-                item: journal,
-                store: store,
-                session: journalDragSession
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction {
+                store.switchToJournal(id: journal.id)
+            }
+            .padding(.horizontal, 4)
+            .onDrag {
+                journalDragSession.begin(journalID: journal.id)
+            }
+            .onDrop(
+                of: [UTType.text, UTType.plainText],
+                delegate: JournalDropDelegate(
+                    item: journal,
+                    store: store,
+                    session: journalDragSession
+                )
             )
-        )
-        .contextMenu {
-            Button { onRenameJournal(journal) } label: {
-                Text(L10n.string(.journalLibraryRename, language: settings.language))
-            }
-            if store.journals.count > 1 {
-                Button(role: .destructive) { onDeleteJournal(journal) } label: {
-                    Text(L10n.string(.journalLibraryDelete, language: settings.language))
+            .contextMenu {
+                Button { onRenameJournal(journal) } label: {
+                    Text(L10n.string(.journalLibraryRename, language: settings.language))
+                }
+                if store.journals.count > 1 {
+                    Button(role: .destructive) { onDeleteJournal(journal) } label: {
+                        Text(L10n.string(.journalLibraryDelete, language: settings.language))
+                    }
                 }
             }
-        }
     }
 
     private func journalRowLabel(_ journal: JournalInfo) -> some View {
