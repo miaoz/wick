@@ -13,12 +13,12 @@ struct HomeView: View {
 
     @State private var quickText = ""
     @State private var reviewingItem: JournalItem?
-    @State private var showEditor = false
+    @State private var navigationPath = NavigationPath()
 
     @Environment(\.appLanguage) private var language: AppLanguage
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ScrollView {
                 VStack(spacing: 14) {
                     // 1. Main Time & Candle Burn Card
@@ -36,7 +36,8 @@ struct HomeView: View {
                         exchangeCoordinator: exchangeCoordinator,
                         language: language
                     ) {
-                        showEditor = true
+                        let entry = store.openOrCreateToday()
+                        navigationPath.append(entry.id)
                     }
 
                     // 4. 今日记录
@@ -56,9 +57,10 @@ struct HomeView: View {
             }
             .background(PhoneTheme.paper.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(isPresented: $showEditor) {
-                let entry = store.openOrCreateToday()
-                EditorView(entry: entry)
+            .navigationDestination(for: UUID.self) { entryID in
+                if let entry = store.entries.first(where: { $0.id == entryID }) {
+                    EditorView(entry: entry)
+                }
             }
             .sheet(item: $reviewingItem) { item in
                 ReviewSheet(item: item) { review in

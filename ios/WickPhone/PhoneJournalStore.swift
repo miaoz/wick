@@ -652,22 +652,32 @@ final class PhoneJournalStore: ObservableObject {
         return entry
     }
 
-    /// Updates an entry by permanent UUID; bumps updatedAt.
+    /// Updates an entry by permanent UUID; bumps updatedAt only if content actually changed.
     func updateEntry(_ entry: JournalEntry) {
         guard !isReadOnlyDueToLoadFailure else { return }
         var updated = entry
-        updated.updatedAt = Date()
         if updated.items.isEmpty {
             updated.items = [JournalItem()]
         }
         updated.date = Calendar.current.startOfDay(for: updated.date)
         mergeLocalDateCollision(into: &updated)
         if let index = entries.firstIndex(where: { $0.id == updated.id }) {
+            guard Self.hasContentChange(from: entries[index], to: updated) else { return }
+            updated.updatedAt = Date()
             entries[index] = updated
         } else {
+            updated.updatedAt = Date()
             entries.insert(updated, at: 0)
         }
         persist()
+    }
+
+    /// Draft timestamps are bookkeeping, not user content. An unchanged draft
+    /// must not become a sync edit merely because a window or journal closed.
+    private static func hasContentChange(from old: JournalEntry, to new: JournalEntry) -> Bool {
+        old.date != new.date
+            || old.title != new.title
+            || old.items != new.items
     }
 
     func deleteEntry(entryID: UUID) {

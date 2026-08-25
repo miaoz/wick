@@ -53,9 +53,9 @@ struct DayListView: View {
                 .padding(.top, 4)
                 .padding(.bottom, 6)
 
-                ScrollView {
-                    VStack(spacing: 14) {
-                        // 1. Compact PnL Heatmap Card
+                List {
+                    // 1. Compact PnL Heatmap Card & Tag Filter
+                    Section {
                         PnlHeatmapCard(
                             currentMonth: $heatmapMonth,
                             entries: store.entries,
@@ -72,10 +72,10 @@ struct DayListView: View {
                                 }
                             }
                         )
-                        .padding(.horizontal, 14)
-                        .padding(.top, 6)
+                        .listRowInsets(EdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 14))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
 
-                        // 2. Tag Filter Flow
                         let allTags = extractTags(from: store.entries)
                         if !allTags.isEmpty {
                             ScrollView(.horizontal, showsIndicators: false) {
@@ -98,9 +98,14 @@ struct DayListView: View {
                                 }
                                 .padding(.horizontal, 14)
                             }
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 6, trailing: 0))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                         }
+                    }
 
-                        // 3. Month-Sectioned Day Cards
+                    // 2. Month-Sectioned Day Cards with Swipe-to-Delete
+                    Section {
                         let filteredEntries = store.entries.filter { entry in
                             guard let tag = selectedTag else { return true }
                             return entry.items.contains { $0.tag == tag }
@@ -114,27 +119,44 @@ struct DayListView: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 40)
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                         } else {
-                            LazyVStack(spacing: 8) {
-                                ForEach(filteredEntries) { entry in
+                            ForEach(filteredEntries) { entry in
+                                ZStack {
+                                    DayCardView(
+                                        entry: entry,
+                                        pnl: exchangeCoordinator.pnl(for: entry.date),
+                                        closedCount: exchangeCoordinator.closedCount(
+                                            for: JournalDayKey.make(from: entry.date)
+                                        ),
+                                        language: language
+                                    )
+
                                     NavigationLink(value: entry.id) {
-                                        DayCardView(
-                                            entry: entry,
-                                            pnl: exchangeCoordinator.pnl(for: entry.date),
-                                            closedCount: exchangeCoordinator.closedCount(
-                                                for: JournalDayKey.make(from: entry.date)
-                                            ),
-                                            language: language
-                                        )
+                                        EmptyView()
                                     }
-                                    .buttonStyle(.plain)
+                                    .opacity(0)
+                                }
+                                .listRowInsets(EdgeInsets(top: 4, leading: 14, bottom: 4, trailing: 14))
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        withAnimation {
+                                            store.deleteEntry(entryID: entry.id)
+                                        }
+                                    } label: {
+                                        Label(L10n.string(.journalDelete, language: language), systemImage: "trash")
+                                    }
                                 }
                             }
-                            .padding(.horizontal, 14)
                         }
                     }
-                    .padding(.bottom, 24)
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
             .background(PhoneTheme.paper.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)

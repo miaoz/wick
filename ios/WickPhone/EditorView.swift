@@ -19,6 +19,9 @@ struct EditorView: View {
     @State private var isDirty = false
     @State private var reviewingItemIndex: Int?
     @State private var imagePreviewState: PhoneImagePreviewState?
+    @State private var showDeleteDayConfirm = false
+    @State private var showDeleteItemConfirm = false
+    @State private var pendingDeleteItemIndex: Int?
 
     init(entry: JournalEntry) {
         _draft = State(initialValue: entry)
@@ -29,7 +32,7 @@ struct EditorView: View {
         ZStack(alignment: .bottomTrailing) {
             ScrollView {
                 VStack(spacing: 16) {
-                    // Back button navigation
+                    // Top Navigation Bar (Back + Delete Day)
                     HStack {
                         Button {
                             saveNow()
@@ -48,7 +51,22 @@ struct EditorView: View {
                             .cornerRadius(4)
                             .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
                         }
+
                         Spacer()
+
+                        Button {
+                            showDeleteDayConfirm = true
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(PhoneFont.ui(13, weight: .medium))
+                                .foregroundColor(PhoneTheme.char.opacity(0.75))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(PhoneTheme.paperHi)
+                                .cornerRadius(4)
+                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
+                        }
+                        .accessibilityLabel(Text(L10n.string(.journalDelete, language: language)))
                     }
                     .padding(.horizontal, 2)
                     .padding(.top, 2)
@@ -123,12 +141,17 @@ struct EditorView: View {
                                 let matchedPositions = exchangeCoordinator.positions(entryDate: draft.date, tag: item.tag)
 
                                 ItemRowView(
+                                    index: idx,
                                     item: $draft.items[idx],
+                                    canDelete: draft.items.count > 1,
                                     matchedPositions: matchedPositions,
                                     language: language,
                                     imageURL: { store.imageURL(for: $0) },
                                     onReviewTap: {
                                         reviewingItemIndex = idx
+                                    },
+                                    onDelete: {
+                                        requestDeleteItem(at: idx)
                                     },
                                     onImageTap: { filenames, imgIdx in
                                         imagePreviewState = PhoneImagePreviewState(filenames: filenames, currentIndex: imgIdx)
@@ -207,6 +230,32 @@ struct EditorView: View {
                 scheduleSave()
             }
         }
+        .alert(
+            L10n.string(.journalDeleteConfirm, language: language),
+            isPresented: $showDeleteDayConfirm
+        ) {
+            Button(L10n.string(.journalDelete, language: language), role: .destructive) {
+                store.deleteEntry(entryID: draft.id)
+                dismiss()
+            }
+            Button(L10n.string(.cancel, language: language), role: .cancel) {}
+        } message: {
+            Text(language == .chinese ? "删除后将无法恢复此日的全部条目。" : "This will permanently delete all entries for this day.")
+        }
+        .alert(
+            L10n.string(.journalDeleteItemConfirm, language: language),
+            isPresented: $showDeleteItemConfirm
+        ) {
+            Button(L10n.string(.journalDeleteItem, language: language), role: .destructive) {
+                if let idx = pendingDeleteItemIndex {
+                    performDeleteItem(at: idx)
+                    pendingDeleteItemIndex = nil
+                }
+            }
+            Button(L10n.string(.cancel, language: language), role: .cancel) {
+                pendingDeleteItemIndex = nil
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .wickWillFlushJournalDrafts)) { _ in
             saveNow()
         }
@@ -237,6 +286,32 @@ struct EditorView: View {
         .animation(.easeOut(duration: 0.2), value: imagePreviewState != nil)
     }
 
+    private func requestDeleteItem(at index: Int) {
+        guard index < draft.items.count else { return }
+        let item = draft.items[index]
+        let hasContent = !item.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                         !item.imageFilenames.isEmpty ||
+                         item.review != nil
+        if hasContent {
+            pendingDeleteItemIndex = index
+            showDeleteItemConfirm = true
+        } else {
+            performDeleteItem(at: index)
+        }
+    }
+
+    private func performDeleteItem(at index: Int) {
+        guard index < draft.items.count else { return }
+        draft.items.remove(at: index)
+        if draft.items.isEmpty {
+            let defaultTag = language == .chinese ? "计划" : "Plan"
+            draft.items = [JournalItem(id: UUID(), tag: defaultTag, body: "")]
+        }
+        scheduleSave()
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+    }
+
     private func scheduleSave() {
         isDirty = true
         saveTask?.cancel()
@@ -249,7 +324,7 @@ struct EditorView: View {
 
     private func saveNow() {
         saveTask?.cancel()
-        guard !store.isReadOnlyDueToLoadFailure else { return }
+        guard isDirty, !store.isReadOnlyDueToLoadFailure else { return }
         store.updateEntry(draft)
         isDirty = false
     }
@@ -276,81 +351,98 @@ private struct ItemReviewTarget: Identifiable {
 }
 
 private struct ItemRowView: View {
+    let index: Int
     @Binding var item: JournalItem
+    let canDelete: Bool
     let matchedPositions: [TradingPosition]
     let language: AppLanguage
     let imageURL: (String) -> URL?
     let onReviewTap: () -> Void
+    let onDelete: () -> Void
     let onImageTap: ([String], Int) -> Void
     let onChange: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            // Main content
-            VStack(alignment: .leading, spacing: 8) {
-                // Tag chip + quick edit
-                HStack {
-                    TextField(language == .chinese ? "标签" : "Tag", text: $item.tag)
-                        .font(PhoneFont.paper(11, weight: .bold))
-                        .foregroundColor(PhoneTheme.cinnabar)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                .fill(PhoneTheme.cinnabarSoft)
-                        )
-                        .frame(maxWidth: 120)
-                        .onChange(of: item.tag) { _ in onChange() }
+        VStack(alignment: .leading, spacing: 8) {
+            // Top bar: Item Index + Tag Chip + Spacer + Delete Item Button (minus.circle)
+            HStack(alignment: .center, spacing: 8) {
+                Text(String(format: L10n.string(.journalItemNumberFormat, language: language), index + 1))
+                    .font(PhoneFont.ui(10, weight: .medium, monospacedDigit: true))
+                    .foregroundColor(PhoneTheme.inkTertiary)
 
-                    Spacer()
-                }
+                TextField(language == .chinese ? "标签" : "Tag", text: $item.tag)
+                    .font(PhoneFont.paper(11, weight: .bold))
+                    .foregroundColor(PhoneTheme.cinnabar)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(PhoneTheme.cinnabarSoft)
+                    )
+                    .frame(maxWidth: 120)
+                    .onChange(of: item.tag) { _ in onChange() }
 
-                // Body editor
-                TextEditor(text: $item.body)
-                    .font(PhoneFont.paper(13.5))
-                    .foregroundColor(PhoneTheme.inkPrimary)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 56)
-                    .onChange(of: item.body) { _ in onChange() }
+                Spacer()
 
-                // Exchange trade receipts if matched
-                if !matchedPositions.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(matchedPositions) { position in
-                            PhoneReceiptCard(position: position)
-                        }
+                if canDelete {
+                    Button(action: onDelete) {
+                        Image(systemName: "minus.circle")
+                            .font(PhoneFont.ui(13, weight: .medium))
+                            .foregroundColor(PhoneTheme.char.opacity(0.6))
+                            .padding(4)
                     }
-                    .padding(.top, 2)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text(L10n.string(.journalDeleteItem, language: language)))
                 }
+            }
 
-                // Images horizontal scroll with tap-to-preview
-                if !item.imageFilenames.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(Array(item.imageFilenames.enumerated()), id: \.offset) { imgIdx, filename in
-                                if let url = imageURL(filename),
-                                   let image = UIImage(contentsOfFile: url.path) {
-                                    Button {
-                                        onImageTap(item.imageFilenames, imgIdx)
-                                    } label: {
-                                        Image(uiImage: image)
-                                            .resizable()
-                                            .scaledToFill()
-                                            .frame(width: 72, height: 72)
-                                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 4)
-                                                    .stroke(PhoneTheme.rule, lineWidth: 1)
-                                            )
-                                    }
-                                    .buttonStyle(.plain)
+            // Body editor
+            TextEditor(text: $item.body)
+                .font(PhoneFont.paper(13.5))
+                .foregroundColor(PhoneTheme.inkPrimary)
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 56)
+                .onChange(of: item.body) { _ in onChange() }
+
+            // Exchange trade receipts if matched
+            if !matchedPositions.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(matchedPositions) { position in
+                        PhoneReceiptCard(position: position)
+                    }
+                }
+                .padding(.top, 2)
+            }
+
+            // Images horizontal scroll with tap-to-preview
+            if !item.imageFilenames.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(item.imageFilenames.enumerated()), id: \.offset) { imgIdx, filename in
+                            if let url = imageURL(filename),
+                               let image = UIImage(contentsOfFile: url.path) {
+                                Button {
+                                    onImageTap(item.imageFilenames, imgIdx)
+                                } label: {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 72, height: 72)
+                                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .stroke(PhoneTheme.rule, lineWidth: 1)
+                                        )
                                 }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
                 }
+            }
 
-                // Review note quote box if present
+            // Bottom bar: Review note quote on left + Review seal/button on bottom-right
+            HStack(alignment: .bottom, spacing: 8) {
                 if let review = item.review, !review.note.isEmpty {
                     HStack(spacing: 6) {
                         Rectangle()
@@ -365,21 +457,28 @@ private struct ItemRowView: View {
                     .background(PhoneTheme.paper)
                     .cornerRadius(3)
                 }
-            }
 
-            // Review stamp slot on trailing edge
-            Button(action: onReviewTap) {
-                if let review = item.review {
-                    JournalReviewBadge(verdict: review.verdict, style: .mini, size: 36, language: language)
-                } else {
-                    Text(L10n.string(.journalReview, language: language))
-                        .font(PhoneFont.paper(11, weight: .bold))
-                        .foregroundColor(PhoneTheme.cinnabar.opacity(0.85))
-                        .frame(width: 36, height: 36)
-                        .rotationEffect(.degrees(-3))
+                Spacer(minLength: 0)
+
+                Button(action: onReviewTap) {
+                    if let review = item.review {
+                        JournalReviewBadge(verdict: review.verdict, style: .mini, size: 36, language: language)
+                    } else {
+                        HStack(spacing: 3) {
+                            Image(systemName: "checkmark.seal")
+                                .font(PhoneFont.ui(9.5, weight: .bold))
+                            Text(L10n.string(.journalReview, language: language))
+                                .font(PhoneFont.paper(11, weight: .bold))
+                        }
+                        .foregroundColor(PhoneTheme.cinnabar.opacity(0.9))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(PhoneTheme.cinnabarSoft)
+                        .cornerRadius(3)
+                    }
                 }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
             .padding(.top, 2)
         }
         .padding(.vertical, 4)
