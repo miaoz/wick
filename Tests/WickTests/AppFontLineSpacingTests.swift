@@ -31,4 +31,22 @@ final class AppFontLineSpacingTests: XCTestCase {
         let actual = AppFont.paperLineSpacing(size)
         XCTAssertEqual(actual, expected)
     }
+
+    @MainActor
+    func testPrintFontCacheTracksLiveFontSelection() {
+        let settings = AppSettings.shared
+        let originalName = settings.journalFontName
+        defer { settings.journalFontName = originalName }
+
+        let size: CGFloat = 37.25
+        settings.journalFontName = ""
+        let defaultFont = WickPrintFont.songti(size)
+
+        let selectedName = NSFont.monospacedSystemFont(ofSize: size, weight: .regular).fontName
+        settings.journalFontName = selectedName
+        let selectedFont = WickPrintFont.songti(size)
+
+        XCTAssertEqual(selectedFont.fontName, selectedName)
+        XCTAssertNotEqual(selectedFont.fontName, defaultFont.fontName)
+    }
 }

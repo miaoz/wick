@@ -69,6 +69,7 @@ final class AppSettings: ObservableObject {
     @Published var journalFontName: String {
         didSet {
             UserDefaults.standard.set(journalFontName, forKey: Keys.journalFontName)
+            WickPrintFont.invalidateCache()
             applyJournalFontStyle()
         }
     }

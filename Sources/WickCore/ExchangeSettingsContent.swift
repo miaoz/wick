@@ -98,9 +98,12 @@ struct ExchangeSettingsContent: View {
                 set: { targetJournalID = $0 }
             )) {
                 ForEach(journalStore.journals) { journal in
-                    Text(journal.name).tag(Optional(journal.id))
+                    Text(journal.name)
+                        .font(AppFont.ui(12.5, weight: .medium, design: .rounded))
+                        .tag(Optional(journal.id))
                 }
             }
+            .font(AppFont.ui(12.5, weight: .medium, design: .rounded))
             .pickerStyle(.menu)
             .labelsHidden()
         }
