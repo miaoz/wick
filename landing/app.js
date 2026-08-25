@@ -35,12 +35,14 @@
     "shot2.cap": "The menu-bar slip — the day at a glance",
     "shot3.cap": "iPhone client — time arcs in your pocket",
     "dl.title": "Download",
+    "dl.pill": "Local Storage · Read-only Sync · Open Source",
+    "dl.pitch.title": "Why not roam by candlelight",
+    "dl.pitch.desc": "Review today's trades today, trade tomorrow's setups tomorrow. Bring time progress, macro events, and trade history into your Mac menu bar.",
     "dl.meta": "macOS 13 Ventura or later · Universal (Apple Silicon & Intel)",
-    "dl.button": "macOS",
-    "dl.ios.soon": "Coming soon",
-    "dl.ios.button": "iOS",
+    "dl.ios.text": "📱 iOS version coming soon to the App Store",
+    "dl.ios.link": "Check iOS progress ›",
     "footer.brand": "Wick",
-    "footer.note": "Why not roam by candlelight"
+    "footer.note": "秉烛日记"
   };
   var ZH_TITLE = document.title;
   var EN_TITLE = "Wick — a trader's almanac and review journal";
@@ -140,7 +142,7 @@
   setInterval(tick, 1000);
 
   /* ---------------- 滚动显影 ---------------- */
-  var rvEls = document.querySelectorAll(".feat, .shot, .dl-body");
+  var rvEls = document.querySelectorAll(".feat, .shot, .dl-pitch");
   if ("IntersectionObserver" in window) {
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (en) {

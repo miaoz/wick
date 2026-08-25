@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="zh" data-scheme="light" data-phase="day">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wick 落地页 · 底部下载区域重构对比方案</title>
+<link rel="preload" href="assets/fonts/wick-print.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face {
+  font-family: "Wick Print";
+  src: url("assets/fonts/wick-print.woff2") format("woff2");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --desk: #E7DCC6;
+  --paper: #FBF4E6;
+  --paper-hi: #FFFCF2;
+  --paper-edge: #D6C8AC;
+  --ink-1: #2B2014;
+  --ink-2: #6B5942;
+  --ink-3: #9A886B;
+  --rule: rgba(43, 32, 20, 0.16);
+  --ember: #E8791C;
+  --ember-hi: #FFB25E;
+  --glow: rgba(232, 121, 28, 0.32);
+  --cinnabar: #C03A22;
+  --cinnabar-press: #A8321E;
+  --cinnabar-soft: rgba(192, 58, 34, 0.1);
+  --dai: #3E5C50;
+  --dai-soft: rgba(62, 92, 80, 0.12);
+  --char-1: #191008;
+  --stain-1: #F0DFB6;
+  --stain-2: #E2C282;
+  --tape: rgba(238, 210, 150, 0.5);
+  --receipt: #FFFDF4;
+  --receipt-ink: #33291A;
+  --sh-page: 0 1px 2px rgba(43, 32, 20, 0.1), 0 10px 26px rgba(43, 32, 20, 0.14);
+  --sh-lift: 0 2px 6px rgba(43, 32, 20, 0.12), 0 22px 50px rgba(43, 32, 20, 0.22);
+  --f-print: "Wick Print", "Songti SC", "STSong", "HiraMinProN-W6", "Noto Serif SC", serif;
+  --f-disp: ui-serif, "New York", "Wick Print", "Songti SC", serif;
+  --f-ui: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+  --f-mono: ui-monospace, "SF Mono", "Menlo", monospace;
+  --grain-opacity: 0.06;
+}
+
+[data-phase="dawn"]:not([data-scheme="dark"]) {
+  --desk: #EBDACB; --paper: #FBF0E4; --paper-hi: #FFFAF1; --paper-edge: #DBC4B2;
+  --ink-1: #33231C; --ink-2: #715850; --ink-3: #9C7F71;
+  --ember: #E06A38; --glow: rgba(224, 106, 56, 0.3);
+}
+[data-phase="dusk"]:not([data-scheme="dark"]) {
+  --desk: #E5D2B0; --paper: #FAEEDA; --paper-hi: #FFF9EA; --paper-edge: #D3BE98;
+  --ink-1: #2E2112; --ink-2: #6B5136; --ink-3: #94764F;
+  --ember: #E07412; --glow: rgba(224, 116, 18, 0.34);
+}
+[data-phase="night"]:not([data-scheme="dark"]) {
+  --desk: #D9D3C4; --paper: #EDE8DB; --paper-hi: #F5F1E6; --paper-edge: #C0B8A4;
+  --ink-1: #29241B; --ink-2: #5E5747; --ink-3: #8A8171;
+  --ember: #E8862B; --glow: rgba(232, 134, 43, 0.3);
+}
+
+[data-scheme="dark"] {
+  --desk: #191209;
+  --paper: #2C2214;
+  --paper-hi: #362A18;
+  --paper-edge: #4A3A22;
+  --ink-1: #F0E3C6;
+  --ink-2: rgba(240, 227, 198, 0.64);
+  --ink-3: rgba(240, 227, 198, 0.42);
+  --rule: rgba(240, 227, 198, 0.14);
+  --ember: #F59A3C;
+  --ember-hi: #FFC882;
+  --glow: rgba(245, 154, 60, 0.42);
+  --cinnabar: #E06A4C;
+  --cinnabar-press: #C0502F;
+  --cinnabar-soft: rgba(224, 106, 76, 0.14);
+  --dai: #8FAE9E;
+  --dai-soft: rgba(143, 174, 158, 0.14);
+  --char-1: #0C0703;
+  --stain-1: #4A3820;
+  --stain-2: #6B5226;
+  --tape: rgba(220, 190, 130, 0.28);
+  --receipt: #F5EEDC;
+  --receipt-ink: #33291A;
+  --sh-page: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 30px rgba(0, 0, 0, 0.5);
+  --sh-lift: 0 2px 8px rgba(0, 0, 0, 0.5), 0 26px 60px rgba(0, 0, 0, 0.6);
+  --grain-opacity: 0.09;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--desk);
+  color: var(--ink-1);
+  font-family: var(--f-ui);
+  font-size: 15px;
+  line-height: 1.6;
+  padding-bottom: 80px;
+}
+
+/* 顶部控制条 */
+.demo-bar {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  padding: 10px 24px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  box-shadow: var(--sh-page);
+}
+.demo-title {
+  font-family: var(--f-print);
+  font-size: 15px; font-weight: 900;
+  display: flex; align-items: center; gap: 8px;
+}
+.demo-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pill-btn {
+  padding: 5px 12px;
+  font-size: 12px; font-weight: 600;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-1);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+.pill-btn.active {
+  background: var(--ink-1);
+  color: var(--paper);
+  border-color: var(--ink-1);
+}
+.pill-btn:hover:not(.active) { border-color: var(--ember); color: var(--ember); }
+
+.container { width: 100%; max-width: 1060px; margin-inline: auto; padding-inline: 24px; }
+
+.section-label {
+  margin: 48px 0 16px;
+  font-family: var(--f-mono);
+  font-size: 12px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--cinnabar);
+  display: flex; align-items: center; gap: 10px;
+}
+.section-label::after {
+  content: ""; flex: 1; height: 1px; background: var(--rule);
+}
+
+.plan-card-wrapper {
+  margin-bottom: 40px;
+}
+
+.plan-desc {
+  background: var(--paper-hi);
+  border: 1px dashed var(--rule);
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  line-height: 1.7;
+}
+.plan-desc strong { color: var(--ink-1); }
+
+/* 公共元素 */
+.sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 20px; }
+.sec-head .no { font-family: var(--f-mono); font-size: 13px; font-weight: 700; color: var(--cinnabar); }
+.sec-head h2 { margin: 0; font-family: var(--f-print); font-size: 25px; font-weight: 900; }
+.sec-head .en { font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+
+/* ==========================================================================
+   现状 (Current)
+   ========================================================================== */
+.current-dl-body {
+  position: relative;
+  background: var(--paper);
+  box-shadow: var(--sh-page);
+  padding: 30px 32px;
+  text-align: center;
+}
+.current-dl-body::after {
+  content: "";
+  position: absolute; left: 6px; right: 6px; bottom: -5px; height: 5px;
+  background: var(--paper-edge);
+  box-shadow: var(--sh-page);
+}
+.current-dl-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; }
+.current-dl-col { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.current-dl-meta { margin: 0; font-family: var(--f-mono); font-size: 12px; color: var(--ink-2); text-align: center; }
+.current-btn-primary {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  padding: 15px 30px;
+  background: var(--ember);
+  color: #FFF3E0;
+  font-size: 15px; font-weight: 700;
+  text-decoration: none;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(43, 32, 20, 0.2);
+}
+.current-btn-ghost {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 14px 30px;
+  background: var(--paper-hi);
+  color: var(--ink-1);
+  font-size: 15px; font-weight: 600;
+  text-decoration: none;
+  border: 1px solid var(--ink-3);
+  border-radius: 6px;
+}
+.current-soon {
+  font-family: var(--f-print);
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #FFF3E0;
+  background: var(--cinnabar);
+  border-radius: 2px;
+  padding: 2px 6px;
+  transform: rotate(-2deg);
+}
+
+/* ==========================================================================
+   方案 A：「秉烛提货单 / 包装封套」（The Sealed Slip & Packing Slip）
+   ========================================================================== */
+.plan-a-container {
+  max-width: 760px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.slip-package {
+  position: relative;
+  background: var(--paper-hi);
+  box-shadow: var(--sh-lift);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--paper-edge);
+}
+
+/* 顶部封签装饰条 */
+.slip-package::before {
+  content: "";
+  display: block;
+  height: 4px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--cinnabar) 0 8px,
+    var(--paper-hi) 8px 14px,
+    var(--ember) 14px 22px,
+    var(--paper-hi) 22px 28px
+  );
+  opacity: 0.85;
+}
+
+.slip-inner {
+  padding: 36px 40px 32px;
+  text-align: center;
+}
+
+.slip-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.slip-app-icon {
+  width: 68px; height: 68px;
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(43, 32, 20, 0.15), 0 0 28px var(--glow);
+  display: block;
+}
+
+.slip-hero h3 {
+  margin: 0;
+  font-family: var(--f-print);
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.slip-hero p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-2);
+  max-width: 480px;
+  line-height: 1.7;
+}
+
+/* 主下载区（macOS） */
+.slip-action-main {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+  text-align: left;
+}
+
+.slip-action-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.slip-action-title {
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slip-apple-logo {
+  width: 17px; height: 17px;
+  fill: currentColor;
+}
+
+.slip-badge-ver {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--stain-1);
+  color: var(--ink-1);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.slip-action-meta {
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.btn-download-mac {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 26px;
+  background: var(--ember);
+  color: #FFF8EE;
+  font-size: 14.5px;
+  font-weight: 700;
+  border-radius: 8px;
+  text-decoration: none;
+  box-shadow: 0 2px 4px rgba(43, 32, 20, 0.15), 0 0 16px var(--glow);
+  transition: all 180ms ease;
+}
+.btn-download-mac:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(43, 32, 20, 0.2), 0 0 24px var(--glow);
+}
+
+/* 票据副券（撕边线与 iOS 伴侣） */
+.slip-tear-line {
+  position: relative;
+  margin: 0 -40px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.slip-tear-line::before {
+  content: "";
+  position: absolute; left: 0; right: 0; top: 50%;
+  border-top: 2px dashed var(--rule);
+}
+.slip-tear-notch-left, .slip-tear-notch-right {
+  position: absolute; top: 50%;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--desk);
+  transform: translateY(-50%);
+  z-index: 2;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.slip-tear-notch-left { left: -8px; }
+.slip-tear-notch-right { right: -8px; }
+
+.slip-sub-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.slip-sub-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.slip-phone-icon {
+  font-size: 16px;
+}
+
+.slip-sub-link {
+  color: var(--ink-2);
+  text-decoration: none;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 150ms ease;
+}
+.slip-sub-link:hover { color: var(--ember); }
+
+.seal-cinnabar {
+  font-family: var(--f-print);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cinnabar);
+  border: 1.5px solid var(--cinnabar);
+  border-radius: 3px;
+  padding: 2px 6px;
+  letter-spacing: 0.1em;
+  background: var(--cinnabar-soft);
+  transform: rotate(-1.5deg);
+}
+
+/* ==========================================================================
+   方案 B：「极简居中 · 终章号召」（The Minimalist Focused Pitch）
+   ========================================================================== */
+.plan-b-container {
+  max-width: 680px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 24px 0;
+}
+
+.pitch-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px;
+  background: var(--paper-hi);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(43, 32, 20, 0.06);
+}
+.pitch-pill .dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--ember);
+}
+
+.pitch-title {
+  font-family: var(--f-print);
+  font-size: clamp(28px, 4vw, 36px);
+  font-weight: 900;
+  margin: 0 0 14px;
+  letter-spacing: 0.01em;
+}
+
+.pitch-desc {
+  font-size: 14.5px;
+  color: var(--ink-2);
+  line-height: 1.8;
+  max-width: 520px;
+  margin: 0 auto 30px;
+}
+
+.pitch-cta-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.pitch-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.pitch-btn-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 32px;
+  background: var(--ember);
+  color: #FFF8EE;
+  font-size: 15.5px;
+  font-weight: 700;
+  text-decoration: none;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(43, 32, 20, 0.2), 0 0 20px var(--glow);
+  transition: all 180ms ease;
+}
+.pitch-btn-main:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(43, 32, 20, 0.25), 0 0 30px var(--glow);
+}
+
+.pitch-btn-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 24px;
+  background: var(--paper-hi);
+  color: var(--ink-1);
+  font-size: 14.5px;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  box-shadow: var(--sh-page);
+  transition: all 180ms ease;
+}
+.pitch-btn-sub:hover {
+  border-color: var(--ember);
+  color: var(--ember);
+}
+
+.pitch-meta {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.pitch-ios-strip {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.pitch-ios-strip a {
+  color: var(--ink-1);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.pitch-ios-strip a:hover { color: var(--ember); }
+
+/* 响应式 */
+@media (max-width: 680px) {
+  .slip-action-main { flex-direction: column; align-items: stretch; gap: 16px; }
+  .btn-download-mac { justify-content: center; }
+  .slip-inner { padding: 24px 20px 20px; }
+  .slip-tear-line { margin: 0 -20px 16px; }
+  .slip-sub-row { flex-direction: column; gap: 8px; align-items: center; }
+}
+</style>
+</head>
+<body>
+
+<header class="demo-bar">
+  <div class="demo-title">
+    <span>🕯️</span>
+    <span>Wick 底部下载区域重构探索</span>
+  </div>
+  <div class="demo-controls">
+    <button class="pill-btn" onclick="setScheme('light')">☀️ 亮色</button>
+    <button class="pill-btn" onclick="setScheme('dark')">🌙 暗色</button>
+    <span style="color: var(--rule); margin: 0 4px;">|</span>
+    <button class="pill-btn active" onclick="scrollToSection('sec-plan-a')">方案 A：包装封套 / 提货单</button>
+    <button class="pill-btn" onclick="scrollToSection('sec-plan-b')">方案 B：极简居中 · 终章号召</button>
+    <button class="pill-btn" onclick="scrollToSection('sec-current')">对照：当前线上版</button>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- ==================== 方案 A ==================== -->
+  <div id="sec-plan-a" class="plan-card-wrapper">
+    <div class="section-label">方案 A · 东方物化风格（推荐）</div>
+    <div class="plan-desc">
+      <strong>设计理念</strong>：将下载区域重塑为一张桌上的<strong>「秉烛装箱单 / 提货凭证（Packing Slip）」</strong>。卡片带有票据打孔撕边与蜡烛封签纹路，App 图标散发柔和烛光。主推 macOS 完整体验，下方副券自然承接 iOS 随身版与 GitHub 源码，兼具强烈的东方纸质美学与极高的点击转化率。
+    </div>
+
+    <div class="sec-head">
+      <span class="no">03</span>
+      <h2>获取应用</h2>
+      <span class="en">Get Wick</span>
+    </div>
+
+    <div class="plan-a-container">
+      <div class="slip-package">
+        <div class="slip-inner">
+          <div class="slip-hero">
+            <img class="slip-app-icon" src="assets/app-icon.png" alt="Wick App Icon">
+            <h3>开始你的秉烛之行</h3>
+            <p>一天一页复盘日记 · 撕页交易黄历 · 菜单栏时间弧光 · 本地私密零遥测</p>
+          </div>
+
+          <!-- 主 CTA 行 -->
+          <div class="slip-action-main">
+            <div class="slip-action-info">
+              <div class="slip-action-title">
+                <svg class="slip-apple-logo" viewBox="0 0 170 170">
+                  <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.7-3.04-7.58-7.7-11.64-13.98-6.19-9.57-11.05-20.98-14.58-34.22-3.53-13.23-5.3-25.7-5.3-37.4 0-14.78 3.8-27.17 11.4-37.16 7.6-10 17.2-15.1 28.8-15.3 4.8 0 10.3 1.3 16.5 3.9 6.2 2.6 10.1 4 11.7 4 1.4 0 5.4-1.4 12-4.2 6.6-2.8 12.3-4 17.1-3.6 13.5.7 24.3 5.4 32.4 14.1-11.9 7.2-17.7 17.2-17.5 29.9.2 9.9 4 18.2 11.4 24.9 7.4 6.7 16.1 10.5 26.1 11.4-2.1 6.5-4.7 12.8-7.8 18.9zM119.22 31.85c0-7.2 2.6-13.9 7.8-20.1 5.2-6.2 11.7-10.4 19.5-12.6.4 1.3.6 2.5.6 3.6 0 7.3-2.8 14.3-8.4 20.9-5.6 6.6-12.4 10.5-20.4 11.8.3-1.2.9-2.4.9-3.6z"/>
+                </svg>
+                <span>macOS 桌面版</span>
+                <span class="slip-badge-ver">v0.1.0 · 最新版</span>
+              </div>
+              <span class="slip-action-meta">macOS 13 Ventura+ · Universal (Apple Silicon & Intel)</span>
+            </div>
+            <a class="btn-download-mac" href="https://github.com/miaoz/wick/releases/latest" target="_blank" rel="noopener">
+              <span>立即下载</span>
+              <span style="font-size: 16px;">↓</span>
+            </a>
+          </div>
+
+          <!-- 撕边虚线 -->
+          <div class="slip-tear-line">
+            <div class="slip-tear-notch-left"></div>
+            <div class="slip-tear-notch-right"></div>
+          </div>
+
+          <!-- 底部副券 -->
+          <div class="slip-sub-row">
+            <div class="slip-sub-left">
+              <span class="slip-phone-icon">📱</span>
+              <span><strong>iPhone 随身版</strong>：时间弧光与今日事件随身看</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span class="seal-cinnabar">即将上架</span>
+              <a class="slip-sub-link" href="https://github.com/miaoz/wick/tree/main/ios" target="_blank" rel="noopener">
+                <span>GitHub 源码预览 ›</span>
+              </a>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ==================== 方案 B ==================== -->
+  <div id="sec-plan-b" class="plan-card-wrapper" style="margin-top: 80px;">
+    <div class="section-label">方案 B · 极简居中 · 终章号召（Modern & Focused）</div>
+    <div class="plan-desc">
+      <strong>设计理念</strong>：借鉴现代精品软件落地页的<strong>去框化（Border-less）留白排版</strong>。摆脱封闭大卡片的压迫感，用大号宋体金句收尾，信息流由浅入深聚焦在唯一的超大下载按钮上，视觉轻盈、焦点明确。
+    </div>
+
+    <div class="plan-b-container">
+      <div class="pitch-pill">
+        <span class="dot"></span>
+        <span>本地存储 · 只读同步 · 开源透明</span>
+      </div>
+      <h2 class="pitch-title">昼短苦夜长，何不秉烛游</h2>
+      <p class="pitch-desc">今天的交易今天复盘，明天做明天的交易。把时间刻度、宏观事件与交易历史，收进你的 Mac 菜单栏。</p>
+
+      <div class="pitch-cta-group">
+        <div class="pitch-buttons">
+          <a class="pitch-btn-main" href="https://github.com/miaoz/wick/releases/latest" target="_blank" rel="noopener">
+            <svg style="width: 18px; height: 18px; fill: currentColor;" viewBox="0 0 170 170">
+              <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.7-3.04-7.58-7.7-11.64-13.98-6.19-9.57-11.05-20.98-14.58-34.22-3.53-13.23-5.3-25.7-5.3-37.4 0-14.78 3.8-27.17 11.4-37.16 7.6-10 17.2-15.1 28.8-15.3 4.8 0 10.3 1.3 16.5 3.9 6.2 2.6 10.1 4 11.7 4 1.4 0 5.4-1.4 12-4.2 6.6-2.8 12.3-4 17.1-3.6 13.5.7 24.3 5.4 32.4 14.1-11.9 7.2-17.7 17.2-17.5 29.9.2 9.9 4 18.2 11.4 24.9 7.4 6.7 16.1 10.5 26.1 11.4-2.1 6.5-4.7 12.8-7.8 18.9zM119.22 31.85c0-7.2 2.6-13.9 7.8-20.1 5.2-6.2 11.7-10.4 19.5-12.6.4 1.3.6 2.5.6 3.6 0 7.3-2.8 14.3-8.4 20.9-5.6 6.6-12.4 10.5-20.4 11.8.3-1.2.9-2.4.9-3.6z"/>
+            </svg>
+            <span>免费下载 macOS 版</span>
+          </a>
+          <a class="pitch-btn-sub" href="https://github.com/miaoz/wick" target="_blank" rel="noopener">
+            <span>GitHub 源码</span>
+          </a>
+        </div>
+        <span class="pitch-meta">macOS 13 Ventura 或更高 · Universal (Apple Silicon & Intel)</span>
+      </div>
+
+      <div class="pitch-ios-strip">
+        <span>📱 <strong>iOS 版</strong> 即将上架 App Store</span>
+        <span>·</span>
+        <a href="https://github.com/miaoz/wick/tree/main/ios" target="_blank" rel="noopener">查看 iOS 进展</a>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ==================== 当前对照 ==================== -->
+  <div id="sec-current" class="plan-card-wrapper" style="margin-top: 80px; opacity: 0.85;">
+    <div class="section-label">线上现状对照 (Current Live Baseline)</div>
+    <div class="plan-desc">
+      <strong>现状问题复盘</strong>：1060px 宽度被左右五五等分，左边是可用版，右边是不可用版；按钮尺寸过小且缺乏动词引导，在宽屏上显得大而空，且缺少品牌收尾情感。
+    </div>
+
+    <div class="sec-head">
+      <span class="no">03</span>
+      <h2>下载</h2>
+      <span class="en">Download</span>
+    </div>
+    <div class="current-dl-body">
+      <div class="current-dl-buttons">
+        <div class="current-dl-col">
+          <div style="display: flex; gap: 12px;">
+            <a class="current-btn-primary" href="#">
+              <span>macOS</span>
+            </a>
+          </div>
+          <p class="current-dl-meta">macOS 13 Ventura 或更高 · Universal（Apple Silicon 与 Intel）</p>
+        </div>
+        <div class="current-dl-col">
+          <div style="display: flex; gap: 12px;">
+            <a class="current-btn-ghost" href="#">
+              <span>iOS</span><span class="current-soon">即将上架</span>
+            </a>
+          </div>
+          <p class="current-dl-meta">iOS 16+ · iPhone</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+function setScheme(s) {
+  document.documentElement.setAttribute('data-scheme', s);
+}
+function scrollToSection(id) {
+  document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+
+</body>
+</html>
