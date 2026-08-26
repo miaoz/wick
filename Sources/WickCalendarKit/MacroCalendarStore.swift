@@ -98,6 +98,7 @@ public final class MacroCalendarStore: ObservableObject {
     /// untouched (no network).
     public func loadIfNeeded(for date: Date) {
         let key = dayKey(for: date)
+        var seededFromCache = false
         if days[key] == nil {
             var state = DayState()
             if let cached = readCache(key: key), !cached.isEmpty {
@@ -107,12 +108,16 @@ public final class MacroCalendarStore: ObservableObject {
                 state.earnings = cachedEarnings
             }
             days[key] = state
+            seededFromCache = true
         }
         if feedIsStale(.macro, key: key, date: date) {
             startFetch(.macro, key: key, date: date)
         }
         if feedIsStale(.earnings, key: key, date: date) {
             startFetch(.earnings, key: key, date: date)
+        }
+        if seededFromCache {
+            objectWillChange.send()
         }
     }
 
@@ -137,7 +142,8 @@ public final class MacroCalendarStore: ObservableObject {
         case .earnings: fetchedAt = state.earningsFetchedAt
         }
         guard let fetchedAt else { return true }
-        let ttl = Calendar.current.isDateInToday(date) ? Self.todayTTL : Self.historicalTTL
+        let isTodayInChina = MacroCalendarClient.chinaCalendar.isDateInToday(date)
+        let ttl = isTodayInChina ? Self.todayTTL : Self.historicalTTL
         return Date().timeIntervalSince(fetchedAt) >= ttl
     }
 
@@ -145,8 +151,15 @@ public final class MacroCalendarStore: ObservableObject {
         let flightKey = "\(key)|\(feed.rawValue)"
         guard !inFlight.contains(flightKey) else { return }
         inFlight.insert(flightKey)
+        objectWillChange.send()
         Task { [weak self] in
-            defer { self?.inFlight.remove(flightKey) }
+            defer {
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.inFlight.remove(flightKey)
+                    self.objectWillChange.send()
+                }
+            }
             await self?.fetch(feed: feed, key: key, for: date)
         }
     }
@@ -159,22 +172,20 @@ public final class MacroCalendarStore: ObservableObject {
             switch feed {
             case .macro:
                 let result = try await fetchMacroEvents(for: date)
-                if var state = days[key] {
-                    state.events = result
-                    state.error = nil
-                    state.macroFetchedAt = Date()
-                    days[key] = state
-                    writeCache(result, key: key)
-                }
+                var state = days[key] ?? DayState()
+                state.events = result
+                state.error = nil
+                state.macroFetchedAt = Date()
+                days[key] = state
+                writeCache(result, key: key)
             case .earnings:
                 let result = try await fetchEarningsReports(for: date)
-                if var state = days[key] {
-                    state.earnings = result
-                    state.earningsError = nil
-                    state.earningsFetchedAt = Date()
-                    days[key] = state
-                    writeEarningsCache(result, key: key)
-                }
+                var state = days[key] ?? DayState()
+                state.earnings = result
+                state.earningsError = nil
+                state.earningsFetchedAt = Date()
+                days[key] = state
+                writeEarningsCache(result, key: key)
             }
         } catch {
             if var state = days[key] {
@@ -196,7 +207,7 @@ public final class MacroCalendarStore: ObservableObject {
             return try await fetcher(date)
         }
         #endif
-        return try await MacroCalendarClient.events(for: date, calendar: .current)
+        return try await MacroCalendarClient.events(for: date, calendar: MacroCalendarClient.chinaCalendar)
     }
 
     private func fetchEarningsReports(for date: Date) async throws -> [EarningsReport] {
@@ -205,13 +216,13 @@ public final class MacroCalendarStore: ObservableObject {
             return try await fetcher(date)
         }
         #endif
-        return try await EarningsCalendarClient.reports(for: date, calendar: .current)
+        return try await EarningsCalendarClient.reports(for: date, calendar: MacroCalendarClient.chinaCalendar)
     }
 
     // MARK: - Disk cache
 
     private func dayKey(for date: Date) -> String {
-        JournalDayKey.make(from: date)
+        JournalDayKey.make(from: date, timeZone: MacroCalendarClient.chinaCalendar.timeZone)
     }
 
     private func cacheURL(for key: String) -> URL {

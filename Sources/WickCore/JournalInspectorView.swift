@@ -35,6 +35,9 @@ struct JournalInspectorView: View {
         .onAppear {
             calendarStore.loadIfNeeded(for: Date())
         }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            calendarStore.loadIfNeeded(for: Date())
+        }
     }
 
     // MARK: 今日事件

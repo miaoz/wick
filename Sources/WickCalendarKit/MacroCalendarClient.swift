@@ -9,8 +9,16 @@ import Foundation
 enum MacroCalendarClient {
     static let endpoint = URL(string: "https://api-one-wscn.awtmt.com/apiv1/finance/macrodatas")!
 
+    /// China timezone calendar used by WallStreetCN's daily trading feeds.
+    static let chinaCalendar: Calendar = {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Shanghai") ?? TimeZone(secondsFromGMT: 8 * 3600)!
+        return cal
+    }()
+
     /// Unix (second) range covering one local day: `[midnight, midnight+1day)`.
-    static func dayUnixRange(for date: Date, calendar: Calendar = .current) -> (start: Int, end: Int) {
+    /// Defaults to `chinaCalendar` so requests align with WallStreetCN's Beijing-time trading day partitions.
+    static func dayUnixRange(for date: Date, calendar: Calendar = chinaCalendar) -> (start: Int, end: Int) {
         let startDate = calendar.startOfDay(for: date)
         let endDate = calendar.date(byAdding: .day, value: 1, to: startDate) ?? startDate
         return (
@@ -19,7 +27,7 @@ enum MacroCalendarClient {
         )
     }
 
-    static func events(for date: Date, calendar: Calendar = .current) async throws -> [MacroCalendarEvent] {
+    static func events(for date: Date, calendar: Calendar = chinaCalendar) async throws -> [MacroCalendarEvent] {
         let range = dayUnixRange(for: date, calendar: calendar)
 
         var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
@@ -29,7 +37,7 @@ enum MacroCalendarClient {
         ]
 
         var request = URLRequest(url: components.url!)
-        request.setValue("Wick/MacroCalendar (macOS)", forHTTPHeaderField: "User-Agent")
+        request.setValue("Wick/MacroCalendar", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 15
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -53,7 +61,7 @@ enum MacroCalendarClient {
 enum EarningsCalendarClient {
     static let endpoint = URL(string: "https://api-ddc-wscn.awtmt.com/finance/report/list")!
 
-    static func reports(for date: Date, calendar: Calendar = .current) async throws -> [EarningsReport] {
+    static func reports(for date: Date, calendar: Calendar = MacroCalendarClient.chinaCalendar) async throws -> [EarningsReport] {
         let range = MacroCalendarClient.dayUnixRange(for: date, calendar: calendar)
 
         var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
@@ -65,7 +73,7 @@ enum EarningsCalendarClient {
         ]
 
         var request = URLRequest(url: components.url!)
-        request.setValue("Wick/MacroCalendar (macOS)", forHTTPHeaderField: "User-Agent")
+        request.setValue("Wick/MacroCalendar", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 15
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -78,3 +86,4 @@ enum EarningsCalendarClient {
         }
     }
 }
+

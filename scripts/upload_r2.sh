@@ -57,11 +57,17 @@ fi
 
 echo "Uploading $ZIP_FILENAME to Cloudflare R2 (bucket: $R2_BUCKET)..."
 
+WRANGLER_CMD="npx -y wrangler"
+if command -v wrangler >/dev/null 2>&1; then
+    WRANGLER_CMD="wrangler"
+fi
+
 # Upload versioned zip
-npx wrangler r2 object put "$R2_BUCKET/$APP_PREFIX/$ZIP_FILENAME" --file="$ZIP_PATH" --remote
+$WRANGLER_CMD r2 object put "$R2_BUCKET/$APP_PREFIX/$ZIP_FILENAME" --file="$ZIP_PATH" --remote
 
 # Upload latest generic Wick.zip
-npx wrangler r2 object put "$R2_BUCKET/$APP_PREFIX/Wick.zip" --file="$ZIP_PATH" --remote
+$WRANGLER_CMD r2 object put "$R2_BUCKET/$APP_PREFIX/Wick.zip" --file="$ZIP_PATH" --remote
+
 
 echo "=========================================="
 echo " Upload complete!"

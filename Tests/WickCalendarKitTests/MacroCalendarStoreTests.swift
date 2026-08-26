@@ -162,4 +162,47 @@ final class MacroCalendarStoreTests: XCTestCase {
         XCTAssertEqual(store.events(for: Date()).count, 1, "failed refresh must keep the cached data")
         XCTAssertNil(store.errorText(for: Date()), "no error when cached data is shown")
     }
+
+    func testSeededFromCacheSendsObjectWillChange() async {
+        // Write cache directly
+        let testEvent = sampleEvent()
+        let dayKey = JournalDayKey.make(from: Date(), timeZone: MacroCalendarClient.chinaCalendar.timeZone)
+        let cacheURL = cacheRoot.appendingPathComponent("\(dayKey).json")
+        let data = try! JSONEncoder().encode([testEvent])
+        try! data.write(to: cacheURL)
+
+        MacroCalendarStore.eventsFetcher = { _ in [testEvent] }
+        MacroCalendarStore.earningsFetcher = { _ in [] }
+
+        var changeNotificationCount = 0
+        let cancellable = store.objectWillChange.sink {
+            changeNotificationCount += 1
+        }
+        defer { cancellable.cancel() }
+
+        store.loadIfNeeded(for: Date())
+        XCTAssertGreaterThanOrEqual(changeNotificationCount, 1, "loadIfNeeded must notify observers when seeding from disk cache")
+        XCTAssertEqual(store.events(for: Date()).count, 1)
+    }
+
+    func testIsLoadingNotificationCycle() async {
+        MacroCalendarStore.eventsFetcher = { _ in
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            return []
+        }
+        MacroCalendarStore.earningsFetcher = { _ in [] }
+        MacroCalendarStore.todayTTL = -1
+
+        var observedIsLoadingHistory: [Bool] = []
+        let cancellable = store.objectWillChange.sink { [weak store] in
+            guard let store else { return }
+            observedIsLoadingHistory.append(store.isLoading(for: Date()))
+        }
+        defer { cancellable.cancel() }
+
+        store.loadIfNeeded(for: Date())
+        await waitUntil { !store.isLoading(for: Date()) }
+        XCTAssertFalse(store.isLoading(for: Date()))
+    }
 }
+

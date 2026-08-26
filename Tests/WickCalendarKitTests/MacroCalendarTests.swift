@@ -167,4 +167,24 @@ final class MacroCalendarTests: XCTestCase {
         XCTAssertEqual(MacroCalendarPayloadDecoder.number("0.2%"), 0.2)
         XCTAssertEqual(MacroCalendarPayloadDecoder.number("42"), 42)
     }
+
+    func testDayUnixRangeDefaultsToChinaCalendar() {
+        let calendar = Calendar(identifier: .gregorian)
+        var utcCal = calendar
+        utcCal.timeZone = TimeZone(secondsFromGMT: 0)!
+        // A date at 15:00 UTC on Aug 26 = 23:00 CST on Aug 26.
+        let date = utcCal.date(from: DateComponents(year: 2026, month: 8, day: 26, hour: 15))!
+        let range = MacroCalendarClient.dayUnixRange(for: date)
+
+        let startInChina = MacroCalendarClient.chinaCalendar.dateComponents(
+            [.year, .month, .day, .hour],
+            from: Date(timeIntervalSince1970: Double(range.start))
+        )
+        XCTAssertEqual(startInChina.year, 2026)
+        XCTAssertEqual(startInChina.month, 8)
+        XCTAssertEqual(startInChina.day, 26)
+        XCTAssertEqual(startInChina.hour, 0)
+    }
 }
+
+

@@ -3,7 +3,7 @@ import WickSync
 
 /// A single global-macro calendar event, mirroring what akshare's `macro_info_ws`
 /// returns (time, country, title, importance, actual/forecast/previous, link).
-public struct MacroCalendarEvent: Identifiable, Codable, Equatable {
+public struct MacroCalendarEvent: Identifiable, Codable, Equatable, Sendable {
     public let id: String
     public let time: Date
     public let country: String
@@ -13,6 +13,7 @@ public struct MacroCalendarEvent: Identifiable, Codable, Equatable {
     public let forecast: Double?
     public let previous: Double?
     public let link: URL?
+
 
     public init(
         id: String,
@@ -157,7 +158,7 @@ public enum EarningsCallTime: String, Codable, Sendable {
 }
 
 /// A single earnings-calendar entry from the WallStreetCN DDC service.
-public struct EarningsReport: Identifiable, Codable, Equatable {
+public struct EarningsReport: Identifiable, Codable, Equatable, Sendable {
     public let id: String
     /// Day-granularity: the feed stamps every report at 00:00.
     public let date: Date

@@ -96,6 +96,7 @@ final class TradingCalendarWindowController: NSObject, NSWindowDelegate, Observa
         calendarWindow.makeKeyAndOrderFront(nil)
         calendarWindow.orderFrontRegardless()
         isPresented = true
+        NotificationCenter.default.post(name: .wickCalendarResetToToday, object: nil)
         NSApp.activate(ignoringOtherApps: true)
 
         DispatchQueue.main.async { [weak self] in

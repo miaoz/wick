@@ -18,4 +18,9 @@ extension Notification.Name {
     /// the accent color (red for redUp, green for greenUp) applies immediately.
     /// Posted by the macOS host (`AppSettings`), observed by `TradingCalendarRootView`.
     public static let wickCalendarPnlConventionChanged = Notification.Name("wick.calendarPnlConventionChanged")
+
+    /// Reopens or summons the calendar window; resets the current date back to today
+    /// so previously torn pages or stale cached dates revert to today's live feed.
+    public static let wickCalendarResetToToday = Notification.Name("wick.calendarResetToToday")
 }
+

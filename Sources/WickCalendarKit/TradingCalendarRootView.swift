@@ -117,6 +117,20 @@ public struct TradingCalendarRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .wickCalendarPnlConventionChanged)) { _ in
             refreshPageTexture()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .wickCalendarResetToToday)) { _ in
+            currentDate = Date()
+            tornCount = 0
+            eventsPage = 0
+            store.loadIfNeeded(for: currentDate)
+            store.loadIfNeeded(for: nextDate)
+            refreshPageTexture()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            currentDate = Date()
+            store.loadIfNeeded(for: currentDate)
+            store.loadIfNeeded(for: nextDate)
+            refreshPageTexture()
+        }
         #if os(macOS)
         .onExitCommand {
             onClose()

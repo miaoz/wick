@@ -71,11 +71,28 @@ fi
 TMP_FILE="$(mktemp)"
 trap 'rm -f "$TMP_FILE"' EXIT
 
-npx wrangler r2 object get application-releases/wick/ios_wishlist.json --file="$TMP_FILE" --remote >/dev/null 2>&1 || {
-    echo "No remote wishlist data found. Checking local state..."
-    "$0" --local
-    exit 0
-}
+R2_BUCKET="${R2_BUCKET:-application-releases}"
+OBJECT_KEY="wick/ios_wishlist.json"
+
+HTTP_STATUS=$(curl -s -w "%{http_code}" -o "$TMP_FILE" \
+    -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+    "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$R2_BUCKET/objects/$OBJECT_KEY")
+
+if [[ "$HTTP_STATUS" -ne 200 ]]; then
+    FETCHED=false
+    if command -v wrangler >/dev/null 2>&1; then
+        wrangler r2 object get "$R2_BUCKET/$OBJECT_KEY" --file="$TMP_FILE" --remote >/dev/null 2>&1 && FETCHED=true || true
+    elif command -v npx >/dev/null 2>&1; then
+        npx -y wrangler r2 object get "$R2_BUCKET/$OBJECT_KEY" --file="$TMP_FILE" --remote >/dev/null 2>&1 && FETCHED=true || true
+    fi
+
+    if [[ "$FETCHED" != "true" ]]; then
+        echo "No remote wishlist data found (HTTP $HTTP_STATUS). Checking local state..."
+        "$0" --local
+        exit 0
+    fi
+fi
+
 
 python3 - <<PY
 import json
