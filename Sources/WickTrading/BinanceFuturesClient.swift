@@ -1,30 +1,6 @@
 import CryptoKit
 import Foundation
 
-/// Failures surfaced by the Binance client. The app layer maps these to
-/// localized UI text, so they stay plain and comparable.
-public enum BinanceError: Error, Equatable, Sendable {
-    /// -2014 / -2015 / -1022 (or 401/403): key invalid, wrong secret,
-    /// no read permission, or IP restriction.
-    case invalidCredentials(String)
-    /// -1021: local clock too far from server time.
-    case timestampOutsideRecvWindow
-    /// HTTP 429 / 418.
-    case rateLimited
-    case http(Int, String)
-    case network(String)
-    case malformedResponse
-
-    public var isAuthFailure: Bool {
-        switch self {
-        case .invalidCredentials:
-            return true
-        default:
-            return false
-        }
-    }
-}
-
 /// Read-only Binance USDⓈ-M futures client that pulls the account trade list
 /// (`GET /fapi/v1/userTrades`, HMAC-SHA256 signed) and reconstructs position
 /// sessions from it.
@@ -52,13 +28,7 @@ public struct BinanceFuturesClient: Sendable {
         apiKey: String,
         secret: String,
         baseURL: URL = URL(string: "https://fapi.binance.com")!,
-        transport: @escaping Transport = { request in
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                throw BinanceError.network("not an HTTP response")
-            }
-            return (data, http)
-        },
+        transport: @escaping Transport = Self.defaultTransport,
         now: @escaping @Sendable () -> Date = Date.init,
         chunkInterval: TimeInterval = 7 * 24 * 3600,
         pageLimit: Int = 1000
@@ -158,20 +128,20 @@ public struct BinanceFuturesClient: Sendable {
         let (data, response) = try await transport(request)
         try checkResponse(data: data, response: response)
         guard let decoded = try? JSONDecoder().decode(ServerTimeResponse.self, from: data) else {
-            throw BinanceError.malformedResponse
+            throw ExchangeClientError.malformedResponse
         }
-        return decoded.serverTime - milliseconds(now())
+        return decoded.serverTime - Self.milliseconds(now())
     }
 
     func userTradesPage(from: Date, to: Date, offsetMs: Int64) async throws -> [TradingFill] {
         // The clock offset only belongs on `timestamp` (signature validation);
         // startTime/endTime filter server-side trade data, which is absolute.
         let params: [(String, String)] = [
-            ("startTime", String(milliseconds(from))),
-            ("endTime", String(milliseconds(to))),
+            ("startTime", String(Self.milliseconds(from))),
+            ("endTime", String(Self.milliseconds(to))),
             ("limit", String(pageLimit)),
             ("recvWindow", "5000"),
-            ("timestamp", String(milliseconds(now()) + offsetMs))
+            ("timestamp", String(Self.milliseconds(now()) + offsetMs))
         ]
         let request = try signedRequest(path: "fapi/v1/userTrades", params: params)
         let (data, response) = try await transport(request)
@@ -187,18 +157,18 @@ public struct BinanceFuturesClient: Sendable {
                 return f
             }
         } catch {
-            throw BinanceError.malformedResponse
+            throw ExchangeClientError.malformedResponse
         }
     }
 
     func incomePage(from: Date, to: Date, offsetMs: Int64) async throws -> [FundingEvent] {
         let params: [(String, String)] = [
             ("incomeType", "FUNDING_FEE"),
-            ("startTime", String(milliseconds(from))),
-            ("endTime", String(milliseconds(to))),
+            ("startTime", String(Self.milliseconds(from))),
+            ("endTime", String(Self.milliseconds(to))),
             ("limit", String(pageLimit)),
             ("recvWindow", "5000"),
-            ("timestamp", String(milliseconds(now()) + offsetMs))
+            ("timestamp", String(Self.milliseconds(now()) + offsetMs))
         ]
         let request = try signedRequest(path: "fapi/v1/income", params: params)
         let (data, response) = try await transport(request)
@@ -206,7 +176,7 @@ public struct BinanceFuturesClient: Sendable {
         do {
             return try JSONDecoder().decode([IncomeRow].self, from: data).map { $0.asFundingEvent() }
         } catch {
-            throw BinanceError.malformedResponse
+            throw ExchangeClientError.malformedResponse
         }
     }
 
@@ -261,15 +231,15 @@ public struct BinanceFuturesClient: Sendable {
         let message = payload?.msg ?? ""
         switch response.statusCode {
         case 429, 418:
-            throw BinanceError.rateLimited
+            throw ExchangeClientError.rateLimited
         case 401, 403:
-            throw BinanceError.invalidCredentials(message)
+            throw ExchangeClientError.invalidCredentials(message)
         default:
             throw error(forCode: payload?.code, message: message, status: response.statusCode)
         }
     }
 
-    private func error(forCode code: Int?, message: String, status: Int) -> BinanceError {
+    private func error(forCode code: Int?, message: String, status: Int) -> ExchangeClientError {
         switch code {
         case -2014, -2015, -1022:
             return .invalidCredentials(message)
@@ -280,9 +250,6 @@ public struct BinanceFuturesClient: Sendable {
         }
     }
 
-    private func milliseconds(_ date: Date) -> Int64 {
-        Int64((date.timeIntervalSince1970 * 1000).rounded())
-    }
 }
 
 extension BinanceFuturesClient: ExchangeTradeClient {}

@@ -23,21 +23,22 @@ public protocol ExchangeTradeClient: Sendable {
     func fetchFunding(from start: Date, to end: Date) async throws -> [FundingEvent]
 }
 
-extension BinanceError {
-    public var asExchangeClientError: ExchangeClientError {
-        switch self {
-        case .invalidCredentials(let message):
-            return .invalidCredentials(message)
-        case .timestampOutsideRecvWindow:
-            return .timestampOutsideRecvWindow
-        case .rateLimited:
-            return .rateLimited
-        case .http(let status, let message):
-            return .http(status, message)
-        case .network(let message):
-            return .network(message)
-        case .malformedResponse:
-            return .malformedResponse
+extension ExchangeTradeClient {
+    /// Milliseconds since the Unix epoch (UTC) for a `Date`, shared by every
+    /// venue client (TR-09).
+    public static func milliseconds(_ date: Date) -> Int64 {
+        Int64((date.timeIntervalSince1970 * 1000).rounded())
+    }
+
+    /// The standard `URLSession` transport used as the default by every venue
+    /// client (TR-09).
+    public static var defaultTransport: @Sendable (URLRequest) async throws -> (Data, HTTPURLResponse) {
+        { request in
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                throw ExchangeClientError.network("not an HTTP response")
+            }
+            return (data, http)
         }
     }
 }

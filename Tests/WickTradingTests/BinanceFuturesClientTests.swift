@@ -255,7 +255,7 @@ final class BinanceFuturesClientTests: XCTestCase {
                 to: Date(timeIntervalSince1970: 1010)
             )
             XCTFail("expected invalidCredentials")
-        } catch let error as BinanceError {
+        } catch let error as ExchangeClientError {
             guard case .invalidCredentials = error else {
                 return XCTFail("unexpected error: \(error)")
             }
@@ -278,7 +278,7 @@ final class BinanceFuturesClientTests: XCTestCase {
                 to: Date(timeIntervalSince1970: 1010)
             )
             XCTFail("expected rateLimited")
-        } catch let error as BinanceError {
+        } catch let error as ExchangeClientError {
             XCTAssertEqual(error, .rateLimited)
         } catch {
             XCTFail("unexpected error type: \(error)")
@@ -296,7 +296,7 @@ final class BinanceFuturesClientTests: XCTestCase {
                 to: Date(timeIntervalSince1970: 1010)
             )
             XCTFail("expected malformedResponse")
-        } catch let error as BinanceError {
+        } catch let error as ExchangeClientError {
             XCTAssertEqual(error, .malformedResponse)
         } catch {
             XCTFail("unexpected error type: \(error)")

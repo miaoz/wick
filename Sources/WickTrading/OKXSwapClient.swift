@@ -25,13 +25,7 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
         secret: String,
         passphrase: String,
         baseURL: URL = URL(string: "https://www.okx.com")!,
-        transport: @escaping Transport = { request in
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                throw ExchangeClientError.network("not an HTTP response")
-            }
-            return (data, http)
-        },
+        transport: @escaping Transport = Self.defaultTransport,
         now: @escaping @Sendable () -> Date = Date.init,
         pageLimit: Int = 100,
         minPageInterval: TimeInterval = 0.22
@@ -146,8 +140,8 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
     ) async throws -> ([TradingFill], String?) {
         var query: [(String, String)] = [
             ("instType", "SWAP"),
-            ("begin", String(milliseconds(from))),
-            ("end", String(milliseconds(to))),
+            ("begin", String(Self.milliseconds(from))),
+            ("end", String(Self.milliseconds(to))),
             ("limit", String(pageLimit)),
         ]
         if let after {
@@ -170,8 +164,8 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
         var query: [(String, String)] = [
             ("instType", "SWAP"),
             ("type", "8"),
-            ("begin", String(milliseconds(from))),
-            ("end", String(milliseconds(to))),
+            ("begin", String(Self.milliseconds(from))),
+            ("end", String(Self.milliseconds(to))),
             ("limit", String(pageLimit)),
         ]
         if let after {
@@ -347,7 +341,4 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
         }
     }
 
-    private func milliseconds(_ date: Date) -> Int64 {
-        Int64((date.timeIntervalSince1970 * 1000).rounded())
-    }
 }

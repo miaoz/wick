@@ -83,16 +83,17 @@ public final class JournalSyncEngine: ObservableObject {
     /// acknowledged, so a crash cannot drop a deletion.
     @Published public private(set) var remoteJournalDeletions: [UUID] = []
 
-    private let backend: any JournalSyncBackend
-    private let localSource: any JournalLocalSource
-    private let deviceID: String
-    private let stateStore: JournalSyncStateStore
+    // Module-internal so the extracted extension files (SY-06) can reach them.
+    let backend: any JournalSyncBackend
+    let localSource: any JournalLocalSource
+    let deviceID: String
+    let stateStore: JournalSyncStateStore
 
-    private var state = JournalSyncState()
-    private var stateJournalID: UUID?
+    var state = JournalSyncState()
+    var stateJournalID: UUID?
     /// Device-scoped state (journal deletion propagation), shared by all
     /// journals of this device and persisted outside per-journal files.
-    private var deviceState = JournalDeviceSyncState()
+    var deviceState = JournalDeviceSyncState()
 
     private var isSyncing = false
     private var pendingSync = false
@@ -286,112 +287,6 @@ public final class JournalSyncEngine: ObservableObject {
         syncNow()
     }
 
-    // MARK: - Journal deletion propagation
-
-    /// Queues a journal deleted on this device for remote propagation: the
-    /// next cycle uploads a journal tombstone (outside the journal folder)
-    /// and then deletes the remote folder, mirroring day-deletion semantics.
-    /// Journals without remote presence (never synced, manifest unknown) are
-    /// ignored - there is nothing on the remote to delete.
-    public func queueJournalDeletion(_ journalID: UUID) {
-        guard !deviceState.isTombstoned(journalID) else { return }
-        let knownRemotely = stateStore.stateExists(for: journalID)
-            || state.remoteFiles[JournalSyncLayout.manifestPath(for: journalID)] != nil
-        guard knownRemotely else { return }
-        deviceState.pendingJournalDeletions.append(
-            JournalDeletionTombstone(journalID: journalID, deletedAt: Date(), deviceID: deviceID)
-        )
-        saveDeviceStateAndPublish()
-        requestSync()
-    }
-
-    /// Confirms that a peer-deleted journal has been applied locally (removed
-    /// from the store / ignored); the tombstone will not be re-published.
-    public func acknowledgeRemoteJournalDeletion(_ journalID: UUID) {
-        deviceState.unackedRemoteDeletions.removeAll { $0 == journalID }
-        if !deviceState.processedJournalTombstones.contains(journalID) {
-            deviceState.processedJournalTombstones.append(journalID)
-        }
-        saveDeviceStateAndPublish()
-    }
-
-    /// Flushes locally-queued journal deletions: tombstone first, then the
-    /// folder - the same ordering as day deletions. Runs before any other
-    /// cycle work so a deleted journal cannot be resurrected by this cycle.
-    private func flushPendingJournalDeletions() async {
-        var failedDeletions: [JournalDeletionTombstone] = []
-        for marker in deviceState.pendingJournalDeletions {
-            do {
-                let tombPath = JournalSyncLayout.journalTombstonePath(for: marker.journalID)
-                if state.remoteFiles[tombPath] == nil {
-                    let data = try JournalSyncEncoding.encoder.encode(marker)
-                    do {
-                        let rev = try await backend.upload(path: tombPath, data: data, ifRev: nil)
-                        state.remoteFiles[tombPath] = RemoteFileRecord(rev: rev, contentHash: nil)
-                    } catch SyncBackendError.writeConflict {
-                        // Another device tombstoned the same journal first -
-                        // the marker being present is all that matters.
-                    }
-                }
-                // Folder delete always runs; a missing folder is success.
-                try await backend.delete(path: JournalSyncLayout.journalRoot(for: marker.journalID))
-                pruneRemoteFiles(under: JournalSyncLayout.journalRoot(for: marker.journalID))
-                state.discoveredJournals.removeValue(forKey: marker.journalID.uuidString.lowercased())
-                stateStore.clear(for: marker.journalID)
-                deviceState.unackedRemoteDeletions.removeAll { $0 == marker.journalID }
-                if !deviceState.processedJournalTombstones.contains(marker.journalID) {
-                    deviceState.processedJournalTombstones.append(marker.journalID)
-                }
-            } catch {
-                // Offline/transient - retry next cycle.
-                failedDeletions.append(marker)
-            }
-        }
-        deviceState.pendingJournalDeletions = failedDeletions
-        saveDeviceStateAndPublish()
-    }
-
-    /// Surfaces peer tombstones this device has not processed yet (published
-    /// via `remoteJournalDeletions` until the app acknowledges), and cleans
-    /// up any journal folder a racing push resurrected after its deletion.
-    /// Runs right after the delta listing so it sees this cycle's fresh view.
-    private func detectPeerJournalTombstones() async {
-        for path in state.remoteFiles.keys {
-            guard let id = JournalSyncLayout.journalTombstoneID(from: path),
-                  !deviceState.isTombstoned(id)
-            else { continue }
-            deviceState.unackedRemoteDeletions.append(id)
-            state.discoveredJournals.removeValue(forKey: id.uuidString.lowercased())
-        }
-
-        // Anti-resurrection: a tombstoned journal's folder must not linger
-        // (a racing push could have recreated files after the delete).
-        for id in deviceState.processedJournalTombstones + deviceState.unackedRemoteDeletions {
-            let root = JournalSyncLayout.journalRoot(for: id)
-            guard state.remoteFiles.keys.contains(where: { $0.hasPrefix(root + "/") }) else { continue }
-            try? await backend.delete(path: root)
-            pruneRemoteFiles(under: root)
-        }
-
-        saveDeviceStateAndPublish()
-    }
-
-    /// True when the journal must not be synced, discovered, or imported on
-    /// this device (its deletion is pending, published, or processed).
-    public func isJournalTombstoned(_ journalID: UUID) -> Bool {
-        deviceState.isTombstoned(journalID)
-    }
-
-    private func pruneRemoteFiles(under root: String) {
-        for path in state.remoteFiles.keys where path.hasPrefix(root + "/") {
-            state.remoteFiles.removeValue(forKey: path)
-        }
-    }
-
-    private func saveDeviceStateAndPublish() {
-        stateStore.saveDeviceState(deviceState)
-        publishFromState()
-    }
 
     // MARK: - Sync cycle
 
@@ -1245,184 +1140,6 @@ public final class JournalSyncEngine: ObservableObject {
         }
     }
 
-    // MARK: - Trading snapshot
-
-    private func reconcileTradingSnapshot(journalID: UUID) async throws {
-        guard localSource.syncTradingSnapshotEnabled else { return }
-        guard !deviceState.pendingTradingSnapshotDeletions.contains(where: { $0.journalID == journalID }) else {
-            return
-        }
-        try requireJournal(journalID)
-
-        let path = JournalSyncLayout.tradingSnapshotPath(for: journalID)
-        let key = path.lowercased()
-        let local = localSource.syncedTradingSnapshot(journalID: journalID)
-        let entryTombstonePath = JournalSyncLayout.tradingSnapshotTombstonePath(for: journalID)
-        let tombstoneKey = entryTombstonePath.lowercased()
-
-        if let tombstoneRecord = state.remoteFiles[tombstoneKey] {
-            var deletedAt = state.tradingSnapshotDeletedAtMilliseconds
-            if tombstoneRecord.rev != state.tradingSnapshotTombstoneRev || deletedAt == nil {
-                let (data, rev) = try await backend.download(path: entryTombstonePath)
-                let marker = try JournalSyncEncoding.decoder.decode(
-                    JournalTradingSnapshotTombstone.self,
-                    from: data
-                )
-                guard marker.journalID == journalID else {
-                    throw CocoaError(.fileReadCorruptFile)
-                }
-                state.tradingSnapshotTombstoneRev = rev
-                state.tradingSnapshotDeletedAtMilliseconds = marker.deletedAtMilliseconds
-                deletedAt = marker.deletedAtMilliseconds
-            }
-
-            if let local, let deletedAt, local.fetchedAtMilliseconds > deletedAt {
-                // A genuinely newer exchange refresh intentionally resurrects
-                // cloud sharing and removes the old deletion marker.
-                try await backend.delete(path: entryTombstonePath)
-                state.remoteFiles.removeValue(forKey: tombstoneKey)
-                state.tradingSnapshotTombstoneRev = nil
-                state.tradingSnapshotDeletedAtMilliseconds = nil
-            } else {
-                localSource.removeSyncedTradingSnapshot(journalID: journalID)
-                if state.remoteFiles[key] != nil {
-                    try? await backend.delete(path: path)
-                    state.remoteFiles.removeValue(forKey: key)
-                }
-                state.tradingSnapshotRev = nil
-                state.tradingSnapshotFetchedAtMilliseconds = nil
-                return
-            }
-        }
-
-        guard let remoteRecord = state.remoteFiles[key] else {
-            state.tradingSnapshotRev = nil
-            state.tradingSnapshotFetchedAtMilliseconds = nil
-            guard let local else { return }
-            try validateTradingSnapshot(local, journalID: journalID)
-            let data = try JournalSyncEncoding.encoder.encode(local)
-            let rev = try await backend.upload(path: path, data: data, ifRev: nil)
-            try requireJournal(journalID)
-            recordTradingSnapshotUpload(data: data, rev: rev, document: local, path: key)
-            return
-        }
-
-        // A changed rev must be inspected even when the local timestamp did
-        // not move: another device may have published a newer snapshot.
-        if state.tradingSnapshotRev != remoteRecord.rev {
-            let (data, downloadedRev) = try await backend.download(path: path)
-            let remote = try JournalSyncEncoding.decoder.decode(
-                JournalTradingSnapshotDocument.self,
-                from: data
-            )
-            try validateTradingSnapshot(remote, journalID: journalID)
-            try requireJournal(journalID)
-
-            if let local, local.fetchedAtMilliseconds > remote.fetchedAtMilliseconds {
-                try validateTradingSnapshot(local, journalID: journalID)
-                let localData = try JournalSyncEncoding.encoder.encode(local)
-                let rev = try await backend.upload(path: path, data: localData, ifRev: downloadedRev)
-                try requireJournal(journalID)
-                recordTradingSnapshotUpload(
-                    data: localData,
-                    rev: rev,
-                    document: local,
-                    path: key
-                )
-            } else {
-                localSource.applySyncedTradingSnapshot(remote, journalID: journalID)
-                state.tradingSnapshotRev = downloadedRev
-                state.tradingSnapshotFetchedAtMilliseconds = remote.fetchedAtMilliseconds
-            }
-            return
-        }
-
-        let baseline = state.tradingSnapshotFetchedAtMilliseconds
-        let localIsMissingOrOlder = local.map { snapshot in
-            baseline.map { snapshot.fetchedAtMilliseconds < $0 } ?? false
-        } ?? true
-        if let local, baseline.map({ local.fetchedAtMilliseconds > $0 }) ?? true {
-            try validateTradingSnapshot(local, journalID: journalID)
-            let data = try JournalSyncEncoding.encoder.encode(local)
-            let rev = try await backend.upload(path: path, data: data, ifRev: remoteRecord.rev)
-            try requireJournal(journalID)
-            recordTradingSnapshotUpload(data: data, rev: rev, document: local, path: key)
-        } else if localIsMissingOrOlder {
-            // Restore a cloud snapshot removed or replaced locally while the
-            // opt-in remains enabled. Disabling the setting skips this path.
-            let (data, downloadedRev) = try await backend.download(path: path)
-            let remote = try JournalSyncEncoding.decoder.decode(
-                JournalTradingSnapshotDocument.self,
-                from: data
-            )
-            try validateTradingSnapshot(remote, journalID: journalID)
-            try requireJournal(journalID)
-            localSource.applySyncedTradingSnapshot(remote, journalID: journalID)
-            state.tradingSnapshotRev = downloadedRev
-            state.tradingSnapshotFetchedAtMilliseconds = remote.fetchedAtMilliseconds
-        }
-    }
-
-    private func validateTradingSnapshot(
-        _ document: JournalTradingSnapshotDocument,
-        journalID: UUID
-    ) throws {
-        guard document.formatVersion <= JournalTradingSnapshotDocument.currentFormatVersion else {
-            throw JournalSyncError.unsupportedTradingSnapshotFormat(document.formatVersion)
-        }
-        guard document.journalID == journalID else {
-            throw CocoaError(.fileReadCorruptFile)
-        }
-    }
-
-    private func recordTradingSnapshotUpload(
-        data: Data,
-        rev: String,
-        document: JournalTradingSnapshotDocument,
-        path: String
-    ) {
-        state.remoteFiles[path] = RemoteFileRecord(
-            rev: rev,
-            contentHash: JournalSyncEncoding.contentHash(of: data)
-        )
-        state.tradingSnapshotRev = rev
-        state.tradingSnapshotFetchedAtMilliseconds = document.fetchedAtMilliseconds
-    }
-
-    private func flushPendingTradingSnapshotDeletions() async {
-        guard !deviceState.pendingTradingSnapshotDeletions.isEmpty else { return }
-        var failed: [JournalTradingSnapshotTombstone] = []
-        for marker in deviceState.pendingTradingSnapshotDeletions {
-            let journalID = marker.journalID
-            let path = JournalSyncLayout.tradingSnapshotPath(for: journalID)
-            let entryTombstonePath = JournalSyncLayout.tradingSnapshotTombstonePath(for: journalID)
-            do {
-                let data = try JournalSyncEncoding.encoder.encode(marker)
-                let knownRev = state.remoteFiles[entryTombstonePath.lowercased()]?.rev
-                let tombstoneRev = try await backend.upload(
-                    path: entryTombstonePath,
-                    data: data,
-                    ifRev: knownRev
-                )
-                try await backend.delete(path: path)
-                state.remoteFiles.removeValue(forKey: path.lowercased())
-                state.remoteFiles[entryTombstonePath.lowercased()] = RemoteFileRecord(
-                    rev: tombstoneRev,
-                    contentHash: JournalSyncEncoding.contentHash(of: data)
-                )
-                if stateJournalID == journalID {
-                    state.tradingSnapshotRev = nil
-                    state.tradingSnapshotFetchedAtMilliseconds = nil
-                    state.tradingSnapshotTombstoneRev = tombstoneRev
-                    state.tradingSnapshotDeletedAtMilliseconds = marker.deletedAtMilliseconds
-                }
-            } catch {
-                failed.append(marker)
-            }
-        }
-        deviceState.pendingTradingSnapshotDeletions = failed
-        saveDeviceStateAndPublish()
-    }
 
     // MARK: - Manifest / tombstones
 
@@ -1690,7 +1407,7 @@ public final class JournalSyncEngine: ObservableObject {
 
     // MARK: - Housekeeping
 
-    private func requireJournal(_ journalID: UUID) throws {
+    func requireJournal(_ journalID: UUID) throws {
         guard localSource.syncJournalID == journalID else {
             throw JournalSyncError.journalSwitched
         }
@@ -1737,7 +1454,7 @@ public final class JournalSyncEngine: ObservableObject {
         }
     }
 
-    private func publishFromState() {
+    func publishFromState() {
         lastSyncAt = state.lastSyncAt
         pendingConflicts = state.pendingConflicts
         remoteJournalDeletions = deviceState.unackedRemoteDeletions

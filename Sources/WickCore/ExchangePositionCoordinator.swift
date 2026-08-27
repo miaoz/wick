@@ -29,10 +29,6 @@ enum ExchangeSyncError: Error, Equatable {
     /// Window contained no fills (typical for a mistyped Hyperliquid address).
     case emptyWindow
 
-    init(_ error: BinanceError) {
-        self.init(error.asExchangeClientError)
-    }
-
     init(_ error: ExchangeClientError) {
         switch error {
         case .invalidCredentials:
@@ -519,11 +515,6 @@ final class ExchangePositionCoordinator: ObservableObject {
                 fundingBackfilled: fundingBackfilled
             )
         } catch let error as ExchangeClientError {
-            finishSync(
-                fills: nil, positions: nil, windowStart: nil, token: token,
-                error: ExchangeSyncError(error)
-            )
-        } catch let error as BinanceError {
             finishSync(
                 fills: nil, positions: nil, windowStart: nil, token: token,
                 error: ExchangeSyncError(error)

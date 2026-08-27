@@ -22,13 +22,7 @@ public struct HyperliquidInfoClient: ExchangeTradeClient, Sendable {
     public init(
         user: String,
         baseURL: URL = URL(string: "https://api.hyperliquid.xyz")!,
-        transport: @escaping Transport = { request in
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                throw ExchangeClientError.network("not an HTTP response")
-            }
-            return (data, http)
-        },
+        transport: @escaping Transport = Self.defaultTransport,
         pageLimit: Int = 2000,
         fundingPageCap: Int = 500,
         fundingPageLimit: Int = 64
@@ -51,8 +45,8 @@ public struct HyperliquidInfoClient: ExchangeTradeClient, Sendable {
     public func fetchFills(from start: Date, to end: Date) async throws -> [TradingFill] {
         guard start < end else { return [] }
         var results: [TradingFill] = []
-        var cursor = milliseconds(start)
-        let endMs = milliseconds(end)
+        var cursor = Self.milliseconds(start)
+        let endMs = Self.milliseconds(end)
         var pages = 0
         while cursor < endMs, pages < 8 {
             pages += 1
@@ -70,8 +64,8 @@ public struct HyperliquidInfoClient: ExchangeTradeClient, Sendable {
     /// delta of each funding record (signed; negative = paid out).
     public func fetchFunding(from start: Date, to end: Date) async throws -> [FundingEvent] {
         guard start < end else { return [] }
-        let startMs = milliseconds(start)
-        let endMs = milliseconds(end)
+        let startMs = Self.milliseconds(start)
+        let endMs = Self.milliseconds(end)
         var results: [FundingEvent] = []
         var cursor = startMs
         var pages = 0
@@ -207,7 +201,4 @@ public struct HyperliquidInfoClient: ExchangeTradeClient, Sendable {
         }
     }
 
-    private func milliseconds(_ date: Date) -> Int64 {
-        Int64((date.timeIntervalSince1970 * 1000).rounded())
-    }
 }
