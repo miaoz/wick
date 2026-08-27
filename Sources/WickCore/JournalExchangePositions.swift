@@ -110,6 +110,31 @@ private struct ReceiptView: View {
         .rotationEffect(.degrees(tilt))
         .shadow(color: palette.textPrimary.color.opacity(0.14), radius: 3, y: 1)
         .accessibilityElement(children: .combine)
+        .contextMenu {
+            Button(L10n.string(.exchangeSharePosition, language: settings.language)) {
+                if let image = renderForShare() { ImageShare.presentShareSheet(for: image, scale: Self.shareRenderScale) }
+            }
+            Button(L10n.string(.journalCopyImage, language: settings.language)) {
+                if let image = renderForShare() { ImageShare.copy(image, scale: Self.shareRenderScale) }
+            }
+        }
+    }
+
+    /// Higher than the calendar page's 2x: the receipt is a small card and
+    /// chat apps recompress, so extra pixels keep the print crisp.
+    private static let shareRenderScale: CGFloat = 3
+
+    /// Renders the receipt upright (no paste tilt) for sharing / copying.
+    /// ImageRenderer builds an isolated tree, so the environment this view
+    /// receives from its ancestors is injected explicitly.
+    private func renderForShare() -> CGImage? {
+        let renderer = ImageRenderer(
+            content: ReceiptView(position: position, tilt: 0)
+                .environmentObject(settings)
+                .environment(\.wickPalette, palette)
+        )
+        renderer.scale = Self.shareRenderScale
+        return renderer.cgImage
     }
 
     // MARK: Rows

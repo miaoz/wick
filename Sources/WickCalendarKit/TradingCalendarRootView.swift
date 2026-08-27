@@ -297,6 +297,21 @@ public struct TradingCalendarRootView: View {
             tearHitLayer
         }
         .frame(width: sceneW, height: layout.pageH + 60, alignment: .top)
+        // Right-click (macOS) / long-press (iOS) share of the page image. On iOS
+        // the tear drag (minimumDistance: 0) wins in the tear zone, so the menu
+        // effectively comes from the page's upper half there.
+        .contextMenu {
+            Button(L10n.string(.calendarShareThisPage, language: language)) {
+                if let image = renderCurrentPage() {
+                    ImageShare.presentShareSheet(for: image, scale: 2)
+                }
+            }
+            Button(L10n.string(.journalCopyImage, language: language)) {
+                if let image = renderCurrentPage() {
+                    ImageShare.copy(image, scale: 2)
+                }
+            }
+        }
     }
 
     private var nextPageShading: some View {
@@ -481,8 +496,10 @@ public struct TradingCalendarRootView: View {
 
     // MARK: - Tearing
 
-    private func refreshPageTexture() {
-        let page = MacroDayPageView(
+    /// The page as currently displayed — single source for the tear texture
+    /// and for share / copy rendering, so a shared image matches the screen.
+    private var currentPageView: MacroDayPageView {
+        MacroDayPageView(
             date: currentDate,
             events: currentEvents,
             earnings: currentEarnings,
@@ -495,7 +512,14 @@ public struct TradingCalendarRootView: View {
             layout: layout,
             convention: envPnlConvention
         )
-        if let cg = CalendarSnapshot.cgImage(of: page, scale: 2) {
+    }
+
+    private func renderCurrentPage(scale: CGFloat = 2) -> CGImage? {
+        CalendarSnapshot.cgImage(of: currentPageView, scale: scale)
+    }
+
+    private func refreshPageTexture() {
+        if let cg = renderCurrentPage() {
             paperScene.setPageTexture(SKTexture(cgImage: cg))
         }
     }

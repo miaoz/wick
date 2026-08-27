@@ -1,4 +1,5 @@
 import SwiftUI
+import WickCalendarKit
 import WickSync
 import WickTrading
 
@@ -145,6 +146,29 @@ struct PhoneReceiptCard: View {
             alignment: .top
         )
         .padding(.vertical, 4)
+        .contextMenu {
+            Button(L10n.string(.exchangeSharePosition, language: currentLanguage)) {
+                if let image = renderForShare() { ImageShare.presentShareSheet(for: image, scale: Self.shareRenderScale) }
+            }
+            Button(L10n.string(.journalCopyImage, language: currentLanguage)) {
+                if let image = renderForShare() { ImageShare.copy(image, scale: Self.shareRenderScale) }
+            }
+        }
+    }
+
+    /// Higher than the calendar page's 2x: the receipt is a small card and
+    /// chat apps recompress, so extra pixels keep the print crisp.
+    private static let shareRenderScale: CGFloat = 3
+
+    /// Renders the receipt for sharing / copying. ImageRenderer builds an
+    /// isolated tree, so the language is passed explicitly rather than relying
+    /// on the environment.
+    private func renderForShare() -> CGImage? {
+        let renderer = ImageRenderer(
+            content: PhoneReceiptCard(position: position, language: currentLanguage)
+        )
+        renderer.scale = Self.shareRenderScale
+        return renderer.cgImage
     }
 
     private var dateRangeText: String {

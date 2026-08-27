@@ -256,6 +256,7 @@ public enum L10n {
         case exchangePositionShort
         case exchangePositionOpen
         case exchangePositionClosed
+        case exchangeSharePosition
         case copyErrorHint
         case copied
 
@@ -293,6 +294,7 @@ public enum L10n {
         case earningsAfterClose
         case earningsTimeTbd
         case macroEventsFlipHintTouch
+        case calendarShareThisPage
 
         // Settings extras
         case generalSection
@@ -558,6 +560,7 @@ public enum L10n {
             case .exchangePositionShort: return "空"
             case .exchangePositionOpen: return "持仓中"
             case .exchangePositionClosed: return "已平仓"
+            case .exchangeSharePosition: return "分享仓位…"
             case .copyErrorHint: return "点击复制错误信息"
             case .copied: return "已复制"
 
@@ -594,6 +597,7 @@ public enum L10n {
             case .earningsAfterClose: return "盘后"
             case .earningsTimeTbd: return "未定"
             case .macroEventsFlipHintTouch: return "轻点翻页 · 点栏目切换"
+            case .calendarShareThisPage: return "分享本页…"
 
             case .generalSection: return "通用"
             case .menuBarPercentage: return "菜单栏显示今日剩余"
@@ -860,6 +864,7 @@ public enum L10n {
             case .exchangePositionShort: return "Short"
             case .exchangePositionOpen: return "Open"
             case .exchangePositionClosed: return "Closed"
+            case .exchangeSharePosition: return "Share Position…"
             case .copyErrorHint: return "Click to copy error"
             case .copied: return "Copied"
 
@@ -896,6 +901,7 @@ public enum L10n {
             case .earningsAfterClose: return "AMC"
             case .earningsTimeTbd: return "TBD"
             case .macroEventsFlipHintTouch: return "Tap to flip · tap a tab to switch"
+            case .calendarShareThisPage: return "Share This Page…"
 
             case .generalSection: return "General"
             case .menuBarPercentage: return "Show day remaining in menu bar"
