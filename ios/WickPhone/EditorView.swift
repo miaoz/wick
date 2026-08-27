@@ -362,6 +362,14 @@ private struct ItemRowView: View {
     let onImageTap: ([String], Int) -> Void
     let onChange: () -> Void
 
+    private var noteText: String {
+        item.review?.note.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    /// Ink opacity for the floating verdict seal: enough to read the content
+    /// (figures, text) underneath it.
+    private static let sealOpacity = 0.82
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Top bar: Item Index + Tag Chip + Spacer + Delete Item Button (minus.circle)
@@ -405,16 +413,6 @@ private struct ItemRowView: View {
                 .frame(minHeight: 56)
                 .onChange(of: item.body) { _ in onChange() }
 
-            // Exchange trade receipts if matched
-            if !matchedPositions.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(matchedPositions) { position in
-                        PhoneReceiptCard(position: position)
-                    }
-                }
-                .padding(.top, 2)
-            }
-
             // Images horizontal scroll with tap-to-preview
             if !item.imageFilenames.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -442,47 +440,85 @@ private struct ItemRowView: View {
                 }
             }
 
-            // Bottom bar: Review note quote on left + Review seal/button on bottom-right
-            HStack(alignment: .bottom, spacing: 8) {
-                if let review = item.review, !review.note.isEmpty {
-                    HStack(spacing: 6) {
-                        Rectangle()
-                            .fill(review.verdict == .correct ? PhoneTheme.cinnabar : PhoneTheme.dai)
-                            .frame(width: 2)
-                        Text(review.note)
-                            .font(PhoneFont.paper(11))
-                            .lineSpacing(PhoneFont.paperLineSpacing(11))
-                            .foregroundColor(PhoneTheme.inkSecondary)
-                            .padding(.vertical, 2)
+            // Exchange trade receipts if matched
+            if !matchedPositions.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(matchedPositions) { position in
+                        PhoneReceiptCard(position: position)
                     }
-                    .padding(.horizontal, 6)
-                    .background(PhoneTheme.paper)
-                    .cornerRadius(3)
                 }
+                .padding(.top, 2)
+            }
 
-                Spacer(minLength: 0)
-
-                Button(action: onReviewTap) {
-                    if let review = item.review {
-                        JournalReviewBadge(verdict: review.verdict, style: .mini, size: 36, language: language)
-                    } else {
-                        HStack(spacing: 3) {
-                            Image(systemName: "checkmark.seal")
-                                .font(PhoneFont.ui(9.5, weight: .bold))
-                            Text(L10n.string(.journalReview, language: language))
-                                .font(PhoneFont.paper(11, weight: .bold))
+            // The unreviewed call-to-action (and the note) keep a row of
+            // their own - only the picked seal gets to float over content.
+            if !noteText.isEmpty || item.review == nil {
+                HStack(alignment: .bottom, spacing: 8) {
+                    if !noteText.isEmpty, let review = item.review {
+                        HStack(spacing: 6) {
+                            Rectangle()
+                                .fill(review.verdict == .correct ? PhoneTheme.cinnabar : PhoneTheme.dai)
+                                .frame(width: 2)
+                            Text(noteText)
+                                .font(PhoneFont.paper(11))
+                                .lineSpacing(PhoneFont.paperLineSpacing(11))
+                                .foregroundColor(PhoneTheme.inkSecondary)
+                                .padding(.vertical, 2)
                         }
-                        .foregroundColor(PhoneTheme.cinnabar.opacity(0.9))
                         .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(PhoneTheme.cinnabarSoft)
+                        .background(PhoneTheme.paper)
                         .cornerRadius(3)
                     }
+
+                    Spacer(minLength: 0)
+
+                    if item.review == nil {
+                        Button(action: onReviewTap) {
+                            HStack(spacing: 3) {
+                                Image(systemName: "checkmark.seal")
+                                    .font(PhoneFont.ui(9.5, weight: .bold))
+                                Text(L10n.string(.journalReview, language: language))
+                                    .font(PhoneFont.paper(11, weight: .bold))
+                            }
+                            .foregroundColor(PhoneTheme.cinnabar.opacity(0.9))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(PhoneTheme.cinnabarSoft)
+                            .cornerRadius(3)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .buttonStyle(.plain)
+                .padding(.top, 2)
             }
-            .padding(.top, 2)
         }
         .padding(.vertical, 4)
+        // Once a verdict is picked, its seal floats over the item's bottom-
+        // trailing corner - covering the button's former spot and slightly
+        // overlapping receipts / content at reduced ink opacity so underlying
+        // text and figures stay readable.
+        .overlay(alignment: .bottomTrailing) {
+            if let review = item.review {
+                Button(action: onReviewTap) {
+                    JournalReviewBadge(
+                        verdict: review.verdict,
+                        style: .seal,
+                        size: 48,
+                        language: language
+                    )
+                    .opacity(Self.sealOpacity)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 2)
+                .accessibilityLabel(Text(verdictName(review.verdict)))
+            }
+        }
+    }
+
+    private func verdictName(_ verdict: JournalReviewVerdict) -> String {
+        switch verdict {
+        case .correct: return L10n.string(.journalReviewCorrect, language: language)
+        case .wrong: return L10n.string(.journalReviewWrong, language: language)
+        }
     }
 }
