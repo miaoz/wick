@@ -29,14 +29,15 @@ public struct BurnStripView: View {
             let size = proxy.size
             let frontier = size.width * fraction
             ZStack(alignment: .leading) {
-                // Unburnt ruled paper
+                // 1. Unburnt ruled paper: background + vertical tick divisions
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
                     .fill(palette.cardTop.color)
+
                 TickMarksShape(ticks: ticks)
-                    .stroke(palette.textPrimary.color.opacity(0.16), lineWidth: 0.5)
+                    .stroke(palette.divider.color, lineWidth: 0.75)
                     .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
 
-                // Candle stain (elapsed) with an irregular edge
+                // 2. Candle stain (elapsed) with an irregular edge
                 StainShape(fraction: fraction)
                     .fill(
                         LinearGradient(
@@ -45,7 +46,13 @@ public struct BurnStripView: View {
                             endPoint: .trailing
                         )
                     )
-                // Warm halo hugging the frontier
+                    .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+
+                // 3. Outer enclosing rule frame (1px border wrapping both elapsed and remaining slots)
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .strokeBorder(palette.divider.color, lineWidth: 1)
+
+                // 4. Warm halo hugging the frontier
                 Ellipse()
                     .fill(
                         RadialGradient(
@@ -59,7 +66,7 @@ public struct BurnStripView: View {
                     .position(x: frontier, y: size.height / 2)
                     .opacity(fraction > 0.002 ? 1 : 0)
 
-                // Ember line at the frontier
+                // 5. Ember line at the frontier
                 Rectangle()
                     .fill(
                         LinearGradient(
@@ -73,6 +80,7 @@ public struct BurnStripView: View {
                     .shadow(color: palette.glow.color, radius: 4)
                     .opacity(fraction > 0.002 ? 1 : 0)
 
+                // 6. Flame dot (hero tier)
                 if showsFlame, fraction > 0.002 {
                     FlameDot()
                         .frame(width: 8, height: 8)
