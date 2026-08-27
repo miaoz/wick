@@ -276,16 +276,16 @@ public final class DropboxSyncBackend: JournalSyncBackend {
     }
 
     public func download(path: String) async throws -> (data: Data, rev: String) {
-        let token = try await validAccessToken()
-        var request = contentRequest(path: "files/download", token: token)
-        request.setValue(
-            try apiArg(["path": path]),
-            forHTTPHeaderField: "Dropbox-API-Arg"
-        )
-        let (data, response) = try await perform(request)
+        let (data, response) = try await performAuthorized { token in
+            var request = contentRequest(path: "files/download", token: token)
+            request.setValue(
+                try apiArg(["path": path]),
+                forHTTPHeaderField: "Dropbox-API-Arg"
+            )
+            return request
+        }
         try validate(response: response, data: data, path: path)
-        let header = (response as? HTTPURLResponse)?
-            .value(forHTTPHeaderField: "Dropbox-API-Result")
+        let header = response.value(forHTTPHeaderField: "Dropbox-API-Result")
         let rev = header
             .flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
             .flatMap { $0["rev"] as? String } ?? ""
@@ -294,15 +294,16 @@ public final class DropboxSyncBackend: JournalSyncBackend {
 
     @discardableResult
     public func upload(path: String, data: Data, ifRev: String?) async throws -> String {
-        let token = try await validAccessToken()
-        var request = contentRequest(path: "files/upload", token: token)
-        let mode: [String: Any] = ifRev.map { [".tag": "update", "update": $0] } ?? [".tag": "add"]
-        request.setValue(
-            try apiArg(["path": path, "mode": mode, "autorename": false, "mute": true]),
-            forHTTPHeaderField: "Dropbox-API-Arg"
-        )
-        request.httpBody = data
-        let (responseData, response) = try await perform(request)
+        let (responseData, response) = try await performAuthorized { token in
+            var request = contentRequest(path: "files/upload", token: token)
+            let mode: [String: Any] = ifRev.map { [".tag": "update", "update": $0] } ?? [".tag": "add"]
+            request.setValue(
+                try apiArg(["path": path, "mode": mode, "autorename": false, "mute": true]),
+                forHTTPHeaderField: "Dropbox-API-Arg"
+            )
+            request.httpBody = data
+            return request
+        }
         do {
             try validate(response: response, data: responseData, path: path)
         } catch let error as SyncBackendError {
@@ -341,15 +342,15 @@ public final class DropboxSyncBackend: JournalSyncBackend {
     /// literal `null`, which no-argument RPC endpoints expect.
     @discardableResult
     private func rpcCall(path: String, body: [String: Any]?) async throws -> [String: Any] {
-        let token = try await validAccessToken()
-        var request = URLRequest(url: URL(string: Self.apiHost + path)!)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try body.map { try JSONSerialization.data(withJSONObject: $0) }
-            ?? Data("null".utf8)
-
-        let (data, response) = try await perform(request)
+        let (data, response) = try await performAuthorized { token in
+            var request = URLRequest(url: URL(string: Self.apiHost + path)!)
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try body.map { try JSONSerialization.data(withJSONObject: $0) }
+                ?? Data("null".utf8)
+            return request
+        }
         try validate(response: response, data: data, path: path)
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw SyncBackendError.server(status: 200, message: "\(path): unreadable response")
@@ -381,6 +382,41 @@ public final class DropboxSyncBackend: JournalSyncBackend {
         }
     }
 
+    /// Runs a token-authenticated request. A 401 means the access token was
+    /// revoked server-side (the refresh token is still valid), so it invalidates
+    /// the cached access token, refreshes once, and retries. A second consecutive
+    /// 401 means the refresh token itself is dead → `needsAuth`.
+    ///
+    /// Without this, a revoked access token whose local expiry is still in the
+    /// future would keep being replayed by `validAccessToken()` for up to the
+    /// full 4h lifetime, trapping the sync loop in a `needsAuth` deadlock.
+    private func performAuthorized(
+        _ makeRequest: (String) throws -> URLRequest
+    ) async throws -> (Data, HTTPURLResponse) {
+        var token = try await validAccessToken()
+        var didRefresh = false
+        while true {
+            let request = try makeRequest(token)
+            let (data, response) = try await perform(request)
+            guard let http = response as? HTTPURLResponse else {
+                throw SyncBackendError.transport(message: "no HTTP response")
+            }
+            guard http.statusCode == 401 else {
+                return (data, http)
+            }
+            if didRefresh {
+                // Refresh token rejected too — full re-auth is required.
+                throw SyncBackendError.needsAuth
+            }
+            // Forget the dead access token so validAccessToken() issues a fresh
+            // one via the refresh token, then retry exactly once.
+            accessToken = nil
+            accessTokenExpiry = nil
+            token = try await validAccessToken()
+            didRefresh = true
+        }
+    }
+
     private func validate(response: URLResponse, data: Data, path: String) throws {
         guard let http = response as? HTTPURLResponse else {
             throw SyncBackendError.transport(message: "no HTTP response")
@@ -389,7 +425,8 @@ public final class DropboxSyncBackend: JournalSyncBackend {
         case 200...299:
             return
         case 401:
-            // Token rejected outright — refresh didn't help (handled upstream on retry).
+            // Defensive fallback: performAuthorized already handles 401+retry,
+            // so reaching here means the refresh token is dead.
             throw SyncBackendError.needsAuth
         case 429:
             let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)

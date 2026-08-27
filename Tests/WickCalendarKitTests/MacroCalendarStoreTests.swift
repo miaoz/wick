@@ -204,5 +204,44 @@ final class MacroCalendarStoreTests: XCTestCase {
         await waitUntil { !store.isLoading(for: Date()) }
         XCTAssertFalse(store.isLoading(for: Date()))
     }
+
+    // CA-02: an EMPTY success (a quiet "休市/无事" day) leaves events unchanged,
+    // so the top-page texture's isLoading=true frame would never be refreshed
+    // unless the store still publishes a completion. Lock the transition the
+    // view's `.onChange(of: isLoading)` depends on.
+    func testEmptyResultStillPublishesCompletion() async {
+        MacroCalendarStore.eventsFetcher = { _ in
+            try? await Task.sleep(nanoseconds: 30_000_000)
+            return []
+        }
+        MacroCalendarStore.earningsFetcher = { _ in [] }
+        MacroCalendarStore.todayTTL = -1
+
+        var publishedIsLoading: [Bool] = []
+        let cancellable = store.objectWillChange.sink { [weak store] in
+            guard let store else { return }
+            publishedIsLoading.append(store.isLoading(for: Date()))
+        }
+        defer { cancellable.cancel() }
+
+        store.loadIfNeeded(for: Date())
+        await waitUntil { !store.isLoading(for: Date()) }
+        XCTAssertTrue(publishedIsLoading.contains(true), "a fetch must publish an isLoading=true frame")
+        XCTAssertTrue(publishedIsLoading.contains(false), "an empty result must publish an isLoading=false completion")
+    }
+
+    // CA-02: a failed day must publish its error state so the view can drop the
+    // loading frame and render the failure stamp instead of hanging.
+    func testFailurePublishesErrorState() async {
+        enum TestError: Error { case fail }
+        MacroCalendarStore.eventsFetcher = { _ in throw TestError.fail }
+        MacroCalendarStore.earningsFetcher = { _ in [] }
+        MacroCalendarStore.todayTTL = -1
+
+        store.loadIfNeeded(for: Date())
+        await waitUntil { store.errorText(for: Date()) != nil }
+        XCTAssertNotNil(store.errorText(for: Date()))
+        XCTAssertFalse(store.isLoading(for: Date()))
+    }
 }
 

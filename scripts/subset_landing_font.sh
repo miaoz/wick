@@ -15,7 +15,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 WORK=.build/landing-font
-FONT_URL="https://github.com/google/fonts/raw/main/ofl/notoserifsc/NotoSerifSC%5Bwght%5D.ttf"
+# Pinned to a specific google/fonts commit (WEB-02) so the subset is
+# reproducible — `main` moves and would silently change the printed font.
+# Bump deliberately after checking in the new woff2. Resolve with:
+#   curl -s "https://api.github.com/repos/google/fonts/commits?path=ofl/notoserifsc/NotoSerifSC%5Bwght%5D.ttf&per_page=1"
+FONT_COMMIT="2e61f4355afd22b801791b0df176065082423b87"
+FONT_URL="https://github.com/google/fonts/raw/${FONT_COMMIT}/ofl/notoserifsc/NotoSerifSC%5Bwght%5D.ttf"
 mkdir -p "$WORK"
 
 if [ ! -f "$WORK/NotoSerifSC.ttf" ]; then

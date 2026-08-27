@@ -746,7 +746,7 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
             ),
             TradingFill(
                 id: 2, symbol: "BTCUSDT", side: "SELL", price: 110, qty: 1,
-                commission: 1, commissionAsset: "USDT", realizedPnl: 10,
+                commission: -1, commissionAsset: "USDT", realizedPnl: 10,
                 time: Self.ms(now.addingTimeInterval(-30))
             ),
         ]
@@ -811,7 +811,7 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
             ),
             TradingFill(
                 id: 2, symbol: "BTCUSDT", side: "SELL", price: 110, qty: 1,
-                commission: 1, commissionAsset: "USDT", realizedPnl: 10,
+                commission: -1, commissionAsset: "USDT", realizedPnl: 10,
                 time: Self.ms(now.addingTimeInterval(-60))
             ),
         ]

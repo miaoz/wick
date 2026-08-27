@@ -215,22 +215,25 @@ public struct TradingPosition: Codable, Identifiable, Equatable, Sendable {
         SymbolTagMatcher.quoteAsset(of: symbol)
     }
 
-    /// Commission in the quote asset as a positive magnitude. Venue sign
-    /// conventions differ (Binance/OKX report fees negative, Hyperliquid
-    /// positive), so the stored value is normalized here; falls back to the
-    /// sum over all assets when the quote asset can't be resolved.
+    /// Commission in the quote asset, signed: negative = paid, positive =
+    /// rebate. All venues normalize to this convention at ingestion: OKX
+    /// reports fees negative natively, while Binance and Hyperliquid report
+    /// positive costs that their clients negate — so a rebate is never mistaken
+    /// for a cost (TR-03). Falls back to the sum over all assets when the
+    /// quote asset can't be resolved.
     public var commissionTotal: Double {
         if let quote = quoteAsset {
-            return abs(commissions[quote] ?? 0)
+            return commissions[quote] ?? 0
         }
-        return commissions.values.reduce(0) { $0 + abs($1) }
+        return commissions.values.reduce(0, +)
     }
 
     /// Realized PnL net of quote-asset commission and funding — the number the
-    /// journal surfaces as "Net PnL". `fundingPnl` is signed (negative = paid
-    /// out), so it is added rather than subtracted.
+    /// journal surfaces as "Net PnL". `commissionTotal` is signed (negative =
+    /// cost, positive = rebate) and `fundingPnl` is signed (negative = paid
+    /// out), so both are added.
     public var netPnl: Double {
-        realizedPnl - commissionTotal + fundingPnl
+        realizedPnl + commissionTotal + fundingPnl
     }
 }
 

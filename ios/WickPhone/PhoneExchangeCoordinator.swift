@@ -43,20 +43,67 @@ final class PhoneExchangeCoordinator: ObservableObject {
     private(set) var openCountByDayKey: [String: Int] = [:]
 
     private let fileManager = FileManager.default
+    private let store: PhoneJournalStore
     private let cacheDirectory: URL
     private var cancellables = Set<AnyCancellable>()
 
-    private init() {
-        self.cloudSyncEnabled = UserDefaults.standard.bool(forKey: Self.cloudSyncEnabledKey)
+    // MARK: - Per-journal run identity (EX-01 port)
 
+    /// Identity frozen at request time; a result is committed only while its
+    /// token is still the latest for the journal AND the binding is unchanged.
+    /// Without this, an in-flight fetch that outlives an unbind/delete would
+    /// write an orphan snapshot (and, with cloud sync on, upload it).
+    private struct JobToken: Equatable {
+        let runID: UUID
+        let journalID: UUID
+        let bindingFingerprint: String
+        let generation: Int
+    }
+
+    /// journalID → runID of the single in-flight run (one run per journal).
+    private var runningJobs: [UUID: UUID] = [:]
+    private var runningTasks: [UUID: Task<Void, Never>] = [:]
+    /// runID → frozen token for the still-current run.
+    private var jobTokens: [UUID: JobToken] = [:]
+    /// Bumped on disconnect / binding change / journal deletion so an in-flight
+    /// result for the old binding is discarded.
+    private var generationByJournal: [UUID: Int] = [:]
+
+    private static func bindingFingerprint(
+        for binding: JournalExchangeBinding,
+        journalID: UUID
+    ) -> String {
+        "\(journalID.uuidString)|\(binding.venue.rawValue)|\(binding.accountLabel)"
+    }
+
+    private func bindingFingerprint(for journalID: UUID) -> String {
+        guard let binding = binding(for: journalID) else {
+            return "none|\(journalID.uuidString)"
+        }
+        return Self.bindingFingerprint(for: binding, journalID: journalID)
+    }
+
+    #if DEBUG
+    /// Test seam: substitute client construction so lifecycle tests run without
+    /// Keychain or network. Returning nil means "no usable client".
+    static var clientFactoryOverride: ((JournalExchangeBinding) -> (any ExchangeTradeClient)?)?
+    #endif
+
+    private static func realCacheDirectory() -> URL {
+        let fileManager = FileManager.default
         let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? fileManager.temporaryDirectory
-        let dir = support.appendingPathComponent("Wick/Trading", isDirectory: true)
-        self.cacheDirectory = dir
-        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        return support.appendingPathComponent("Wick/Trading", isDirectory: true)
+    }
+
+    init(store: PhoneJournalStore = .shared, cacheDirectory: URL = PhoneExchangeCoordinator.realCacheDirectory()) {
+        self.cloudSyncEnabled = UserDefaults.standard.bool(forKey: Self.cloudSyncEnabledKey)
+        self.store = store
+        self.cacheDirectory = cacheDirectory
+        try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
 
         // Listen for active journal changes
-        PhoneJournalStore.shared.$activeJournalID
+        store.$activeJournalID
             .dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] journalID in
@@ -64,7 +111,15 @@ final class PhoneExchangeCoordinator: ObservableObject {
             }
             .store(in: &cancellables)
 
-        loadSnapshot(for: PhoneJournalStore.shared.activeJournalID)
+        // A deleted journal must never be resurrected by a stale run.
+        store.$journals
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] journals in
+                self?.pruneDeletedJournals(journals)
+            }
+            .store(in: &cancellables)
+
+        loadSnapshot(for: store.activeJournalID)
     }
 
     // MARK: - Snapshot Loading & Caching
@@ -85,7 +140,7 @@ final class PhoneExchangeCoordinator: ObservableObject {
     }
 
     func snapshot(for journalID: UUID) -> TradingPositionSnapshot? {
-        if journalID == PhoneJournalStore.shared.activeJournalID {
+        if journalID == store.activeJournalID {
             return snapshot
         }
         let url = cacheDirectory.appendingPathComponent("\(journalID.uuidString).json")
@@ -117,7 +172,7 @@ final class PhoneExchangeCoordinator: ObservableObject {
         if let data = try? JSONEncoder().encode(newSnapshot) {
             try? data.write(to: url, options: .atomic)
         }
-        if journalID == PhoneJournalStore.shared.activeJournalID {
+        if journalID == store.activeJournalID {
             snapshot = newSnapshot
         }
     }
@@ -170,7 +225,7 @@ final class PhoneExchangeCoordinator: ObservableObject {
     }
 
     func binding(for journalID: UUID) -> JournalExchangeBinding? {
-        PhoneJournalStore.shared.journals.first(where: { $0.id == journalID })?.exchangeBinding
+        store.journals.first(where: { $0.id == journalID })?.exchangeBinding
     }
 
     func isSyncing(for journalID: UUID) -> Bool {
@@ -184,57 +239,128 @@ final class PhoneExchangeCoordinator: ObservableObject {
     // MARK: - Fetch & Sync
 
     func syncNow(journalID: UUID? = nil) {
-        let targetID = journalID ?? PhoneJournalStore.shared.activeJournalID
+        let targetID = journalID ?? store.activeJournalID
         guard let targetID,
-              let journal = PhoneJournalStore.shared.journals.first(where: { $0.id == targetID }),
+              let journal = store.journals.first(where: { $0.id == targetID }),
               let binding = journal.exchangeBinding
         else { return }
 
-        guard !syncingJournalIDs.contains(targetID) else { return }
+        guard runningJobs[targetID] == nil else { return }
+        let token = JobToken(
+            runID: UUID(),
+            journalID: targetID,
+            bindingFingerprint: Self.bindingFingerprint(for: binding, journalID: targetID),
+            generation: generationByJournal[targetID, default: 0]
+        )
+        runningJobs[targetID] = token.runID
+        jobTokens[token.runID] = token
         syncingJournalIDs.insert(targetID)
         isSyncing = !syncingJournalIDs.isEmpty
         lastError = nil
         errorsByJournal.removeValue(forKey: targetID)
 
-        Task {
-            do {
-                let client = try makeClient(for: binding, journalID: targetID)
-                let entries = (targetID == PhoneJournalStore.shared.activeJournalID)
-                    ? PhoneJournalStore.shared.entries
-                    : []
-                let earliestDay = entries.map(\.date).min() ?? Date()
-                let windowStart = Calendar.current.startOfDay(for: earliestDay)
-                let windowEnd = Date()
+        let task = Task { [weak self] in
+            _ = await self?.fetchAndCommit(token: token, binding: binding)
+        }
+        runningTasks[token.runID] = task
+    }
 
-                let fills = try await client.fetchFills(from: windowStart, to: windowEnd)
-                let funding = (try? await client.fetchFunding(from: windowStart, to: windowEnd)) ?? []
-                let positions = PositionAggregator.aggregate(fills: fills)
+    /// Fetches fills/funding for a frozen run identity and commits the result
+    /// only while the token is still current (EX-01). A stale result — an
+    /// in-flight fetch after unbind/delete/rebind — is discarded entirely.
+    private func fetchAndCommit(token: JobToken, binding: JournalExchangeBinding) async {
+        let targetID = token.journalID
+        do {
+            let client = try makeClient(for: binding, journalID: targetID)
+            let entries = (targetID == store.activeJournalID)
+                ? store.entries
+                : []
+            let earliestDay = entries.map(\.date).min() ?? Date()
+            let windowStart = Calendar.current.startOfDay(for: earliestDay)
+            let windowEnd = Date()
 
-                let newSnapshot = TradingPositionSnapshot(
-                    fetchedAt: Date(),
-                    windowStart: windowStart,
-                    positions: positions,
-                    fills: fills,
-                    funding: funding,
-                    fundingBackfilled: false,
-                    sourceVenue: binding.venue.rawValue,
-                    sourceAccountLabel: binding.accountLabel
-                )
+            let fills = try await client.fetchFills(from: windowStart, to: windowEnd)
+            let funding = (try? await client.fetchFunding(from: windowStart, to: windowEnd)) ?? []
+            let positions = PositionAggregator.aggregate(fills: fills)
 
-                saveSnapshot(newSnapshot, for: targetID)
-                syncingJournalIDs.remove(targetID)
-                isSyncing = !syncingJournalIDs.isEmpty
-            } catch {
-                let msg = error.localizedDescription
-                errorsByJournal[targetID] = msg
-                lastError = msg
-                syncingJournalIDs.remove(targetID)
-                isSyncing = !syncingJournalIDs.isEmpty
+            let newSnapshot = TradingPositionSnapshot(
+                fetchedAt: Date(),
+                windowStart: windowStart,
+                positions: positions,
+                fills: fills,
+                funding: funding,
+                fundingBackfilled: false,
+                sourceVenue: binding.venue.rawValue,
+                sourceAccountLabel: binding.accountLabel
+            )
+
+            guard jobTokens[token.runID] == token,
+                  runningJobs[targetID] == token.runID,
+                  store.journals.contains(where: { $0.id == targetID }),
+                  bindingFingerprint(for: targetID) == token.bindingFingerprint,
+                  generationByJournal[targetID, default: 0] == token.generation,
+                  !Task.isCancelled
+            else {
+                finishSync(token: token, error: nil)
+                return
             }
+            saveSnapshot(newSnapshot, for: targetID)
+            finishSync(token: token, error: nil)
+        } catch {
+            finishSync(token: token, error: error.localizedDescription)
         }
     }
 
+    private func finishSync(token: JobToken, error: String?) {
+        defer {
+            // Only clear the per-journal mapping when this run is STILL the
+            // latest — an old cancelled task finishing after a newer run started
+            // must never wipe the newer run's identity.
+            if runningJobs[token.journalID] == token.runID {
+                runningJobs.removeValue(forKey: token.journalID)
+            }
+            runningTasks.removeValue(forKey: token.runID)
+            jobTokens.removeValue(forKey: token.runID)
+            syncingJournalIDs.remove(token.journalID)
+            isSyncing = !syncingJournalIDs.isEmpty
+        }
+        guard jobTokens[token.runID] == token,
+              runningJobs[token.journalID] == token.runID,
+              store.journals.contains(where: { $0.id == token.journalID }),
+              bindingFingerprint(for: token.journalID) == token.bindingFingerprint,
+              generationByJournal[token.journalID, default: 0] == token.generation
+        else {
+            return
+        }
+        if let error {
+            errorsByJournal[token.journalID] = error
+            lastError = error
+        }
+    }
+
+    /// Cancels the in-flight run for a journal and bumps its generation, so a
+    /// stale result can never be committed after a disconnect, a binding
+    /// change, or a journal deletion.
+    func cancelTasks(for journalID: UUID) {
+        guard let runID = runningJobs[journalID] else { return }
+        runningTasks[runID]?.cancel()
+        runningTasks.removeValue(forKey: runID)
+        jobTokens.removeValue(forKey: runID)
+        runningJobs.removeValue(forKey: journalID)
+        generationByJournal[journalID, default: 0] += 1
+        syncingJournalIDs.remove(journalID)
+        isSyncing = !syncingJournalIDs.isEmpty
+    }
+
     private func makeClient(for binding: JournalExchangeBinding, journalID: UUID) throws -> any ExchangeTradeClient {
+        #if DEBUG
+        if let override = Self.clientFactoryOverride {
+            guard let client = override(binding) else {
+                throw ExchangeClientError.invalidCredentials("No client factory override")
+            }
+            return client
+        }
+        #endif
         switch binding.venue {
         case .hyperliquid:
             return HyperliquidInfoClient(user: binding.accountLabel)
@@ -258,19 +384,32 @@ final class PhoneExchangeCoordinator: ObservableObject {
     // MARK: - Bindings & Secrets
 
     func setBinding(_ binding: JournalExchangeBinding, secrets: ExchangeSecretBlob?, for journalID: UUID) {
+        // Saving a new binding invalidates any in-flight run using the old one,
+        // so its result can never be committed after the change.
+        cancelTasks(for: journalID)
         if let secrets {
             saveSecret(secrets, for: journalID)
         }
-        PhoneJournalStore.shared.setExchangeBinding(binding, for: journalID)
+        store.setExchangeBinding(binding, for: journalID)
         syncNow(journalID: journalID)
     }
 
     func removeBinding(for journalID: UUID) {
+        cancelTasks(for: journalID)
         deleteSecret(for: journalID)
-        PhoneJournalStore.shared.setExchangeBinding(nil, for: journalID)
+        store.setExchangeBinding(nil, for: journalID)
         removeCloudSnapshot(for: journalID)
-        if journalID == PhoneJournalStore.shared.activeJournalID {
+        if journalID == store.activeJournalID {
             snapshot = nil
+        }
+    }
+
+    /// Cancels every in-flight run whose journal left the catalog, even if it
+    /// never produced a cache file (first sync deleted mid-request).
+    func pruneDeletedJournals(_ journals: [JournalInfo]) {
+        let live = Set(journals.map(\.id))
+        for id in runningJobs.keys where !live.contains(id) {
+            cancelTasks(for: id)
         }
     }
 
@@ -335,7 +474,7 @@ final class PhoneExchangeCoordinator: ObservableObject {
     func removeCloudSnapshot(for journalID: UUID) {
         let url = cacheDirectory.appendingPathComponent("\(journalID.uuidString).json")
         try? fileManager.removeItem(at: url)
-        if journalID == PhoneJournalStore.shared.activeJournalID {
+        if journalID == store.activeJournalID {
             snapshot = nil
         }
     }

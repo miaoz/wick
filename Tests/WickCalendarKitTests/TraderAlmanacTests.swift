@@ -25,6 +25,32 @@ final class TraderAlmanacTests: XCTestCase {
         XCTAssertNotNil(entry1.sha)
     }
 
+    func testSeedIsStableIntegerAcrossProcesses() {
+        // 2026-08-25 (Tuesday) with no events: seed = 2026*10000 + 8*100 + 25
+        // = 20260825, which % generalPool.count(31) == 0 → generalPool[0].
+        // Lock the exact baseline so a seed change (e.g. Hasher's per-process
+        // salt, which made every launch pick a different entry) breaks here.
+        let date = calendar.date(from: DateComponents(year: 2026, month: 8, day: 25))!
+        let entry = TraderAlmanac.entry(for: date)
+        XCTAssertEqual(entry.seal, "摸鱼")
+        XCTAssertEqual(entry.yi, "喝冰美式 · 假装看盘")
+        XCTAssertEqual(entry.category, .humor)
+    }
+
+    func testFridaySeedGateRouting() {
+        // 2026-08-21 is a Friday and seed % 3 == 0 → routes to fridayEntries[1].
+        let gated = calendar.date(from: DateComponents(year: 2026, month: 8, day: 21))!
+        let gatedEntry = TraderAlmanac.entry(for: gated)
+        XCTAssertEqual(gatedEntry.seal, "顺风", "a Friday whose seed % 3 == 0 must use the Friday pool")
+        XCTAssertEqual(gatedEntry.yi, "见好就收 · 犒劳自己")
+
+        // 2026-08-14 is a Friday and seed % 3 == 2 → falls through to the general pool.
+        let ungated = calendar.date(from: DateComponents(year: 2026, month: 8, day: 14))!
+        let ungatedEntry = TraderAlmanac.entry(for: ungated)
+        XCTAssertEqual(ungatedEntry.seal, "取舍", "a Friday whose seed % 3 != 0 must NOT use the Friday pool")
+        XCTAssertEqual(ungatedEntry.category, .discipline)
+    }
+
     func testWeekendRouting() {
         // 2026-08-23 is Sunday
         let sunday = calendar.date(from: DateComponents(year: 2026, month: 8, day: 23))!

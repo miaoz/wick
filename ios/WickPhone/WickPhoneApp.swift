@@ -74,6 +74,20 @@ struct WickPhoneApp: App {
         .onChange(of: scenePhase) { newPhase in
             switch newPhase {
             case .background:
+                // IO-02: wrap the flush in a background task so the system does
+                // not suspend us mid-write. The atomic write keeps the store
+                // recoverable next launch even if the task expires early.
+                var taskID: UIBackgroundTaskIdentifier = .invalid
+                taskID = UIApplication.shared.beginBackgroundTask(withName: "WickPendingFlush") {
+                    if taskID != .invalid {
+                        UIApplication.shared.endBackgroundTask(taskID)
+                    }
+                }
+                defer {
+                    if taskID != .invalid {
+                        UIApplication.shared.endBackgroundTask(taskID)
+                    }
+                }
                 store.flushPendingWrites()
             case .active:
                 sync.engine.syncNow()

@@ -756,13 +756,17 @@ struct SettingsContentView: View {
         panel.nameFieldStringValue = "Wick-Journal-\(AppInfo.shortVersion).zip"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try journalStore.exportArchive(to: url)
-            dataStatusText = L10n.string(.journalExportSuccess, language: language)
-        } catch {
-            dataStatusText = L10n.string(.journalExportFailed, language: language)
-                + ": "
-                + error.localizedDescription
+        // UI-06: the archive build (encode + copy + ditto) runs off the main
+        // thread; only the status text is set here after it completes.
+        Task {
+            do {
+                try await journalStore.exportArchive(to: url)
+                dataStatusText = L10n.string(.journalExportSuccess, language: language)
+            } catch {
+                dataStatusText = L10n.string(.journalExportFailed, language: language)
+                    + ": "
+                    + error.localizedDescription
+            }
         }
     }
 
@@ -772,13 +776,16 @@ struct SettingsContentView: View {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try journalStore.importArchive(from: url)
-            dataStatusText = L10n.string(.journalImportSuccess, language: language)
-        } catch {
-            dataStatusText = L10n.string(.journalImportFailed, language: language)
-                + ": "
-                + error.localizedDescription
+        // UI-06: the unzip + validation run off the main thread.
+        Task {
+            do {
+                try await journalStore.importArchive(from: url)
+                dataStatusText = L10n.string(.journalImportSuccess, language: language)
+            } catch {
+                dataStatusText = L10n.string(.journalImportFailed, language: language)
+                    + ": "
+                    + error.localizedDescription
+            }
         }
     }
 
@@ -822,8 +829,10 @@ struct SettingsContentView: View {
             Text(L10n.string(.syncStatusNeedsAuth, language: language))
                 .font(AppFont.preset(.caption))
                 .foregroundStyle(theme.secondaryText)
-        case .error(let message):
-            let display = message.contains("remote format")
+        case .error(let kind, let message):
+            // SY-04: localized copy is keyed on the typed kind, never on a raw
+            // English substring match of the detail.
+            let display = kind == .remoteFormatTooNew
                 ? L10n.string(.syncRemoteTooNew, language: language)
                 : message
             CopyableErrorNotice(message: display, language: language, rawMessage: message)

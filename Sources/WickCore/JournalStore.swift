@@ -85,10 +85,13 @@ final class JournalStore: ObservableObject {
     #if DEBUG
     /// Test seam: force the next catalog persist to fail, deterministically
     /// exercising the AC-P1-04 rollback path.
-    static var failCatalogPersistOverride = false
+    nonisolated(unsafe) static var failCatalogPersistOverride = false
     /// Test seam: force the final export replace to fail after the temp
     /// archive was built, exercising the AC-P1-07 atomic-replace path.
-    static var failExportReplaceOverride = false
+    nonisolated(unsafe) static var failExportReplaceOverride = false
+    /// Test seam: fail the Nth image copy during import (1-based), exercising
+    /// the DS-02 quarantine-rollback path.
+    nonisolated(unsafe) static var failImageCopyAtIndex: Int?
     #endif
     /// Last explicit-recovery failure (start fresh / import), so UI callers
     /// never silently drop a recovery error.
@@ -1183,35 +1186,57 @@ final class JournalStore: ObservableObject {
     /// first, the frozen in-memory snapshot is encoded (never the possibly
     /// stale main file), and the destination is only replaced after the new
     /// archive is fully built.
-    func exportArchive(to destinationURL: URL) throws {
-        let tempRoot = fileManager.temporaryDirectory
-            .appendingPathComponent("WickExport-\(UUID().uuidString)", isDirectory: true)
-        defer { try? fileManager.removeItem(at: tempRoot) }
+    func exportArchive(to destinationURL: URL) async throws {
+        // A load-failure read-only store has already emptied `entries`; encoding
+        // that empty snapshot would atomically overwrite a previous good export.
+        // "No writes while read-only" must cover the export artifact too.
+        guard !isReadOnlyDueToLoadFailure else {
+            throw JournalStoreError.exportFailed(
+                "The journal is under read-only protection after a load failure; export is disabled."
+            )
+        }
 
         // 1. Unified flush protocol: editors commit drafts, then the store's
         // writer drains so the in-memory snapshot below is the final state.
-        if !isReadOnlyDueToLoadFailure {
-            flushActiveJournalSession()
-        }
+        flushActiveJournalSession()
 
-        // 2. Freeze identity + content; a concurrent switch (impossible while
-        // the synchronous zip runs, but kept explicit) must not mix journals.
+        // 2. Freeze identity + content on the main actor, then hand the heavy
+        // encode/copy/ditto/replace to a background task (UI-06) so a large
+        // journal does not freeze the menu-bar panel.
         let snapshot = JournalSnapshot(version: JournalSnapshot.currentVersion, entries: entries)
         let frozenImagesDirectory = imagesDirectory
+        try await Self.performExport(
+            snapshot: snapshot,
+            imagesDirectory: frozenImagesDirectory,
+            destinationURL: destinationURL
+        )
+    }
 
+    /// Builds the export archive off the main thread: encode the frozen
+    /// snapshot, copy images, run ditto, and atomically replace the target.
+    private nonisolated static func performExport(
+        snapshot: JournalSnapshot,
+        imagesDirectory: URL,
+        destinationURL: URL
+    ) async throws {
+        let fileManager = FileManager.default
+        let tempRoot = fileManager.temporaryDirectory
+            .appendingPathComponent("WickExport-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: tempRoot) }
         try fileManager.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+
         let payloadDir = tempRoot.appendingPathComponent("Wick-Journal", isDirectory: true)
         try fileManager.createDirectory(at: payloadDir, withIntermediateDirectories: true)
 
         // 3. Encode the frozen in-memory snapshot into the temp payload.
-        let data = try encoder.encode(snapshot)
+        let data = try JournalSyncEncoding.encoder.encode(snapshot)
         try data.write(to: payloadDir.appendingPathComponent("journal.json"), options: .atomic)
 
         let imagesDest = payloadDir.appendingPathComponent("images", isDirectory: true)
         try fileManager.createDirectory(at: imagesDest, withIntermediateDirectories: true)
-        if fileManager.fileExists(atPath: frozenImagesDirectory.path) {
+        if fileManager.fileExists(atPath: imagesDirectory.path) {
             let imageFiles = try fileManager.contentsOfDirectory(
-                at: frozenImagesDirectory,
+                at: imagesDirectory,
                 includingPropertiesForKeys: nil
             )
             for file in imageFiles where !file.hasDirectoryPath {
@@ -1230,12 +1255,12 @@ final class JournalStore: ObservableObject {
         let tempZip = destDir.appendingPathComponent(".Wick-export-\(UUID().uuidString).tmp", isDirectory: false)
         defer { try? fileManager.removeItem(at: tempZip) }
         try runZip(sourceDirectory: payloadDir, destinationZip: tempZip)
-        try replaceDestination(destinationURL, with: tempZip)
+        try replaceDestination(destinationURL, with: tempZip, fileManager: fileManager)
     }
 
     /// Atomic swap of the freshly built archive over the target. Wrapped so a
     /// deterministic failure can be injected for tests.
-    private func replaceDestination(_ destinationURL: URL, with tempZip: URL) throws {
+    private nonisolated static func replaceDestination(_ destinationURL: URL, with tempZip: URL, fileManager: FileManager) throws {
         #if DEBUG
         if Self.failExportReplaceOverride {
             throw CocoaError(.fileWriteUnknown)
@@ -1250,38 +1275,19 @@ final class JournalStore: ObservableObject {
     ///
     /// The input is fully validated BEFORE any read-only flag or file is
     /// touched; an invalid archive leaves the store and on-disk files exactly
-    /// as they were (AC-P1-01).
-    func importArchive(from sourceURL: URL) throws {
+    /// as they were (AC-P1-01). The unzip + decode run off the main thread so
+    /// a large archive does not freeze the menu-bar panel (UI-06).
+    func importArchive(from sourceURL: URL) async throws {
         // 1. Validate the input completely in a temp area — no state change.
         let tempRoot = fileManager.temporaryDirectory
             .appendingPathComponent("WickImport-\(UUID().uuidString)", isDirectory: true)
         defer { try? fileManager.removeItem(at: tempRoot) }
         try fileManager.createDirectory(at: tempRoot, withIntermediateDirectories: true)
 
-        let jsonURL: URL
-        let importedImages: URL?
-
-        if sourceURL.pathExtension.lowercased() == "json" {
-            jsonURL = sourceURL
-            importedImages = nil
-        } else {
-            try runUnzip(zipURL: sourceURL, destinationDirectory: tempRoot)
-            if let found = findJournalJSON(under: tempRoot) {
-                jsonURL = found
-            } else {
-                throw JournalStoreError.importMissingJournalJSON
-            }
-            let siblingImages = jsonURL
-                .deletingLastPathComponent()
-                .appendingPathComponent("images", isDirectory: true)
-            importedImages = fileManager.fileExists(atPath: siblingImages.path) ? siblingImages : nil
-        }
-
-        let data = try Data(contentsOf: jsonURL)
-        let snapshot = try decoder.decode(JournalSnapshot.self, from: data)
-        guard snapshot.version <= JournalSnapshot.currentVersion else {
-            throw JournalStoreError.unsupportedSnapshotVersion(snapshot.version)
-        }
+        let (snapshot, importedImages) = try await Self.prepareImport(
+            from: sourceURL,
+            tempRoot: tempRoot
+        )
 
         // 2. If the LIBRARY is read-only, recover a real catalog first; only a
         //    durable catalog write lets the import proceed.
@@ -1309,21 +1315,59 @@ final class JournalStore: ObservableObject {
             lastRollingBackupAt = Date()
         }
 
-        // Replace images directory.
+        // Replace images directory transactionally (DS-02): move the existing
+        // images aside into a same-volume quarantine, copy the imported images
+        // into a fresh directory, and only delete the quarantine once every
+        // copy succeeded. If a copy fails, the quarantine is moved back, so an
+        // interrupted import never loses the pre-existing images.
+        var imagesQuarantine: URL?
+        var imagesMovedAside = false
         if fileManager.fileExists(atPath: imagesDirectory.path) {
-            try fileManager.removeItem(at: imagesDirectory)
-        }
-        try fileManager.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
-
-        if let importedImages {
-            let files = try fileManager.contentsOfDirectory(
-                at: importedImages,
-                includingPropertiesForKeys: nil
+            let quarantine = journalDirectory.appendingPathComponent(
+                ".WickImagesQuarantine-\(UUID().uuidString)", isDirectory: true
             )
-            for file in files where !file.hasDirectoryPath {
-                let dest = imagesDirectory.appendingPathComponent(file.lastPathComponent)
-                try fileManager.copyItem(at: file, to: dest)
+            do {
+                try fileManager.moveItem(at: imagesDirectory, to: quarantine)
+                imagesQuarantine = quarantine
+                imagesMovedAside = true
+            } catch {
+                // Can't move the old images aside; keep them and merge the
+                // imported files instead of deleting anything.
+                imagesQuarantine = nil
             }
+        }
+
+        do {
+            try fileManager.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
+            if let importedImages {
+                let files = try fileManager.contentsOfDirectory(
+                    at: importedImages,
+                    includingPropertiesForKeys: nil
+                )
+                var copied = 0
+                for file in files where !file.hasDirectoryPath {
+                    #if DEBUG
+                    if copied + 1 == Self.failImageCopyAtIndex {
+                        throw CocoaError(.fileWriteUnknown)
+                    }
+                    #endif
+                    let dest = imagesDirectory.appendingPathComponent(file.lastPathComponent)
+                    try fileManager.copyItem(at: file, to: dest)
+                    copied += 1
+                }
+            }
+        } catch {
+            if imagesMovedAside {
+                try? fileManager.removeItem(at: imagesDirectory)
+                if let imagesQuarantine {
+                    try? fileManager.moveItem(at: imagesQuarantine, to: imagesDirectory)
+                }
+            }
+            throw error
+        }
+
+        if let imagesQuarantine {
+            try? fileManager.removeItem(at: imagesQuarantine)
         }
 
         entries = snapshot.entries.sorted { $0.date > $1.date }
@@ -1335,6 +1379,40 @@ final class JournalStore: ObservableObject {
         JournalThumbnailCache.shared.removeAll()
         persist()
         touchActiveJournalMetadata()
+    }
+
+    /// Unzips (if needed), decodes and validates the import payload on a
+    /// background thread. Throws before any store state is touched (AC-P1-01).
+    private nonisolated static func prepareImport(
+        from sourceURL: URL,
+        tempRoot: URL
+    ) async throws -> (snapshot: JournalSnapshot, importedImages: URL?) {
+        let fileManager = FileManager.default
+        let jsonURL: URL
+        let importedImages: URL?
+
+        if sourceURL.pathExtension.lowercased() == "json" {
+            jsonURL = sourceURL
+            importedImages = nil
+        } else {
+            try runUnzip(zipURL: sourceURL, destinationDirectory: tempRoot)
+            if let found = findJournalJSON(under: tempRoot) {
+                jsonURL = found
+            } else {
+                throw JournalStoreError.importMissingJournalJSON
+            }
+            let siblingImages = jsonURL
+                .deletingLastPathComponent()
+                .appendingPathComponent("images", isDirectory: true)
+            importedImages = fileManager.fileExists(atPath: siblingImages.path) ? siblingImages : nil
+        }
+
+        let data = try Data(contentsOf: jsonURL)
+        let snapshot = try JournalSyncEncoding.decoder.decode(JournalSnapshot.self, from: data)
+        guard snapshot.version <= JournalSnapshot.currentVersion else {
+            throw JournalStoreError.unsupportedSnapshotVersion(snapshot.version)
+        }
+        return (snapshot, importedImages)
     }
 
     /// Forces a synchronous write of the in-memory snapshot (used on quit).
@@ -2104,8 +2182,8 @@ final class JournalStore: ObservableObject {
         return rep.representation(using: .png, properties: [:])
     }
 
-    private func findJournalJSON(under directory: URL) -> URL? {
-        let fm = fileManager
+    private nonisolated static func findJournalJSON(under directory: URL) -> URL? {
+        let fm = FileManager.default
         if let enumerator = fm.enumerator(
             at: directory,
             includingPropertiesForKeys: nil,
@@ -2120,7 +2198,7 @@ final class JournalStore: ObservableObject {
         return nil
     }
 
-    private func runZip(sourceDirectory: URL, destinationZip: URL) throws {
+    private nonisolated static func runZip(sourceDirectory: URL, destinationZip: URL) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
         process.arguments = ["-c", "-k", "--sequesterRsrc", "--keepParent", sourceDirectory.path, destinationZip.path]
@@ -2134,7 +2212,7 @@ final class JournalStore: ObservableObject {
         }
     }
 
-    private func runUnzip(zipURL: URL, destinationDirectory: URL) throws {
+    private nonisolated static func runUnzip(zipURL: URL, destinationDirectory: URL) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
         process.arguments = ["-x", "-k", zipURL.path, destinationDirectory.path]

@@ -138,4 +138,46 @@ final class PhoneJournalStoreTests: XCTestCase {
         XCTAssertEqual(store.entryCount(for: firstID), 1)
         XCTAssertEqual(store.entryCount(for: second.id), 2)
     }
+
+    // IO-05: creating an entry for a historical day must target THAT day and
+    // dedupe, so tapping an empty heatmap day never opens today.
+    @MainActor
+    func testCreateEntryOnHistoricalDayTargetsThatDayAndDedupes() throws {
+        let store = PhoneJournalStore(rootDirectory: root)
+        let yesterday = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -1, to: Date()))
+
+        let created = store.createEntry(on: yesterday)
+        XCTAssertTrue(Calendar.current.isDate(created.date, inSameDayAs: yesterday))
+
+        let again = store.createEntry(on: yesterday)
+        XCTAssertEqual(again.id, created.id, "creating twice on the same day must not duplicate")
+        XCTAssertEqual(store.entries.count, 1)
+    }
+
+    // IO-01: the .bak sidecar must still rotate through the background writer
+    // after the rotation was moved off the main thread.
+    @MainActor
+    func testBackupSidecarRotatesPreviousSnapshotOnWriter() throws {
+        let store = PhoneJournalStore(rootDirectory: root)
+        var first = store.openOrCreateToday()
+        first.title = "first"
+        store.updateEntry(first)
+        XCTAssertTrue(store.flushPendingWrites())
+
+        var second = store.entries[0]
+        second.title = "second"
+        store.updateEntry(second)
+        XCTAssertTrue(store.flushPendingWrites())
+
+        let backup = try JournalSyncEncoding.decoder.decode(
+            JournalSnapshot.self,
+            from: Data(contentsOf: store.backupURL)
+        )
+        XCTAssertEqual(backup.entries.first?.title, "first", "the .bak must hold the pre-overwrite primary")
+        let primary = try JournalSyncEncoding.decoder.decode(
+            JournalSnapshot.self,
+            from: Data(contentsOf: store.databaseURL)
+        )
+        XCTAssertEqual(primary.entries.first?.title, "second")
+    }
 }

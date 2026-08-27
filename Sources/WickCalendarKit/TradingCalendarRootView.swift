@@ -118,6 +118,18 @@ public struct TradingCalendarRootView: View {
         .onChange(of: sortOrder) { _ in
             refreshPageTexture()
         }
+        .onChange(of: store.isLoading(for: currentDate)) { _ in
+            // A fetch completing with an EMPTY result (quiet day) or an error
+            // leaves events/earnings unchanged, so without this the top page
+            // texture would stay stuck on the isLoading=true frame forever.
+            refreshPageTexture()
+        }
+        .onChange(of: store.errorText(for: currentDate)) { _ in
+            refreshPageTexture()
+        }
+        .onChange(of: store.earningsErrorText(for: currentDate)) { _ in
+            refreshPageTexture()
+        }
         .onChange(of: envPnlConvention) { newConvention in
             TradingCalendarTheme.pnlConvention = newConvention
             refreshPageTexture()

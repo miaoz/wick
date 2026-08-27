@@ -259,7 +259,15 @@ enum PhoneAuthSession {
             session.presentationContextProvider = AnchorProvider.shared
             session.prefersEphemeralWebBrowserSession = false
             currentSession = session
-            session.start()
+            // IO-03: start() returns false when the session cannot be presented
+            // (e.g. no window); without this the continuation below would never
+            // resume and the "connecting" state would hang forever.
+            guard session.start() else {
+                continuation.resume(
+                    throwing: SyncBackendError.server(status: 0, message: "auth session could not be presented")
+                )
+                return
+            }
         }
     }
 

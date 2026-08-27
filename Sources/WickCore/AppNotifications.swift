@@ -10,4 +10,7 @@ extension Notification.Name {
     /// Posted when the active journal changes (switch / create / delete / rename).
     static let wickActiveJournalDidChange = Notification.Name("wick.activeJournalDidChange")
     static let wickTradingSnapshotDidChange = Notification.Name("wick.tradingSnapshotDidChange")
+
+    /// Posted by ⌘F so the titlebar accessory can focus its search field (UI-03).
+    static let wickJournalFocusSearch = Notification.Name("wick.journalFocusSearch")
 }

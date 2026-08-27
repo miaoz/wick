@@ -21,6 +21,16 @@ struct DayListView: View {
         case rename
     }
 
+    /// Reverses a `JournalDayKey` ("yyyy-MM-dd", current timezone) back to a
+    /// date so an empty heatmap day can be opened on the exact tapped day.
+    private static func date(fromDayKey dayKey: String) -> Date {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: dayKey) ?? Date()
+    }
+
     @State private var nameAlertMode: NameAlert = .new
     @State private var showNameAlert = false
     @State private var nameDraft = ""
@@ -86,7 +96,8 @@ struct DayListView: View {
                                 }) {
                                     navigationPath.append(entry.id)
                                 } else {
-                                    let newEntry = store.openOrCreateToday()
+                                    // IO-05: create on the SELECTED day, not today.
+                                    let newEntry = store.createEntry(on: Self.date(fromDayKey: dayKey))
                                     navigationPath.append(newEntry.id)
                                 }
                             }

@@ -42,6 +42,10 @@ final class FakeSyncBackend: JournalSyncBackend {
     var authorized = true
     var uploadCount = 0
     var downloadCount = 0
+    /// When set, the next upload to an `entries/` path fails (the merge's entry
+    /// push), letting the conflict archive upload succeed so the engine's
+    /// baseline does not advance — exercises the SY-03 retry path.
+    var failNextEntryUpload: SyncBackendError?
     /// When set, incremental listings throw this error once.
     var failNextIncremental: SyncBackendError?
     /// Fires once at the start of `listChanges`, so a test can switch the
@@ -99,6 +103,10 @@ final class FakeSyncBackend: JournalSyncBackend {
     @discardableResult
     func upload(path: String, data: Data, ifRev: String?) async throws -> String {
         uploadCount += 1
+        if let error = failNextEntryUpload, path.lowercased().contains("/entries/") {
+            failNextEntryUpload = nil
+            throw error
+        }
         let key = path.lowercased()
         if let existing = files[key] {
             guard let ifRev, ifRev == existing.rev else {
@@ -563,16 +571,21 @@ final class JournalSyncEngineTests: XCTestCase {
         // B blocks the SECOND day's download, so day1's mutation is already
         // enqueued when day2's download is in flight.
         let b = makeSource()
-        backend.downloadBlocker = { $0.hasSuffix("days/2026-08-02.json") }
+        backend.downloadBlocker = { $0 == self.dayPath("2026-08-02") }
         let engineB = makeEngine(source: b, stateDir: "b", device: "B")
         let cycleTask = Task { await engineB.performSyncCycle() }
 
         for _ in 0..<300 {
-            if backend.blockedDownloadPaths.contains(where: { $0.hasSuffix("days/2026-08-02.json") }) {
+            if backend.blockedDownloadPaths.contains(where: { $0 == self.dayPath("2026-08-02") }) {
                 break
             }
             try? await Task.sleep(nanoseconds: 10_000_000)
         }
+
+        XCTAssertTrue(
+            backend.blockedDownloadPaths.contains(self.dayPath("2026-08-02")),
+            "the download blocker must actually intercept day2, or this race never happens"
+        )
 
         // The user edits day1 while day2 is still downloading.
         b.days["2026-08-01"] = entry(dayKey: "2026-08-01", body: "local edit", updatedAt: t0.addingTimeInterval(500))
@@ -1057,6 +1070,78 @@ final class JournalSyncEngineTests: XCTestCase {
         XCTAssertEqual(try decodeRemoteDay("2026-08-01").items.first?.body, "B2")
     }
 
+    // SY-03: the conflict record is written before the merge push can be
+    // confirmed. When that push fails (network blip), the next cycle retries
+    // the merge and must NOT append a duplicate record.
+    func testConflictRecordIsNotDuplicatedWhenMergePushFails() async throws {
+        let itemID = UUID()
+        let a = makeSource()
+        let b = makeSource()
+        let engineA = makeEngine(source: a, stateDir: "a", device: "A")
+        let engineB = makeEngine(source: b, stateDir: "b", device: "B")
+
+        a.days["2026-08-01"] = JournalEntry(
+            id: entryID("2026-08-01"),
+            date: date("2026-08-01"),
+            items: [JournalItem(id: itemID, body: "v1")],
+            createdAt: t0,
+            updatedAt: t0
+        )
+        b.days["2026-08-01"] = a.days["2026-08-01"]!
+        await engineA.performSyncCycle() // push v1
+        await engineB.performSyncCycle()
+
+        // Divergence on the SAME item UUID.
+        a.days["2026-08-01"]!.items[0].body = "A1"
+        a.days["2026-08-01"]!.updatedAt = t0.addingTimeInterval(100)
+        b.days["2026-08-01"]!.items[0].body = "B1"
+        b.days["2026-08-01"]!.updatedAt = t0.addingTimeInterval(200)
+        await engineA.performSyncCycle() // push A1
+
+        // B merges: the conflict archive upload succeeds, the merged entry
+        // push fails, so B's baseline does not advance.
+        backend.failNextEntryUpload = .transport(message: "blip")
+        await engineB.performSyncCycle()
+        XCTAssertEqual(engineB.pendingConflicts.count, 1)
+
+        // Next cycle retries the merge; the record must not duplicate.
+        await engineB.performSyncCycle()
+        XCTAssertEqual(engineB.pendingConflicts.count, 1, "a retried merge must not duplicate its conflict record")
+    }
+
+    // SY-02: when the remote holds BOTH a stale settlement marker and a fresh
+    // one for the day, the fresh one must win regardless of iteration order —
+    // a stale marker must never permanently shadow the settlement.
+    func testStaleSettlementMarkerDoesNotShadowFreshMarker() async throws {
+        let f = try await makeDualConflictFixture()
+        let entryID = f.engineB.pendingConflicts.first!.entryID
+
+        // Seed a STALE settlement marker (bogus hash) for this day.
+        let staleMarker = JournalSettlementMarker(
+            entryID: entryID,
+            settledHash: "stale-hash",
+            deviceID: "ghost",
+            stamp: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        backend.seedFile(
+            JournalSyncLayout.settlementPath(for: journalID, entryID: entryID, stamp: staleMarker.stamp),
+            data: try JournalSyncEncoding.encoder.encode(staleMarker)
+        )
+
+        // A resolves keep-remote, which uploads a FRESH marker carrying the
+        // day's current remote hash.
+        for conflict in f.engineA.pendingConflicts {
+            f.engineA.resolveConflict(id: conflict.id, resolution: .remote)
+        }
+        await f.engineA.performSyncCycle()
+        XCTAssertTrue(f.engineA.pendingConflicts.isEmpty)
+
+        // B syncs with both markers present; the fresh one must clear its
+        // record (SY-02).
+        await f.engineB.performSyncCycle()
+        XCTAssertTrue(f.engineB.pendingConflicts.isEmpty, "a stale marker must not shadow the fresh settlement")
+    }
+
     /// The app's real usage model: one person operates one device at a time
     /// while the others stay online and idle (their local content equals their
     /// baseline, so they pull rather than re-merge). An idle peer must adopt the
@@ -1393,7 +1478,8 @@ final class JournalSyncEngineTests: XCTestCase {
 
         await engine.performSyncCycle()
 
-        if case .error(let message) = engine.status {
+        if case .error(let kind, let message) = engine.status {
+            XCTAssertEqual(kind, .remoteFormatTooNew)
             XCTAssertTrue(message.contains("v99"))
         } else {
             XCTFail("expected error status, got \(engine.status)")

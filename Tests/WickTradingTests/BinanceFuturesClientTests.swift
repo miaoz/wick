@@ -110,6 +110,40 @@ final class BinanceFuturesClientTests: XCTestCase {
         XCTAssertEqual(requestCount.value, 4, "server time + 3 pages (2 + 2 + 1)")
     }
 
+    func testPositiveBinanceCommissionIsNegatedOnIngestion() async throws {
+        // Binance reports commission as a POSITIVE cost. The app's unified
+        // convention is negative = paid (TR-03); if the fee were left positive
+        // it would be treated as a rebate and inflate net PnL by 2× the fee.
+        let client = BinanceFuturesClient(
+            apiKey: "key-1",
+            secret: "secret",
+            baseURL: URL(string: "https://fapi.example.com")!,
+            transport: { request in
+                if request.url!.path.hasSuffix("/time") {
+                    return (Self.serverTimePayload(0), Self.http(200))
+                }
+                let body = #"""
+                [{"id":1,"symbol":"BTCUSDT","side":"BUY","price":"100","qty":"1","time":1000000,"commission":"0.5","commissionAsset":"USDT","realizedPnl":"0"}]
+                """#
+                return (Data(body.utf8), Self.http(200))
+            },
+            now: { Date(timeIntervalSince1970: 2000) },
+            chunkInterval: 60,
+            pageLimit: 1000
+        )
+        let fills = try await client.fetchFills(
+            from: Date(timeIntervalSince1970: 1000),
+            to: Date(timeIntervalSince1970: 1010)
+        )
+        XCTAssertEqual(fills.count, 1)
+        XCTAssertEqual(
+            fills[0].commission,
+            -0.5,
+            accuracy: 1e-12,
+            "a positive Binance fee must be stored negative (cost)"
+        )
+    }
+
     func testFetchFillsSplitsChunks() async throws {
         let windowStart = Date(timeIntervalSince1970: 1000)
         let seenWindows = Box<[(Int64, Int64)]>([])
@@ -134,6 +168,46 @@ final class BinanceFuturesClientTests: XCTestCase {
 
         _ = try await client.fetchFills(from: windowStart, to: windowStart.addingTimeInterval(12))
         XCTAssertEqual(seenWindows.value.count, 3, "12s window / 5s chunks")
+    }
+
+    func testChunkBoundaryFillIsNotDuplicated() async throws {
+        // Binance's endTime filter is INCLUSIVE: a fill exactly at a chunk
+        // boundary would be returned by both the chunk that ends there and the
+        // one that starts there, duplicating it (TR-04). Chunk starts must
+        // advance by 1ms past the boundary.
+        let windowStart = Date(timeIntervalSince1970: 1000)
+        // 5s chunkInterval → first chunk covers [1000s, 1005s); the boundary
+        // between chunk 1 and chunk 2 is 1005s in ms.
+        let boundary = Int64(1_005_000)
+        let client = BinanceFuturesClient(
+            apiKey: "key-1",
+            secret: "secret",
+            baseURL: URL(string: "https://fapi.example.com")!,
+            transport: { request in
+                if request.url!.path.hasSuffix("/time") {
+                    return (Self.serverTimePayload(0), Self.http(200))
+                }
+                let queryItems = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
+                let start = Int64(queryItems.first { $0.name == "startTime" }!.value!)!
+                let end = Int64(queryItems.first { $0.name == "endTime" }!.value!)!
+                // A fill at the boundary is in range for any chunk whose
+                // inclusive [start, end] spans it.
+                if start <= boundary && boundary <= end {
+                    let row = #"{"id":1,"symbol":"BTCUSDT","side":"BUY","price":"100","qty":"1","time":\#(boundary),"isBuyer":true,"commission":"0","commissionAsset":"USDT","realizedPnl":"0"}"#
+                    return (Data("[\(row)]".utf8), Self.http(200))
+                }
+                return (Data("[]".utf8), Self.http(200))
+            },
+            now: { Date(timeIntervalSince1970: 2000) },
+            chunkInterval: 5,
+            pageLimit: 1000
+        )
+
+        let fills = try await client.fetchFills(
+            from: windowStart,
+            to: windowStart.addingTimeInterval(12)
+        )
+        XCTAssertEqual(fills.count, 1, "the boundary fill must be fetched by exactly one chunk")
     }
 
     func testServerTimeOffsetAppliedToSignedParams() async throws {

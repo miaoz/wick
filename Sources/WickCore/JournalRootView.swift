@@ -265,10 +265,10 @@ struct JournalRootView: View {
     }
 
     private func focusSearchField() {
-        // Best-effort: post a notification; the sidebar search field becomes first responder via window.
-        if let window = NSApp.keyWindow {
-            window.makeFirstResponder(window.contentView)
-        }
+        // UI-03: ⌘F must actually focus the top-bar search field. The search
+        // lives in the titlebar accessory (a separate hierarchy), so the
+        // journal window posts a notification the accessory listens for.
+        NotificationCenter.default.post(name: .wickJournalFocusSearch, object: nil)
     }
 
     private func cycleColumns() {
@@ -282,11 +282,14 @@ struct JournalRootView: View {
         panel.allowedContentTypes = [.zip, .json]
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try store.importArchive(from: url)
-            exportStatus = L10n.string(.journalImportSuccess, language: settings.language)
-        } catch {
-            exportStatus = L10n.string(.journalImportFailed, language: settings.language)
+        // UI-06: the unzip + validation run off the main thread.
+        Task {
+            do {
+                try await store.importArchive(from: url)
+                exportStatus = L10n.string(.journalImportSuccess, language: settings.language)
+            } catch {
+                exportStatus = L10n.string(.journalImportFailed, language: settings.language)
+            }
         }
     }
 

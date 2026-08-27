@@ -21,6 +21,19 @@ final class JournalStoreTests: XCTestCase {
         tempRoot = nil
     }
 
+    /// XCTest's XCTAssertThrowsError cannot take an async autoclosure; this is
+    /// the async equivalent used for the now-async export/import API.
+    private func assertThrowsAsync<T>(
+        _ body: () async throws -> T,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        do {
+            _ = try await body()
+            XCTFail("expected an error to be thrown", file: file, line: line)
+        } catch {}
+    }
+
     // MARK: - Multi-journal
 
     func testFreshInstallCreatesDefaultJournal() {
@@ -547,7 +560,7 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(reloaded2.journals.count, 1)
     }
 
-    func testImportAfterCorruptCatalogRecoversLibrary() throws {
+    func testImportAfterCorruptCatalogRecoversLibrary() async throws {
         try Data("{\"version\":99,\"activeJournalID\":".utf8)
             .write(to: catalogURL(), options: .atomic)
         let reloaded = JournalStore(rootDirectory: tempRoot)
@@ -560,7 +573,7 @@ final class JournalStoreTests: XCTestCase {
         let importURL = tempRoot.appendingPathComponent("import.json", isDirectory: false)
         try JournalSyncEncoding.encoder.encode(snapshot).write(to: importURL, options: .atomic)
 
-        try reloaded.importArchive(from: importURL)
+        try await reloaded.importArchive(from: importURL)
         XCTAssertFalse(reloaded.isCatalogReadOnly)
         XCTAssertEqual(reloaded.entries.first?.title, "imported")
         XCTAssertFalse(reloaded.databaseURL.path.contains("_pending"))
@@ -571,7 +584,7 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(reloaded2.entries.first?.title, "imported")
     }
 
-    func testImportInvalidKeepsCatalogReadOnlyAndOriginalBytes() throws {
+    func testImportInvalidKeepsCatalogReadOnlyAndOriginalBytes() async throws {
         let corrupt = Data("{\"version\":99,\"activeJournalID\":".utf8)
         try corrupt.write(to: catalogURL(), options: .atomic)
         let reloaded = JournalStore(rootDirectory: tempRoot)
@@ -580,9 +593,64 @@ final class JournalStoreTests: XCTestCase {
         let badURL = tempRoot.appendingPathComponent("bad.json", isDirectory: false)
         try Data("not json at all".utf8).write(to: badURL, options: .atomic)
 
-        XCTAssertThrowsError(try reloaded.importArchive(from: badURL))
+        await assertThrowsAsync { try await reloaded.importArchive(from: badURL) }
         XCTAssertTrue(reloaded.isCatalogReadOnly, "a failed import must keep the catalog read-only")
         XCTAssertEqual(try Data(contentsOf: catalogURL()), corrupt, "original catalog bytes unchanged")
+    }
+
+    // MARK: - DS-02 import image quarantine rollback
+
+    func testImportImageCopyFailureRollsBackOriginalImages() async throws {
+        // Give the active journal pre-existing images with known bytes.
+        let imagesDir = store.imagesDirectory
+        try FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
+        let old1 = imagesDir.appendingPathComponent("old1.png")
+        let old2 = imagesDir.appendingPathComponent("old2.png")
+        let old1Bytes = Data([0xAA, 0x01, 0x02, 0x03])
+        let old2Bytes = Data([0xBB, 0x04, 0x05, 0x06])
+        try old1Bytes.write(to: old1)
+        try old2Bytes.write(to: old2)
+
+        // Build an import payload whose images/ contains two files.
+        let payloadRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WickImportPayload-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: payloadRoot) }
+        let payloadDir = payloadRoot.appendingPathComponent("Wick-Journal", isDirectory: true)
+        try FileManager.default.createDirectory(at: payloadDir, withIntermediateDirectories: true)
+        let snapshot = JournalSnapshot(version: JournalSnapshot.currentVersion, entries: store.entries)
+        try JournalSyncEncoding.encoder.encode(snapshot)
+            .write(to: payloadDir.appendingPathComponent("journal.json"))
+        let payloadImages = payloadDir.appendingPathComponent("images", isDirectory: true)
+        try FileManager.default.createDirectory(at: payloadImages, withIntermediateDirectories: true)
+        try Data([0x11]).write(to: payloadImages.appendingPathComponent("new1.png"))
+        try Data([0x22]).write(to: payloadImages.appendingPathComponent("new2.png"))
+
+        let zipURL = tempRoot.appendingPathComponent("import.zip", isDirectory: false)
+        try dittoZip(source: payloadDir, destination: zipURL)
+
+        // The 2nd image copy fails mid-import.
+        JournalStore.failImageCopyAtIndex = 2
+        defer { JournalStore.failImageCopyAtIndex = nil }
+        await assertThrowsAsync { try await store.importArchive(from: zipURL) }
+
+        // Original images must be restored byte-for-byte; no partial new files.
+        XCTAssertEqual(try Data(contentsOf: old1), old1Bytes)
+        XCTAssertEqual(try Data(contentsOf: old2), old2Bytes)
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: imagesDir.appendingPathComponent("new1.png").path),
+            "a rolled-back import must not leave the first copied image behind"
+        )
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: imagesDir.appendingPathComponent("new2.png").path)
+        )
+    }
+
+    private func dittoZip(source: URL, destination: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.arguments = ["-c", "-k", "--sequesterRsrc", "--keepParent", source.path, destination.path]
+        try process.run()
+        process.waitUntilExit()
     }
 
     func testStartFreshFailureCleansNewDirectoryAndRestoresCatalog() throws {

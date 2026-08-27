@@ -110,7 +110,10 @@ public struct BinanceFuturesClient: Sendable {
                 // Guard against a server that ignores startTime: always advance.
                 cursor = max(nextCursor, cursor.addingTimeInterval(1))
             }
-            chunkStart = chunkEnd
+            // Binance's endTime filter is INCLUSIVE, so a fill exactly at the
+            // boundary would otherwise be fetched again by the next chunk
+            // (TR-04). Advance the chunk start by 1ms to keep chunks exclusive.
+            chunkStart = chunkEnd.addingTimeInterval(0.001)
         }
         return result
     }
@@ -137,7 +140,8 @@ public struct BinanceFuturesClient: Sendable {
                 let nextCursor = Date(timeIntervalSince1970: Double(lastTime + 1) / 1000)
                 cursor = max(nextCursor, cursor.addingTimeInterval(1))
             }
-            chunkStart = chunkEnd
+            // Inclusively-filtered endTime → advance by 1ms (TR-04).
+            chunkStart = chunkEnd.addingTimeInterval(0.001)
         }
         return result
     }
@@ -173,7 +177,15 @@ public struct BinanceFuturesClient: Sendable {
         let (data, response) = try await transport(request)
         try checkResponse(data: data, response: response)
         do {
-            return try JSONDecoder().decode([TradingFill].self, from: data)
+            let fills = try JSONDecoder().decode([TradingFill].self, from: data)
+            // Binance reports commission as a POSITIVE cost. The app's unified
+            // commission convention is negative = paid (TR-03), so negate on
+            // the way in — otherwise a fee would be added back to net PnL.
+            return fills.map { fill in
+                var f = fill
+                f.commission = -fill.commission
+                return f
+            }
         } catch {
             throw BinanceError.malformedResponse
         }

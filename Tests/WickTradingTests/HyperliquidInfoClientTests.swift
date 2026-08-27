@@ -142,4 +142,43 @@ final class HyperliquidInfoClientTests: XCTestCase {
         XCTAssertEqual(object?["type"] as? String, "userFunding")
         XCTAssertEqual(object?["user"] as? String, "0xabcdef0123456789abcdef0123456789abcdef01")
     }
+
+    func testFundingPaginatesWhenPageHits500Cap() async throws {
+        // `userFunding` returns at most 500 records per time-bounded response.
+        // A full 500-record page must continue to the next page; the old
+        // threshold (min(pageLimit, 2000)) treated a 500-record page as short
+        // and silently truncated an active account's funding history to one page.
+        let calls = Box(0)
+        let client = HyperliquidInfoClient(
+            user: "0xabcdef0123456789abcdef0123456789abcdef01",
+            baseURL: URL(string: "https://hl.example.com")!,
+            transport: { request in
+                calls.value += 1
+                let body = request.httpBody.flatMap {
+                    try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
+                }
+                if calls.value == 1 {
+                    var rows: [String] = []
+                    for index in 0..<500 {
+                        let time = 1_000 + Int64(index)
+                        rows.append(
+                            #"{"delta":{"coin":"BTC","usdc":"-0.25"},"time":\#(time)}"#
+                        )
+                    }
+                    return (Data("[\(rows.joined(separator: ","))]".utf8), Self.http(200))
+                }
+                XCTAssertEqual(body?["startTime"] as? Int64, 1_500)
+                return (Data("[]".utf8), Self.http(200))
+            },
+            fundingPageCap: 500
+        )
+        let events = try await client.fetchFunding(
+            from: Date(timeIntervalSince1970: 1),
+            to: Date(timeIntervalSince1970: 2_000)
+        )
+        XCTAssertEqual(calls.value, 2, "a full 500-record funding page must trigger a second request")
+        XCTAssertEqual(events.count, 500)
+        XCTAssertEqual(events.first?.time, 1_000)
+        XCTAssertEqual(events.last?.time, 1_499)
+    }
 }

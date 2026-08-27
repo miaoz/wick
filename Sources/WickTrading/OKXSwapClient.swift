@@ -15,6 +15,10 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
     public var transport: Transport
     public var now: @Sendable () -> Date
     public var pageLimit: Int
+    /// Minimum spacing between paginated requests. OKX throttles private
+    /// endpoints to ~10 requests / 2s, so a large backfill paced below this
+    /// would otherwise fail the whole round (TR-05).
+    public var minPageInterval: TimeInterval
 
     public init(
         apiKey: String,
@@ -29,7 +33,8 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
             return (data, http)
         },
         now: @escaping @Sendable () -> Date = Date.init,
-        pageLimit: Int = 100
+        pageLimit: Int = 100,
+        minPageInterval: TimeInterval = 0.22
     ) {
         self.apiKey = apiKey
         self.secret = secret
@@ -38,6 +43,7 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
         self.transport = transport
         self.now = now
         self.pageLimit = pageLimit
+        self.minPageInterval = minPageInterval
     }
 
     public func fetchFills(from start: Date, to end: Date) async throws -> [TradingFill] {
@@ -59,6 +65,7 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
             if page.contains(where: { $0.time < startMs }) { break }
             guard page.count >= pageLimit, let lastBillID else { break }
             after = lastBillID
+            try await paceNextPage()
         }
         return results
     }
@@ -83,8 +90,16 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
             if page.contains(where: { $0.time < startMs }) { break }
             guard page.count >= pageLimit, let lastBillID else { break }
             after = lastBillID
+            try await paceNextPage()
         }
         return results
+    }
+
+    /// Sleeps `minPageInterval` between paginated requests to stay under OKX's
+    /// ~10 req / 2s private-endpoint throttle (TR-05).
+    private func paceNextPage() async {
+        guard minPageInterval > 0 else { return }
+        try? await Task.sleep(nanoseconds: UInt64(minPageInterval * 1_000_000_000))
     }
 
     // MARK: - Signing
@@ -211,6 +226,7 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
         var billId: String?
         var side: String?
         var posSide: String?
+        var subType: String?
         var fillPx: String?
         var fillSz: String?
         var fillPnl: String?
@@ -229,17 +245,36 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
             }()
             let sideNorm = (side ?? "").lowercased() == "sell" ? "SELL" : "BUY"
             let tsMs = Int64(ts ?? "0") ?? 0
+            // `subType` disambiguates fills whose open/close intent is not
+            // derivable from side alone. OKX encodes it as NUMERIC codes
+            // (5 = 平多 close long, 6 = 平空 close short, 104/105 = 强平
+            // long/short, 125/126 = ADL 平多/空, plus other close-side codes);
+            // these always reduce a position, so a lone one at a flat window is
+            // a close — not a phantom new position (TR-06).
+            let effect: TradingFillEffect? = {
+                switch subType ?? "" {
+                case "5", "6", "100", "101", "104", "105", "112", "113", "125", "126":
+                    return .close
+                default:
+                    return nil
+                }
+            }()
             return TradingFill(
                 id: TradingFill.integerID(from: idRaw),
                 symbol: OKXSwapClient.symbol(fromInstID: instId),
                 side: sideNorm,
                 positionSide: pos,
                 price: Double(fillPx ?? "") ?? 0,
+                // NOTE (TR-02): `fillSz` is in CONTRACTS (张), not base units —
+                // a BTC SWAP contract is 100 coin, so this magnitude is ~100x
+                // the base quantity. The real conversion needs instruments
+                // `ctVal`; until then treat this as display-only.
                 qty: Double(fillSz ?? "") ?? 0,
                 quoteQty: 0,
                 commission: Double(fee ?? "") ?? 0,
                 commissionAsset: feeCcy ?? "",
                 realizedPnl: Double(fillPnl ?? "") ?? 0,
+                effect: effect,
                 time: tsMs
             )
         }
@@ -297,6 +332,10 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
         }
         if let envelope = try? JSONDecoder().decode(Envelope.self, from: data) {
             if envelope.code == "0" { return }
+            // 50011 — request rate limited (HTTP still 200); surface as rateLimited.
+            if envelope.code == "50011" {
+                throw ExchangeClientError.rateLimited
+            }
             // 50111 / 50113 / 50119 — invalid key / sign / passphrase
             if ["50111", "50113", "50119", "50105"].contains(envelope.code) {
                 throw ExchangeClientError.invalidCredentials(envelope.msg ?? envelope.code)

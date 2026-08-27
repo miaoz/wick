@@ -262,7 +262,7 @@ struct JournalEditorPane: View {
     private var dayScopedSections: some View {
         ForEach(store.filteredEntries) { entry in
             daySection(
-                entryID: entry.id,
+                entry: entry,
                 isFocused: store.selectedEntryID == entry.id
             )
             .id(Self.dayScrollID(entry.id))
@@ -331,13 +331,15 @@ struct JournalEditorPane: View {
 
     @ViewBuilder
     private func daySection(
-        entryID: UUID,
+        entry: JournalEntry,
         isFocused: Bool
     ) -> some View {
-        let draft = drafts[entryID] ?? store.entries.first(where: { $0.id == entryID }) ?? JournalEntry()
+        // UI-04: take the entry directly (the ForEach already has it) instead
+        // of a per-day O(N) lookup; the draft is the only per-keystroke input.
+        let draft = drafts[entry.id] ?? entry
 
         VStack(alignment: .leading, spacing: 0) {
-            dayHeader(entryID: entryID, draft: draft, isFocused: isFocused)
+            dayHeader(entryID: entry.id, draft: draft, isFocused: isFocused)
 
             dayBurnStrip(for: draft.date)
                 .padding(.top, 12)
@@ -346,7 +348,7 @@ struct JournalEditorPane: View {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(draft.items.enumerated()), id: \.element.id) { index, item in
                     itemCard(
-                        entryID: entryID,
+                        entryID: entry.id,
                         itemID: item.id,
                         itemIndex: index
                     )
@@ -359,7 +361,7 @@ struct JournalEditorPane: View {
             }
             .padding(.top, 4)
 
-            addItemRow(entryID: entryID)
+            addItemRow(entryID: entry.id)
                 .padding(.top, 10)
         }
         .padding(.horizontal, 26)

@@ -33,6 +33,10 @@ struct JournalImagePreviewOverlay: View {
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
     @State private var didCopyFeedback = false
+    /// Full-resolution image for the current filename, loaded once per filename.
+    /// Gestures only mutate the transform states above, so keeping the image in
+    /// @State prevents re-reading it from disk on every zoom/pan frame.
+    @State private var loadedImage: NSImage?
 
     private var currentFilename: String? {
         state?.currentFilename
@@ -107,11 +111,8 @@ struct JournalImagePreviewOverlay: View {
     @ViewBuilder
     private func imageContent(for filename: String) -> some View {
         GeometryReader { proxy in
-            let fullImage = store.loadNSImage(filename: filename)
-            let thumb = store.loadThumbnail(filename: filename, maxPixel: 800)
-
             ZStack {
-                if let nsImage = fullImage ?? thumb {
+                if let nsImage = loadedImage {
                     Image(nsImage: nsImage)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
@@ -174,6 +175,12 @@ struct JournalImagePreviewOverlay: View {
             .contentShape(Rectangle())
         }
         .padding(40)
+        .task(id: filename) {
+            // Load exactly once per filename; the fallback thumbnail keeps a
+            // low-memory decode when the full-res file is unreadable.
+            loadedImage = store.loadNSImage(filename: filename)
+                ?? store.loadThumbnail(filename: filename, maxPixel: 800)
+        }
     }
 
     // MARK: - Top Bar

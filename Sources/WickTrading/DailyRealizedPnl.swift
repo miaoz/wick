@@ -21,9 +21,10 @@ public enum DailyRealizedPnl {
         return sums
     }
 
-    /// Attributes each position's net PnL (realized − commission − funding) to
-    /// the day that position was opened. This is the figure the journal
-    /// surfaces in the PnL calendar, day list, and day page header.
+    /// Attributes each position's net PnL (realized + commission + funding,
+    /// where commission/funding are signed: negative = cost) to the day that
+    /// position was opened. This is the figure the journal surfaces in the PnL
+    /// calendar, day list, and day page header.
     public static func netSumsByOpenDay(
         positions: [TradingPosition],
         calendar: Calendar

@@ -695,8 +695,9 @@ struct SettingsView: View {
             Text(L10n.string(.syncStatusNeedsAuth, language: language))
                 .font(PhoneFont.paper(11))
                 .foregroundColor(PhoneTheme.cinnabar)
-        case .error(let message):
-            Text(message.contains("remote format") ? L10n.string(.syncRemoteTooNew, language: language) : message)
+        case .error(let kind, let message):
+            // SY-04: localize via the typed kind, never a raw English substring.
+            Text(kind == .remoteFormatTooNew ? L10n.string(.syncRemoteTooNew, language: language) : message)
                 .font(PhoneFont.paper(10.5))
                 .foregroundColor(PhoneTheme.inkSecondary)
         case .idle:

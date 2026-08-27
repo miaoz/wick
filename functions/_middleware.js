@@ -116,6 +116,37 @@ export function appendVaryAccept(headers) {
 }
 
 export async function onRequest(context) {
+  const res = await handleRequest(context);
+  // Security headers (WEB-02): applied to every response. The landing page has
+  // inline scripts/styles, so CSP keeps 'unsafe-inline' for those directives.
+  if (!res.headers.has("X-Content-Type-Options")) {
+    res.headers.set("X-Content-Type-Options", "nosniff");
+  }
+  if (!res.headers.has("X-Frame-Options")) {
+    res.headers.set("X-Frame-Options", "DENY");
+  }
+  if (!res.headers.has("Referrer-Policy")) {
+    res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  }
+  if (!res.headers.has("Content-Security-Policy")) {
+    res.headers.set(
+      "Content-Security-Policy",
+      [
+        "default-src 'self'",
+        "img-src 'self' data:",
+        "style-src 'self' 'unsafe-inline'",
+        "font-src 'self' data:",
+        "script-src 'self' 'unsafe-inline'",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'"
+      ].join("; ")
+    );
+  }
+  return res;
+}
+
+async function handleRequest(context) {
   const { request, next } = context;
   const url = new URL(request.url);
 

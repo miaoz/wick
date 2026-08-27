@@ -23,6 +23,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # CI-01: the middleware/landing agent-readiness suite never ran in CI.
+      - name: Run middleware + landing tests
+        run: node --test
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:

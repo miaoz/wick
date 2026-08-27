@@ -33,8 +33,8 @@ private func fill(
 final class PositionAggregatorTests: XCTestCase {
     func testRoundTripLong() {
         let positions = PositionAggregator.aggregate(fills: [
-            fill(1, side: "BUY", price: 100, qty: 0.002, commission: 0.01, time: 1000),
-            fill(2, side: "SELL", price: 110, qty: 0.002, realizedPnl: 0.2, commission: 0.01, time: 2000)
+            fill(1, side: "BUY", price: 100, qty: 0.002, commission: -0.01, time: 1000),
+            fill(2, side: "SELL", price: 110, qty: 0.002, realizedPnl: 0.2, commission: -0.01, time: 2000)
         ])
 
         XCTAssertEqual(positions.count, 1)
@@ -47,7 +47,7 @@ final class PositionAggregatorTests: XCTestCase {
         XCTAssertEqual(position.exitPrice ?? 0, 110, accuracy: 1e-9)
         XCTAssertEqual(position.peakSize, 0.002, accuracy: 1e-9)
         XCTAssertEqual(position.realizedPnl, 0.2, accuracy: 1e-9)
-        XCTAssertEqual(position.commissions["USDT"] ?? 0, 0.02, accuracy: 1e-9)
+        XCTAssertEqual(position.commissions["USDT"] ?? 0, -0.02, accuracy: 1e-9)
     }
 
     func testPyramidAndStagedExit() {

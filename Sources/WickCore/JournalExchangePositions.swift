@@ -212,9 +212,11 @@ private struct ReceiptView: View {
             )
             breakdownRow(
                 label: L10n.string(.exchangePositionCommission, language: settings.language),
-                value: "−" + Self.format(pnl: position.commissionTotal) + quoteSuffix,
-                valueColor: printLoss,
-                shows: position.commissionTotal > 1e-9
+                // Signed: a negative value is a paid fee, a positive value a
+                // rebate (TR-03) — never hardcode a leading minus.
+                value: signedText(position.commissionTotal),
+                valueColor: position.commissionTotal <= 0 ? printLoss : printGain,
+                shows: abs(position.commissionTotal) > 1e-9
             )
             breakdownRow(
                 label: L10n.string(.exchangePositionFunding, language: settings.language),

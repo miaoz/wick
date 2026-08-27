@@ -28,6 +28,19 @@ final class JournalStoreSyncTests: XCTestCase {
         tempRoot = nil
     }
 
+    /// XCTest's XCTAssertThrowsError cannot take an async autoclosure; this is
+    /// the async equivalent used for the now-async export/import API.
+    private func assertThrowsAsync<T>(
+        _ body: () async throws -> T,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        do {
+            _ = try await body()
+            XCTFail("expected an error to be thrown", file: file, line: line)
+        } catch {}
+    }
+
     // MARK: - Version gate
 
     func testNewerSnapshotVersionGoesReadOnlyAndKeepsFileUntouched() throws {
@@ -62,6 +75,31 @@ final class JournalStoreSyncTests: XCTestCase {
         let reloaded = JournalStore(rootDirectory: tempRoot)
         XCTAssertFalse(reloaded.isReadOnlyDueToLoadFailure)
         XCTAssertEqual(reloaded.entries.count, 1)
+    }
+
+    // MARK: - DS-01 read-only export guard
+
+    func testReadOnlyExportIsRefusedAndKeepsPreviousArchive() async throws {
+        // A previous good export.
+        let dest = tempRoot.appendingPathComponent("export.zip", isDirectory: false)
+        try await store.exportArchive(to: dest)
+        let oldBytes = try Data(contentsOf: dest)
+        XCTAssertFalse(oldBytes.isEmpty)
+
+        // Corrupt the journal so the reloaded store is read-only with emptied entries.
+        try Data("not-json".utf8).write(to: store.databaseURL, options: .atomic)
+        let reloaded = JournalStore(rootDirectory: tempRoot)
+        XCTAssertTrue(reloaded.isReadOnlyDueToLoadFailure)
+        XCTAssertTrue(reloaded.entries.isEmpty)
+
+        // Export must be refused and must NOT atomically overwrite the previous
+        // archive with an empty snapshot.
+        await assertThrowsAsync { try await reloaded.exportArchive(to: dest) }
+        XCTAssertEqual(
+            try Data(contentsOf: dest),
+            oldBytes,
+            "a read-only export must not clobber the previous good archive"
+        )
     }
 
     // MARK: - DS-01 image path safety
@@ -250,7 +288,7 @@ final class JournalStoreSyncTests: XCTestCase {
         return try JournalSyncEncoding.decoder.decode(JournalSnapshot.self, from: Data(contentsOf: jsonURL))
     }
 
-    func testExportEncodesLatestInMemorySnapshotNotStaleDiskFile() throws {
+    func testExportEncodesLatestInMemorySnapshotNotStaleDiskFile() async throws {
         let entry = store.createEntry()
         var draft = entry
         draft.title = "Exported Latest"
@@ -266,30 +304,30 @@ final class JournalStoreSyncTests: XCTestCase {
         try JournalSyncEncoding.encoder.encode(stale).write(to: store.databaseURL, options: .atomic)
 
         let dest = tempRoot.appendingPathComponent("export.zip", isDirectory: false)
-        try store.exportArchive(to: dest)
+        try await store.exportArchive(to: dest)
 
         let decoded = try decodedExport(at: dest)
         XCTAssertEqual(decoded.entries.first?.title, "Exported Latest")
         XCTAssertEqual(decoded.entries.first?.items.first?.body, "fresh body")
     }
 
-    func testEditThenExportImmediatelyIsLatest() throws {
+    func testEditThenExportImmediatelyIsLatest() async throws {
         let entry = store.createEntry()
         var draft = entry
         draft.items[0].body = "typed now"
         store.updateEntry(draft)
 
         let dest = tempRoot.appendingPathComponent("export2.zip", isDirectory: false)
-        try store.exportArchive(to: dest)
+        try await store.exportArchive(to: dest)
 
         let decoded = try decodedExport(at: dest)
         XCTAssertEqual(decoded.entries.first?.items.first?.body, "typed now")
     }
 
-    func testExportFailureKeepsPreviousDestination() throws {
+    func testExportFailureKeepsPreviousDestination() async throws {
         _ = store.createEntry()
         let dest = tempRoot.appendingPathComponent("backup.zip", isDirectory: false)
-        try store.exportArchive(to: dest)
+        try await store.exportArchive(to: dest)
         let oldBytes = try Data(contentsOf: dest)
         XCTAssertFalse(oldBytes.isEmpty)
 
@@ -298,7 +336,7 @@ final class JournalStoreSyncTests: XCTestCase {
         JournalStore.failExportReplaceOverride = true
         defer { JournalStore.failExportReplaceOverride = false }
 
-        XCTAssertThrowsError(try store.exportArchive(to: dest))
+        await assertThrowsAsync { try await store.exportArchive(to: dest) }
         XCTAssertEqual(
             try Data(contentsOf: dest),
             oldBytes,
@@ -309,7 +347,7 @@ final class JournalStoreSyncTests: XCTestCase {
         XCTAssertTrue(leftovers.isEmpty, "the temp archive must be cleaned up on failure")
     }
 
-    func testExportOnlyContainsActiveJournal() throws {
+    func testExportOnlyContainsActiveJournal() async throws {
         let firstID = store.activeJournalID!
         _ = store.createEntry()
         var draft = store.entries[0]
@@ -324,7 +362,7 @@ final class JournalStoreSyncTests: XCTestCase {
 
         // Export while the SECOND journal is active — must not leak the first.
         let dest = tempRoot.appendingPathComponent("export3.zip", isDirectory: false)
-        try store.exportArchive(to: dest)
+        try await store.exportArchive(to: dest)
         let decoded = try decodedExport(at: dest)
         XCTAssertEqual(decoded.entries.first?.title, "From Second")
         XCTAssertFalse(decoded.entries.contains { $0.title == "Only From First" })

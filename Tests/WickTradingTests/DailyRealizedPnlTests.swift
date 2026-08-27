@@ -116,7 +116,7 @@ final class DailyRealizedPnlTests: XCTestCase {
                     id: "one",
                     realizedPnl: 10,
                     openedAt: base + 3600,
-                    commissions: ["USDT": 0.5],
+                    commissions: ["USDT": -0.5],
                     fundingPnl: -1.5 // paid out → reduces net
                 )
             ],
@@ -133,7 +133,7 @@ final class DailyRealizedPnlTests: XCTestCase {
                     id: "one",
                     realizedPnl: 10,
                     openedAt: base + 3600,
-                    commissions: ["BNB": 2.0]
+                    commissions: ["BNB": -2.0]
                 )
             ],
             calendar: Self.gmt
@@ -151,7 +151,7 @@ final class DailyRealizedPnlTests: XCTestCase {
                     symbol: "FOO",
                     realizedPnl: 10,
                     openedAt: base + 3600,
-                    commissions: ["USDT": 3.0, "USDC": 2.0]
+                    commissions: ["USDT": -3.0, "USDC": -2.0]
                 )
             ],
             calendar: Self.gmt
@@ -167,12 +167,30 @@ final class DailyRealizedPnlTests: XCTestCase {
                     id: "one",
                     realizedPnl: 1.0,
                     openedAt: base + 3600,
-                    commissions: ["USDT": 1.0]
+                    commissions: ["USDT": -1.0]
                 )
             ],
             calendar: Self.gmt
         )
         XCTAssertTrue(sums.isEmpty)
+    }
+
+    func testNetAddsRebateInsteadOfTreatingItAsCost() {
+        // A positive commission is a REBATE (e.g. OKX fee > 0), never a cost —
+        // it must ADD to net, not be subtracted as if it were a fee (TR-03).
+        let base = TimeInterval(17_000) * Self.day
+        let sums = DailyRealizedPnl.netSumsByOpenDay(
+            positions: [
+                position(
+                    id: "one",
+                    realizedPnl: 10,
+                    openedAt: base + 3600,
+                    commissions: ["USDT": 1.5]
+                )
+            ],
+            calendar: Self.gmt
+        )
+        XCTAssertEqual(sums[dayStart(base)] ?? 0, 11.5, accuracy: 1e-12)
     }
 
     func testNetIsAttributedToOpenDay() {
@@ -185,7 +203,7 @@ final class DailyRealizedPnlTests: XCTestCase {
                     realizedPnl: 100,
                     openedAt: openDay + 3 * 3600,
                     closedAt: closeDay + 16 * 3600,
-                    commissions: ["USDT": 1],
+                    commissions: ["USDT": -1],
                     fundingPnl: -2 // paid out → reduces net
                 )
             ],

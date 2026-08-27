@@ -657,16 +657,26 @@ final class PhoneJournalStore: ObservableObject {
 
     // MARK: - Entries
 
-    /// Opens today's entry if present, otherwise creates it.
+    /// Opens the entry for `date` if one exists; otherwise creates it.
+    /// Enforces one entry per calendar day (IO-05) so tapping an empty day in
+    /// the PnL heatmap opens THAT day, never today.
     @discardableResult
-    func openOrCreateToday() -> JournalEntry {
-        if let existing = entries.first(where: { Calendar.current.isDateInToday($0.date) }) {
+    func createEntry(on date: Date = Date()) -> JournalEntry {
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: date)
+        if let existing = entries.first(where: { calendar.isDate($0.date, inSameDayAs: day) }) {
             return existing
         }
-        let entry = JournalEntry(date: Calendar.current.startOfDay(for: Date()))
+        let entry = JournalEntry(date: day)
         entries.insert(entry, at: 0)
         persist()
         return entry
+    }
+
+    /// Opens today's entry if present, otherwise creates it.
+    @discardableResult
+    func openOrCreateToday() -> JournalEntry {
+        createEntry(on: Date())
     }
 
     /// Updates an entry by permanent UUID; bumps updatedAt only if content actually changed.
@@ -779,6 +789,7 @@ final class PhoneJournalStore: ObservableObject {
     private struct PendingSnapshot: Sendable {
         let journalID: UUID
         let databaseURL: URL
+        let backupURL: URL
         let snapshot: JournalSnapshot
         let generation: UInt64
     }
@@ -821,18 +832,15 @@ final class PhoneJournalStore: ObservableObject {
         guard !persistBlocked else { return }
         guard !isReadOnlyDueToLoadFailure else { return }
         ensureDirectories()
-        // Sidecar backup of the current primary before the overwrite, matching
-        // the macOS backup semantics.
-        if fileManager.fileExists(atPath: databaseURL.path),
-           loadSnapshot(from: databaseURL) != nil
-        {
-            try? fileManager.removeItem(at: backupURL)
-            try? fileManager.copyItem(at: databaseURL, to: backupURL)
-        }
+        // Sidecar backup rotation happens inside the writer (IO-01): the primary
+        // is copied to .bak on the background queue right before the overwrite,
+        // so saving an edit never triggers a full synchronous snapshot decode
+        // on the main thread.
         nextGeneration &+= 1
         latestSnapshot = PendingSnapshot(
             journalID: activeJournalID ?? UUID(),
             databaseURL: databaseURL,
+            backupURL: backupURL,
             snapshot: JournalSnapshot(version: JournalSnapshot.currentVersion, entries: entries),
             generation: nextGeneration
         )
@@ -853,6 +861,14 @@ final class PhoneJournalStore: ObservableObject {
         )
         persistQueue.async { [weak self] in
             do {
+                // Rotate the current primary to .bak before overwriting it. An
+                // existence check (no decode) is all that is needed; the writer
+                // runs off the main thread (IO-01).
+                let fm = FileManager.default
+                if fm.fileExists(atPath: pending.databaseURL.path) {
+                    try? fm.removeItem(at: pending.backupURL)
+                    try? fm.copyItem(at: pending.databaseURL, to: pending.backupURL)
+                }
                 let data = try JournalSyncEncoding.encoder.encode(pending.snapshot)
                 try data.write(to: pending.databaseURL, options: .atomic)
                 result.set(error: nil)

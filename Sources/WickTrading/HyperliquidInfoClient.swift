@@ -10,8 +10,14 @@ public struct HyperliquidInfoClient: ExchangeTradeClient, Sendable {
     public var user: String
     public var baseURL: URL
     public var transport: Transport
-    /// Hard cap per response; the API documents 2000.
+    /// Hard cap per `userFillsByTime` response; the API documents 2000.
     public var pageLimit: Int
+    /// Hard cap per `userFunding` response. Unlike fills, time-bounded
+    /// funding responses return at most 500 records regardless of `pageLimit`.
+    public var fundingPageCap: Int
+    /// Ceiling on funding pages; 500 records/page needs ~64 pages to cover the
+    /// full multi-month window an active account accumulates.
+    public var fundingPageLimit: Int
 
     public init(
         user: String,
@@ -23,12 +29,16 @@ public struct HyperliquidInfoClient: ExchangeTradeClient, Sendable {
             }
             return (data, http)
         },
-        pageLimit: Int = 2000
+        pageLimit: Int = 2000,
+        fundingPageCap: Int = 500,
+        fundingPageLimit: Int = 64
     ) {
         self.user = user
         self.baseURL = baseURL
         self.transport = transport
         self.pageLimit = pageLimit
+        self.fundingPageCap = fundingPageCap
+        self.fundingPageLimit = fundingPageLimit
     }
 
     public static func normalizedAddress(_ raw: String) -> String? {
@@ -65,11 +75,14 @@ public struct HyperliquidInfoClient: ExchangeTradeClient, Sendable {
         var results: [FundingEvent] = []
         var cursor = startMs
         var pages = 0
-        while cursor < endMs, pages < 8 {
+        while cursor < endMs, pages < fundingPageLimit {
             pages += 1
             let page = try await fundingPage(startMs: cursor, endMs: endMs)
             results.append(contentsOf: page)
-            guard page.count >= min(pageLimit, 2000), let last = page.last else { break }
+            // `userFunding` caps time-bounded responses at 500 records, not the
+            // 2000 fills allow — a full page here is 500, so compare against the
+            // funding cap or a >500 record page would silently stop after page 1.
+            guard page.count >= fundingPageCap, let last = page.last else { break }
             let next = last.time + 1
             if next <= cursor { break }
             cursor = next
@@ -137,7 +150,9 @@ public struct HyperliquidInfoClient: ExchangeTradeClient, Sendable {
                 price: Double(px ?? "") ?? 0,
                 qty: Double(sz ?? "") ?? 0,
                 quoteQty: 0,
-                commission: Double(fee ?? "") ?? 0,
+                // HL reports fees as a positive cost; the app's unified
+                // commission convention is negative = paid (TR-03), so negate.
+                commission: -(Double(fee ?? "") ?? 0),
                 commissionAsset: feeToken ?? "USDC",
                 realizedPnl: Double(closedPnl ?? "") ?? 0,
                 effect: effect,

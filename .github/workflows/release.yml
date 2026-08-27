@@ -86,6 +86,21 @@ jobs:
             CURRENT_PROJECT_VERSION="${{ steps.version.outputs.build }}" \
             build CODE_SIGNING_ALLOWED=NO
 
+      # CI-01: the iOS Store regression suite (WickPhoneTests) never ran in CI
+      # and could silently rot — run it on an available simulator.
+      - name: iOS Store regression tests (simulator)
+        run: |
+          set -euo pipefail
+          # Skip runtimes whose device list is empty (a KeyError-0 trap).
+          DEVICE_ID="$(xcrun simctl list devices available -j | \
+            python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(v[0]["udid"] for k in d for v in d[k] if v and v[0]["isAvailable"] and "iPhone" in v[0]["name"]))')"
+          echo "Using simulator: ${DEVICE_ID}"
+          xcodebuild test \
+            -project ios/WickPhone.xcodeproj \
+            -scheme WickPhone \
+            -destination "platform=iOS Simulator,id=${DEVICE_ID}" \
+            CODE_SIGNING_ALLOWED=NO
+
       - name: Build iOS SwiftPM targets (fast shared-target gate)
         run: |
           set -euo pipefail

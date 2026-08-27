@@ -15,10 +15,20 @@ struct JournalNavigationSidebar: View {
     @Environment(\.wickPalette) private var palette
     @ObservedObject private var positionCoordinator = ExchangePositionCoordinator.shared
     @StateObject private var journalDragSession = JournalDragSession()
+    /// Per-journal (entries, positions) counts, computed once per journal-list
+    /// / active-journal / trading-snapshot change instead of on every render.
+    /// Non-active journals are decoded from disk + aggregated, which is far too
+    /// expensive to run inside body evaluation (search keystrokes re-render it).
+    @State private var journalStats: [UUID: JournalSidebarStats] = [:]
 
     let onNewJournal: () -> Void
     let onRenameJournal: (JournalInfo) -> Void
     let onDeleteJournal: (JournalInfo) -> Void
+
+    private struct JournalSidebarStats: Equatable {
+        var entries: Int
+        var positions: Int
+    }
 
     var body: some View {
         ScrollView {
@@ -52,7 +62,27 @@ struct JournalNavigationSidebar: View {
         .hidesAppKitScrollers()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(palette.sidebarBackground.color)
+        .onAppear { refreshJournalStats() }
+        .task(id: store.journals.map(\.id)) { refreshJournalStats() }
+        .onChange(of: store.activeJournalID) { _ in refreshJournalStats() }
+        .onReceive(NotificationCenter.default.publisher(for: .wickTradingSnapshotDidChange)) { _ in
+            refreshJournalStats()
+        }
         .onDisappear { journalDragSession.reset() }
+    }
+
+    /// Recomputes every journal's (entries, positions) counts. Runs on explicit
+    /// invalidation points (list change, active switch, trading snapshot) — never
+    /// inside body evaluation.
+    private func refreshJournalStats() {
+        var stats: [UUID: JournalSidebarStats] = [:]
+        for journal in store.journals {
+            stats[journal.id] = JournalSidebarStats(
+                entries: store.entryCount(for: journal.id),
+                positions: positionCoordinator.positionsCount(for: journal.id)
+            )
+        }
+        journalStats = stats
     }
 
     @ViewBuilder
@@ -95,8 +125,18 @@ struct JournalNavigationSidebar: View {
 
     private func journalRowLabel(_ journal: JournalInfo) -> some View {
         let isActive = journal.id == store.activeJournalID
-        let entriesCount = store.entryCount(for: journal.id)
-        let positionsCount = positionCoordinator.positionsCount(for: journal.id)
+        // The active journal's counts are in-memory (free); non-active journals
+        // must come from the cached stats, never a disk decode mid-render.
+        let entriesCount: Int
+        let positionsCount: Int
+        if isActive {
+            entriesCount = store.entries.count
+            positionsCount = positionCoordinator.positionsCount(for: journal.id)
+        } else {
+            let cached = journalStats[journal.id]
+            entriesCount = cached?.entries ?? 0
+            positionsCount = cached?.positions ?? 0
+        }
         let statsText = L10n.journalStats(entries: entriesCount, positions: positionsCount, language: settings.language)
 
         return HStack(spacing: 6) {

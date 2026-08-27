@@ -124,6 +124,33 @@ final class OKXSwapClientTests: XCTestCase {
         XCTAssertEqual(fills[1].side, "SELL")
     }
 
+    func testSubTypeDisambiguatesCloseEffect() async throws {
+        // A liquidation/close code always reduces a position: it must map to
+        // `.close` so the aggregator does not spawn a phantom position for a
+        // lone close at a flat window (TR-06). OKX subType is numeric —
+        // 104 = 强平多, 6 = 平空 — not a text tag.
+        let calls = Box(0)
+        let client = makeClient { _ in
+            calls.value += 1
+            guard calls.value == 1 else {
+                return (Data(#"{"code":"0","data":[]}"#.utf8), Self.http(200))
+            }
+            let body = #"""
+            {"code":"0","data":[
+              {"instId":"BTC-USDT-SWAP","tradeId":"21","billId":"b21","side":"sell","posSide":"net","subType":"104","fillPx":"100","fillSz":"1","fillPnl":"0","fee":"0","feeCcy":"USDT","ts":"1600000000000"},
+              {"instId":"BTC-USDT-SWAP","tradeId":"22","billId":"b22","side":"buy","posSide":"net","subType":"6","fillPx":"100","fillSz":"1","fillPnl":"0","fee":"0","feeCcy":"USDT","ts":"1600000001000"}
+            ]}
+            """#
+            return (Data(body.utf8), Self.http(200))
+        }
+        let fills = try await client.fetchFills(
+            from: Date(timeIntervalSince1970: 1_600_000_000),
+            to: Date(timeIntervalSince1970: 1_600_100_000)
+        )
+        XCTAssertEqual(fills[0].effect, .close, "a liquidation (104) is a position reduction, never a new open")
+        XCTAssertEqual(fills[1].effect, .close, "a 平空 code (6) is a position reduction too")
+    }
+
     func testDropsFillsBeforeRequestedStart() async throws {
         let client = makeClient { _ in
             let body = #"""

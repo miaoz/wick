@@ -1,6 +1,7 @@
 import SwiftUI
 import XCTest
-@testable import WickCore
+@testable import WickCalendarKit
+import WickSync
 
 final class WickThemeTests: XCTestCase {
     private var calendar: Calendar = {

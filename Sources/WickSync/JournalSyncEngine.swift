@@ -55,7 +55,20 @@ public final class JournalSyncEngine: ObservableObject {
         case needsAuth
         /// Transient network failure — retries on the next cycle.
         case offline
-        case error(String)
+        /// Permanent sync failure. The kind drives localized UI copy; `detail`
+        /// carries the raw message (server body etc.) for copying/debugging.
+        case error(SyncErrorKind, detail: String)
+    }
+
+    /// Categorizes a sync failure so views can pick localized copy instead of
+    /// matching raw English strings (SY-04).
+    public enum SyncErrorKind: Equatable {
+        /// Remote content was written by a newer Wick than this app supports.
+        case remoteFormatTooNew
+        /// A server-level failure with no specific remediation.
+        case server
+        /// Everything else.
+        case other
     }
 
     @Published public private(set) var status: Status = .idle
@@ -197,6 +210,10 @@ public final class JournalSyncEngine: ObservableObject {
             // writable source; a read-only store keeps the record so the
             // conflict stays visible.
             guard let chosen = record.localEntry, writable, let journalID = stateJournalID else { return }
+            // Flush any in-flight editor draft first (SY-05) so the chosen
+            // resolution is not later clobbered by a stale draft the editor
+            // still holds for this day.
+            localSource.prepareForRemoteApply(entryID: record.entryID)
             localSource.applySyncedEntry(chosen, journalID: journalID)
             if let hash = try? JournalSyncEncoding.contentHash(for: chosen) {
                 dayState.settlement = .pushSettled(hash)
@@ -422,9 +439,9 @@ public final class JournalSyncEngine: ObservableObject {
         } catch let error as SyncBackendError {
             handleBackendError(error)
         } catch let error as JournalSyncError {
-            status = .error(message(for: error))
+            status = .error(errorKind(for: error), detail: message(for: error))
         } catch {
-            status = .error(error.localizedDescription)
+            status = .error(.other, detail: error.localizedDescription)
         }
         saveAndPublish()
     }
@@ -553,8 +570,8 @@ public final class JournalSyncEngine: ObservableObject {
                 await uploadSettlementMarker(entryID: entryID, settledHash: hash, journalID: journalID)
             }
             if state.pendingConflicts.contains(where: { $0.entryID == entryID }),
-               let settled = try? await peerSettlementMarker(for: entryID, journalID: journalID),
-               settled.settledHash == state.entries[entryID]?.remoteContentHash {
+               let hash = state.entries[entryID]?.remoteContentHash,
+               try await hasSettlingMarker(for: entryID, journalID: journalID, hash: hash) {
                 removeConflicts(for: entryID)
             }
         }
@@ -1123,6 +1140,12 @@ public final class JournalSyncEngine: ObservableObject {
         remote: JournalEntry? = nil,
         merged: JournalEntry? = nil
     ) {
+        // SY-03: dedupe by (entryID, summary). The record is written before the
+        // upload can be confirmed, so a network blip that retries the merge on
+        // the next cycle must not accumulate a duplicate conflict record.
+        guard !state.pendingConflicts.contains(where: { $0.entryID == entryID && $0.summary == summary }) else {
+            return
+        }
         state.pendingConflicts.append(
             SyncConflictRecord(
                 entryID: entryID,
@@ -1168,17 +1191,20 @@ public final class JournalSyncEngine: ObservableObject {
         }
     }
 
-    /// Finds a peer's settlement marker for a day, if any (downloads the first
-    /// matching file; markers are tiny and rare).
-    private func peerSettlementMarker(for entryID: UUID, journalID: UUID) async throws -> JournalSettlementMarker? {
+    /// True when ANY peer settlement marker for this day carries `hash`.
+    /// Iterates every marker rather than stopping at the first match (SY-02):
+    /// a stale marker from an older settlement must never shadow a newer,
+    /// matching one, or the day's conflicts would be stuck forever.
+    private func hasSettlingMarker(for entryID: UUID, journalID: UUID, hash: String) async throws -> Bool {
         for path in state.remoteFiles.keys where JournalSyncLayout.isSettlementPath(path, journalID: journalID) {
             guard JournalSyncLayout.settlementEntryID(from: path, journalID: journalID) == entryID else { continue }
             let (data, _) = try await backend.download(path: path)
-            if let marker = try? JournalSyncEncoding.decoder.decode(JournalSettlementMarker.self, from: data) {
-                return marker
+            if let marker = try? JournalSyncEncoding.decoder.decode(JournalSettlementMarker.self, from: data),
+               marker.settledHash == hash {
+                return true
             }
         }
-        return nil
+        return false
     }
 
     // MARK: - Images
@@ -1683,9 +1709,18 @@ public final class JournalSyncEngine: ObservableObject {
         case .transport, .rateLimited:
             status = .offline
         case .server(let code, let message):
-            status = .error("Dropbox \(code): \(message)")
+            status = .error(.server, detail: "Dropbox \(code): \(message)")
         default:
-            status = .error(error.localizedDescription)
+            status = .error(.other, detail: error.localizedDescription)
+        }
+    }
+
+    private func errorKind(for error: JournalSyncError) -> SyncErrorKind {
+        switch error {
+        case .unsupportedRemoteFormat, .unsupportedTradingSnapshotFormat:
+            return .remoteFormatTooNew
+        case .journalSwitched, .invalidRemoteEntryIdentity:
+            return .other
         }
     }
 

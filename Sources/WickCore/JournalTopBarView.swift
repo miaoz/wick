@@ -12,6 +12,13 @@ struct JournalTopBarView: View {
     @ObservedObject private var calendarWindow = TradingCalendarWindowController.shared
     @Environment(\.colorScheme) private var colorScheme
 
+    /// Local search input, committed to the store on a debounce so rapid
+    /// typing does not trigger a full-library scan on every keystroke (UI-05).
+    @State private var searchDraft = ""
+    @State private var searchDebounceTask: Task<Void, Never>?
+    /// ⌘F (via .wickJournalFocusSearch) focuses the search field (UI-03).
+    @FocusState private var searchFocused: Bool
+
     let columnModeOverride: Int?
 
     init(columnModeOverride: Int? = nil) {
@@ -127,13 +134,15 @@ struct JournalTopBarView: View {
                 .foregroundStyle(.secondary)
             TextField(
                 L10n.string(.journalSearchPlaceholder, language: settings.language),
-                text: $store.searchText
+                text: $searchDraft
             )
             .textFieldStyle(.plain)
             .font(AppFont.ui(12))
+            .focused($searchFocused)
 
-            if !store.searchText.isEmpty {
+            if !searchDraft.isEmpty {
                 Button {
+                    searchDraft = ""
                     store.clearSearch()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -152,6 +161,25 @@ struct JournalTopBarView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+        }
+        .onChange(of: searchDraft) { newValue in
+            searchDebounceTask?.cancel()
+            let store = store
+            searchDebounceTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                guard !Task.isCancelled else { return }
+                store.searchText = newValue
+            }
+        }
+        .onChange(of: store.searchText) { newValue in
+            // External resets (clear, journal switch, selection) must not leave
+            // a stale draft in the field.
+            if newValue != searchDraft {
+                searchDraft = newValue
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .wickJournalFocusSearch)) { _ in
+            searchFocused = true
         }
     }
 }

@@ -96,12 +96,10 @@ public enum TraderAlmanac: Sendable {
         let day = cal.component(.day, from: date)
         let weekday = cal.component(.weekday, from: date) // 1 = Sun, 7 = Sat
         
-        // Deterministic integer seed for this specific calendar date
-        var hasher = Hasher()
-        hasher.combine(year)
-        hasher.combine(month)
-        hasher.combine(day)
-        let seed = abs(hasher.finalize())
+        // Deterministic integer seed for this specific calendar date. Must be a
+        // plain integer, not Hasher: Hasher salts its seed per process, so the
+        // same date would pick a different entry on every launch.
+        let seed = year * 10000 + month * 100 + day
 
         // 1. Weekend Check (Sat/Sun): Relaxing, reviewing, offline life
         if weekday == 1 || weekday == 7 {
