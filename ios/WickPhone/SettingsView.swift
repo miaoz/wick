@@ -532,7 +532,7 @@ struct SettingsView: View {
                             .foregroundColor(PhoneTheme.inkSecondary)
 
                         Text("v\(PhoneAppInfo.versionDisplay)")
-                            .font(PhoneFont.ui(10.5, weight: .medium, monospacedDigit: true))
+                            .font(PhoneFont.paper(10.5, weight: .medium))
                             .foregroundColor(PhoneTheme.inkTertiary)
                     }
                     .padding(.top, 8)
