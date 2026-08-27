@@ -40,6 +40,7 @@ final class PhoneExchangeCoordinator: ObservableObject {
 
     private(set) var pnlByDay: [Date: Double] = [:]
     private(set) var closedCountByDayKey: [String: Int] = [:]
+    private(set) var openCountByDayKey: [String: Int] = [:]
 
     private let fileManager = FileManager.default
     private let cacheDirectory: URL
@@ -80,7 +81,7 @@ final class PhoneExchangeCoordinator: ObservableObject {
             snapshot = nil
             return
         }
-        snapshot = loaded
+        snapshot = rebuildingDerivedPositions(in: loaded)
     }
 
     func snapshot(for journalID: UUID) -> TradingPositionSnapshot? {
@@ -91,7 +92,19 @@ final class PhoneExchangeCoordinator: ObservableObject {
         guard let data = try? Data(contentsOf: url),
               let loaded = try? JSONDecoder().decode(TradingPositionSnapshot.self, from: data)
         else { return nil }
-        return loaded
+        return rebuildingDerivedPositions(in: loaded)
+    }
+
+    private func rebuildingDerivedPositions(
+        in snapshot: TradingPositionSnapshot
+    ) -> TradingPositionSnapshot {
+        guard !snapshot.fills.isEmpty else { return snapshot }
+        var rebuilt = snapshot
+        rebuilt.positions = FundingAttributor.attach(
+            positions: PositionAggregator.aggregate(fills: snapshot.fills),
+            funding: snapshot.funding
+        )
+        return rebuilt
     }
 
     /// Number of aggregated trading positions for a journal.
@@ -114,11 +127,18 @@ final class PhoneExchangeCoordinator: ObservableObject {
             positions: snapshot?.positions ?? [],
             calendar: .current
         )
-        var counts: [String: Int] = [:]
-        for position in snapshot?.positions ?? [] where position.isClosed {
-            counts[JournalDayKey.make(from: position.openTime), default: 0] += 1
+        var closedCounts: [String: Int] = [:]
+        var openCounts: [String: Int] = [:]
+        for position in snapshot?.positions ?? [] {
+            let dayKey = JournalDayKey.make(from: position.openTime)
+            if position.isClosed {
+                closedCounts[dayKey, default: 0] += 1
+            } else {
+                openCounts[dayKey, default: 0] += 1
+            }
         }
-        closedCountByDayKey = counts
+        closedCountByDayKey = closedCounts
+        openCountByDayKey = openCounts
     }
 
     // MARK: - Query Positions
@@ -139,6 +159,10 @@ final class PhoneExchangeCoordinator: ObservableObject {
 
     func closedCount(for dayKey: String) -> Int {
         closedCountByDayKey[dayKey] ?? 0
+    }
+
+    func openCount(for dayKey: String) -> Int {
+        openCountByDayKey[dayKey] ?? 0
     }
 
     func isConfigured(for journalID: UUID) -> Bool {
@@ -295,12 +319,15 @@ final class PhoneExchangeCoordinator: ObservableObject {
 
     func applyCloudSnapshotDocument(_ document: JournalTradingSnapshotDocument, journalID: UUID) {
         guard cloudSyncEnabled else { return }
-        guard let downloaded = try? JSONDecoder().decode(TradingPositionSnapshot.self, from: document.payload) else {
+        guard var downloaded = try? JSONDecoder().decode(TradingPositionSnapshot.self, from: document.payload) else {
             return
         }
 
         let currentFetched = snapshot(for: journalID)?.fetchedAt ?? .distantPast
         if downloaded.fetchedAt >= currentFetched {
+            downloaded = rebuildingDerivedPositions(in: downloaded)
+            downloaded.sourceVenue = document.venue
+            downloaded.sourceAccountLabel = document.accountLabel
             saveSnapshot(downloaded, for: journalID)
         }
     }

@@ -552,6 +552,7 @@ private struct DayCardView: View {
 
 private struct JournalManagerSheet: View {
     @ObservedObject var store: PhoneJournalStore
+    @ObservedObject private var exchangeCoordinator = PhoneExchangeCoordinator.shared
     let language: AppLanguage
     @Environment(\.dismiss) private var dismiss
 
@@ -569,7 +570,7 @@ private struct JournalManagerSheet: View {
                     ForEach(store.journals) { journal in
                         let isActive = journal.id == store.activeJournalID
                         let entriesCount = store.entryCount(for: journal.id)
-                        let positionsCount = PhoneExchangeCoordinator.shared.positionsCount(for: journal.id)
+                        let positionsCount = exchangeCoordinator.positionsCount(for: journal.id)
                         let statsText = L10n.journalStats(entries: entriesCount, positions: positionsCount, language: language)
 
                         HStack(spacing: 12) {

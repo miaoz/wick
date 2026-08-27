@@ -414,12 +414,21 @@ private struct TodayTradingCard: View {
                 }
 
                 let closedCount = exchangeCoordinator.closedCount(for: JournalDayKey.make(from: Date()))
+                let openCount = exchangeCoordinator.openCount(for: JournalDayKey.make(from: Date()))
                 let journalID = PhoneJournalStore.shared.activeJournalID
                 let venueName = journalID.flatMap { exchangeCoordinator.binding(for: $0)?.venue }.map { Self.venueTitle($0) }
 
                 HStack(spacing: 10) {
-                    if closedCount > 0 {
+                    if closedCount > 0 && openCount > 0 {
+                        Text(String(format: language == .chinese ? "%d 笔平仓 · %d 笔持仓" : "%d closed · %d open", closedCount, openCount))
+                            .font(PhoneFont.ui(11, weight: .bold, monospacedDigit: true))
+                            .foregroundColor(PhoneTheme.inkPrimary)
+                    } else if closedCount > 0 {
                         Text(String(format: language == .chinese ? "%d 笔平仓" : "%d closed", closedCount))
+                            .font(PhoneFont.ui(11, weight: .bold, monospacedDigit: true))
+                            .foregroundColor(PhoneTheme.inkPrimary)
+                    } else if openCount > 0 {
+                        Text(String(format: language == .chinese ? "%d 笔持仓" : "%d open", openCount))
                             .font(PhoneFont.ui(11, weight: .bold, monospacedDigit: true))
                             .foregroundColor(PhoneTheme.inkPrimary)
                     } else {

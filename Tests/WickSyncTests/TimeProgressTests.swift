@@ -106,4 +106,40 @@ final class TimeProgressTests: XCTestCase {
         XCTAssertEqual(L10n.journalStats(entries: 12, positions: 0, language: .english), "12 entries")
         XCTAssertEqual(L10n.journalStats(entries: 12, positions: 5, language: .english), "12 entries · 5 pos")
     }
+
+    func testDayStatsFormatting() {
+        XCTAssertEqual(
+            String(format: L10n.string(.journalDayStatsMixedFormat, language: .chinese), 4, 2, 1),
+            "4 条 · 2 笔已平仓 · 1 笔持仓中"
+        )
+        XCTAssertEqual(
+            String(format: L10n.string(.journalDayStatsOpenFormat, language: .chinese), 4, 1),
+            "4 条 · 1 笔持仓中"
+        )
+        XCTAssertEqual(
+            String(format: L10n.string(.journalDayStatsFormat, language: .chinese), 4, 2),
+            "4 条 · 2 笔已平仓"
+        )
+        XCTAssertEqual(
+            String(format: L10n.string(.journalDayStatsFlatFormat, language: .chinese), 4),
+            "4 条 · 无持仓"
+        )
+
+        XCTAssertEqual(
+            String(format: L10n.string(.journalDayStatsMixedFormat, language: .english), 4, 2, 1),
+            "4 · 2 closed · 1 open"
+        )
+        XCTAssertEqual(
+            String(format: L10n.string(.journalDayStatsOpenFormat, language: .english), 4, 1),
+            "4 · 1 open"
+        )
+        XCTAssertEqual(
+            String(format: L10n.string(.journalDayStatsFormat, language: .english), 4, 2),
+            "4 · 2 closed"
+        )
+        XCTAssertEqual(
+            String(format: L10n.string(.journalDayStatsFlatFormat, language: .english), 4),
+            "4 · flat"
+        )
+    }
 }

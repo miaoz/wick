@@ -302,6 +302,7 @@ struct JournalDayListColumn: View {
                                         entry: entry,
                                         dayPnL: pnlByDay[Calendar.current.startOfDay(for: entry.date)],
                                         closedPositions: closedPositionsByDayKey[JournalDayKey.make(from: entry.date)],
+                                        openPositions: openPositionsByDayKey[JournalDayKey.make(from: entry.date)],
                                         showsPositionStats: positionCoordinator.snapshot != nil
                                     )
                                 }
@@ -478,6 +479,11 @@ struct JournalDayListColumn: View {
         positionCoordinator.closedCountByDayKey
     }
 
+    /// 开仓日 → 持仓中笔数。
+    private var openPositionsByDayKey: [String: Int] {
+        positionCoordinator.openCountByDayKey
+    }
+
     private var itemSections: [ItemSection] {
         let calendar = Calendar.current
         let grouped = Dictionary(grouping: store.filteredTimelineItems) {
@@ -555,7 +561,9 @@ struct JournalDayTimelineRow: View {
     let dayPnL: Double?
     /// 当日开仓且已平仓的笔数;nil = 未启用交易所数据。
     let closedPositions: Int?
-    /// 交易所快照在场时才显示「· 无持仓 / N 笔已平仓」段。
+    /// 当日开仓且持仓中的笔数;nil = 未启用交易所数据。
+    let openPositions: Int?
+    /// 交易所快照在场时才显示「· 无持仓 / N 笔已平仓 / N 笔持仓中」段。
     let showsPositionStats: Bool
 
     /// 涨跌配色下的盈/亏色（只换用哪个已有色值，不改色值本身）。
@@ -631,10 +639,23 @@ struct JournalDayTimelineRow: View {
         let count = entry.items.count
         if showsPositionStats {
             let closed = closedPositions ?? 0
+            let open = openPositions ?? 0
+            if closed > 0 && open > 0 {
+                return String(
+                    format: L10n.string(.journalDayStatsMixedFormat, language: settings.language),
+                    count, closed, open
+                )
+            }
             if closed > 0 {
                 return String(
                     format: L10n.string(.journalDayStatsFormat, language: settings.language),
                     count, closed
+                )
+            }
+            if open > 0 {
+                return String(
+                    format: L10n.string(.journalDayStatsOpenFormat, language: settings.language),
+                    count, open
                 )
             }
             return String(

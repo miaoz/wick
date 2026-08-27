@@ -858,4 +858,52 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
         XCTAssertEqual(position.fundingPnl, -0.5, accuracy: 1e-12)
         XCTAssertEqual(position.netPnl, 8.5, accuracy: 1e-12)
     }
+
+    func testOpenAndClosedPositionCountsPerDay() async throws {
+        let coordinator = ExchangePositionCoordinator.shared
+        let journalID = bindActiveJournal()
+
+        let now = Date()
+        let dayKey = JournalDayKey.make(from: now)
+
+        // One closed position and one open position on the same day.
+        let closedPos = TradingPosition(
+            id: "btc-closed",
+            symbol: "BTCUSDT",
+            side: .long,
+            openTime: now.addingTimeInterval(-3600),
+            closeTime: now.addingTimeInterval(-1800),
+            entryPrice: 50_000,
+            exitPrice: 51_000,
+            peakSize: 1.0,
+            realizedPnl: 1000
+        )
+        let openPos = TradingPosition(
+            id: "eth-open",
+            symbol: "ETHUSDT",
+            side: .long,
+            openTime: now.addingTimeInterval(-1200),
+            closeTime: nil,
+            entryPrice: 3_000,
+            exitPrice: nil,
+            peakSize: 2.0,
+            realizedPnl: 0
+        )
+
+        let cached = TradingPositionSnapshot(
+            fetchedAt: now,
+            windowStart: Calendar.current.startOfDay(for: now),
+            positions: [closedPos, openPos],
+            fills: [],
+            funding: []
+        )
+        try JSONEncoder().encode(cached).write(to: cacheFile(for: journalID))
+
+        coordinator.activeJournalDidChange()
+
+        XCTAssertEqual(coordinator.closedCount(for: dayKey), 1)
+        XCTAssertEqual(coordinator.openCount(for: dayKey), 1)
+        XCTAssertEqual(coordinator.closedCountByDayKey[dayKey], 1)
+        XCTAssertEqual(coordinator.openCountByDayKey[dayKey], 1)
+    }
 }

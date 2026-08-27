@@ -404,9 +404,7 @@ final class PhoneJournalStore: ObservableObject {
         let url = librariesRoot
             .appendingPathComponent(journalID.uuidString, isDirectory: true)
             .appendingPathComponent("journal.json", isDirectory: false)
-        guard let data = try? Data(contentsOf: url),
-              let snapshot = try? JSONDecoder().decode(JournalSnapshot.self, from: data)
-        else { return 0 }
+        guard let snapshot = loadSnapshot(from: url) else { return 0 }
         return snapshot.entries.count
     }
 

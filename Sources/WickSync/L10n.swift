@@ -105,6 +105,8 @@ public enum L10n {
         case journalItemNumberFormat
         case journalItemCountFormat
         case journalDayStatsFormat
+        case journalDayStatsOpenFormat
+        case journalDayStatsMixedFormat
         case journalDayStatsFlatFormat
         case journalDayElapsedFormat
         case sidebarTodayMark
@@ -411,6 +413,8 @@ public enum L10n {
             case .journalItemNumberFormat: return "条目 %d"
             case .journalItemCountFormat: return "%d 条"
             case .journalDayStatsFormat: return "%d 条 · %d 笔已平仓"
+            case .journalDayStatsOpenFormat: return "%d 条 · %d 笔持仓中"
+            case .journalDayStatsMixedFormat: return "%d 条 · %d 笔已平仓 · %d 笔持仓中"
             case .journalDayStatsFlatFormat: return "%d 条 · 无持仓"
             case .journalDayElapsedFormat: return "今日已过 %d%%"
             case .sidebarTodayMark: return "今"
@@ -715,6 +719,8 @@ public enum L10n {
             case .journalItemNumberFormat: return "Item %d"
             case .journalItemCountFormat: return "%d items"
             case .journalDayStatsFormat: return "%d · %d closed"
+            case .journalDayStatsOpenFormat: return "%d · %d open"
+            case .journalDayStatsMixedFormat: return "%d · %d closed · %d open"
             case .journalDayStatsFlatFormat: return "%d · flat"
             case .journalDayElapsedFormat: return "%d%% of today elapsed"
             case .sidebarTodayMark: return "NOW"

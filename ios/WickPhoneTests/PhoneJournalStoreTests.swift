@@ -106,4 +106,36 @@ final class PhoneJournalStoreTests: XCTestCase {
         XCTAssertFalse(reloaded.isCatalogReadOnly)
         XCTAssertEqual(reloaded.journals.count, 1)
     }
+
+    @MainActor
+    func testEntryCountForActiveAndInactiveJournals() {
+        let store = PhoneJournalStore(rootDirectory: root)
+        let firstID = store.journals[0].id
+        let second = store.createJournal(name: "Second")
+
+        store.switchToJournal(id: firstID)
+        var firstEntry = store.openOrCreateToday()
+        firstEntry.title = "first day"
+        store.updateEntry(firstEntry)
+
+        store.switchToJournal(id: second.id)
+        var secondEntry1 = store.openOrCreateToday()
+        secondEntry1.title = "second day 1"
+        store.updateEntry(secondEntry1)
+
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+        let secondEntry2 = JournalEntry(date: yesterday, items: [JournalItem(tag: "note", body: "second day 2")])
+        store.updateEntry(secondEntry2)
+
+        XCTAssertTrue(store.flushPendingWrites())
+
+        // When second is active:
+        XCTAssertEqual(store.entryCount(for: second.id), 2)
+        XCTAssertEqual(store.entryCount(for: firstID), 1)
+
+        // When first is active:
+        store.switchToJournal(id: firstID)
+        XCTAssertEqual(store.entryCount(for: firstID), 1)
+        XCTAssertEqual(store.entryCount(for: second.id), 2)
+    }
 }

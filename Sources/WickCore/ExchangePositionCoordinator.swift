@@ -93,6 +93,7 @@ final class ExchangePositionCoordinator: ObservableObject {
 
     private(set) var pnlByDay: [Date: Double] = [:]
     private(set) var closedCountByDayKey: [String: Int] = [:]
+    private(set) var openCountByDayKey: [String: Int] = [:]
 
     private var refreshTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
@@ -214,6 +215,14 @@ final class ExchangePositionCoordinator: ObservableObject {
         }
         guard let snap = loadSnapshot(at: Self.cacheURL(for: journalID)) else { return 0 }
         return snap.positions.count
+    }
+
+    func closedCount(for dayKey: String) -> Int {
+        closedCountByDayKey[dayKey] ?? 0
+    }
+
+    func openCount(for dayKey: String) -> Int {
+        openCountByDayKey[dayKey] ?? 0
     }
 
     func refreshIfStale() {
@@ -599,11 +608,18 @@ final class ExchangePositionCoordinator: ObservableObject {
             positions: snapshot?.positions ?? [],
             calendar: .current
         )
-        var counts: [String: Int] = [:]
-        for position in snapshot?.positions ?? [] where position.isClosed {
-            counts[JournalDayKey.make(from: position.openTime), default: 0] += 1
+        var closedCounts: [String: Int] = [:]
+        var openCounts: [String: Int] = [:]
+        for position in snapshot?.positions ?? [] {
+            let dayKey = JournalDayKey.make(from: position.openTime)
+            if position.isClosed {
+                closedCounts[dayKey, default: 0] += 1
+            } else {
+                openCounts[dayKey, default: 0] += 1
+            }
         }
-        closedCountByDayKey = counts
+        closedCountByDayKey = closedCounts
+        openCountByDayKey = openCounts
     }
 
     /// Loads a journal's entries for windowing / auto-creation. Corrupt or
