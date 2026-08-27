@@ -1,0 +1,10 @@
+# .releaserc.yml - Release configuration for Wick
+version:
+  file: scripts/package_app.sh
+
+hooks:
+  prepare_artifact: ./scripts/set_version.sh {version}
+
+include:
+  - scripts/package_app.sh
+  - ios/WickPhone.xcodeproj/project.pbxproj

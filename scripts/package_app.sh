@@ -27,6 +27,13 @@ mkdir -p "$DIST_DIR"
 rm -rf "$APP_DIR" "$LEGACY_APP_DIR"
 mkdir -p "$UNIVERSAL_DIR"
 
+# Auto-sync version into iOS project if present
+PBXPROJ="$ROOT_DIR/ios/WickPhone.xcodeproj/project.pbxproj"
+if [[ -f "$PBXPROJ" ]]; then
+    sed -i '' -E "s/MARKETING_VERSION = [0-9.]+;/MARKETING_VERSION = ${VERSION};/g" "$PBXPROJ"
+    sed -i '' -E "s/CURRENT_PROJECT_VERSION = [0-9]+;/CURRENT_PROJECT_VERSION = ${BUILD};/g" "$PBXPROJ"
+fi
+
 "$ROOT_DIR/scripts/generate_icon_assets.sh"
 
 build_arch() {

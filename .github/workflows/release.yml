@@ -60,21 +60,6 @@ jobs:
       - name: Unit tests
         run: swift test
 
-      - name: Build iOS app (generic device scheme)
-        run: |
-          set -euo pipefail
-          xcodebuild \
-            -project ios/WickPhone.xcodeproj \
-            -scheme WickPhone \
-            -destination 'generic/platform=iOS' \
-            build CODE_SIGNING_ALLOWED=NO
-
-      - name: Build iOS SwiftPM targets (fast shared-target gate)
-        run: |
-          set -euo pipefail
-          IPHONE_SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
-          swift build --target WickCalendarKit --triple arm64-apple-ios16.0 --sdk "$IPHONE_SDK"
-
       - name: Resolve version
         id: version
         run: |
@@ -89,6 +74,23 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "build=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
           echo "Resolved VERSION=${VERSION} BUILD=${GITHUB_RUN_NUMBER}"
+
+      - name: Build iOS app (generic device scheme)
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project ios/WickPhone.xcodeproj \
+            -scheme WickPhone \
+            -destination 'generic/platform=iOS' \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ steps.version.outputs.build }}" \
+            build CODE_SIGNING_ALLOWED=NO
+
+      - name: Build iOS SwiftPM targets (fast shared-target gate)
+        run: |
+          set -euo pipefail
+          IPHONE_SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          swift build --target WickCalendarKit --triple arm64-apple-ios16.0 --sdk "$IPHONE_SDK"
 
       - name: Package zip
         env:

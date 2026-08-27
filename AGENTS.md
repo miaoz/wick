@@ -11,7 +11,7 @@
 - **交易日历**：himekuri「黄历」撕页日历（无边框透明穿透窗、撕纸物理与程序合成音效），内容由 `WickCalendarKit` 直连华尔街见闻（宏观 + 财报，keyless REST，非 WebSocket、不打包 Python）。
 - **字体**：可从设备已安装字体里任选一套，全局换用（日记、设置、日历、编辑器输入），不内置任何字体文件；不选即默认 Songti/系统外观。见 `AppFont`/`FontPickerView`。
 - 其他：登录启动（`SMAppService`）、亮/暗/跟随系统外观（「一日弧光」主题引擎）、中英双语、菜单栏百分比、GitHub Releases 检查更新。
-- macOS 13+ / Universal；Swift 6.1+、SwiftUI + AppKit、SwiftPM，**无第三方依赖**。Bundle ID `com.miaoz.wick`；版本默认值见 `scripts/package_app.sh`。
+- macOS 13+ / Universal；Swift 6.1+、SwiftUI + AppKit、SwiftPM，**无第三方依赖**。Bundle ID `com.miaoz.wick`；版本单一真源见 `scripts/package_app.sh`（执行打包、CI 构建或 `./scripts/set_version.sh` 会自动同步写入 `ios/WickPhone.xcodeproj`，双端版本号保持完全一致）。
 
 ## 模块划分
 

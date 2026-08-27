@@ -525,11 +525,15 @@ struct SettingsView: View {
                         }
                     }
 
-                    // 8. About
+                    // 8. About & Version
                     VStack(spacing: 4) {
                         Text(language == .chinese ? "Wick for iOS · 秉烛日记" : "Wick for iOS")
                             .font(PhoneFont.paper(12, weight: .bold))
                             .foregroundColor(PhoneTheme.inkSecondary)
+
+                        Text("v\(PhoneAppInfo.versionDisplay)")
+                            .font(PhoneFont.ui(10.5, weight: .medium, monospacedDigit: true))
+                            .foregroundColor(PhoneTheme.inkTertiary)
                     }
                     .padding(.top, 8)
                     .padding(.bottom, 24)
@@ -1117,5 +1121,22 @@ private struct SheetVenuePickerMenu: View {
             .cornerRadius(4)
             .overlay(RoundedRectangle(cornerRadius: 4).stroke(PhoneTheme.rule, lineWidth: 1))
         }
+    }
+}
+
+// MARK: - App Info
+
+enum PhoneAppInfo {
+    static var shortVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? "0.0.0"
+    }
+
+    static var buildNumber: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+    }
+
+    static var versionDisplay: String {
+        "\(shortVersion) (\(buildNumber))"
     }
 }
