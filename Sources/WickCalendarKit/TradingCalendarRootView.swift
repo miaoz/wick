@@ -47,6 +47,7 @@ public struct TradingCalendarRootView: View {
     @State private var tornCount = 0
     @State private var eventsPage = 0
     @State private var activeTab: MacroCalendarTab = .macro
+    @State private var sortOrder: MacroEventSortOrder = .time
 
     public init(
         language: AppLanguage,
@@ -97,6 +98,9 @@ public struct TradingCalendarRootView: View {
         .onChange(of: activeTab) { _ in
             refreshPageTexture()
         }
+        .onChange(of: sortOrder) { _ in
+            refreshPageTexture()
+        }
         .onChange(of: envPnlConvention) { newConvention in
             TradingCalendarTheme.pnlConvention = newConvention
             refreshPageTexture()
@@ -110,6 +114,9 @@ public struct TradingCalendarRootView: View {
             if note.userInfo?["tabSwitch"] != nil {
                 switchTab()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .wickCalendarToggleSortOrder)) { _ in
+            toggleSortOrder()
         }
         .onReceive(NotificationCenter.default.publisher(for: .wickCalendarFontStyleChanged)) { _ in
             refreshPageTexture()
@@ -180,6 +187,13 @@ public struct TradingCalendarRootView: View {
         }
     }
 
+    /// Toggles the event sort order between time and importance in the macro pane.
+    private func toggleSortOrder() {
+        sortOrder = (sortOrder == .time) ? .importance : .time
+        eventsPage = 0
+        Haptics.tick()
+    }
+
     /// The active tab's error text for a day (the two feeds fail independently).
     private func errorText(for date: Date) -> String? {
         activeTab == .macro ? store.errorText(for: date) : store.earningsErrorText(for: date)
@@ -224,6 +238,7 @@ public struct TradingCalendarRootView: View {
                 language: language,
                 eventsPage: 0,
                 tab: activeTab,
+                sortOrder: sortOrder,
                 layout: layout,
                 convention: envPnlConvention
             )
@@ -421,7 +436,10 @@ public struct TradingCalendarRootView: View {
             let leftPad = layout.isFullBleed ? layout.frameSideInset + 11 * s : 18 * s
             let macroBoundary = leftPad + 50 * s
             let earningsBoundary = leftPad + 130 * s
-            if point.x < macroBoundary {
+            let sortBoundary = layout.pageW - (layout.isFullBleed ? layout.frameSideInset + 65 * s : 65 * s)
+            if activeTab == .macro && point.x >= sortBoundary {
+                toggleSortOrder()
+            } else if point.x < macroBoundary {
                 selectTab(.macro)
             } else if point.x < earningsBoundary {
                 selectTab(.earnings)
@@ -473,6 +491,7 @@ public struct TradingCalendarRootView: View {
             language: language,
             eventsPage: eventsPage,
             tab: activeTab,
+            sortOrder: sortOrder,
             layout: layout,
             convention: envPnlConvention
         )
@@ -492,6 +511,7 @@ public struct TradingCalendarRootView: View {
             language: language,
             eventsPage: eventsPage,
             tab: activeTab,
+            sortOrder: sortOrder,
             seed: tearSeed(for: tornCount),
             start: CGSize(
                 width: drag.width * 0.3,

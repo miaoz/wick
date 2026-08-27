@@ -16,6 +16,7 @@ struct JournalInspectorView: View {
     @State private var eventsCollapsed = false
     @State private var pnlCollapsed = false
     @State private var tab: InspectorTab = .macro
+    @State private var sortOrder: MacroEventSortOrder = .time
     @State private var expandedMacroEventIDs: Set<String> = []
     @State private var expandedEarningsIDs: Set<String> = []
 
@@ -105,10 +106,14 @@ struct JournalInspectorView: View {
                         font: AppFont.paper(8.5)
                     )
 
-                    // 栏目签条:宏观 / 财报
+                    // 栏目签条:宏观 / 财报 + 最右侧排序按钮
                     HStack(spacing: 6) {
                         inspectorTab(title: L10n.string(.macroEventsSection, language: settings.language), tab: .macro)
                         inspectorTab(title: L10n.string(.earningsSection, language: settings.language), tab: .earnings)
+                        Spacer()
+                        if tab == .macro {
+                            sortButton
+                        }
                     }
 
                     if pnlCollapsed {
@@ -171,6 +176,36 @@ struct JournalInspectorView: View {
         .buttonStyle(.plain)
     }
 
+    private var sortButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                sortOrder = (sortOrder == .time) ? .importance : .time
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: sortOrder == .time ? "clock" : "star.fill")
+                    .font(AppFont.ui(8))
+                Text(sortOrder == .time
+                    ? L10n.string(.macroSortByTime, language: settings.language)
+                    : L10n.string(.macroSortByImportance, language: settings.language))
+                    .font(AppFont.paper(9.5, weight: .medium))
+            }
+            .foregroundStyle(palette.textSecondary.color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2.5)
+            .background(palette.controlBackground.color.opacity(0.5))
+            .overlay {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .strokeBorder(palette.divider.color, lineWidth: 0.8)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(sortOrder == .time
+            ? L10n.string(.macroSortByTime, language: settings.language)
+            : L10n.string(.macroSortByImportance, language: settings.language))
+    }
+
     @ViewBuilder
     private var rowsContent: some View {
         if calendarStore.isLoading(for: Date()) {
@@ -191,7 +226,8 @@ struct JournalInspectorView: View {
     }
 
     private func macroRows(limit: Int?) -> some View {
-        let events = calendarStore.events(for: Date())
+        let rawEvents = calendarStore.events(for: Date())
+        let events = rawEvents.sorted(by: sortOrder)
         return Group {
             if events.isEmpty {
                 idleChop
@@ -199,11 +235,21 @@ struct JournalInspectorView: View {
                 let shown = limit.map { Array(events.prefix($0)) } ?? events
                 ForEach(shown) { event in
                     let isExpanded = expandedMacroEventIDs.contains(event.id)
-                    HStack(alignment: .firstTextBaseline, spacing: 7) {
-                        Text(Self.eventTimeFormatter.string(from: event.time))
-                            .font(AppFont.ui(9.5, weight: .bold, design: .monospaced))
-                            .foregroundStyle(palette.pnlUp.color)
-                            .frame(width: 34, alignment: .leading)
+                    HStack(alignment: .top, spacing: 7) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(Self.eventTimeFormatter.string(from: event.time))
+                                .font(AppFont.ui(9.5, weight: .bold, design: .monospaced))
+                                .foregroundStyle(palette.pnlUp.color)
+
+                            HStack(spacing: 1) {
+                                ForEach(0..<max(1, min(3, event.importance)), id: \.self) { _ in
+                                    Image(systemName: "star.fill")
+                                        .font(AppFont.ui(6.5))
+                                        .foregroundStyle(palette.accent.color)
+                                }
+                            }
+                        }
+                        .frame(width: 34, alignment: .leading)
                         Text(event.country)
                             .font(AppFont.paper(10))
                             .foregroundStyle(palette.textSecondary.color)

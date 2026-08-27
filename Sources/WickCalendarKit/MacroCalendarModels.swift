@@ -38,6 +38,28 @@ public struct MacroCalendarEvent: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
+/// Sorting strategy for macro calendar events.
+public enum MacroEventSortOrder: String, CaseIterable, Sendable {
+    case time
+    case importance
+}
+
+public extension Collection where Element == MacroCalendarEvent {
+    func sorted(by order: MacroEventSortOrder) -> [MacroCalendarEvent] {
+        switch order {
+        case .time:
+            return self.sorted { $0.time < $1.time }
+        case .importance:
+            return self.sorted { a, b in
+                if a.importance != b.importance {
+                    return a.importance > b.importance
+                }
+                return a.time < b.time
+            }
+        }
+    }
+}
+
 enum MacroCalendarError: Error, Equatable {
     case http(Int)
     case badPayload(String)

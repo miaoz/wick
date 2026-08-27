@@ -44,6 +44,7 @@ private struct FlatCalendarView: View {
     @Binding var activeTab: CalendarView.CalendarTab
     @ObservedObject var calendarStore: MacroCalendarStore
     let language: AppLanguage
+    @State private var sortOrder: MacroEventSortOrder = .time
 
     var body: some View {
         ScrollView {
@@ -76,12 +77,40 @@ private struct FlatCalendarView: View {
                     ) {
                         activeTab = .earnings
                     }
+
+                    if activeTab == .macro {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                sortOrder = (sortOrder == .time) ? .importance : .time
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: sortOrder == .time ? "clock" : "star.fill")
+                                    .font(PhoneFont.ui(9))
+                                Text(sortOrder == .time
+                                    ? L10n.string(.macroSortByTime, language: language)
+                                    : L10n.string(.macroSortByImportance, language: language))
+                                    .font(PhoneFont.paper(11, weight: .medium))
+                            }
+                            .foregroundColor(PhoneTheme.inkSecondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 7)
+                            .background(PhoneTheme.paperHi)
+                            .cornerRadius(4)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                    .stroke(PhoneTheme.rule, lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .padding(.horizontal, 14)
 
                 // Event List
                 if activeTab == .macro {
-                    let events = calendarStore.events(for: selectedDate)
+                    let rawEvents = calendarStore.events(for: selectedDate)
+                    let events = rawEvents.sorted(by: sortOrder)
                     if events.isEmpty {
                         EmptyDayStampView(
                             stamp: language == .chinese ? "本日休市" : "CLOSED",

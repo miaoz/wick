@@ -22,5 +22,8 @@ extension Notification.Name {
     /// Reopens or summons the calendar window; resets the current date back to today
     /// so previously torn pages or stale cached dates revert to today's live feed.
     public static let wickCalendarResetToToday = Notification.Name("wick.calendarResetToToday")
+
+    /// Toggles the event sort order between time and importance in the physical calendar pad.
+    public static let wickCalendarToggleSortOrder = Notification.Name("wick.calendarToggleSortOrder")
 }
 

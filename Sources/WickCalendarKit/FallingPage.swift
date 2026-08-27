@@ -13,6 +13,8 @@ public struct FallingPage: Identifiable {
     public let eventsPage: Int
     /// The pane tab the sheet was showing when it came off.
     public let tab: MacroCalendarTab
+    /// The event sort order when the page came off.
+    public let sortOrder: MacroEventSortOrder
     public let seed: UInt64
     public let start: CGSize
     public let grabX: CGFloat
@@ -32,6 +34,7 @@ public struct FallingPage: Identifiable {
         language: AppLanguage,
         eventsPage: Int,
         tab: MacroCalendarTab = .macro,
+        sortOrder: MacroEventSortOrder = .time,
         seed: UInt64,
         start: CGSize,
         grabX: CGFloat,
@@ -46,6 +49,7 @@ public struct FallingPage: Identifiable {
         self.language = language
         self.eventsPage = eventsPage
         self.tab = tab
+        self.sortOrder = sortOrder
         self.seed = seed
         self.start = start
         self.grabX = grabX
@@ -108,6 +112,7 @@ public struct FallingPageView: View {
             language: page.language,
             eventsPage: page.eventsPage,
             tab: page.tab,
+            sortOrder: page.sortOrder,
             layout: page.layout,
             convention: page.convention
         )

@@ -185,6 +185,48 @@ final class MacroCalendarTests: XCTestCase {
         XCTAssertEqual(startInChina.day, 26)
         XCTAssertEqual(startInChina.hour, 0)
     }
+
+    // MARK: - Sorting
+
+    func testSortEventsByTime() {
+        let t1 = Date(timeIntervalSince1970: 1000)
+        let t2 = Date(timeIntervalSince1970: 2000)
+        let t3 = Date(timeIntervalSince1970: 3000)
+
+        let e1 = MacroCalendarEvent(id: "1", time: t2, country: "US", title: "E1", importance: 3, actual: nil, forecast: nil, previous: nil, link: nil)
+        let e2 = MacroCalendarEvent(id: "2", time: t1, country: "CN", title: "E2", importance: 1, actual: nil, forecast: nil, previous: nil, link: nil)
+        let e3 = MacroCalendarEvent(id: "3", time: t3, country: "EU", title: "E3", importance: 2, actual: nil, forecast: nil, previous: nil, link: nil)
+
+        let sorted = [e1, e2, e3].sorted(by: .time)
+        XCTAssertEqual(sorted.map(\.id), ["2", "1", "3"])
+    }
+
+    func testSortEventsByImportance() {
+        let t1 = Date(timeIntervalSince1970: 1000)
+        let t2 = Date(timeIntervalSince1970: 2000)
+        let t3 = Date(timeIntervalSince1970: 3000)
+
+        let e1 = MacroCalendarEvent(id: "1", time: t2, country: "US", title: "E1", importance: 1, actual: nil, forecast: nil, previous: nil, link: nil)
+        let e2 = MacroCalendarEvent(id: "2", time: t1, country: "CN", title: "E2", importance: 3, actual: nil, forecast: nil, previous: nil, link: nil)
+        let e3 = MacroCalendarEvent(id: "3", time: t3, country: "EU", title: "E3", importance: 2, actual: nil, forecast: nil, previous: nil, link: nil)
+
+        let sorted = [e1, e2, e3].sorted(by: .importance)
+        XCTAssertEqual(sorted.map(\.id), ["2", "3", "1"])
+    }
+
+    func testSortEventsByImportanceTiesFallBackToTime() {
+        let t1 = Date(timeIntervalSince1970: 1000)
+        let t2 = Date(timeIntervalSince1970: 2000)
+        let t3 = Date(timeIntervalSince1970: 3000)
+
+        let e1 = MacroCalendarEvent(id: "1", time: t3, country: "US", title: "E1", importance: 3, actual: nil, forecast: nil, previous: nil, link: nil)
+        let e2 = MacroCalendarEvent(id: "2", time: t1, country: "CN", title: "E2", importance: 3, actual: nil, forecast: nil, previous: nil, link: nil)
+        let e3 = MacroCalendarEvent(id: "3", time: t2, country: "EU", title: "E3", importance: 1, actual: nil, forecast: nil, previous: nil, link: nil)
+
+        let sorted = [e1, e2, e3].sorted(by: .importance)
+        XCTAssertEqual(sorted.map(\.id), ["2", "1", "3"])
+    }
 }
+
 
 

@@ -46,6 +46,7 @@ struct MacroDayPageView: View {
     let eventsPage: Int
     /// Which compartment the pane shows.
     let tab: MacroCalendarTab
+    var sortOrder: MacroEventSortOrder = .time
     let layout: PaperLayout
     var convention: PnlColorConvention = TradingCalendarTheme.pnlConvention
 
@@ -292,12 +293,9 @@ struct MacroDayPageView: View {
         }
     }
 
-    /// Most newsworthy first; ties keep chronological order.
+    /// Events sorted according to the chosen order (.time or .importance).
     private var rankedEvents: [MacroCalendarEvent] {
-        events.sorted { a, b in
-            if a.importance != b.importance { return a.importance > b.importance }
-            return a.time < b.time
-        }
+        events.sorted(by: sortOrder)
     }
 
     /// The events pane is a fixed compartment: everything between the lunar
@@ -354,12 +352,31 @@ struct MacroDayPageView: View {
                     .foregroundStyle(TradingCalendarTheme.dimInk)
             }
             Spacer()
+            if tab == .macro, events.count > 0 {
+                sortChip
+            }
             if isLoading, activeCount > 0 {
                 Text(L10n.string(.macroLoading, language: language))
                     .font(TradingCalendarTheme.mincho(7 * s))
                     .foregroundStyle(TradingCalendarTheme.dimInk)
             }
         }
+    }
+
+    /// A subtle printed indicator of event sort order on paper.
+    private var sortChip: some View {
+        let label = sortOrder == .time
+            ? L10n.string(.macroSortByTime, language: language)
+            : L10n.string(.macroSortByImportance, language: language)
+        return Text(label)
+            .font(TradingCalendarTheme.kanji(8 * s))
+            .foregroundStyle(TradingCalendarTheme.dimInk)
+            .padding(.horizontal, 4 * s)
+            .padding(.vertical, 1.5 * s)
+            .overlay {
+                Rectangle()
+                    .strokeBorder(TradingCalendarTheme.ink.opacity(0.2), lineWidth: 0.6 * s)
+            }
     }
 
     /// A pane tab chip: solid accent when active, an outlined ghost when not.
@@ -658,9 +675,9 @@ struct MacroDayPageView: View {
     }
 
     private func importanceStars(_ importance: Int, size: CGFloat) -> some View {
-        let stars = min(max(importance, 0), 2)
+        let stars = min(max(importance, 0), 3)
         return HStack(spacing: 1 * s) {
-            ForEach(0..<2, id: \.self) { i in
+            ForEach(0..<3, id: \.self) { i in
                 Text("★")
                     .font(TradingCalendarTheme.kanji(size))
                     .foregroundStyle(i < stars ? accent : TradingCalendarTheme.ink.opacity(0.15))

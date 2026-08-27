@@ -269,6 +269,8 @@ public enum L10n {
         case macroForecast
         case macroPrevious
         case macroImportance
+        case macroSortByTime
+        case macroSortByImportance
         case macroLunar
         case macroMoreEventsFormat
         case calendarIdleWeekday
@@ -566,6 +568,8 @@ public enum L10n {
             case .macroForecast: return "预期"
             case .macroPrevious: return "前值"
             case .macroImportance: return "重要性"
+            case .macroSortByTime: return "按时间"
+            case .macroSortByImportance: return "按星级"
             case .macroLunar: return "农历"
             case .macroMoreEventsFormat: return "另有 %d 项"
             case .calendarIdleWeekday: return "本日无事"
@@ -864,6 +868,8 @@ public enum L10n {
             case .macroForecast: return "Forecast"
             case .macroPrevious: return "Previous"
             case .macroImportance: return "Importance"
+            case .macroSortByTime: return "By Time"
+            case .macroSortByImportance: return "By Stars"
             case .macroLunar: return "Lunar"
             case .macroMoreEventsFormat: return "%d more"
             case .calendarIdleWeekday: return "Quiet day"

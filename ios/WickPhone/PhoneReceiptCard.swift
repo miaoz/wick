@@ -73,7 +73,7 @@ struct PhoneReceiptCard: View {
 
                 Spacer()
 
-                Text(timeString(for: position.openTime))
+                Text(dateRangeText)
                     .font(PhoneFont.ui(9.5, monospacedDigit: true))
                     .foregroundColor(PhoneTheme.receiptInk.opacity(0.6))
             }
@@ -99,19 +99,33 @@ struct PhoneReceiptCard: View {
                 }
             }
 
-            // Realized PnL Row
-            HStack {
-                Text(L10n.string(.exchangePositionRealizedPnl, language: currentLanguage))
-                    .font(PhoneFont.paper(10.5, weight: .semibold))
-                    .foregroundColor(PhoneTheme.receiptInk)
+            // Total / Holding Row
+            if position.isClosed {
+                HStack {
+                    Text(L10n.string(.exchangePositionRealizedPnl, language: currentLanguage))
+                        .font(PhoneFont.paper(10.5, weight: .semibold))
+                        .foregroundColor(PhoneTheme.receiptInk)
 
-                Spacer()
+                    Spacer()
 
-                let pnl = position.realizedPnl
-                let isGain = pnl >= 0
-                Text(formatPnl(pnl))
-                    .font(PhoneFont.ui(12, weight: .bold, monospacedDigit: true))
-                    .foregroundColor(PhoneTheme.pnlColor(isGain: isGain))
+                    let pnl = position.realizedPnl
+                    let isGain = pnl >= 0
+                    Text(formatPnl(pnl))
+                        .font(PhoneFont.ui(12, weight: .bold, monospacedDigit: true))
+                        .foregroundColor(PhoneTheme.pnlColor(isGain: isGain))
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(L10n.string(.exchangePositionOpen, language: currentLanguage))
+                        .font(PhoneFont.paper(10.5, weight: .semibold))
+                        .foregroundColor(PhoneTheme.receiptInk)
+
+                    Spacer()
+
+                    Text(formatDate(position.openTime))
+                        .font(PhoneFont.ui(9.5, monospacedDigit: true))
+                        .foregroundColor(PhoneTheme.receiptInk.opacity(0.6))
+                }
             }
         }
         .padding(.horizontal, 10)
@@ -133,9 +147,17 @@ struct PhoneReceiptCard: View {
         .padding(.vertical, 4)
     }
 
-    private func timeString(for date: Date) -> String {
+    private var dateRangeText: String {
+        let open = formatDate(position.openTime)
+        if let close = position.closeTime {
+            return "\(open) → \(formatDate(close))"
+        }
+        return open
+    }
+
+    private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
+        formatter.dateFormat = "MM-dd HH:mm"
         return formatter.string(from: date)
     }
 
@@ -151,6 +173,7 @@ struct PhoneReceiptCard: View {
 
     private func formatPnl(_ pnl: Double) -> String {
         let prefix = pnl >= 0 ? "+" : ""
-        return "\(prefix)\(String(format: "%.2f", pnl)) USDT"
+        let quote = position.quoteAsset.map { " \($0)" } ?? " USDT"
+        return "\(prefix)\(String(format: "%.2f", pnl))\(quote)"
     }
 }
