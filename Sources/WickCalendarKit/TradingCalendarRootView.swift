@@ -28,7 +28,10 @@ public struct TradingCalendarRootView: View {
     let layout: PaperLayout
 
     @Environment(\.pnlColorConvention) private var envPnlConvention
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var store = MacroCalendarStore.shared
+
+    @GestureState private var isGestureActive = false
 
     @State private var currentDate = Date()
     @State private var sim: PaperSim
@@ -81,6 +84,20 @@ public struct TradingCalendarRootView: View {
             store.loadIfNeeded(for: nextDate)
             TradingCalendarTheme.pnlConvention = envPnlConvention
             refreshPageTexture()
+            resetDragState()
+        }
+        .onDisappear {
+            resetDragState()
+        }
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase != .active {
+                cancelOrSettleDrag()
+            }
+        }
+        .onChange(of: isGestureActive) { active in
+            if !active && dragging {
+                cancelOrSettleDrag()
+            }
         }
         .onChange(of: currentDate) { _ in
             store.loadIfNeeded(for: nextDate)
@@ -302,15 +319,19 @@ public struct TradingCalendarRootView: View {
         // effectively comes from the page's upper half there.
         .contextMenu {
             Button(L10n.string(.calendarShareThisPage, language: language)) {
+                cancelOrSettleDrag()
                 if let image = renderCurrentPage() {
                     ImageShare.presentShareSheet(for: image, scale: 2)
                 }
             }
             Button(L10n.string(.journalCopyImage, language: language)) {
+                cancelOrSettleDrag()
                 if let image = renderCurrentPage() {
                     ImageShare.copy(image, scale: 2)
                 }
             }
+        } preview: {
+            currentPageView
         }
     }
 
@@ -365,6 +386,9 @@ public struct TradingCalendarRootView: View {
 
     private var tearGesture: some Gesture {
         DragGesture(minimumDistance: 0)
+            .updating($isGestureActive) { _, state, _ in
+                state = true
+            }
             .onChanged { value in
                 if tornMidDrag { return }
                 if !dragging { beginGrab(at: value.startLocation) }
@@ -409,6 +433,7 @@ public struct TradingCalendarRootView: View {
                 }
             }
             .onEnded { value in
+                guard dragging else { return }
                 dragging = false
                 lastTickLevel = 0
                 CalendarCursor.openHand()
@@ -479,6 +504,31 @@ public struct TradingCalendarRootView: View {
             hold = 1
         }
         TearSound.shared.playRustle()
+    }
+
+    private func cancelOrSettleDrag(pulled: CGFloat = 0, amplified: CGFloat = 0) {
+        guard dragging || hold > 0 || drag != .zero else { return }
+        dragging = false
+        tornMidDrag = false
+        lastTickLevel = 0
+        CalendarCursor.openHand()
+        sim.release()
+        settleWithoutTearing(pulled: pulled, amplified: amplified)
+    }
+
+    private func resetDragState() {
+        dragging = false
+        tornMidDrag = false
+        lastTickLevel = 0
+        CalendarCursor.openHand()
+        sim.release()
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            drag = .zero
+            hold = 0
+        }
+        sim.setSeam(centerX: tearCenterX, front: min(damage / 0.95, 1) * seamSpan)
     }
 
     private func settleWithoutTearing(pulled: CGFloat, amplified: CGFloat) {

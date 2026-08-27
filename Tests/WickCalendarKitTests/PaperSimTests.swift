@@ -157,4 +157,33 @@ final class PaperSimTests: XCTestCase {
         XCTAssertEqual(phoneLayout.eventsPaneTopY, phoneLayout.contentTopInset + expectedHeaderH, accuracy: 0.01)
         XCTAssertGreaterThan(phoneLayout.eventPaneHeight, 150)
     }
+
+    func testGrabAndReleaseReturnsToRest() {
+        let sim = PaperSim(layout: .desktop)
+        let restPos = sim.pos
+
+        // Grab and lift
+        sim.setGrab(at: CGPoint(x: 150, y: 250))
+        sim.moveGrab(to: CGPoint(x: 160, y: 260), lift: 1.0)
+        for _ in 0..<10 {
+            sim.step(1.0 / 60.0)
+        }
+
+        // Lifted state has vertices pulled out in z
+        let hasLiftedVertex = sim.pos.contains { $0.z > 5.0 }
+        XCTAssertTrue(hasLiftedVertex, "grab with lift must pull vertex in z")
+
+        // Release grab: solver should spring back towards rest plane
+        sim.release()
+        for _ in 0..<200 {
+            sim.step(1.0 / 60.0)
+        }
+
+        // Vertices should return close to rest positions
+        for i in sim.pos.indices {
+            XCTAssertEqual(sim.pos[i].x, restPos[i].x, accuracy: 2.0)
+            XCTAssertEqual(sim.pos[i].y, restPos[i].y, accuracy: 2.0)
+            XCTAssertEqual(sim.pos[i].z, restPos[i].z, accuracy: 1.0)
+        }
+    }
 }
