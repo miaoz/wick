@@ -952,4 +952,20 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(mutates, 0, "flushing an unchanged draft must not notify sync")
         _ = cancellable
     }
+
+    func testEntryCountForActiveAndInactiveJournals() {
+        let firstID = store.activeJournalID!
+        _ = store.createEntry(on: Date())
+        _ = store.createEntry(on: Date().addingTimeInterval(-86400))
+        XCTAssertEqual(store.entryCount(for: firstID), 2)
+
+        let second = store.createJournal(name: "Second Book")
+        _ = store.createEntry(on: Date())
+        XCTAssertEqual(store.entryCount(for: second.id), 1)
+        XCTAssertEqual(store.entryCount(for: firstID), 2)
+
+        store.switchToJournal(id: firstID)
+        XCTAssertEqual(store.entryCount(for: firstID), 2)
+        XCTAssertEqual(store.entryCount(for: second.id), 1)
+    }
 }

@@ -717,6 +717,19 @@ final class JournalStore: ObservableObject {
         return loadEntriesFromDisk(journalID: journalID)
     }
 
+    /// Number of day entries in a journal.
+    func entryCount(for journalID: UUID) -> Int {
+        if journalID == activeJournalID {
+            return entries.count
+        }
+        switch loadEntriesFromDisk(journalID: journalID) {
+        case .active(let entries), .loaded(let entries):
+            return entries.count
+        default:
+            return 0
+        }
+    }
+
     /// Same as `ensurePositionEntries`, but can target a journal that is not open.
     /// Only runs on a loaded journal or a legitimately new one; corrupt,
     /// newer-format, and deleted-from-catalog journals are skipped without

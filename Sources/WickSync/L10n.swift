@@ -278,6 +278,8 @@ public enum L10n {
         case inspectorMonthlyOverview
         case inspectorJournalsSection
         case inspectorTagsSection
+        case journalEntriesCountFormat
+        case journalPositionsCountFormat
         case journalLibraryManage
         case journalCycleColumns
         case inspectorToggle
@@ -577,6 +579,8 @@ public enum L10n {
             case .inspectorMonthlyOverview: return "月度总览"
             case .inspectorJournalsSection: return "日记本"
             case .inspectorTagsSection: return "标签"
+            case .journalEntriesCountFormat: return "%d 篇"
+            case .journalPositionsCountFormat: return "%d 仓"
             case .journalLibraryManage: return "管理"
             case .journalCycleColumns: return "切换栏位(⌃⌘S)"
             case .inspectorToggle: return "检查器(⌥⌘0)"
@@ -877,6 +881,8 @@ public enum L10n {
             case .inspectorMonthlyOverview: return "Monthly Overview"
             case .inspectorJournalsSection: return "Journals"
             case .inspectorTagsSection: return "Tags"
+            case .journalEntriesCountFormat: return "%d entries"
+            case .journalPositionsCountFormat: return "%d pos"
             case .journalLibraryManage: return "Manage"
             case .journalCycleColumns: return "Cycle columns (⌃⌘S)"
             case .inspectorToggle: return "Inspector (⌥⌘0)"
@@ -942,5 +948,31 @@ public enum L10n {
             case .tabSettings: return "Settings"
             }
         }
+    }
+
+    /// Formats subtle notebook summary stats (e.g. "12 篇 · 5 仓" / "12 entries · 5 pos").
+    public static func journalStats(entries: Int, positions: Int, language: AppLanguage) -> String {
+        let entriesStr: String
+        switch language {
+        case .chinese:
+            entriesStr = String(format: string(.journalEntriesCountFormat, language: language), entries)
+        case .english:
+            if entries == 1 {
+                entriesStr = "1 entry"
+            } else {
+                entriesStr = String(format: string(.journalEntriesCountFormat, language: language), entries)
+            }
+        }
+
+        guard positions > 0 else { return entriesStr }
+
+        let posStr: String
+        switch language {
+        case .chinese:
+            posStr = String(format: string(.journalPositionsCountFormat, language: language), positions)
+        case .english:
+            posStr = "\(positions) pos"
+        }
+        return "\(entriesStr) · \(posStr)"
     }
 }

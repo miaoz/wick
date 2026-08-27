@@ -396,6 +396,20 @@ final class PhoneJournalStore: ObservableObject {
         persistCatalog()
     }
 
+    /// Number of day entries in a journal.
+    func entryCount(for journalID: UUID) -> Int {
+        if journalID == activeJournalID {
+            return entries.count
+        }
+        let url = librariesRoot
+            .appendingPathComponent(journalID.uuidString, isDirectory: true)
+            .appendingPathComponent("journal.json", isDirectory: false)
+        guard let data = try? Data(contentsOf: url),
+              let snapshot = try? JSONDecoder().decode(JournalSnapshot.self, from: data)
+        else { return 0 }
+        return snapshot.entries.count
+    }
+
     /// Registers a journal discovered on another device under the same id
     /// (see the macOS store for the full explanation). Does not switch.
     @discardableResult

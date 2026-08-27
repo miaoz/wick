@@ -207,6 +207,15 @@ final class ExchangePositionCoordinator: ObservableObject {
         }
     }
 
+    /// Number of aggregated trading positions for a journal (if bound & cached).
+    func positionsCount(for journalID: UUID) -> Int {
+        if journalID == store.activeJournalID, let snapshot {
+            return snapshot.positions.count
+        }
+        guard let snap = loadSnapshot(at: Self.cacheURL(for: journalID)) else { return 0 }
+        return snap.positions.count
+    }
+
     func refreshIfStale() {
         guard isEnabled, !isSyncing else { return }
         if let fetchedAt = snapshot?.fetchedAt,

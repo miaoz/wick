@@ -94,4 +94,16 @@ final class TimeProgressTests: XCTestCase {
         XCTAssertGreaterThan(week!.fractionRemaining, 0)
         XCTAssertLessThan(week!.fractionRemaining, 1)
     }
+
+    func testJournalStatsFormatting() {
+        XCTAssertEqual(L10n.journalStats(entries: 0, positions: 0, language: .chinese), "0 篇")
+        XCTAssertEqual(L10n.journalStats(entries: 1, positions: 0, language: .chinese), "1 篇")
+        XCTAssertEqual(L10n.journalStats(entries: 12, positions: 0, language: .chinese), "12 篇")
+        XCTAssertEqual(L10n.journalStats(entries: 12, positions: 5, language: .chinese), "12 篇 · 5 仓")
+
+        XCTAssertEqual(L10n.journalStats(entries: 0, positions: 0, language: .english), "0 entries")
+        XCTAssertEqual(L10n.journalStats(entries: 1, positions: 0, language: .english), "1 entry")
+        XCTAssertEqual(L10n.journalStats(entries: 12, positions: 0, language: .english), "12 entries")
+        XCTAssertEqual(L10n.journalStats(entries: 12, positions: 5, language: .english), "12 entries · 5 pos")
+    }
 }

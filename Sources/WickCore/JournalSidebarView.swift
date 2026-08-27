@@ -13,6 +13,7 @@ struct JournalNavigationSidebar: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: JournalStore
     @Environment(\.wickPalette) private var palette
+    @ObservedObject private var positionCoordinator = ExchangePositionCoordinator.shared
     @StateObject private var journalDragSession = JournalDragSession()
 
     let onNewJournal: () -> Void
@@ -92,12 +93,28 @@ struct JournalNavigationSidebar: View {
     }
 
     private func journalRowLabel(_ journal: JournalInfo) -> some View {
-        HStack(spacing: 8) {
+        let isActive = journal.id == store.activeJournalID
+        let entriesCount = store.entryCount(for: journal.id)
+        let positionsCount = positionCoordinator.positionsCount(for: journal.id)
+        let statsText = L10n.journalStats(entries: entriesCount, positions: positionsCount, language: settings.language)
+
+        return HStack(spacing: 6) {
             Text(journal.name)
-                .font(AppFont.ui(13, weight: journal.id == store.activeJournalID ? .semibold : .regular, design: .rounded))
+                .font(AppFont.ui(13, weight: isActive ? .semibold : .regular, design: .rounded))
                 .lineLimit(1)
+
             Spacer(minLength: 4)
-            if journal.id == store.activeJournalID {
+
+            Text(statsText)
+                .font(AppFont.ui(10, design: .monospaced))
+                .foregroundStyle(
+                    isActive
+                        ? Color(red: 1, green: 0.95, blue: 0.88).opacity(0.65)
+                        : palette.textTertiary.color.opacity(0.7)
+                )
+                .lineLimit(1)
+
+            if isActive {
                 Text(L10n.string(.sidebarTodayMark, language: settings.language))
                     .font(AppFont.ui(10.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(Color(red: 1, green: 0.95, blue: 0.88).opacity(0.85))
@@ -107,10 +124,10 @@ struct JournalNavigationSidebar: View {
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .foregroundStyle(journal.id == store.activeJournalID ? Color(red: 1, green: 0.95, blue: 0.88) : palette.textPrimary.color)
+        .foregroundStyle(isActive ? Color(red: 1, green: 0.95, blue: 0.88) : palette.textPrimary.color)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(journal.id == store.activeJournalID ? palette.accent.color : .clear)
+                .fill(isActive ? palette.accent.color : .clear)
         )
     }
 

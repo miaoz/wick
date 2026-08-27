@@ -568,6 +568,10 @@ private struct JournalManagerSheet: View {
                 Section {
                     ForEach(store.journals) { journal in
                         let isActive = journal.id == store.activeJournalID
+                        let entriesCount = store.entryCount(for: journal.id)
+                        let positionsCount = PhoneExchangeCoordinator.shared.positionsCount(for: journal.id)
+                        let statsText = L10n.journalStats(entries: entriesCount, positions: positionsCount, language: language)
+
                         HStack(spacing: 12) {
                             // Active status icon
                             if isActive {
@@ -580,10 +584,16 @@ private struct JournalManagerSheet: View {
                                     .foregroundColor(PhoneTheme.inkTertiary.opacity(0.4))
                             }
 
-                            // Journal Name in user's custom selected font!
-                            Text(journal.name)
-                                .font(PhoneFont.paper(16, weight: isActive ? .bold : .medium))
-                                .foregroundColor(isActive ? PhoneTheme.inkPrimary : PhoneTheme.inkSecondary)
+                            // Journal Name + subtle stats
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(journal.name)
+                                    .font(PhoneFont.paper(16, weight: isActive ? .bold : .medium))
+                                    .foregroundColor(isActive ? PhoneTheme.inkPrimary : PhoneTheme.inkSecondary)
+
+                                Text(statsText)
+                                    .font(PhoneFont.ui(11, monospacedDigit: true))
+                                    .foregroundColor(PhoneTheme.inkTertiary.opacity(0.85))
+                            }
 
                             Spacer()
 

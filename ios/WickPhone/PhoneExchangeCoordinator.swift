@@ -94,6 +94,11 @@ final class PhoneExchangeCoordinator: ObservableObject {
         return loaded
     }
 
+    /// Number of aggregated trading positions for a journal.
+    func positionsCount(for journalID: UUID) -> Int {
+        snapshot(for: journalID)?.positions.count ?? 0
+    }
+
     private func saveSnapshot(_ newSnapshot: TradingPositionSnapshot, for journalID: UUID) {
         let url = cacheDirectory.appendingPathComponent("\(journalID.uuidString).json")
         if let data = try? JSONEncoder().encode(newSnapshot) {
