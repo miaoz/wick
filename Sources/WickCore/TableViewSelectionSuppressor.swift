@@ -31,12 +31,24 @@ struct TableViewSelectionSuppressor: NSViewRepresentable {
 
         func applyIfNeeded() {
             if let tableView, tableView.window != nil {
-                tableView.selectionHighlightStyle = .none
+                if tableView.selectionHighlightStyle != .none {
+                    DispatchQueue.main.async { [weak tableView] in
+                        if tableView?.selectionHighlightStyle != .none {
+                            tableView?.selectionHighlightStyle = .none
+                        }
+                    }
+                }
                 return
             }
             if let found = containingListView as? NSTableView {
                 tableView = found
-                found.selectionHighlightStyle = .none
+                if found.selectionHighlightStyle != .none {
+                    DispatchQueue.main.async { [weak found] in
+                        if found?.selectionHighlightStyle != .none {
+                            found?.selectionHighlightStyle = .none
+                        }
+                    }
+                }
                 return
             }
             guard !didScheduleRetry else { return }
@@ -46,7 +58,9 @@ struct TableViewSelectionSuppressor: NSViewRepresentable {
                 self.didScheduleRetry = false
                 if let found = self.containingListView as? NSTableView {
                     self.tableView = found
-                    found.selectionHighlightStyle = .none
+                    if found.selectionHighlightStyle != .none {
+                        found.selectionHighlightStyle = .none
+                    }
                 }
             }
         }

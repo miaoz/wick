@@ -21,34 +21,35 @@ struct JournalNavigationSidebar: View {
     let onDeleteJournal: (JournalInfo) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if settings.physicalCalendarEnabled {
-                // 彩蛋开启:主窗退为纯三栏,月历回导航栏顶部(现状位置)。
-                JournalPnlCalendarView()
-                    .padding(.horizontal, 4)
-            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if settings.physicalCalendarEnabled {
+                    // 彩蛋开启:主窗退为纯三栏,月历回导航栏顶部(现状位置)。
+                    JournalPnlCalendarView()
+                        .padding(.horizontal, 4)
+                }
 
-            sideSection(
-                L10n.string(.inspectorJournalsSection, language: settings.language),
-                onAdd: onNewJournal,
-                addHelp: L10n.string(.journalLibraryNew, language: settings.language)
-            ) {
-                ForEach(store.journals) { journal in
-                    journalRow(journal)
+                sideSection(
+                    L10n.string(.inspectorJournalsSection, language: settings.language),
+                    onAdd: onNewJournal,
+                    addHelp: L10n.string(.journalLibraryNew, language: settings.language)
+                ) {
+                    ForEach(store.journals) { journal in
+                        journalRow(journal)
+                    }
+                }
+
+                if !store.allTags.isEmpty {
+                    sideSection(L10n.string(.inspectorTagsSection, language: settings.language)) {
+                        sidebarTagFlow
+                    }
                 }
             }
-
-            if !store.allTags.isEmpty {
-                sideSection(L10n.string(.inspectorTagsSection, language: settings.language)) {
-                    sidebarTagFlow
-                }
-            }
-
-            Spacer(minLength: 0)
+            .padding(.top, 14)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        // 文字左缘落 x=10,与首颗红绿灯左缘(x≈9)对齐(v4 同此关系:灯 18 / 文 20);
-        // 行 pill 自带 4pt 外边距,不与窗缘相切。
-        .padding(.top, 14)
+        .scrollIndicators(.never)
+        .hidesAppKitScrollers()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(palette.sidebarBackground.color)
         .onDisappear { journalDragSession.reset() }
@@ -325,6 +326,7 @@ struct JournalDayListColumn: View {
                 .scrollIndicators(.never)
                 .background(TableViewSelectionSuppressor())
                 .hidesAppKitScrollers()
+                .transaction { $0.animation = nil }
             }
         }
     }
@@ -369,6 +371,7 @@ struct JournalDayListColumn: View {
                 .scrollIndicators(.never)
                 .background(TableViewSelectionSuppressor())
                 .hidesAppKitScrollers()
+                .transaction { $0.animation = nil }
             }
         }
     }

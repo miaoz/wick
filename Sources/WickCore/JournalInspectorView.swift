@@ -26,11 +26,15 @@ struct JournalInspectorView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            eventsSection
-            Divider().overlay(palette.divider.color)
-            pnlSection
+        ScrollView {
+            VStack(spacing: 0) {
+                eventsSection
+                Divider().overlay(palette.divider.color)
+                pnlSection
+            }
         }
+        .scrollIndicators(.never)
+        .hidesAppKitScrollers()
         .frame(maxHeight: .infinity, alignment: .top)
         .background(palette.columnPaper.color)
         .onAppear {

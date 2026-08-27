@@ -296,7 +296,7 @@ struct JournalRootView: View {
     /// 不用 NavigationSplitView——macOS 26 会把侧栏画成浮起的圆角卡片,
     /// 与「同一叠纸」的栏面语言冲突(设计 §05 的拖拽/双击逃生口在此自实现)。
     private func splitLayout(palette: WickPalette) -> some View {
-        HStack(spacing: 0) {
+        HStack(alignment: .top, spacing: 0) {
             if columnMode == 0 {
                 JournalNavigationSidebar(
                     onNewJournal: beginNewJournal,
@@ -329,7 +329,7 @@ struct JournalRootView: View {
                 )
             }
 
-            HStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 0) {
                 // The 440pt floor sits on the editor PAGE itself — putting it
                 // on the editor+inspector group lets the fixed-width inspector
                 // eat the floor and deform the page header first.
@@ -349,7 +349,7 @@ struct JournalRootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // The dividers move as their leading columns resize. Measuring the
         // gesture in this stationary ancestor avoids Ventura recomputing a
         // local translation against the divider's new position.
