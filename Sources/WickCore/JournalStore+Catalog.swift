@@ -9,40 +9,11 @@ import WickSync
 // Multi-journal catalog API + bootstrap/migration, split out of the store
 // god-file (DS-07). Pure behavior-preserving move.
 
-extension JournalStore {
-    // MARK: - Multi-journal API
+extension JournalStore: JournalLibraryHost {
+    private var libraryCore: JournalLibraryCore { JournalLibraryCore(host: self) }
 
-    /// Switch the active journal. Flushes editor drafts + the current store first.
-    func switchToJournal(id: UUID) {
-        guard !isCatalogReadOnly else { return }
-        guard id != activeJournalID else { return }
-        guard journals.contains(where: { $0.id == id }) else { return }
-
-        flushActiveJournalSession()
-        // Block persist until the new journal is loaded so a stray write
-        // cannot dump the previous journal's in-memory entries into the
-        // newly bound directory (and then sync them up as that journal).
-        persistBlocked = true
-        activeJournalID = id
-        bindPaths(for: id)
-        resetSessionState()
-        loadActiveJournalContent()
-        persistBlocked = false
-        persistCatalog()
-        notifyActiveJournalChanged()
-    }
-
-    /// Creates a new empty journal, switches to it, and returns its metadata.
-    @discardableResult
-    func createJournal(name: String) -> JournalInfo {
-        guard !isCatalogReadOnly else { return activeJournal ?? JournalInfo(name: "") }
-        flushActiveJournalSession()
-
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedName = trimmed.isEmpty ? defaultJournalName() : trimmed
-        let info = JournalInfo(name: resolvedName)
-        let dir = librariesRoot.appendingPathComponent(info.id.uuidString, isDirectory: true)
-
+    func seedJournalDirectory(for id: UUID) {
+        let dir = librariesRoot.appendingPathComponent(id.uuidString, isDirectory: true)
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         try? fileManager.createDirectory(
             at: dir.appendingPathComponent("images", isDirectory: true),
@@ -52,216 +23,120 @@ extension JournalStore {
             at: dir.appendingPathComponent("backups", isDirectory: true),
             withIntermediateDirectories: true
         )
-
-        // Seed an empty snapshot on disk so load has a primary file.
-        let empty = JournalSnapshot.empty
-        if let data = try? encoder.encode(empty) {
+        if let data = try? encoder.encode(JournalSnapshot.empty) {
             try? data.write(
                 to: dir.appendingPathComponent("journal.json", isDirectory: false),
                 options: .atomic
             )
         }
+    }
 
-        journals.append(info)
-        activeJournalID = info.id
-        bindPaths(for: info.id)
-        resetSessionState()
-        entries = []
-        selection = nil
-        isReadOnlyDueToLoadFailure = false
-        loadFailureMessage = nil
-        didRestoreFromBackup = false
-        lastPersistError = nil
-        JournalThumbnailCache.shared.removeAll()
-        persistCatalog()
-        notifyActiveJournalChanged()
-        return info
+    func loadActiveContent() {
+        loadActiveJournalContent()
+    }
+
+    func defaultJournalName() -> String {
+        defaultJournalName(for: nil)
+    }
+
+    func publishObjectWillChange() {
+        objectWillChange.send()
+    }
+
+    func captureSession() -> JournalSessionSnapshot {
+        JournalSessionSnapshot(
+            journalDirectory: journalDirectory,
+            imagesDirectory: imagesDirectory,
+            databaseURL: databaseURL,
+            backupURL: backupURL,
+            entries: entries,
+            isReadOnlyDueToLoadFailure: isReadOnlyDueToLoadFailure,
+            lastPersistError: lastPersistError,
+            platformState: MacSessionExtras(
+                backupsDirectory: backupsDirectory,
+                selection: selection,
+                selectedTagFilter: selectedTagFilter,
+                searchText: searchText,
+                loadFailureMessage: loadFailureMessage,
+                didRestoreFromBackup: didRestoreFromBackup,
+                lastRollingBackupAt: lastRollingBackupAt
+            )
+        )
+    }
+
+    func restoreSession(_ snapshot: JournalSessionSnapshot) {
+        journalDirectory = snapshot.journalDirectory
+        imagesDirectory = snapshot.imagesDirectory
+        databaseURL = snapshot.databaseURL
+        backupURL = snapshot.backupURL
+        entries = snapshot.entries
+        isReadOnlyDueToLoadFailure = snapshot.isReadOnlyDueToLoadFailure
+        lastPersistError = snapshot.lastPersistError
+        if let extras = snapshot.platformState as? MacSessionExtras {
+            backupsDirectory = extras.backupsDirectory
+            selection = extras.selection
+            selectedTagFilter = extras.selectedTagFilter
+            searchText = extras.searchText
+            loadFailureMessage = extras.loadFailureMessage
+            didRestoreFromBackup = extras.didRestoreFromBackup
+            lastRollingBackupAt = extras.lastRollingBackupAt
+        }
+    }
+}
+
+/// Opaque macOS session extras carried in the shared `JournalSessionSnapshot`.
+private struct MacSessionExtras: Sendable {
+    let backupsDirectory: URL
+    let selection: JournalSelection?
+    let selectedTagFilter: String?
+    let searchText: String
+    let loadFailureMessage: String?
+    let didRestoreFromBackup: Bool
+    let lastRollingBackupAt: Date?
+}
+
+extension JournalStore {
+
+    // MARK: - Multi-journal API
+
+    /// Switch the active journal. Flushes editor drafts + the current store first.
+    func switchToJournal(id: UUID) {
+        libraryCore.switchToJournal(id: id)
+    }
+
+    /// Creates a new empty journal, switches to it, and returns its metadata.
+    @discardableResult
+    func createJournal(name: String) -> JournalInfo {
+        libraryCore.createJournal(name: name)
     }
 
     /// Reorders journals in the catalog (e.g. from drag-and-drop) and persists the new order.
     func moveJournal(from source: IndexSet, to destination: Int) {
-        guard !isCatalogReadOnly else { return }
-        journals.move(fromOffsets: source, toOffset: destination)
-        persistCatalog()
+        libraryCore.moveJournal(from: source, to: destination)
     }
 
     /// Binds (or clears) the exchange account for one journal. Secrets are
     /// not stored here — only the venue + display label.
     func setExchangeBinding(_ binding: JournalExchangeBinding?, for id: UUID) {
-        guard !isCatalogReadOnly else { return }
-        guard let index = journals.firstIndex(where: { $0.id == id }) else { return }
-        journals[index].exchangeBinding = binding
-        journals[index].updatedAt = Date()
-        persistCatalog()
-        objectWillChange.send()
+        libraryCore.setExchangeBinding(binding, for: id)
     }
 
     /// Renames a journal in the catalog.
     func renameJournal(id: UUID, to name: String) {
-        guard !isCatalogReadOnly else { return }
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        guard let index = journals.firstIndex(where: { $0.id == id }) else { return }
-
-        journals[index].name = trimmed
-        journals[index].updatedAt = Date()
-        persistCatalog()
-        if id == activeJournalID {
-            notifyActiveJournalChanged()
-        }
+        libraryCore.renameJournal(id: id, to: name)
     }
 
     /// Deletes a journal and its on-disk folder. Refuses to delete the last journal.
     @discardableResult
     func deleteJournal(id: UUID) -> Bool {
-        guard !isCatalogReadOnly else { return false }
-        guard journals.count > 1 else { return false }
-        guard journals.contains(where: { $0.id == id }) else { return false }
-
-        let wasActive = id == activeJournalID
-        if wasActive {
-            flushActiveJournalSession()
-        }
-
-        let originalJournals = journals
-        let originalActive = activeJournalID
-        let originalSession = captureJournalSession()
-        let originalJournalIDs = Set(journals.map(\.id))
-        let dir = librariesRoot.appendingPathComponent(id.uuidString, isDirectory: true)
-        let quarantine = librariesRoot
-            .appendingPathComponent(".WickJournalQuarantine-\(UUID().uuidString)", isDirectory: true)
-        let movedAside = fileManager.fileExists(atPath: dir.path)
-        if movedAside {
-            do {
-                try fileManager.moveItem(at: dir, to: quarantine)
-            } catch {
-                return false
-            }
-        }
-
-        journals.removeAll { $0.id == id }
-
-        if wasActive {
-            let next = journals.sorted { $0.updatedAt > $1.updatedAt }.first
-                ?? journals.first
-            persistBlocked = true
-            activeJournalID = next?.id
-            if let nextID = activeJournalID {
-                bindPaths(for: nextID)
-                resetSessionState()
-                loadActiveJournalContent()
-            }
-            persistBlocked = false
-        }
-
-        guard persistCatalog() else {
-            rollbackJournalDeletion(
-                originalJournals: originalJournals,
-                originalActiveJournalID: originalActive,
-                originalSession: originalSession,
-                originalJournalIDs: originalJournalIDs,
-                quarantine: quarantine,
-                originalDirectory: dir,
-                movedAside: movedAside
-            )
-            return false
-        }
-        if movedAside {
-            try? fileManager.removeItem(at: quarantine)
-        }
-        notifyActiveJournalChanged()
-        return true
+        libraryCore.deleteJournal(id: id)
     }
 
-    /// Result of applying a peer's deletion of a journal.
-    enum RemoteJournalDeleteResult: Equatable {
-        case deleted
-        case notFound
-        case refusedReadOnly
-        case ioFailure
-    }
-
-    /// Applies a deletion that originated on ANOTHER device. Unlike
-    /// `deleteJournal` (the user-facing API that must keep at least one
-    /// journal), this deletes even the last journal and seeds a fresh,
-    /// pure-local default so the app always has an active book. The new
-    /// default must not inherit the deleted journal's Dropbox state or
-    /// exchange binding (a new UUID means neither exists).
-    ///
-    /// The folder is moved aside on the same volume first; if the catalog write
-    /// fails, the folder and in-memory catalog are rolled back and `.ioFailure`
-    /// is returned so the coordinator does NOT acknowledge the remote tombstone
-    /// (AC-P1-04).
+    /// Applies a deletion that originated on ANOTHER device: deletes even the
+    /// last journal and seeds a fresh, pure-local default (AC-P1-04).
     @discardableResult
-    func deleteJournalFromRemote(id: UUID) -> RemoteJournalDeleteResult {
-        guard !isCatalogReadOnly else { return .refusedReadOnly }
-        guard journals.contains(where: { $0.id == id }) else { return .notFound }
-
-        let wasActive = id == activeJournalID
-        if wasActive {
-            flushActiveJournalSession()
-        }
-
-        let originalJournals = journals
-        let originalActive = activeJournalID
-        let originalSession = captureJournalSession()
-        let originalJournalIDs = Set(journals.map(\.id))
-        let dir = librariesRoot.appendingPathComponent(id.uuidString, isDirectory: true)
-        let quarantine = librariesRoot
-            .appendingPathComponent(".WickJournalQuarantine-\(UUID().uuidString)", isDirectory: true)
-        let dirMovedAside = fileManager.fileExists(atPath: dir.path)
-        if dirMovedAside {
-            do {
-                try fileManager.moveItem(at: dir, to: quarantine)
-            } catch {
-                return .ioFailure
-            }
-        }
-
-        journals.removeAll { $0.id == id }
-
-        if journals.isEmpty {
-            // Last journal deleted by a peer: seed a fresh default and switch.
-            let info = makeDefaultJournal()
-            journals = [info]
-            activeJournalID = info.id
-            if let newID = activeJournalID {
-                bindPaths(for: newID)
-                resetSessionState()
-                loadActiveJournalContent()
-            }
-        } else if wasActive {
-            let next = journals.sorted { $0.updatedAt > $1.updatedAt }.first
-                ?? journals.first
-            persistBlocked = true
-            activeJournalID = next?.id
-            if let nextID = activeJournalID {
-                bindPaths(for: nextID)
-                resetSessionState()
-                loadActiveJournalContent()
-            }
-            persistBlocked = false
-        }
-
-        // Only a durable catalog commit makes the deletion real.
-        guard persistCatalog() else {
-            rollbackJournalDeletion(
-                originalJournals: originalJournals,
-                originalActiveJournalID: originalActive,
-                originalSession: originalSession,
-                originalJournalIDs: originalJournalIDs,
-                quarantine: quarantine,
-                originalDirectory: dir,
-                movedAside: dirMovedAside
-            )
-            return .ioFailure
-        }
-
-        if dirMovedAside {
-            try? fileManager.removeItem(at: quarantine)
-        }
-        notifyActiveJournalChanged()
-        return .deleted
+    func deleteJournalFromRemote(id: UUID) -> JournalRemoteDeleteResult {
+        libraryCore.deleteJournalFromRemote(id: id)
     }
 
     /// Suggested default name for a newly created journal (language-aware).
@@ -272,29 +147,13 @@ extension JournalStore {
     }
 
     func uniquifiedJournalName(_ base: String) -> String {
-        let existing = Set(journals.map { $0.name.lowercased() })
-        if !existing.contains(base.lowercased()) {
-            return base
-        }
-        var index = 2
-        while existing.contains("\(base) \(index)".lowercased()) {
-            index += 1
-        }
-        return "\(base) \(index)"
+        libraryCore.uniquifiedJournalName(base)
     }
 
     /// Collision check for sync-applied renames: the journal being renamed must
     /// not uniquify against itself.
     func uniquifiedJournalName(_ base: String, excluding journalID: UUID) -> String {
-        let existing = Set(journals.filter { $0.id != journalID }.map { $0.name.lowercased() })
-        if !existing.contains(base.lowercased()) {
-            return base
-        }
-        var index = 2
-        while existing.contains("\(base) \(index)".lowercased()) {
-            index += 1
-        }
-        return "\(base) \(index)"
+        libraryCore.uniquifiedJournalName(base, excluding: journalID)
     }
 
     /// Adopts a journal discovered on another sync device: registers it locally
@@ -317,37 +176,7 @@ extension JournalStore {
     /// everywhere" and tombstone the remote content.
     @discardableResult
     func registerRemoteJournal(id: UUID, name: String) -> JournalInfo {
-        guard !isCatalogReadOnly else { return JournalInfo(name: name) }
-        if let existing = journals.first(where: { $0.id == id }) {
-            return existing
-        }
-
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let info = JournalInfo(
-            id: id,
-            name: uniquifiedJournalName(trimmed.isEmpty ? defaultJournalName() : trimmed)
-        )
-        let dir = librariesRoot.appendingPathComponent(id.uuidString, isDirectory: true)
-        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? fileManager.createDirectory(
-            at: dir.appendingPathComponent("images", isDirectory: true),
-            withIntermediateDirectories: true
-        )
-        try? fileManager.createDirectory(
-            at: dir.appendingPathComponent("backups", isDirectory: true),
-            withIntermediateDirectories: true
-        )
-        // Seed an empty snapshot so load has a primary file.
-        if let data = try? encoder.encode(JournalSnapshot.empty) {
-            try? data.write(
-                to: dir.appendingPathComponent("journal.json", isDirectory: false),
-                options: .atomic
-            )
-        }
-
-        journals.append(info)
-        persistCatalog()
-        return info
+        libraryCore.registerRemoteJournal(id: id, name: name)
     }
 
     // MARK: - Bootstrap / migration
@@ -563,35 +392,7 @@ extension JournalStore {
 
     @discardableResult
     func persistCatalog() -> Bool {
-        guard !isCatalogReadOnly else { return false }
-        guard let activeJournalID, !journals.isEmpty else { return false }
-        let catalog = JournalCatalogSnapshot(
-            version: JournalCatalogSnapshot.currentVersion,
-            activeJournalID: activeJournalID,
-            journals: journals
-        )
-        #if DEBUG
-        if Self.failCatalogPersistOverride {
-            NSLog("Wick catalog persist failed (test override)")
-            return false
-        }
-        #endif
-        do {
-            let data = try encoder.encode(catalog)
-            try fileManager.createDirectory(at: librariesRoot, withIntermediateDirectories: true)
-            // Sidecar backup of the valid primary before every overwrite,
-            // matching the journal.json.bak protection level.
-            if fileManager.fileExists(atPath: catalogURL.path) {
-                let backupURL = Self.catalogBackupURL(in: librariesRoot)
-                try? fileManager.removeItem(at: backupURL)
-                try? fileManager.copyItem(at: catalogURL, to: backupURL)
-            }
-            try data.write(to: catalogURL, options: .atomic)
-            return true
-        } catch {
-            NSLog("Wick catalog persist failed: \(error.localizedDescription)")
-            return false
-        }
+        libraryCore.persistCatalog()
     }
 
     func bindPaths(for journalID: UUID) {
@@ -613,64 +414,6 @@ extension JournalStore {
         didRestoreFromBackup = false
         lastPersistError = nil
         JournalThumbnailCache.shared.removeAll()
-    }
-
-    func captureJournalSession() -> JournalSessionSnapshot {
-        JournalSessionSnapshot(
-            journalDirectory: journalDirectory,
-            imagesDirectory: imagesDirectory,
-            databaseURL: databaseURL,
-            backupURL: backupURL,
-            backupsDirectory: backupsDirectory,
-            entries: entries,
-            selection: selection,
-            selectedTagFilter: selectedTagFilter,
-            searchText: searchText,
-            isReadOnlyDueToLoadFailure: isReadOnlyDueToLoadFailure,
-            loadFailureMessage: loadFailureMessage,
-            lastPersistError: lastPersistError,
-            didRestoreFromBackup: didRestoreFromBackup,
-            lastRollingBackupAt: lastRollingBackupAt
-        )
-    }
-
-    func restoreJournalSession(_ snapshot: JournalSessionSnapshot) {
-        journalDirectory = snapshot.journalDirectory
-        imagesDirectory = snapshot.imagesDirectory
-        databaseURL = snapshot.databaseURL
-        backupURL = snapshot.backupURL
-        backupsDirectory = snapshot.backupsDirectory
-        entries = snapshot.entries
-        selection = snapshot.selection
-        selectedTagFilter = snapshot.selectedTagFilter
-        searchText = snapshot.searchText
-        isReadOnlyDueToLoadFailure = snapshot.isReadOnlyDueToLoadFailure
-        loadFailureMessage = snapshot.loadFailureMessage
-        lastPersistError = snapshot.lastPersistError
-        didRestoreFromBackup = snapshot.didRestoreFromBackup
-        lastRollingBackupAt = snapshot.lastRollingBackupAt
-    }
-
-    func rollbackJournalDeletion(
-        originalJournals: [JournalInfo],
-        originalActiveJournalID: UUID?,
-        originalSession: JournalSessionSnapshot,
-        originalJournalIDs: Set<UUID>,
-        quarantine: URL,
-        originalDirectory: URL,
-        movedAside: Bool
-    ) {
-        let createdIDs = Set(journals.map(\.id)).subtracting(originalJournalIDs)
-        for id in createdIDs {
-            let createdDirectory = librariesRoot.appendingPathComponent(id.uuidString, isDirectory: true)
-            try? fileManager.removeItem(at: createdDirectory)
-        }
-        if movedAside, fileManager.fileExists(atPath: quarantine.path) {
-            try? fileManager.moveItem(at: quarantine, to: originalDirectory)
-        }
-        journals = originalJournals
-        activeJournalID = originalActiveJournalID
-        restoreJournalSession(originalSession)
     }
 
     func loadActiveJournalContent() {

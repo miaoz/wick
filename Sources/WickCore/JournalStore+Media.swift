@@ -431,7 +431,7 @@ extension JournalStore {
     func recoverCatalogFromScratch() throws {
         let originalJournals = journals
         let originalActive = activeJournalID
-        let originalSession = captureJournalSession()
+        let originalSession = captureSession()
         let quarantine = librariesRoot.appendingPathComponent(
             "catalog.corrupt-\(UUID().uuidString).json",
             isDirectory: false
@@ -463,7 +463,7 @@ extension JournalStore {
             isCatalogReadOnly = true
             journals = originalJournals
             activeJournalID = originalActive
-            restoreJournalSession(originalSession)
+            restoreSession(originalSession)
             throw JournalStoreError.catalogRecoveryFailed
         }
         notifyActiveJournalChanged()

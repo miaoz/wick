@@ -6,7 +6,7 @@ import WickSync
 
 /// Points at one item inside a day journal. Used when the timeline is item-scoped
 /// (tag filter / text search).
-struct JournalItemRef: Hashable, Identifiable {
+struct JournalItemRef: Hashable, Identifiable, Sendable {
     let entryID: UUID
     let itemID: UUID
 
@@ -24,7 +24,7 @@ struct JournalTimelineItem: Identifiable, Hashable {
 }
 
 /// What the editor is focused on.
-enum JournalSelection: Hashable {
+enum JournalSelection: Hashable, Sendable {
     /// Full day journal (all items).
     case day(UUID)
     /// Single item only (used under tag / search filtering).
@@ -84,8 +84,11 @@ final class JournalStore: ObservableObject {
 
     #if DEBUG
     /// Test seam: force the next catalog persist to fail, deterministically
-    /// exercising the AC-P1-04 rollback path.
-    nonisolated(unsafe) static var failCatalogPersistOverride = false
+    /// exercising the AC-P1-04 rollback path. Forwards to the shared core.
+    static var failCatalogPersistOverride: Bool {
+        get { JournalLibraryCore.failCatalogPersistOverride }
+        set { JournalLibraryCore.failCatalogPersistOverride = newValue }
+    }
     /// Test seam: force the final export replace to fail after the temp
     /// archive was built, exercising the AC-P1-07 atomic-replace path.
     nonisolated(unsafe) static var failExportReplaceOverride = false
@@ -138,23 +141,6 @@ final class JournalStore: ObservableObject {
     /// Test-observable count of full-snapshot persists (PF-01 regression guard:
     /// a batch apply must add exactly one).
     var persistCount = 0
-
-    struct JournalSessionSnapshot {
-        let journalDirectory: URL
-        let imagesDirectory: URL
-        let databaseURL: URL
-        let backupURL: URL
-        let backupsDirectory: URL
-        let entries: [JournalEntry]
-        let selection: JournalSelection?
-        let selectedTagFilter: String?
-        let searchText: String
-        let isReadOnlyDueToLoadFailure: Bool
-        let loadFailureMessage: String?
-        let lastPersistError: String?
-        let didRestoreFromBackup: Bool
-        let lastRollingBackupAt: Date?
-    }
 
     // MARK: - Init
 

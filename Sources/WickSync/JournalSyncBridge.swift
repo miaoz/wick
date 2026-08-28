@@ -11,11 +11,11 @@ import Foundation
 /// needs.
 @MainActor
 public protocol JournalSyncStoreHost: AnyObject {
-    var activeJournalID: UUID? { get }
+    var activeJournalID: UUID? { get set }
     var activeJournalName: String { get }
     var journals: [JournalInfo] { get set }
     var entries: [JournalEntry] { get set }
-    var isReadOnlyDueToLoadFailure: Bool { get }
+    var isReadOnlyDueToLoadFailure: Bool { get set }
 
     /// Resolves an image file's on-disk URL from its safe filename (nil when
     /// invalid). Must be the single image-URL constructor (path-traversal safe).
