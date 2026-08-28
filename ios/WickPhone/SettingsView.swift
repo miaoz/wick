@@ -250,6 +250,13 @@ struct SettingsView: View {
                                 Toggle("", isOn: $physicalEasterEgg)
                                     .labelsHidden()
                                     .tint(PhoneTheme.ember)
+                                    .onChange(of: physicalEasterEgg) { enabled in
+                                        // The pad's torn-to page is sticky; switching
+                                        // the easter egg back on is the only reset.
+                                        guard enabled else { return }
+                                        TearOffState.resetToToday()
+                                        NotificationCenter.default.post(name: .wickCalendarResetToToday, object: nil)
+                                    }
                             }
                             .padding(12)
                             .background(PhoneTheme.cinnabarSoft)

@@ -18,6 +18,11 @@ enum CalendarSnapshot {
 /// sheet is handed to the host via `onPageTorn` to fall away (macOS: an overlay window,
 /// iOS: a full-screen overlay).
 ///
+/// The pad is sticky like a real himekuri: the day on top is pinned via
+/// `TearOffState` and survives relaunch and midnight. Nothing here advances or
+/// restores it on its own — only tearing (one page at a time) or the
+/// easter-egg re-enable reset (`.wickCalendarResetToToday`) moves it.
+///
 /// Platform-agnostic: the host supplies the language, a close action, a closure
 /// that presents the torn page, and the pad's `PaperLayout` (desktop widget by
 /// default; the iPhone app passes a full-screen layout whose page is the display).
@@ -33,7 +38,7 @@ public struct TradingCalendarRootView: View {
 
     @GestureState private var isGestureActive = false
 
-    @State private var currentDate = Date()
+    @State private var currentDate: Date
     @State private var sim: PaperSim
     @State private var paperScene: CalendarPaperScene
 
@@ -62,6 +67,7 @@ public struct TradingCalendarRootView: View {
         self.onClose = onClose
         self.onPageTorn = onPageTorn
         self.layout = layout
+        _currentDate = State(initialValue: TearOffState.displayedDate())
         _sim = State(initialValue: PaperSim(layout: layout))
         _paperScene = State(initialValue: CalendarPaperScene(layout: layout))
         _tearCenterX = State(initialValue: layout.pageW * 0.7)
@@ -80,6 +86,9 @@ public struct TradingCalendarRootView: View {
         .frame(width: layout.windowW, height: layout.windowH, alignment: .top)
         .onAppear {
             paperScene.sim = sim
+            // Pin the day on top: a pad that is never torn keeps showing this
+            // same page tomorrow instead of flipping itself at midnight.
+            TearOffState.saveDisplayedDate(currentDate)
             store.loadIfNeeded(for: currentDate)
             store.loadIfNeeded(for: nextDate)
             TradingCalendarTheme.pnlConvention = envPnlConvention
@@ -155,14 +164,9 @@ public struct TradingCalendarRootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .wickCalendarResetToToday)) { _ in
             currentDate = Date()
+            TearOffState.saveDisplayedDate(currentDate)
             tornCount = 0
             eventsPage = 0
-            store.loadIfNeeded(for: currentDate)
-            store.loadIfNeeded(for: nextDate)
-            refreshPageTexture()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
-            currentDate = Date()
             store.loadIfNeeded(for: currentDate)
             store.loadIfNeeded(for: nextDate)
             refreshPageTexture()
@@ -613,16 +617,18 @@ public struct TradingCalendarRootView: View {
         Haptics.rip()
         onPageTorn(piece)
 
+        let tornToDate = nextDate
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            currentDate = nextDate
+            currentDate = tornToDate
             drag = .zero
             hold = 0
             damage = 0
             tornCount += 1
             eventsPage = 0
         }
+        TearOffState.saveDisplayedDate(tornToDate)
         sim.reset()
     }
 }

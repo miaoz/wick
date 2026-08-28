@@ -96,7 +96,8 @@ final class TradingCalendarWindowController: NSObject, NSWindowDelegate, Observa
         calendarWindow.makeKeyAndOrderFront(nil)
         calendarWindow.orderFrontRegardless()
         isPresented = true
-        NotificationCenter.default.post(name: .wickCalendarResetToToday, object: nil)
+        // Summoning the pad must NOT reset it: the torn-to page is sticky
+        // (`TearOffState`); only re-enabling the easter egg resets to today.
         NSApp.activate(ignoringOtherApps: true)
 
         DispatchQueue.main.async { [weak self] in

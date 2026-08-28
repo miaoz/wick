@@ -158,9 +158,14 @@ final class AppSettings: ObservableObject {
     /// 彩蛋:贴桌物理黄历(无边框暗室窗 + 撕页物理)。默认关 —— 黄历默认
     /// 以印刷语言住在主窗右栏检查器;开启后黄历独立贴桌,主窗退为纯三栏,
     /// 盈亏月历移至导航栏顶部(见 final.html §00「月历归属跟着黄历走」)。
+    /// 物理黄历的撕到页是粘滞的(TearOffState):重新开启彩蛋是唯一重置回今天的途径。
     @Published var physicalCalendarEnabled: Bool {
         didSet {
             UserDefaults.standard.set(physicalCalendarEnabled, forKey: Keys.physicalCalendar)
+            if physicalCalendarEnabled && !oldValue {
+                TearOffState.resetToToday()
+                NotificationCenter.default.post(name: .wickCalendarResetToToday, object: nil)
+            }
         }
     }
 

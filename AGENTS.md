@@ -82,6 +82,7 @@ node --test                # 落地页中间件回归
 **其他**
 
 - 交易日历纹理快照必须随 `isLoading`/错误态重刷（否则闲日永卡「加载中」）；`TraderAlmanac` 种子是纯整数 `year*10000+month*100+day`，**勿改回 `Hasher`**（每进程随机）。iOS 长按分享只有页面上半部有效（撕页区手势吃长按）。
+- 物理黄历（彩蛋）的撕到页是**粘滞**的：`TearOffState`（`wick.calendar.tornToDate`）固定当前页，跨启动/跨午夜不自动回今天也不自动前进（**勿恢复 `NSCalendarDayChanged` 重置或开窗时的 `.wickCalendarResetToToday`**）；唯一重置是双端设置里彩蛋关→开（macOS `AppSettings.physicalCalendarEnabled` didSet / iOS `SettingsView` onChange）。
 - landing 改文案后必须跑 `scripts/subset_landing_font.sh` 重新子集化字体（源已 pin 到 google/fonts commit，勿改回 `main`）；iOS 无预装中文宋体，不自带字体必混字。
 - 网络面：`api.github.com`、两台 `*-wscn.awtmt.com`、`fapi.binance.com`/`www.okx.com`/`api.hyperliquid.xyz`，全部只读 15–20s 超时；无遥测、无账号体系。
 - 许可：仓库暂无 `LICENSE`，保留版权，新增第三方代码前需与维护者确认。

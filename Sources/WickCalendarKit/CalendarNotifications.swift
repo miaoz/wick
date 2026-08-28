@@ -19,8 +19,9 @@ extension Notification.Name {
     /// Posted by the macOS host (`AppSettings`), observed by `TradingCalendarRootView`.
     public static let wickCalendarPnlConventionChanged = Notification.Name("wick.calendarPnlConventionChanged")
 
-    /// Reopens or summons the calendar window; resets the current date back to today
-    /// so previously torn pages or stale cached dates revert to today's live feed.
+    /// The easter egg was re-enabled in settings: the physical pad resets to
+    /// today. This is the ONLY reset of the sticky torn-to day — reopening the
+    /// calendar window or the date rolling over must never post it.
     public static let wickCalendarResetToToday = Notification.Name("wick.calendarResetToToday")
 
     /// Toggles the event sort order between time and importance in the physical calendar pad.
