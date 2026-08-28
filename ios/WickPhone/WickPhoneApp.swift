@@ -77,16 +77,9 @@ struct WickPhoneApp: App {
                 // IO-02: wrap the flush in a background task so the system does
                 // not suspend us mid-write. The atomic write keeps the store
                 // recoverable next launch even if the task expires early.
-                var taskID: UIBackgroundTaskIdentifier = .invalid
-                taskID = UIApplication.shared.beginBackgroundTask(withName: "WickPendingFlush") {
-                    if taskID != .invalid {
-                        UIApplication.shared.endBackgroundTask(taskID)
-                    }
-                }
+                let task = PhoneBackgroundTask(name: "WickPendingFlush")
                 defer {
-                    if taskID != .invalid {
-                        UIApplication.shared.endBackgroundTask(taskID)
-                    }
+                    task.end()
                 }
                 store.flushPendingWrites()
             case .active:
@@ -96,6 +89,27 @@ struct WickPhoneApp: App {
                 break
             }
         }
+    }
+}
+
+/// MainActor-isolated background task runner protecting `UIBackgroundTaskIdentifier`.
+@MainActor
+private final class PhoneBackgroundTask {
+    private var identifier: UIBackgroundTaskIdentifier = .invalid
+
+    init(name: String) {
+        identifier = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.end()
+            }
+        }
+    }
+
+    func end() {
+        guard identifier != .invalid else { return }
+        let current = identifier
+        identifier = .invalid
+        UIApplication.shared.endBackgroundTask(current)
     }
 }
 

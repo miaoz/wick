@@ -59,7 +59,7 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
             if page.contains(where: { $0.time < startMs }) { break }
             guard page.count >= pageLimit, let lastBillID else { break }
             after = lastBillID
-            try await paceNextPage()
+            await paceNextPage()
         }
         return results
     }
@@ -84,7 +84,7 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
             if page.contains(where: { $0.time < startMs }) { break }
             guard page.count >= pageLimit, let lastBillID else { break }
             after = lastBillID
-            try await paceNextPage()
+            await paceNextPage()
         }
         return results
     }
