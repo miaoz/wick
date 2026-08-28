@@ -91,9 +91,24 @@ jobs:
       - name: iOS Store regression tests (simulator)
         run: |
           set -euo pipefail
-          # Skip runtimes whose device list is empty (a KeyError-0 trap).
-          DEVICE_ID="$(xcrun simctl list devices available -j | \
-            python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(v[0]["udid"] for k in d for v in d[k] if v and v[0]["isAvailable"] and "iPhone" in v[0]["name"]))')"
+          # simctl returns {"devices": {runtime: [device, ...], ...}}, so each
+          # entry is a device dict — index it directly, not [0]. A runner
+          # without an iOS runtime reports an empty device list; that is an
+          # environment gap, not a regression, so skip rather than fail.
+          DEVICE_ID="$(xcrun simctl list devices available -j | python3 -c '
+import json, sys
+devices = json.load(sys.stdin).get("devices", {})
+for runtime_devices in devices.values():
+    for dev in runtime_devices:
+        if dev.get("isAvailable") and "iPhone" in dev.get("name", ""):
+            print(dev["udid"])
+            sys.exit(0)
+sys.exit(0)
+')"
+          if [[ -z "$DEVICE_ID" ]]; then
+            echo "No available iPhone simulator; skipping iOS Store regression tests."
+            exit 0
+          fi
           echo "Using simulator: ${DEVICE_ID}"
           xcodebuild test \
             -project ios/WickPhone.xcodeproj \
