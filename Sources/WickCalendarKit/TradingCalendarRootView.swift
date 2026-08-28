@@ -53,6 +53,9 @@ public struct TradingCalendarRootView: View {
     @State private var lastVelocity: CGSize = .zero
     @State private var lastTickLevel = 0
     @State private var tornCount = 0
+    /// A tear whose falling sheet hasn't reached the screen yet; the day
+    /// advance commits on presentation (`commitTear`), never before.
+    @State private var pendingTearID: UUID?
     @State private var eventsPage = 0
     @State private var activeTab: MacroCalendarTab = .macro
     @State private var sortOrder: MacroEventSortOrder = .time
@@ -590,9 +593,13 @@ public struct TradingCalendarRootView: View {
         }
     }
 
-    /// Irreversible. The page comes off and is handed to the host to fall away
-    /// (past the bottom of the screen); the next day is revealed underneath.
+    /// The pull crossed the point of no return: the fibers give and the sheet
+    /// comes off in the hand, handed to the host to fall away. The pad commits
+    /// the advance ONLY once the falling sheet's first frame is on screen
+    /// (`onPresented`): the paper leaving IS the date change. A pull whose
+    /// sheet never falls is just a shake — the day stays put.
     private func performTear() {
+        let tornToDate = nextDate
         let upward = drag.height < 0 || lastVelocity.height < -200
         let piece = FallingPage(
             date: currentDate,
@@ -611,13 +618,31 @@ public struct TradingCalendarRootView: View {
             upward: upward,
             throwVelocity: lastVelocity,
             layout: layout,
-            convention: envPnlConvention
+            convention: envPnlConvention,
+            onPresented: { [self] in commitTear(to: tornToDate) }
         )
+        let pieceID = piece.id
+        pendingTearID = pieceID
         TearSound.shared.playRip()
         Haptics.rip()
         onPageTorn(piece)
 
-        let tornToDate = nextDate
+        // If the sheet never reaches the screen (the host couldn't present
+        // it), settle the pull back as a shake: no paper fell, so the day
+        // must not move either.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
+            guard pendingTearID == pieceID else { return }
+            pendingTearID = nil
+            settleWithoutTearing(pulled: 0, amplified: 0)
+        }
+    }
+
+    /// The falling sheet's first frame covers the pad — now the next day
+    /// (already painted underneath) can be revealed without a visible
+    /// in-place flip.
+    private func commitTear(to tornToDate: Date) {
+        guard pendingTearID != nil else { return }
+        pendingTearID = nil
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {

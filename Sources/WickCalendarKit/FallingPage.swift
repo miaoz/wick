@@ -25,6 +25,10 @@ public struct FallingPage: Identifiable {
     /// The pad the sheet came off - it renders and falls in this page size.
     public let layout: PaperLayout
     public let convention: PnlColorConvention
+    /// Fired once when the falling sheet's first frame is actually on screen.
+    /// The pad commits its day advance only then: the paper leaving IS the
+    /// date change — a pull whose sheet never falls is just a shake.
+    public let onPresented: () -> Void
 
     @MainActor
     public init(
@@ -41,7 +45,8 @@ public struct FallingPage: Identifiable {
         upward: Bool,
         throwVelocity: CGSize,
         layout: PaperLayout = .desktop,
-        convention: PnlColorConvention = TradingCalendarTheme.pnlConvention
+        convention: PnlColorConvention = TradingCalendarTheme.pnlConvention,
+        onPresented: @escaping () -> Void = {}
     ) {
         self.date = date
         self.events = events
@@ -57,6 +62,7 @@ public struct FallingPage: Identifiable {
         self.throwVelocity = throwVelocity
         self.layout = layout
         self.convention = convention
+        self.onPresented = onPresented
     }
 }
 
@@ -73,6 +79,8 @@ public struct FallingPageView: View {
     public let headroom: CGFloat
 
     @State private var start = Date()
+    /// Guards the presentation handshake so a re-appear never re-fires it.
+    @State private var presented = false
 
     /// Which way the sheet leans when the hand gave it no sideways speed.
     private let dir: Double
@@ -95,7 +103,13 @@ public struct FallingPageView: View {
         }
         .padding(.top, headroom + page.layout.blockTopPad + page.layout.pageTopInset - 14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .onAppear { start = Date() }
+        .onAppear {
+            start = Date()
+            if !presented {
+                presented = true
+                page.onPresented()
+            }
+        }
         .allowsHitTesting(false)
     }
 
