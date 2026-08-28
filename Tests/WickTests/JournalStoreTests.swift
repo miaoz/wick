@@ -52,7 +52,7 @@ final class JournalStoreTests: XCTestCase {
         draft.title = "In First"
         store.updateEntry(draft)
 
-        let second = store.createJournal(name: "Work")
+        let second = store.createJournal(name: "Work")!
         XCTAssertEqual(store.journals.count, 2)
         XCTAssertEqual(store.activeJournalID, second.id)
         XCTAssertEqual(store.entries.count, 0)
@@ -87,8 +87,8 @@ final class JournalStoreTests: XCTestCase {
 
     func testReorderJournalsPersists() {
         let first = store.journals.first!.name
-        let second = store.createJournal(name: "Second")
-        let third = store.createJournal(name: "Third")
+        let second = store.createJournal(name: "Second")!
+        let third = store.createJournal(name: "Third")!
         XCTAssertEqual(store.journals.map(\.name), [first, "Second", "Third"])
 
         // Move "Third" (index 2) to the top (index 0)
@@ -188,7 +188,7 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.isCatalogReadOnly)
 
         let before = try Data(contentsOf: catalogURL())
-        _ = reloaded.createJournal(name: "Nope")
+        XCTAssertNil(reloaded.createJournal(name: "Nope"), "read-only creation must not return a phantom journal")
         reloaded.renameJournal(id: UUID(), to: "Nope")
         reloaded.moveJournal(from: IndexSet(integer: 0), to: 1)
         XCTAssertFalse(reloaded.deleteJournal(id: UUID()))
@@ -196,7 +196,7 @@ final class JournalStoreTests: XCTestCase {
             JournalExchangeBinding(venue: .okx, accountLabel: "OKX"),
             for: UUID()
         )
-        _ = reloaded.registerRemoteJournal(id: UUID(), name: "Remote")
+        XCTAssertNil(reloaded.registerRemoteJournal(id: UUID(), name: "Remote"), "read-only registration must not return a phantom journal")
         XCTAssertEqual(try Data(contentsOf: catalogURL()), before, "no catalog mutation in read-only state")
         XCTAssertTrue(reloaded.journals.isEmpty)
     }
@@ -204,7 +204,7 @@ final class JournalStoreTests: XCTestCase {
     func testCorruptPrimaryRestoresFromValidBackupAndKeepsCorruptCopy() throws {
         let binding = JournalExchangeBinding(venue: .binance, accountLabel: "Binance")
         let firstID = store.activeJournalID!
-        let second = store.createJournal(name: "Second")
+        let second = store.createJournal(name: "Second")!
         store.setExchangeBinding(binding, for: second.id)
         store.renameJournal(id: firstID, to: "Alpha")
         store.switchToJournal(id: firstID)
@@ -278,7 +278,7 @@ final class JournalStoreTests: XCTestCase {
     @discardableResult
     private func makeNonActiveJournal() -> JournalInfo {
         let original = store.activeJournalID!
-        let second = store.createJournal(name: "Second")
+        let second = store.createJournal(name: "Second")!
         store.switchToJournal(id: original)
         return second
     }
@@ -328,7 +328,7 @@ final class JournalStoreTests: XCTestCase {
     }
 
     func testEnsurePositionEntriesOnDeletedJournalDoesNotRecreateDirectory() {
-        let second = store.createJournal(name: "Second")
+        let second = store.createJournal(name: "Second")!
         XCTAssertTrue(store.deleteJournal(id: second.id))
         let dir = tempRoot.appendingPathComponent(second.id.uuidString, isDirectory: true)
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.path))
@@ -440,7 +440,7 @@ final class JournalStoreTests: XCTestCase {
 
     func testRemoteDeleteNonActiveJournal() {
         let original = store.activeJournalID!
-        let second = store.createJournal(name: "Second") // second becomes active
+        let second = store.createJournal(name: "Second")! // second becomes active
         let dir = tempRoot.appendingPathComponent(original.uuidString, isDirectory: true)
 
         XCTAssertEqual(store.deleteJournalFromRemote(id: original), .deleted)
@@ -451,7 +451,7 @@ final class JournalStoreTests: XCTestCase {
 
     func testRemoteDeleteActiveJournalSwitchesToRemaining() {
         let original = store.activeJournalID!
-        let second = store.createJournal(name: "Second")
+        let second = store.createJournal(name: "Second")!
         XCTAssertEqual(store.deleteJournalFromRemote(id: second.id), .deleted)
         XCTAssertEqual(store.journals.count, 1)
         XCTAssertEqual(store.activeJournalID, original)
@@ -518,7 +518,7 @@ final class JournalStoreTests: XCTestCase {
 
     func testPrimaryMissingRestoresFromValidBackup() throws {
         let firstID = store.activeJournalID!
-        let second = store.createJournal(name: "Second")
+        let second = store.createJournal(name: "Second")!
         let catalog = JournalCatalogSnapshot(
             version: 1,
             activeJournalID: firstID,
@@ -679,7 +679,7 @@ final class JournalStoreTests: XCTestCase {
     }
 
     func testRemoteDeleteCatalogWriteFailureRollsBackAndReturnsIOFailure() throws {
-        let second = store.createJournal(name: "Second")
+        let second = store.createJournal(name: "Second")!
         let activeID = store.activeJournalID!
         let dir = tempRoot.appendingPathComponent(activeID.uuidString, isDirectory: true)
         XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path))
@@ -733,7 +733,7 @@ final class JournalStoreTests: XCTestCase {
     }
 
     func testUserDeleteCatalogWriteFailureIsNotReportedAsSuccess() throws {
-        let second = store.createJournal(name: "Second")
+        let second = store.createJournal(name: "Second")!
         let secondDirectory = tempRoot.appendingPathComponent(second.id.uuidString, isDirectory: true)
         JournalStore.failCatalogPersistOverride = true
         defer { JournalStore.failCatalogPersistOverride = false }
@@ -1027,7 +1027,7 @@ final class JournalStoreTests: XCTestCase {
         _ = store.createEntry(on: Date().addingTimeInterval(-86400))
         XCTAssertEqual(store.entryCount(for: firstID), 2)
 
-        let second = store.createJournal(name: "Second Book")
+        let second = store.createJournal(name: "Second Book")!
         _ = store.createEntry(on: Date())
         XCTAssertEqual(store.entryCount(for: second.id), 1)
         XCTAssertEqual(store.entryCount(for: firstID), 2)

@@ -25,7 +25,7 @@ final class PhoneJournalStoreTests: XCTestCase {
     func testWriterKeepsEditsWithOriginalJournalAcrossImmediateSwitch() {
         let store = PhoneJournalStore(rootDirectory: root)
         let firstID = store.journals[0].id
-        let second = store.createJournal(name: "Second")
+        let second = store.createJournal(name: "Second")!
 
         store.switchToJournal(id: firstID)
         var firstEntry = store.openOrCreateToday()
@@ -50,7 +50,7 @@ final class PhoneJournalStoreTests: XCTestCase {
     @MainActor
     func testUserDeleteCatalogFailureRestoresDirectoryAndCatalog() {
         let store = PhoneJournalStore(rootDirectory: root)
-        let second = store.createJournal(name: "Second")
+        let second = store.createJournal(name: "Second")!
         let directory = root.appendingPathComponent(second.id.uuidString, isDirectory: true)
 
         PhoneJournalStore.failCatalogPersistOverride = true
@@ -90,7 +90,7 @@ final class PhoneJournalStoreTests: XCTestCase {
     @MainActor
     func testCorruptCatalogCanRestoreFromBackup() throws {
         let store = PhoneJournalStore(rootDirectory: root)
-        let second = store.createJournal(name: "Second")
+        let second = store.createJournal(name: "Second")!
         let catalogURL = root.appendingPathComponent("catalog.json")
         let futureCatalog = JournalCatalogSnapshot(
             version: JournalCatalogSnapshot.currentVersion + 1,
@@ -111,7 +111,7 @@ final class PhoneJournalStoreTests: XCTestCase {
     func testEntryCountForActiveAndInactiveJournals() {
         let store = PhoneJournalStore(rootDirectory: root)
         let firstID = store.journals[0].id
-        let second = store.createJournal(name: "Second")
+        let second = store.createJournal(name: "Second")!
 
         store.switchToJournal(id: firstID)
         var firstEntry = store.openOrCreateToday()

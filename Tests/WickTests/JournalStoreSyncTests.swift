@@ -229,7 +229,7 @@ final class JournalStoreSyncTests: XCTestCase {
 
     func testApplySyncedChangesIgnoresNonActiveJournal() {
         let original = store.activeJournalID!
-        let second = store.createJournal(name: "Second")
+        let second = store.createJournal(name: "Second")!
         store.switchToJournal(id: original)
         let before = store.persistCount
 
@@ -462,7 +462,7 @@ final class JournalStoreSyncTests: XCTestCase {
         let remoteID = UUID()
         let info = store.adoptRemoteJournal(id: remoteID, name: "From Other Mac")
 
-        XCTAssertEqual(info.id, remoteID)
+        XCTAssertEqual(info?.id, remoteID)
         XCTAssertEqual(store.activeJournalID, remoteID)
         XCTAssertEqual(store.journals.count, 2)
         XCTAssertTrue(store.entries.isEmpty, "adopted journal starts empty; the engine fills it")
@@ -482,7 +482,7 @@ final class JournalStoreSyncTests: XCTestCase {
 
         let info = store.adoptRemoteJournal(id: originalID, name: "whatever")
 
-        XCTAssertEqual(info.id, originalID)
+        XCTAssertEqual(info?.id, originalID)
         XCTAssertEqual(store.activeJournalID, originalID)
         XCTAssertEqual(store.journals.count, 2, "no duplicate journal for a known id")
     }
@@ -490,8 +490,8 @@ final class JournalStoreSyncTests: XCTestCase {
     func testAdoptRemoteJournalUniquifiesDisplayName() {
         let existing = store.activeJournal!.name
         let info = store.adoptRemoteJournal(id: UUID(), name: existing)
-        XCTAssertNotEqual(info.name.lowercased(), existing.lowercased())
-        XCTAssertTrue(info.name.hasPrefix(existing))
+        XCTAssertNotEqual(info?.name.lowercased(), existing.lowercased())
+        XCTAssertTrue(info?.name.hasPrefix(existing) == true)
     }
 
     func testRegisterRemoteJournalDoesNotSwitchActive() {
@@ -500,7 +500,7 @@ final class JournalStoreSyncTests: XCTestCase {
 
         let info = store.registerRemoteJournal(id: remoteID, name: "Background Import")
 
-        XCTAssertEqual(info.id, remoteID)
+        XCTAssertEqual(info?.id, remoteID)
         XCTAssertEqual(store.activeJournalID, originalID, "registration must not yank the active journal")
         XCTAssertEqual(store.journals.count, 2)
         let reloaded = JournalStore(rootDirectory: tempRoot)

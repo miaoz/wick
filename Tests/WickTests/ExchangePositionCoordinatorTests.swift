@@ -507,7 +507,7 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
     func testJournalDeletionMidFlightDoesNotRecreateAnything() async {
         let coordinator = ExchangePositionCoordinator()
         let journalID = bindActiveJournal()
-        let second = store.createJournal(name: "Second")
+        let second = store.createJournal(name: "Second")!
         let client = BlockingTradeClient()
         ExchangePositionCoordinator.clientFactoryOverride = { _, _ in client }
 
@@ -554,7 +554,7 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
     func testParallelRunsOnDifferentJournalsAreIndependent() async {
         let coordinator = ExchangePositionCoordinator()
         let firstID = store.activeJournalID!
-        let second = store.createJournal(name: "Second")
+        let second = store.createJournal(name: "Second")!
         store.setExchangeBinding(
             JournalExchangeBinding(venue: .binance, accountLabel: "Binance"),
             for: firstID
@@ -606,7 +606,7 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
     func testSwitchToIdleJournalShowsIdleWithoutManualRefresh() async {
         let coordinator = ExchangePositionCoordinator()
         let firstID = store.activeJournalID!
-        let second = store.createJournal(name: "Second")
+        let second = store.createJournal(name: "Second")!
         store.switchToJournal(id: firstID) // A active again for the test
         store.setExchangeBinding(
             JournalExchangeBinding(venue: .binance, accountLabel: "Binance"),

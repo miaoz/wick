@@ -348,26 +348,16 @@ final class PhoneJournalStore: ObservableObject {
 
     /// Registers a journal discovered on another device under the same id
     /// (see the macOS store for the full explanation). Does not switch.
+    /// Nil when the catalog is read-only (nothing was registered).
     @discardableResult
-    func registerRemoteJournal(id: UUID, name: String) -> JournalInfo {
-        guard !isCatalogReadOnly else { return JournalInfo(name: name) }
-        if let existing = journals.first(where: { $0.id == id }) {
-            return existing
-        }
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let info = JournalInfo(
-            id: id,
-            name: uniquifiedJournalName(trimmed.isEmpty ? "日记" : trimmed)
-        )
-        seedJournalDirectory(for: id)
-        journals.append(info)
-        persistCatalog()
-        return info
+    func registerRemoteJournal(id: UUID, name: String) -> JournalInfo? {
+        libraryCore.registerRemoteJournal(id: id, name: name)
     }
 
     /// Creates a new empty journal and switches to it.
+    /// Nil when the catalog is read-only (nothing was created).
     @discardableResult
-    func createJournal(name: String) -> JournalInfo {
+    func createJournal(name: String) -> JournalInfo? {
         libraryCore.createJournal(name: name)
     }
 

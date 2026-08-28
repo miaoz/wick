@@ -164,9 +164,12 @@ public struct JournalLibraryCore {
     }
 
     /// Creates a new empty journal, switches to it, and returns its metadata.
+    /// Nil under catalog read-only — callers must not mistake a refused
+    /// creation for a real journal (a phantom "success" value would make the
+    /// sync auto-import path believe the registration happened).
     @discardableResult
-    public func createJournal(name: String) -> JournalInfo {
-        guard !host.isCatalogReadOnly else { return host.journals.first { $0.id == host.activeJournalID } ?? JournalInfo(name: "") }
+    public func createJournal(name: String) -> JournalInfo? {
+        guard !host.isCatalogReadOnly else { return nil }
         host.flushActiveJournalSession()
 
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -227,9 +230,10 @@ public struct JournalLibraryCore {
     }
 
     /// Registers a journal discovered on another device under the same id.
+    /// Nil under catalog read-only (nothing was registered).
     @discardableResult
-    public func registerRemoteJournal(id: UUID, name: String) -> JournalInfo {
-        guard !host.isCatalogReadOnly else { return JournalInfo(name: name) }
+    public func registerRemoteJournal(id: UUID, name: String) -> JournalInfo? {
+        guard !host.isCatalogReadOnly else { return nil }
         if let existing = host.journals.first(where: { $0.id == id }) {
             return existing
         }

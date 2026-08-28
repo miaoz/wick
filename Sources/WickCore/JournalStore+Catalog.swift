@@ -105,8 +105,9 @@ extension JournalStore {
     }
 
     /// Creates a new empty journal, switches to it, and returns its metadata.
+    /// Nil when the catalog is read-only (nothing was created).
     @discardableResult
-    func createJournal(name: String) -> JournalInfo {
+    func createJournal(name: String) -> JournalInfo? {
         libraryCore.createJournal(name: name)
     }
 
@@ -158,10 +159,11 @@ extension JournalStore {
 
     /// Adopts a journal discovered on another sync device: registers it locally
     /// under the SAME id (the remote folder's identity) and switches to it.
-    /// The sync engine then pulls its contents down.
+    /// The sync engine then pulls its contents down. Nil when the catalog is
+    /// read-only (nothing was registered, no switch happens).
     @discardableResult
-    func adoptRemoteJournal(id: UUID, name: String) -> JournalInfo {
-        let info = registerRemoteJournal(id: id, name: name)
+    func adoptRemoteJournal(id: UUID, name: String) -> JournalInfo? {
+        guard let info = registerRemoteJournal(id: id, name: name) else { return nil }
         if activeJournalID != info.id {
             switchToJournal(id: info.id)
         }
@@ -173,9 +175,9 @@ extension JournalStore {
     /// purpose — the engine applies remote days onto it, never the reverse.
     /// Callers must reset the journal's sync state first: a state file left
     /// from a deleted past life would make "empty local" look like "deleted
-    /// everywhere" and tombstone the remote content.
+    /// everywhere" and tombstone the remote content. Nil when read-only.
     @discardableResult
-    func registerRemoteJournal(id: UUID, name: String) -> JournalInfo {
+    func registerRemoteJournal(id: UUID, name: String) -> JournalInfo? {
         libraryCore.registerRemoteJournal(id: id, name: name)
     }
 
