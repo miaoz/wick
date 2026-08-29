@@ -1,6 +1,12 @@
 <RCC>
   <qresource prefix="/">
     <file alias="qml/ProgressPanel.qml">../qml/ProgressPanel.qml</file>
+    <file alias="qml/journal/Theme.qml">../qml/journal/Theme.qml</file>
+    <file alias="qml/journal/JournalWindow.qml">../qml/journal/JournalWindow.qml</file>
+    <file alias="qml/journal/NavColumn.qml">../qml/journal/NavColumn.qml</file>
+    <file alias="qml/journal/DayList.qml">../qml/journal/DayList.qml</file>
+    <file alias="qml/journal/DayPage.qml">../qml/journal/DayPage.qml</file>
+    <file alias="qml/journal/Inspector.qml">../qml/journal/Inspector.qml</file>
     <file>candle.svg</file>
   </qresource>
 </RCC>

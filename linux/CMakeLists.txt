@@ -45,12 +45,11 @@ add_executable(test_journal_core
 target_link_libraries(test_journal_core PRIVATE wick_core)
 add_test(NAME test_journal_core COMMAND test_journal_core)
 
-# Stage-0 tray app (unused by stage-1 core tests).
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Quick Widgets Svg)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Quick Widgets Svg QuickControls2)
 
 qt_add_executable(wick
     src/main.cpp
@@ -60,13 +59,26 @@ qt_add_executable(wick
     src/TrayController.h
     src/ProgressWindow.cpp
     src/ProgressWindow.h
+    src/app/JournalLibrary.cpp
+    src/app/JournalLibrary.h
+    src/app/JournalWindow.cpp
+    src/app/JournalWindow.h
+    src/app/LunarCalendar.cpp
+    src/app/LunarCalendar.h
     resources/resources.qrc
 )
 
+target_include_directories(wick PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/app
+)
+
 target_link_libraries(wick PRIVATE
+    wick_core
     Qt6::Quick
     Qt6::Widgets
     Qt6::Svg
+    Qt6::QuickControls2
 )
 
 target_compile_definitions(wick PRIVATE

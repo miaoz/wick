@@ -1,8 +1,10 @@
+#include "JournalLibrary.h"
 #include "TimeProgress.h"
 #include "TrayController.h"
 
 #include <QApplication>
 #include <QIcon>
+#include <QQuickStyle>
 
 int main(int argc, char *argv[])
 {
@@ -16,9 +18,18 @@ int main(int argc, char *argv[])
     app.setQuitOnLastWindowClosed(false);
     app.setWindowIcon(QIcon(QStringLiteral(":/candle.svg")));
 
+    QQuickStyle::setStyle(QStringLiteral("Basic"));
+
+    JournalLibrary library;
+    library.bootstrap();
+
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &library, &JournalLibrary::flushNow);
+
     TimeProgress progress;
-    TrayController tray(&progress);
-    Q_UNUSED(tray);
+    TrayController tray(&progress, &library);
+
+    if (app.arguments().contains(QStringLiteral("--journal")))
+        tray.openJournal();
 
     return app.exec();
 }
