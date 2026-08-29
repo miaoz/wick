@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "wick.progress",
+  "name": "秉烛",
+  "version": "0.1.0",
+  "author": "miaoz",
+  "license": "MIT",
+  "description": "Candle in the bar. Click opens a system dropdown with remaining day / week / month / year.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "秉烛",
+    "description": "Remaining time of day, week, month, and year.",
+    "category": "Time",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
