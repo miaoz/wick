@@ -210,3 +210,5 @@ RSS 开/关都约 221 MB，也符合关窗未拆 hosting。
 - `sample 5s`：主线程全部样本停在 `mach_msg`；`NSDisplayCycleFlush` / `RepeatAnimation` 均 0 帧
 - `swift test` 382 通过；`WickPhone` scheme 模拟器编译通过；`-wick-screenshot-journal` 对照改动前基线内容一致
 
+**延后项归档**：见 `docs/maintenance-plan-2026-08-29.md`。注意上文的 UI-01/02/05 经逐项复核实已于 316cc91（08-28 审查轮）修复，实际在案的只有 UI-04；勿按本文件编号直接开工。
+
