@@ -87,6 +87,10 @@
   .scene-cap b { color: var(--ink-1); }
   .scene-cap .k { font-family: var(--f-mono); font-size: 10.5px; color: var(--cinnabar); letter-spacing: 0.08em; }
 
+  /* 主窗按真实最小宽度(≈1366)1:1 绘制,JS 整体缩放适配页面 */
+  .jscale-wrap { overflow: hidden; }
+  .jscale-inner { width: 1366px; transform-origin: top left; }
+
   /* Quickshell bar */
   .osbar { position: absolute; top: 0; left: 0; right: 0; height: 36px; z-index: 6;
     display: flex; align-items: center; gap: 14px; padding: 0 12px;
@@ -174,8 +178,14 @@
   .jlist .lr.dim { color: var(--ink-3); }
 
   /* ============ 账册页(对齐 JournalDaySection / JournalItemEditorCard) ============ */
-  .jpage { flex: 1; background: var(--paper-hi); overflow: hidden; padding: 20px 26px 14px; display: flex; flex-direction: column; }
-  .jpage .ph2 { display: flex; align-items: flex-end; gap: 14px; }
+  /* 栏底是 columnPaper;每天一页宣纸单页(paper-hi + 0.5pt 发丝边框 + 双层微接触投影)浮在栏底上。
+     边距对齐实现:栏 → 纸 = 上下 20 / 左右 28;纸内 = 上 20 / 左右 26 / 下 14;内容栏宽上限 880 居中。 */
+  .jpage { flex: 1; background: var(--paper); overflow: hidden; padding: 20px 28px; display: flex; flex-direction: column; }
+  .jsheet { background: var(--paper-hi); border: 0.5px solid var(--rule); border-radius: 4px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 5px 14px rgba(0, 0, 0, 0.08);
+    padding: 20px 26px 14px; display: flex; flex-direction: column;
+    max-width: 880px; width: 100%; margin: 0 auto; }
+  .jpage .ph2 { display: flex; align-items: flex-end; gap: 10px; }
   .jpage .ph2 .big { font-family: var(--f-disp); font-size: 28px; font-weight: 800; white-space: nowrap; line-height: 1; }
   .jpage .ph2 .stamp { font-family: var(--f-print); font-size: 11px; color: var(--ink-2); line-height: 1.5; padding-bottom: 3px; white-space: nowrap; }
   .jpage .ph2 .sp { flex: 1; min-width: 8px; }
@@ -195,6 +205,7 @@
   .jentry .enum { font-family: var(--f-mono); font-size: 10px; color: var(--ink-3); }
   .jentry .etag { font-family: var(--f-print); font-size: 12.5px; font-weight: 700; color: var(--cinnabar); margin: 2px 0 6px; }
   .jentry .body { font-family: var(--f-print); font-size: 13.5px; line-height: 2.0; color: var(--ink-1); max-width: 62ch; }
+  .review-row { display: flex; justify-content: flex-end; margin-top: 4px; }
   .review-cta { font-family: var(--f-print); font-size: 12px; font-weight: 700; color: var(--cinnabar); opacity: 0.8; transform: rotate(-3deg);
     width: 44px; height: 44px; display: inline-grid; place-items: center; background: none; border: none; cursor: pointer; }
   .jentry .floatseal { position: absolute; right: 2px; bottom: 6px; opacity: 0.82; }
@@ -215,7 +226,7 @@
   .receipt .down { color: #B0341E; }
 
   /* ============ 检查器(第四栏:今日事件 + 盈亏月历) ============ */
-  .jinsp { width: 252px; flex: none; border-left: 1px solid var(--rule); background: var(--paper);
+  .jinsp { width: 240px; flex: none; border-left: 1px solid var(--rule); background: var(--paper);
     display: flex; flex-direction: column; overflow: hidden; }
   .jinsp .isec { padding: 11px 13px 12px; border-bottom: 1px solid var(--rule); }
   .jinsp .isec:last-child { border-bottom: none; }
@@ -271,6 +282,8 @@
   .seg { margin-left: auto; display: flex; border: 1px solid var(--ink-3); border-radius: 4px; overflow: hidden; }
   .seg b { font-weight: 600; font-size: 11px; padding: 4px 11px; color: var(--ink-2); }
   .seg b.on { background: var(--ember); color: #FFF3E0; }
+  .fontpick { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; color: var(--cinnabar); border: 1px solid var(--rule); border-radius: 4px; padding: 3px 8px; cursor: pointer; }
+  .fontpick:hover { border-color: var(--cinnabar); }
   .toggle { margin-left: auto; width: 34px; height: 20px; border-radius: 10px; background: var(--rule); position: relative; flex: none; }
   .toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--paper-hi); box-shadow: 0 1px 2px rgba(0,0,0,0.25); }
   .toggle.on { background: var(--ember); }
@@ -351,7 +364,7 @@
         <div class="dec"><div class="dv">纸的物理</div><div class="dt"><b>纸不透明。</b>不用 Hyprland blur / 透明:秉烛的纸是有克重的东西,透了就不是纸。OS 侧自己的 bar 可以半透明,那是它的事。</div></div>
         <div class="dec"><div class="dv">字态落地</div><div class="dt">圆体(活数据)→ <b>Inter + Noto Sans SC</b>;宋体(印刷 / 存档)→ <b>Noto Serif SC</b>;单据等宽 → <b>JetBrains Mono</b>(Omarchy 默认等宽)。Qt 走系统字体,不内嵌。</div></div>
         <div class="dec"><div class="dv">四相位</div><div class="dt"><span class="kept">弧光引擎原样保留。</span>Omarchy 是暗色桌面,默认落在「暗 · 子夜」;亮 / 暗 / 跟随系统在设置里,四相位随一天流动——这是秉烛的魂,不为桌面风格砍掉。</div></div>
-        <div class="dec"><div class="dv">修订 0.2</div><div class="dt"><b>对齐现行实现而非旧定稿。</b>① 复盘章 = 白文方章,字形恒为 <span class="kept">✓ / ✗</span>,印泥随盈亏约定(✓ 盈色 / ✗ 亏色),不再是朱砂「对/错」;② 进度面板按现行 hero 结构重画;③ 检查器(栏内黄历)回到 1.0 范围——裁剪的只有贴桌物理彩蛋。</div></div>
+        <div class="dec"><div class="dv">修订 0.2</div><div class="dt"><b>对齐现行实现而非旧定稿。</b>① 复盘章 = 白文方章,字形恒为 <span class="kept">✓ / ✗</span>,印泥随盈亏约定(✓ 盈色 / ✗ 亏色),盖下后 82% 透明浮条目右下;② 进度面板按现行 hero 结构重画;③ 检查器(栏内黄历)回到 1.0 范围——裁剪的只有贴桌物理彩蛋;④ 账册页按 JournalDaySection 重画:条目无卡片壳、发丝线分隔、页眉全件(大日期 / 农历 / 净盈亏 / 保存态 / 删除)。</div></div>
         <div class="dec"><div class="dv">盈亏约定</div><div class="dt"><b>默认绿涨红跌,全界面跟随。</b>色值只有两组:pnlUp = 朱砂、pnlDown = 黛青;约定只交换语义绑定。复盘章印泥、日期列表盈亏、单据数字、盈亏月历一律走约定;黄历的「宜 / 方印」永远朱砂,不参与交换。设置里可切红涨绿跌(A 股习惯),Linux 同一套。</div></div>
       </div>
     </div>
@@ -462,8 +475,11 @@
     <div class="sec-head"><span class="no">02</span><h2>日记主窗 · 可磁贴四栏</h2><span class="en">Journal window, tiled</span></div>
     <p class="lead">一个守规矩的 Hyprland tile:<b>2px 系统描边(Omarchy 主题 accent 色,非 Wick 颜色)</b>、圆角、无 titlebar——第一行就是秉烛工具行。栏内是现行实现的语言:导航 / 日期列表(盈亏色随约定 + ✓/✗ 复盘小章)/ 账册页(宋体条目 + 胶带单据 + 复盘方章)/ <b>第四栏检查器 = 今日事件(宜忌 + 宏观/财报)+ 盈亏月历</b>。黄历不撕页,但入栏。</p>
 
-    <div class="scene" style="padding: 56px 26px 26px;">
-      <div class="hwin" style="height: 620px;">
+    <div class="scene" style="padding: 40px 8px 26px;">
+      <!-- 主窗有最小宽度(全导航 + 检查器 ≈ 1366pt);按最小宽度 1:1 绘制,再整体缩放适配页面,避免元素溢出纸面 -->
+      <div class="jscale-wrap">
+        <div class="jscale-inner">
+      <div class="hwin" style="height: 700px;">
         <span class="wtag">wick · 日记</span>
         <div class="jtb">
           <span class="id">
@@ -509,8 +525,8 @@
             </div>
           </div>
           <div class="jlist">
-            <div class="lr on"><span class="ld">8月29日</span><span class="lm">周六 · 今天 · 1 条目</span><span class="lp"></span></div>
-            <div class="lr"><span class="ld">8月28日</span><span class="lm">周五 · 3 条目</span><span class="lp up">+431.4</span></div>
+            <div class="lr"><span class="ld">8月29日</span><span class="lm">周六 · 今天 · 1 条目</span><span class="lp"></span></div>
+            <div class="lr on"><span class="ld">8月28日</span><span class="lm">周五 · 2 条目</span><span class="lp up">+431.4</span></div>
             <div class="lr"><span class="ld">8月27日</span><span class="lm">周四 · 2 条目</span>
               <span class="lp"><span class="chop gain" style="width: 20px; height: 20px; font-size: 11px;"><span>✓</span></span></span></div>
             <div class="lr"><span class="ld">8月26日</span><span class="lm">周三 · 2 条目</span><span class="lp down">−311.3</span></div>
@@ -518,35 +534,55 @@
             <div class="lr"><span class="ld">8月24日</span><span class="lm">周一 · 4 条目</span><span class="lp up">+96.0</span></div>
           </div>
           <div class="jpage">
-            <div class="ph">
-              <span class="big">8月28日 <span style="font-size: 15px; color: var(--ink-3); font-weight: 400;">周五</span></span>
-              <span class="sub">3 条目 · 已复盘 1</span>
-              <div class="burnstrip" style="--p: 100%; --ticks: 24;"><div class="char"></div></div>
+            <div class="jsheet">
+            <div class="ph2">
+              <span class="big">8月28日</span>
+              <span class="stamp">周五<br>七月十六 · 丙午年</span>
+              <span class="sp"></span>
+              <span class="pnl"><small>净盈亏</small><b>+431.38 USDT</b></span>
+              <span class="saved">已自动保存</span>
+              <button class="qbtn" title="删除当日"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.5 4h11M6.5 4V2.8h3V4M4 4l.6 9.2a1 1 0 0 0 1 .8h4.8a1 1 0 0 0 1-.8L12 4M6.8 7v4M9.2 7v4"/></svg></button>
+            </div>
+            <div class="dayburn">
+              <div class="burnstrip" style="--p: 100%; --ticks: 24; height: 8px;"><div class="char"></div></div>
             </div>
 
-            <div class="jentry">
-              <div class="et">
-                <span class="ptag on">BTC</span>
-                <span class="etime">21:40</span>
-                <span class="ereview"><span class="chop gain" style="width: 34px; height: 34px; font-size: 16px;"><span>✓</span></span></span>
+            <div class="jitems">
+              <div class="jentry">
+                <div class="etop">
+                  <span class="enum">条目 1</span>
+                  <span style="flex:1"></span>
+                  <button class="qbtn" title="添加图片"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="3.5" width="13" height="10" rx="1.5"/><circle cx="5.5" cy="7" r="1"/><path d="M2 12l3.5-3 2.5 2 2.5-2.5L14 12"/><path d="M12.5 1.5v3M11 3h3"/></svg></button>
+                  <button class="qbtn" title="删除条目"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M5.5 8h5"/></svg></button>
+                </div>
+                <div class="etag">BTC</div>
+                <p class="body">多头拿了两天,突破后回踩不破,按计划在 114.2k 落袋。这笔的教训是加仓点选得急,第二次 VWAP 被抬高了一截——下次等回踩确认再补。</p>
+                <div class="receipt">
+                  <div class="r-head"><b>BTCUSDT 永续 · 多</b><span>08-27 09:41 → 08-28 21:35</span></div>
+                  <div class="r-row"><span>开仓 → 平仓 VWAP</span><span>112,480.5 → 114,206.0</span></div>
+                  <div class="r-row"><span>数量 · 持有</span><span>0.250 BTC · 1 天 12 小时</span></div>
+                  <div class="r-row"><span>手续费 · 资金费</span><span>−6.12 · +2.40</span></div>
+                  <div class="r-row r-total"><span>已实现盈亏</span><span class="up">+431.38 USDT</span></div>
+                </div>
+                <span class="floatseal"><span class="chop gain" style="width: 52px; height: 52px; font-size: 24px;"><span>✓</span></span></span>
               </div>
-              <p class="body">多头拿了两天,突破后回踩不破,按计划在 114.2k 落袋。这笔的教训是加仓点选得急,第二次 VWAP 被抬高了一截——下次等回踩确认再补。</p>
-              <div class="receipt" style="max-width: 430px;">
-                <div class="r-head"><b>BTCUSDT 永续 · 多</b><span>08-26 09:41 → 08-28 21:35</span></div>
-                <div class="r-row"><span>开仓 → 平仓 VWAP</span><span>112,480.5 → 114,206.0</span></div>
-                <div class="r-row"><span>数量 · 持有</span><span>0.250 BTC · 2 天 11 小时</span></div>
-                <div class="r-row"><span>手续费 · 资金费</span><span>−6.12 · +2.40</span></div>
-                <div class="r-row r-total"><span>已实现盈亏</span><span class="up">+431.38 USDT</span></div>
+
+              <div class="jentry">
+                <div class="etop">
+                  <span class="enum">条目 2</span>
+                  <span style="flex:1"></span>
+                  <button class="qbtn" title="添加图片"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="3.5" width="13" height="10" rx="1.5"/><circle cx="5.5" cy="7" r="1"/><path d="M2 12l3.5-3 2.5 2 2.5-2.5L14 12"/><path d="M12.5 1.5v3M11 3h3"/></svg></button>
+                  <button class="qbtn" title="删除条目"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M5.5 8h5"/></svg></button>
+                </div>
+                <div class="etag">心态</div>
+                <p class="body">空仓过夜。这周第三次想追 SOL 的突破,忍住了。把「想追」写下来之后,冲动就过去了一半。</p>
+                <div class="review-row"><button class="review-cta">复盘</button></div>
               </div>
             </div>
-
-            <div class="jentry">
-              <div class="et">
-                <span class="ptag">心态</span>
-                <span class="etime">23:05</span>
-                <span class="ereview"><span class="review-slot">复盘</span></span>
-              </div>
-              <p class="body">空仓过夜。这周第三次想追 SOL 的突破,忍住了。把「想追」写下来之后,冲动就过去了一半。</p>
+            <button class="add-item">
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2.5v11M2.5 8h11"/></svg>
+              添加条目
+            </button>
             </div>
           </div>
           <div class="jinsp">
@@ -585,28 +621,70 @@
           </div>
         </div>
       </div>
+        </div>
+      </div>
     </div>
     <div class="scene-cap">
       <span><span class="k">A</span> <b>窗口描边</b>:Hyprland 活动窗 accent(图示为 Tokyo Night 蓝),Wick 不自绘;失焦自动转灰</span>
       <span><span class="k">B</span> <b>无 titlebar</b>:Omarchy 默认关窗 <span class="keyhint">Super+Q</span>、移动 <span class="keyhint">Super+拖拽</span>;工具行只做秉烛的事</span>
-      <span><span class="k">C</span> <b>四栏全可开关</b>:导航三态 × 检查器开关,共 3×2 组合;半屏 tile 先收检查器再收导航,落「仅列表 / 专注」</span>
-      <span><span class="k">D</span> <b>复盘章</b>:白文方章,字形恒为 ✓/✗,印泥随盈亏约定——默认绿涨红跌(✓ 黛青 / ✗ 朱砂),盖下 0.3s 落印</span>
+      <span><span class="k">C</span> <b>四栏全可开关</b>:导航三态 × 检查器开关,共 3×2 组合;半屏 tile 先收检查器再收导航,落「仅列表 / 专注」。<b>全导航 + 检查器的最小宽度 ≈ 1366pt</b>(此处按最小宽度 1:1 绘制后整体缩放),窗口更窄时不硬撑四栏</span>
+      <span><span class="k">D</span> <b>复盘章</b>:未盖 = 宋体「复盘」文字钮自占一行、靠条目右下(-3° 倾);盖下 = 白文方章 82% 透明浮条目右下,盖在内容上是章的特权。字形恒为 ✓/✗,印泥随盈亏约定(默认绿涨红跌)</span>
       <span><span class="k">E</span> <b>检查器</b>:今日事件(大日期 + 农历 + 朱砂方印 + 宜/忌 + 宏观/财报 tab)+ 盈亏月历;无暗室、无撕页——那是贴桌彩蛋的形态,不在 1.0</span>
+      <span><span class="k">F</span> <b>账册页</b>:一天一页——每页是宣纸单页(paper-hi + 0.5pt 发丝边框 + 双层微接触投影)浮在栏底上,边距与实现同值(栏→纸 20/28,纸内 20/26/14,内容上限 880 居中);条目无卡片壳、靠发丝线与留白分隔;标签恒为朱砂宋体加粗(pnlUp,不参与涨跌交换);页眉 = 大日期 + 农历小注 + 净盈亏 + 已自动保存 + 删除,挤不下退两行;过去日的烛痕条天然燃尽,今天才有烛苗与「已燃」小字</span>
     </div>
   </section>
 
-  <!-- ==================== 03 设置窗 ==================== -->
-  <section data-screen-label="设置窗">
-    <div class="sec-head"><span class="no">03</span><h2>设置窗 · 独立 tile</h2><span class="en">Settings</span></div>
-    <p class="lead">设置从 Mac 的「纸签第二态」改为<b>独立小窗</b>——Linux 没有菜单栏弹层里翻页的惯例,独立窗更合平铺桌面的肌肉记忆。内容对齐 Linux 1.0 范围:<b>栏内黄历(检查器)保留开关,贴桌物理彩蛋不做</b>;交易所绑定按日记本。</p>
+  <!-- ==================== 03 设置 · 三端统一 IA ==================== -->
+  <section data-screen-label="设置统一">
+    <div class="sec-head"><span class="no">03</span><h2>设置 · 三端统一 IA</h2><span class="en">Settings, one IA across platforms</span></div>
+    <p class="lead">设置不再是三端各自一套。<b>同一项设置,在 macOS / iOS / Linux 落在相同分类、相同顺序、相同文案</b>;端间差异只允许一种:「这个平台没有这个东西」(标 —)。下表是统一后的目标 IA,也是三端各自的迁移清单。设置窗本身从 Mac 的「纸签第二态」改为<b>独立小窗</b>——Linux 没有菜单栏弹层里翻页的惯例。</p>
 
-    <div class="scene" style="padding: 40px 24px 24px; display: grid; place-items: center;">
-      <div class="hwin idle" style="width: 640px; height: 660px;">
+    <div class="sheet">
+      <table class="spec">
+        <tr><th>分类(顺序固定)</th><th>设置项</th><th>macOS</th><th>iOS</th><th>Linux</th></tr>
+        <tr><td rowspan="4">1 · 外观与语言</td><td>语言</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓</td></tr>
+        <tr><td>外观(亮 / 暗 / 跟随系统)</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓</td></tr>
+        <tr><td>涨跌颜色(绿涨红跌默认)</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓</td></tr>
+        <tr><td>字体(界面 / 印刷)</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓ 系统已装字体任选,Qt 枚举 fontconfig</td></tr>
+        <tr><td rowspan="3">2 · 通用</td><td>每周从周一开始</td><td class="dim">✓</td><td class="dim">✓ 新增</td><td class="dim">✓</td></tr>
+        <tr><td>登录启动</td><td class="dim">✓ SMAppService</td><td class="dim">—</td><td class="dim">✓ systemd --user</td></tr>
+        <tr><td>菜单栏 / 托盘显示剩余百分比</td><td class="dim">✓</td><td class="dim">—</td><td class="dim">✓</td></tr>
+        <tr><td rowspan="2">3 · 日记与提醒</td><td>打开日记(入口按钮)</td><td class="dim">✓</td><td class="dim">—</td><td class="dim">— 在托盘菜单</td></tr>
+        <tr><td>每日提醒 + 时间</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓ freedesktop 通知</td></tr>
+        <tr><td rowspan="2">4 · 交易日历</td><td>主窗显示黄历(检查器 / Tab)</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓</td></tr>
+        <tr><td>贴桌物理黄历(彩蛋)</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">— 1.0 不做</td></tr>
+        <tr><td rowspan="2">5 · 同步</td><td>Dropbox 连接 / 状态 / 立即同步 / 断开</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓</td></tr>
+        <tr><td>对账冲突列表</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓</td></tr>
+        <tr><td rowspan="2">6 · 交易所</td><td>按日记本绑定 / 凭据 / 状态 / 刷新 / 解绑</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓ 凭据进 libsecret</td></tr>
+        <tr><td>同步仓位快照(默认关)</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓</td></tr>
+        <tr><td rowspan="3">7 · 数据</td><td>导出 / 导入(zip · journal.json)</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓</td></tr>
+        <tr><td>显示数据目录</td><td class="dim">✓</td><td class="dim">—</td><td class="dim">✓</td></tr>
+        <tr><td>只读告警(加载失败 / catalog 保护)</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓</td></tr>
+        <tr><td rowspan="3">8 · 关于</td><td>版本号</td><td class="dim">✓</td><td class="dim">✓ 新增</td><td class="dim">✓</td></tr>
+        <tr><td>检查更新</td><td class="dim">✓ GitHub Releases</td><td class="dim">— 商店分发</td><td class="dim">✓ 只检查,安装走 pacman</td></tr>
+        <tr><td>退出</td><td class="dim">✓</td><td class="dim">—</td><td class="dim">— 在托盘菜单</td></tr>
+      </table>
+    </div>
+    <div class="sheet-edge"></div>
+
+    <div class="sheet" style="margin-top: 22px;">
+      <div class="decisions">
+        <div class="dec"><div class="dv">macOS 迁移</div><div class="dt">四个顶层段(语言 / 外观 / 涨跌颜色 / 字体)合并为 <b>1 · 外观与语言</b>;「日记」段更名 <b>3 · 日记与提醒</b>;「交易日历」段补「主窗显示黄历」行(现状只在工具栏)。其余段原样重编号。</div></div>
+        <div class="dec"><div class="dv">iOS 迁移</div><div class="dt">「外观主题」卡更名 <b>1 · 外观与语言</b>(内容已一致);「日记提醒」更名 <b>3 · 日记与提醒</b>;新增 <b>2 · 通用</b>(每周从周一开始)与 <b>8 · 关于</b>(版本号)。</div></div>
+        <div class="dec"><div class="dv">Linux 实施</div><div class="dt">按上表建八组,不留私货;「—」的项界面不出现(贴桌彩蛋不留入口,而不是灰显)。</div></div>
+      </div>
+    </div>
+    <div class="sheet-edge"></div>
+
+    <div class="scene" style="padding: 40px 24px 24px; display: grid; place-items: center; margin-top: 22px;">
+      <div class="hwin idle" style="width: 660px; height: 380px;">
         <span class="wtag" style="color: var(--os-fg-dim); border-color: var(--os-border-idle);">wick · 设置</span>
         <div class="sbody">
           <div class="snav">
-            <div class="si on">通用</div>
-            <div class="si">外观</div>
+            <div class="si on">外观与语言</div>
+            <div class="si">通用</div>
+            <div class="si">日记与提醒</div>
+            <div class="si">交易日历</div>
             <div class="si">同步</div>
             <div class="si">交易所</div>
             <div class="si">数据</div>
@@ -614,17 +692,10 @@
           </div>
           <div class="smain">
             <div class="ssec">
-              <div class="sh">通用</div>
+              <div class="sh">外观与语言</div>
               <div class="srow">语言<span class="seg"><b class="on">简体中文</b><b>English</b></span></div>
-              <div class="srow">涨跌颜色<small>章 / 单据 / 月历全局跟随</small><span class="seg"><b class="on">绿涨红跌</b><b>红涨绿跌</b></span></div>
-              <div class="srow">每周从周一开始<span class="toggle on"></span></div>
-              <div class="srow">登录时启动<small>systemd --user 服务</small><span class="toggle on"></span></div>
-              <div class="srow">托盘旁显示今日剩余百分比<span class="toggle"></span></div>
-            </div>
-            <div class="ssec">
-              <div class="sh">外观 · 秉烛四相位</div>
-              <div class="srow">亮 / 暗<span class="seg"><b>亮</b><b class="on">暗</b><b>跟随系统</b></span></div>
-              <div class="srow">烛火随一天流动<small>此刻:子夜</small>
+              <div class="srow">外观<span class="seg"><b>亮</b><b class="on">暗</b><b>跟随系统</b></span></div>
+              <div class="srow">烛火随一天流动<small>秉烛四相位 · 此刻:子夜</small>
                 <span class="phase-chips">
                   <i style="background: linear-gradient(160deg, #2B2118, #181110);"></i>
                   <i style="background: linear-gradient(160deg, #2C2214, #191209);"></i>
@@ -632,27 +703,18 @@
                   <i style="background: linear-gradient(160deg, #241C10, #120D07); box-shadow: 0 0 0 1.5px var(--ember);"></i>
                 </span>
               </div>
-              <div class="srow">界面字体<small>圆体 · 活数据</small><span class="mono" style="margin-left: auto;">Inter / Noto Sans SC</span></div>
-              <div class="srow">印刷字体<small>宋体 · 账册与单据</small><span class="mono" style="margin-left: auto;">Noto Serif SC</span></div>
-            </div>
-            <div class="ssec">
-              <div class="sh">提醒 · 交易日历</div>
-              <div class="srow">每日提醒写日记<small>21:00 · freedesktop 通知</small><span class="toggle on"></span></div>
-              <div class="srow">在主窗检查器显示黄历<small>今日事件 + 宜忌;贴桌物理彩蛋不在 1.0</small><span class="toggle on"></span></div>
-            </div>
-            <div class="ssec">
-              <div class="sh">同步与交易所</div>
-              <div class="srow">Dropbox<small>已连接 · 2 分钟前 · 墓碑删除同步</small><span class="toggle on"></span></div>
-              <div class="srow">同步仓位快照<small>密钥永不上云</small><span class="toggle"></span></div>
-              <div class="srow">交易所绑定<small>当前日记本「交易日志」</small><span class="mono" style="margin-left: auto;">Binance 只读 Key · libsecret</span></div>
+              <div class="srow">涨跌颜色<small>章 / 单据 / 月历全局跟随</small><span class="seg"><b class="on">绿涨红跌</b><b>红涨绿跌</b></span></div>
+              <div class="srow">界面字体<small>圆体 · 活数据 · 系统已装字体任选</small><span class="mono fontpick">Inter / Noto Sans SC<svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3l5 5-5 5"/></svg></span></div>
+              <div class="srow">印刷字体<small>宋体 · 账册与单据 · 系统已装字体任选</small><span class="mono fontpick">Noto Serif SC<svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3l5 5-5 5"/></svg></span></div>
             </div>
           </div>
         </div>
       </div>
     </div>
     <div class="scene-cap">
-      <span><span class="k">A</span> <b>左栏分组</b>:通用 / 外观 / 同步 / 交易所 / 数据 / 关于,对标 Mac 设置分区;「交易日历」保留(管检查器显隐),只减去贴桌彩蛋开关</span>
-      <span><span class="k">B</span> <b>失焦描边</b>:图示为非活动窗(idle border);同一时刻 Hyprland 只有一扇窗亮 accent</span>
+      <span><span class="k">A</span> <b>左栏八组</b>:顺序即上表 1–8,三端同名同序;图示选中「外观与语言」组</span>
+      <span><span class="k">B</span> <b>通用组</b>:每周从周一开始 / 登录时启动(systemd --user)/ 托盘旁显示今日剩余百分比</span>
+      <span><span class="k">C</span> <b>失焦描边</b>:图示为非活动窗(idle border);同一时刻 Hyprland 只有一扇窗亮 accent</span>
     </div>
   </section>
 
@@ -665,7 +727,7 @@
         <tr><td>常驻入口</td><td class="dim">MenuBarExtra 蜡烛 + 360pt 撕边纸签</td><td class="dim">SNI 模板蜡烛 + layer-shell 浮动纸签,352px,锚定托盘下方</td></tr>
         <tr><td>窗口 chrome</td><td class="dim">红绿灯 + 空 NSToolbar 建立标题栏几何</td><td class="dim">Hyprland 系统描边 + 圆角 + 磁贴;无 titlebar,工具行即首行</td></tr>
         <tr><td>主窗骨架</td><td class="dim">手动三栏 + 可选检查器,⌃⌘S 三态循环</td><td class="dim">同款三栏 + 第四栏检查器(今日事件 + 盈亏月历);栏位 3×2 自由开关,窄窗自动折「仅列表 / 专注」</td></tr>
-        <tr><td>设置</td><td class="dim">菜单栏纸签第二态(齿轮翻页)</td><td class="dim">独立小窗,左栏分组;平铺桌面不养弹层翻页的惯例</td></tr>
+        <tr><td>设置</td><td class="dim">菜单栏纸签第二态(齿轮翻页)</td><td class="dim">独立小窗,左栏八组;分类与顺序三端统一(见 §03 矩阵),只裁剪本平台没有的项</td></tr>
         <tr><td>黄历</td><td class="dim">检查器版(默认)+ 贴桌物理彩蛋(撕页 / 暗室)</td><td class="dim">检查器版保留;<b>贴桌物理彩蛋 1.0 不做</b>,界面不留入口</td></tr>
         <tr><td>字态</td><td class="dim">SF Rounded / Songti SC / New York / SF Mono</td><td class="dim">Inter + Noto Sans SC / Noto Serif SC / JetBrains Mono,全部走系统已装字体</td></tr>
         <tr><td>密钥</td><td class="dim">Keychain(dev 走 0600 文件)</td><td class="dim">libsecret(dev 走 <code>~/.local/share/wick/dev-secrets.json</code>,0600)</td></tr>
@@ -735,6 +797,20 @@
   /* Linux 稿默认落在「暗 · 子夜」(Omarchy 是暗色桌面);用户显式选择过则尊重其选择 */
   if (!localStorage.getItem("wick-scheme")) localStorage.setItem("wick-scheme", "dark");
   if (!localStorage.getItem("wick-phase")) localStorage.setItem("wick-phase", "night");
+
+  /* 日记主窗按最小宽度 1366 1:1 绘制,整体缩放适配页面宽度 */
+  (function () {
+    var wrap = document.querySelector(".jscale-wrap");
+    if (!wrap) return;
+    var inner = wrap.firstElementChild;
+    function fit() {
+      var s = wrap.clientWidth / 1366;
+      inner.style.transform = "scale(" + s + ")";
+      wrap.style.height = (inner.offsetHeight * s) + "px";
+    }
+    window.addEventListener("resize", fit);
+    fit();
+  })();
 </script>
 <script src="theme.js"></script>
 </body>
