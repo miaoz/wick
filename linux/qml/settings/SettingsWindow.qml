@@ -533,8 +533,8 @@ Rectangle {
                 text: (syncCoordinator && syncCoordinator.connected)
                       ? t("断开 Dropbox", "Disconnect Dropbox")
                       : t("连接 Dropbox", "Connect Dropbox")
-                coming: !(syncCoordinator && syncCoordinator.fakeSyncAvailable)
-                enabled: !!(syncCoordinator && syncCoordinator.fakeSyncAvailable)
+                coming: false
+                enabled: !!syncCoordinator
                 onClicked: {
                     if (!syncCoordinator)
                         return
@@ -545,18 +545,28 @@ Rectangle {
                 }
             }
             Text {
-                visible: !!(syncCoordinator && syncCoordinator.fakeSyncAvailable)
+                visible: !!(syncCoordinator && (syncCoordinator.connected
+                           || syncCoordinator.statusText.length > 0
+                           || syncCoordinator.fakeSyncAvailable))
                 Layout.fillWidth: true
                 Layout.topMargin: 6
                 text: {
                     if (!syncCoordinator)
                         return ""
-                    if (syncCoordinator.connected)
-                        return t("已连接（调试假后端）", "Connected (debug fake backend)")
+                    if (syncCoordinator.connected) {
+                        const prefix = syncCoordinator.fakeSyncAvailable
+                            ? t("已连接（调试假后端）", "Connected (debug fake backend)")
+                            : t("已连接", "Connected")
+                        return prefix
                             + (syncCoordinator.accountEmail ? " · " + syncCoordinator.accountEmail : "")
                             + (syncCoordinator.statusText ? " · " + syncCoordinator.statusText : "")
-                    return t("WICK_FAKE_SYNC=1：用内存假后端跑同步循环，不访问真实 Dropbox。",
-                             "WICK_FAKE_SYNC=1: run the engine against an in-memory fake, no real Dropbox.")
+                    }
+                    if (syncCoordinator.statusText.length > 0)
+                        return syncCoordinator.statusText
+                    if (syncCoordinator.fakeSyncAvailable)
+                        return t("WICK_FAKE_SYNC=1：用内存假后端跑同步循环，不访问真实 Dropbox。",
+                                 "WICK_FAKE_SYNC=1: run the engine against an in-memory fake, no real Dropbox.")
+                    return ""
                 }
                 color: theme.ink3
                 font.family: theme.fontUi
