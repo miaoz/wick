@@ -1,0 +1,27 @@
+# Maintainer: miaoz
+# Skeleton for Omarchy / Arch. Build from the linux/ tree (parent of this file).
+pkgname=wick
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="秉烛 · Wick for Linux"
+arch=('x86_64' 'aarch64')
+url="https://github.com/miaoz/wick"
+license=('LicenseRef-proprietary')
+depends=('qt6-base' 'qt6-declarative' 'qt6-svg' 'openssl')
+makedepends=('cmake' 'ninja' 'gcc')
+
+build() {
+  local src="${startdir}/.."
+  cmake -G Ninja -B build -S "$src" -DCMAKE_BUILD_TYPE=Release
+  cmake --build build --target wick
+}
+
+package() {
+  install -Dm755 build/wick "$pkgdir/usr/bin/wick"
+  install -Dm644 "${startdir}/../resources/wick.desktop" \
+      "$pkgdir/usr/share/applications/wick.desktop"
+  install -Dm644 "${startdir}/../resources/candle.svg" \
+      "$pkgdir/usr/share/icons/hicolor/scalable/apps/wick.svg"
+  install -Dm644 "${startdir}/wick.service" \
+      "$pkgdir/usr/lib/systemd/user/wick.service"
+}
