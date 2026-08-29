@@ -1,10 +1,10 @@
 # Wick for Linux 开发方案（Omarchy）
 
-状态：可执行草案 · 2026-08-29（修订：1.0 对齐现有功能，仅排除物理黄历；视觉方向冻结）
+状态：可执行草案 · 2026-08-30（修订：视觉合同改为仓库内 `linux.html` v0.2）
 仓库：https://github.com/miaoz/wick
 目标机：Omarchy 4（Arch + Hyprland 0.56 + Quickshell）
 UI 栈：Qt 6 + QML（不做 Tauri / GPUI）
-设计：Linux 高保真 HTML 另存，不跟本方案一起进仓。语言接到 `designs/wick-design-language/` 秉烛定稿（第三平台），不另起 design system。
+设计合同：`designs/wick-design-language/linux.html`（已确认）。token 源 `tokens-v2.css`。不另起 design system。
 
 本文是给「会写 Swift、不熟 Linux」的执行清单。完成标准写在每阶段末尾，未勾上就不进入下一阶段。
 
@@ -14,7 +14,7 @@ UI 栈：Qt 6 + QML（不做 Tauri / GPUI）
 
 Linux 版是**新壳，旧格式**。界面用 Qt/QML 重写；日记 JSON、图片规则、catalog、Dropbox 远端协议、仓位快照必须与 macOS 的 `WickSync` / `WickTrading` 兼容。Mac 是格式真源；Linux 只实现，不发明新字段。
 
-**产品目标（Linux 1.0）**：除物理黄历彩蛋外，现有 macOS 功能都要有。Dropbox 与交易所仓位同步是 1.0 的一部分，不是可选项。阶段顺序只是施工顺序，不是砍功能。
+**产品目标（Linux 1.0）**：除**贴桌物理撕页黄历**外，现有 macOS 功能都要有。栏内检查器（今日事件 + 盈亏月历）在 1.0。Dropbox 与交易所仓位同步是 1.0 的一部分，不是可选项。阶段顺序只是施工顺序，不是砍功能。
 
 ---
 
@@ -22,8 +22,9 @@ Linux 版是**新壳，旧格式**。界面用 Qt/QML 重写；日记 JSON、图
 
 ### Linux 1.0 必须有（对标现有 Wick.app）
 
-- **托盘蜡烛**：StatusNotifierItem，出现在 `omarchy.tray`；日/周/月/年进度（`TimeProgress`）；可选菜单栏百分比
-- **日记**：多日记本、一天多条目、标签 + 正文 + 图片、条目检索、复盘、导入/导出 zip 或 `journal.json`
+- **托盘蜡烛**：StatusNotifierItem，出现在 `omarchy.tray`；进度面板对齐现行 Mac `ProgressSlipContent`（hero 大百分比 + 今日大烛痕条 + 周/月/年细条 + 页脚格言）；可选托盘百分比
+- **日记**：四栏可磁贴（导航 / 日期列表 / 账册页 / 检查器）；多日记本、一天多条目、标签 + 正文 + 图片、条目检索、复盘（✓/✗ 方章）、导入/导出 zip 或 `journal.json`
+- **检查器**：今日事件（宜忌 + 宏观/财报）+ 盈亏月历。黄历不撕页，但入栏。栏位可关；半屏先收检查器再收导航
 - **数据安全**：退出/关窗强制落盘、`journal.json.bak` 与滚动备份、加载失败只读
 - **中文 IME**：正文用 Qt `TextArea`，禁止 WebView / 自绘输入框
 - **Dropbox 同步**：本地为真源；按天对账；日记本改名；墓碑删除；冲突保留双方；OAuth PKCE
@@ -35,22 +36,24 @@ Linux 版是**新壳，旧格式**。界面用 Qt/QML 重写；日记 JSON、图
 
 ### 1.0 明确不做
 
-- **物理黄历整条彩蛋**（`WickCalendarKit`：撕页物理、桌面透明贴窗、宏观/财报黄历页、程序合成撕纸音）。这是唯一对现有功能的裁剪。
+- **贴桌物理撕页黄历**（`WickCalendarKit`：撕页物理、桌面透明贴窗、程序合成撕纸音）。宏观/财报与宜忌走日记检查器，不另开贴桌窗。这是唯一对现有功能的裁剪。
 - Quickshell `bar-widget`（顶栏内嵌蜡烛）。Mac 对应物是菜单栏托盘，Linux 用 `omarchy.tray` 即算对齐；内嵌顶栏是 1.0 之后的增强。
 - macOS 壳层细节：`MenuBarExtra` 几何 hack、`SMAppService`、钥匙串弹窗、`LSUIElement`
 - GPUI / Tauri / Electron / GTK
-- 普通翻页黄历（若以后要「有日历、无撕纸」，另开版本，不混进 1.0）
 
 ### 视觉方向（跟设计语言，不跟 Mac 窗口壳）
 
-Linux 是第三平台，不是把 Mac 窗口贴到 Hyprland 上。
+Linux 是第三平台，不是把 Mac 窗口贴到 Hyprland 上。视觉以已确认的 `linux.html` 为准。
 
-- **纸面身份**只出现在内容里：四相位弧光、墨/烛/松烟/朱砂、方章、交割单。token 以 `designs/wick-design-language/` 秉烛定稿为准。
-- **窗口铬跟 Hyprland**：系统边框、磁贴；无红绿灯、无假 titlebar、无无边框宣纸贴桌。
-- **进度面板浮动**（layer-shell / 托盘弹出），不是一块磁贴。日记窗可磁贴：宽三栏，窄了折成「专注」。
-- **纸不透明**，不用 Hyprland blur。托盘蜡烛用模板图标。
-- **字态**：圆体（活数据）→ Inter + Noto Sans SC；宋体（印刷/存档）→ Noto Serif SC。Qt 装系统字体，不走网页 CDN。
-- 交割单盈亏色（松烟盈/朱砂亏 vs 定稿 v2 红盈黛亏）实现前在设计语言里对齐一次；未对齐前按 Mac 印刷单：松烟盈、朱砂亏。
+- **纸面身份**只出现在内容里：四相位弧光、墨/烛/朱砂/黛青、方章、交割单。token 源 `tokens-v2.css`。OS 铬用页面里的 `--os-*`（东京夜系示意），不消耗秉烛颜料。
+- **窗口铬跟 Hyprland**：2px 系统描边（Omarchy accent）+ 圆角 + 磁贴间隙；无红绿灯、无假 titlebar、无无边框宣纸贴桌。
+- **进度面板浮动**（layer-shell / 托盘弹出），结构对齐 Mac `ProgressSlipContent`，不是四张独立 metric-card，也不是一块磁贴。
+- **日记四栏**：导航 / 日期列表 / 账册页 / 检查器。磁贴半屏不够宽时自动先收检查器再收导航，落「仅列表 / 专注」。
+- **纸不透明**，不用 Hyprland blur。托盘蜡烛用模板图标；唤起时一点烛火色。
+- **字态**：圆体 → Inter + Noto Sans SC；宋体 → Noto Serif SC；单据等宽 → JetBrains Mono。Qt 走系统字体，不走网页 CDN。
+- **四相位原样保留**。Omarchy 默认「暗 · 子夜」。
+- **盈亏约定**：默认绿涨红跌。色值两组固定：`pnlUp` = 朱砂、`pnlDown` = 黛青；约定只交换语义绑定。复盘章印泥、列表、单据、月历一律走约定。黄历「宜 / 方印」永远朱砂。设置可切红涨绿跌。
+- **复盘章**：白文方章，字形恒为 ✓ / ✗，印泥随盈亏约定，盖下后约 82% 透明浮在条目右下。
 
 ### 施工版本（都在 1.0 内，只是先后）
 
@@ -58,7 +61,7 @@ Linux 是第三平台，不是把 Mac 窗口贴到 Hyprland 上。
 | --- | --- | --- |
 | 0 | 是 | 托盘 + 进度窗口 |
 | 1 | 是 | 本地 JSON 核心 + 备份/只读 |
-| 2 | 是 | 日记主窗 + IME + 图片 + 检索 + zip |
+| 2 | 是 | 日记四栏主窗 + 检查器 + IME + 图片 + 检索 + zip |
 | 3 | 是 | 设置、主题、字体、提醒、开机启动、打包骨架 |
 | 4 | 是 | Dropbox 同步 |
 | 5 | 是 | 交易所仓位 + 快照同步开关 |
@@ -150,9 +153,9 @@ wick/
 
 ### 阶段 0 — 托盘能点（2–3 天）
 
-1. `linux/` 最小工程：进度小窗 + 托盘蜡烛（先用 `assets/`）。
-2. 左键开关进度；右键：日记 / 设置 / 退出。
-3. `TimeProgress` 每秒刷新；可设周起始。
+1. `linux/` 最小工程：托盘蜡烛（模板图标）+ 浮动进度纸签。
+2. 左键开关进度；右键原生 SNI 菜单：日记 / 设置 / 退出（不画自绘菜单）。
+3. 纸签结构对齐 `ProgressSlipContent`：hero 大百分比、今日大烛痕条（00:00→24:00）、周/月/年细条、页脚格言。
 4. `wick.desktop`。
 
 完成标准：Omarchy 上编译运行；托盘可见可点；杀进程无残留。
@@ -163,11 +166,11 @@ wick/
 
 完成标准：Swift golden 往返一致；截断主文件后只读且不覆盖 `.bak`；非法图片名拒收。
 
-这一阶段仍不准画三栏。格式错了，同步和仓位都会写坏 Mac。
+这一阶段仍不准画主窗。格式错了，同步和仓位都会写坏 Mac。
 
 ### 阶段 2 — 日记主窗（约 2 周）
 
-三栏布局、多日记本、条目/标签/图片/`TextArea`、检索、自动保存、**导入导出 zip 与 journal.json**、顶栏折叠后做。
+四栏布局（导航 / 日期列表 / 账册页 / 检查器）、多日记本、条目/标签/图片/`TextArea`、检索、自动保存、**导入导出 zip 与 journal.json**、栏位折叠（检查器 → 导航 → 专注）。账册页按 `JournalDaySection`：无卡片壳、发丝线分隔、页眉含大日期 / 农历 / 净盈亏 / 保存态。检查器含今日事件与盈亏月历。
 
 完成标准：中文 IME 不丢字；Linux 写的 `Journals/` 拷到 Mac 能开；Mac 的日记在 Linux 能开能改。
 
@@ -253,7 +256,7 @@ ninja -C linux/build
 
 ## 9. 现在立刻做的下一件事
 
-本文件进仓之后，下一提交是阶段 0（最小托盘），不是同步，也不是仓位。Linux 设计稿 HTML 仍不进仓，等视觉评审后再说。
+本文件进仓之后，下一提交是阶段 0（最小托盘），不是同步，也不是仓位。视觉以 `designs/wick-design-language/linux.html` 为准。
 
-1. 本文件（本次已进仓）
-2. `linux/` 最小 CMake + 托盘 + `TimeProgress`（在 Omarchy 真机验收）
+1. 本文件（本次 PR）
+2. `linux/` 最小 CMake + 托盘模板图标 + 浮动进度纸签（在 Omarchy 真机验收）
