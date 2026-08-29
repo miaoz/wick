@@ -20,7 +20,7 @@ Rectangle {
             verticalAlignment: Text.AlignVCenter
             text: library.searchText.length > 0 ? "无匹配条目" : "还没有日记\n点 ＋ 写下今天"
             color: theme.ink3
-            font.family: "Noto Serif SC"
+            font.family: theme.fontPrint
             font.pixelSize: 13
             wrapMode: Text.Wrap
         }
@@ -55,14 +55,14 @@ Rectangle {
                             Text {
                                 text: modelData.monthLabel
                                 color: theme.ink1
-                                font.family: "Noto Serif SC"
+                                font.family: theme.fontPrint
                                 font.pixelSize: 12
                                 font.weight: Font.Bold
                             }
                             Text {
                                 text: "" + modelData.year
                                 color: theme.ink3
-                                font.family: "JetBrains Mono"
+                                font.family: theme.fontMono
                                 font.pixelSize: 10
                                 anchors.baseline: parent.children[0].baseline
                             }
@@ -95,14 +95,14 @@ Rectangle {
                                     Text {
                                         text: modelData.dateLabel
                                         color: theme.ink1
-                                        font.family: "Inter, Noto Sans SC"
+                                        font.family: theme.fontUi
                                         font.pixelSize: 13
                                         font.weight: Font.Bold
                                     }
                                     Text {
                                         text: modelData.weekday
                                         color: theme.ink3
-                                        font.family: "Noto Sans SC"
+                                        font.family: theme.fontUi
                                         font.pixelSize: 11
                                         anchors.baseline: parent.children[0].baseline
                                     }
@@ -110,7 +110,7 @@ Rectangle {
                                 Text {
                                     text: modelData.itemCount + " 条"
                                     color: theme.ink3
-                                    font.family: "JetBrains Mono"
+                                    font.family: theme.fontMono
                                     font.pixelSize: 10
                                 }
                             }
@@ -120,14 +120,14 @@ Rectangle {
                                 Text {
                                     visible: modelData.hasCorrect
                                     text: "✓"
-                                    color: theme.pnlUp
+                                    color: theme.gain
                                     font.pixelSize: 12
                                     font.weight: Font.Bold
                                 }
                                 Text {
                                     visible: modelData.hasWrong
                                     text: "✗"
-                                    color: theme.pnlDown
+                                    color: theme.loss
                                     font.pixelSize: 12
                                     font.weight: Font.Bold
                                 }
