@@ -170,7 +170,7 @@ Omarchy UI 是 Quickshell `linux/omarchy/wick.progress` `bar-widget` + 系统 `K
 
 ### 阶段 1 — 本地库核心（1–2 周）
 
-`JournalItem` / `JournalEntry` / `JournalSnapshot` / `JournalCatalogSnapshot` / `JournalImageFilename` / catalog 五种加载结局 / atomic write / 只读门门。
+`JournalItem` / `JournalEntry` / `JournalSnapshot` / `JournalCatalogSnapshot` / `JournalImageFilename` / catalog 五种加载结局 / atomic write / 只读门闩。
 
 完成标准：Swift golden 往返一致；截断主文件后只读且不覆盖 `.bak`；非法图片名拒收。
 
@@ -262,7 +262,7 @@ ninja -C linux/build
 | 交易所限流 / OKX 张单位 | 照 `AGENTS.md` 交易口径，测试锁死 |
 | Hyprland 磁贴日记窗 | Omarchy 进度走 KeyboardPanel；主窗可磁贴 |
 | 托盘要用 `QApplication` | 不准改成 `QGuiApplication` |
-| 秉烛主题耗时 | 阶段 3 必须有四相位，但可先做能用的过渡，再拔动画 |
+| 秉烛主题耗时 | 阶段 3 必须有四相位，但可先做能用的过渡，再抠动画 |
 
 ---
 
