@@ -47,7 +47,8 @@ public enum PositionAggregator {
         for fill in sorted {
             let delta = (fill.side == "BUY" ? 1.0 : -1.0) * fill.qty
             gross += abs(delta)
-            guard delta != 0 else { continue }
+            // Lane fills are filtered to qty > 0 upstream, so delta is never 0
+            // (TR-11: removed the unreachable guard).
             let nextNet = snapToFlatIfDust(net + delta)
             if nextNet == net { continue }
 

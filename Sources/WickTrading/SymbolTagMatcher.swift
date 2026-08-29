@@ -118,8 +118,14 @@ public enum SymbolTagMatcher {
         for (tag, count) in tagCounts {
             guard let key = normalize(tag), matches(tag: tag, symbol: symbol) else { continue }
             if let current = best {
+                // Ties break shorter-first, then lexicographically on the
+                // normalized key — a plain dict scan has arbitrary iteration
+                // order, so without the final key comparison the pick would
+                // depend on hash order and vary across launches (TR-11).
                 let better = count > current.count
-                    || (count == current.count && key.count < current.key.count)
+                    || (count == current.count
+                        && (key.count < current.key.count
+                            || (key.count == current.key.count && key < current.key)))
                 if better {
                     best = (tag, key, count)
                 }

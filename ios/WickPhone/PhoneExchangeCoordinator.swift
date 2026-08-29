@@ -20,7 +20,6 @@ struct ExchangeSecretBlob: Codable, Equatable {
 final class PhoneExchangeCoordinator: ObservableObject {
     static let shared = PhoneExchangeCoordinator()
 
-    static let refreshInterval: TimeInterval = 30 * 60
     private static let serviceName = "com.miaoz.wick.exchange.phone"
     private static let cloudSyncEnabledKey = "wick.sync.tradingSnapshotEnabled"
 

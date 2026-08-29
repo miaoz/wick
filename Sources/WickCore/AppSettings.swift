@@ -129,12 +129,6 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// Backwards compatibility alias for older references.
-    var checkForUpdatesOnLaunch: Bool {
-        get { checkForUpdatesAutomatically }
-        set { checkForUpdatesAutomatically = newValue }
-    }
-
     @Published var lastNotifiedUpdateVersion: String {
         didSet {
             UserDefaults.standard.set(lastNotifiedUpdateVersion, forKey: Keys.lastNotifiedUpdateVersion)

@@ -427,10 +427,9 @@ extension JournalStore {
 
         entries[entryIndex].items.remove(at: itemIndex)
         if entries[entryIndex].items.isEmpty {
-            let orphaned = entries[entryIndex]
-            for filename in orphaned.allImageFilenames {
-                removeImageFile(filename)
-            }
+            // Removing the last item made the entry empty: the entry's images
+            // were already deleted above (they belonged to the removed item),
+            // so it collapses into a plain deletion (DS-08).
             entries.remove(at: entryIndex)
             selection = defaultSelection()
         } else {

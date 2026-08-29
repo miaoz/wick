@@ -127,10 +127,15 @@ final class UpdateCheckerPresenter: ObservableObject {
             AppSettings.shared.lastKnownRemoteVersion = version
             AppSettings.shared.lastKnownRemoteURL = downloadURL.absoluteString
 
-            // Deliver notification if not yet notified for this version
+            // Deliver notification if not yet notified for this version. The
+            // version is marked only when a post actually happened: if the user
+            // has not authorized notifications, the post is skipped and the
+            // mark must stay unset so the next check retries instead of
+            // permanently missing the update (DS-10).
             if AppSettings.shared.lastNotifiedUpdateVersion != version {
-                AppSettings.shared.lastNotifiedUpdateVersion = version
-                await postUpdateNotification(version: version, downloadURL: downloadURL)
+                if await postUpdateNotification(version: version, downloadURL: downloadURL) {
+                    AppSettings.shared.lastNotifiedUpdateVersion = version
+                }
             }
         case .upToDate:
             AppSettings.shared.lastKnownRemoteVersion = ""
@@ -140,11 +145,14 @@ final class UpdateCheckerPresenter: ObservableObject {
         }
     }
 
-    private func postUpdateNotification(version: String, downloadURL: URL) async {
-        guard JournalReminderScheduler.notificationsAvailable else { return }
+    /// Posts the update notification, returning false (without marking the
+    /// version notified) when the post is skipped — notifications unavailable,
+    /// permission not granted, or the add failed.
+    private func postUpdateNotification(version: String, downloadURL: URL) async -> Bool {
+        guard JournalReminderScheduler.notificationsAvailable else { return false }
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
-        guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
+        guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return false }
 
         let content = UNMutableNotificationContent()
         let language = AppSettings.shared.language
@@ -166,8 +174,10 @@ final class UpdateCheckerPresenter: ObservableObject {
 
         do {
             try await center.add(request)
+            return true
         } catch {
             NSLog("Wick: failed to post update notification: \(error.localizedDescription)")
+            return false
         }
     }
 }

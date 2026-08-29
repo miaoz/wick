@@ -752,6 +752,10 @@ extension PhoneJournalStore: JournalLocalSource {
         syncBridge.syncEntrySnapshots()
     }
 
+    func syncEntrySnapshot(entryID: UUID) -> JournalEntry? {
+        syncBridge.syncEntrySnapshot(entryID: entryID)
+    }
+
     func prepareForRemoteApply(entryID: UUID) {
         syncBridge.prepareForRemoteApply(entryID: entryID)
     }

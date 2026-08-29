@@ -987,11 +987,16 @@ public final class JournalSyncEngine: ObservableObject {
     /// True when the day in the store still hashes (canonically) to `snapshot`
     /// - nothing changed locally since the cycle's snapshot was taken. Applied
     /// remote content must never clobber mid-cycle local edits.
+    ///
+    /// SY-09: uses the single-point `syncEntrySnapshot` read, NOT a full
+    /// `syncEntrySnapshots()` copy — this runs per entry decision, so the
+    /// whole-journal copy would make a cycle O(N²). The single-point read still
+    /// sees the freshest on-disk state on every call (ED-01 freshness).
     private func localEntryMatchesSnapshot(
         _ entryID: UUID,
         snapshot: (entry: JournalEntry, hash: String)?
     ) -> Bool {
-        guard let fresh = localSource.syncEntrySnapshots()[entryID] else {
+        guard let fresh = localSource.syncEntrySnapshot(entryID: entryID) else {
             return snapshot == nil
         }
         guard let hash = try? JournalSyncEncoding.contentHash(for: fresh) else { return false }
@@ -1391,8 +1396,9 @@ public final class JournalSyncEngine: ObservableObject {
         }
 
         // Journal tombstones age out the same way once every peer has had a
-        // retention window to see them. Devices keep the UUID in their local
-        // ignore lists, so a GC'd marker cannot lead to re-import.
+        // retention window to see them. The UUID stays in `processedJournalTombstones`
+        // (the device's durable ignore list) — only the marker file is GC'd — so
+        // a GC'd marker cannot re-expose the deleted journal for re-import (SY-08).
         for path in state.remoteFiles.keys
         where JournalSyncLayout.journalTombstoneID(from: path) != nil {
             guard let (data, _) = try? await backend.download(path: path),
@@ -1401,7 +1407,6 @@ public final class JournalSyncEngine: ObservableObject {
             else { continue }
             try? await backend.delete(path: path)
             state.remoteFiles.removeValue(forKey: path)
-            deviceState.processedJournalTombstones.removeAll { $0 == marker.journalID }
         }
     }
 

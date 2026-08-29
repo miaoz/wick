@@ -54,6 +54,10 @@ extension JournalStore: JournalLocalSource {
         syncBridge.syncEntrySnapshots()
     }
 
+    func syncEntrySnapshot(entryID: UUID) -> JournalEntry? {
+        syncBridge.syncEntrySnapshot(entryID: entryID)
+    }
+
     /// Test helper: apply against the currently active journal.
     func applySyncedEntry(_ entry: JournalEntry) {
         guard let activeJournalID else { return }

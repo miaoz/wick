@@ -66,6 +66,11 @@ final class JournalReminderScheduler: NSObject, UNUserNotificationCenterDelegate
     }
 
     func rescheduleFromSettings() {
+        // Re-register action categories here too: this runs on every
+        // reminder-setting change and on language switch, so the action
+        // button titles follow the current language instead of freezing at
+        // launch time (DS-10). Idempotent and cheap.
+        registerCategories()
         let settings = AppSettings.shared
         Task {
             await reschedule(

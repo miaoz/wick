@@ -10,7 +10,7 @@ enum ItemEditorFocus: Equatable {
 }
 
 // MARK: - Item card
-struct JournalItemEditorCard: View {
+struct JournalItemEditorCard: View, Equatable {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: JournalStore
     @Environment(\.wickPalette) private var palette
@@ -36,6 +36,21 @@ struct JournalItemEditorCard: View {
     /// Which field should take first responder when `isEditing` becomes true.
     let initialFocus: ItemEditorFocus
     let onBeginEditing: (ItemEditorFocus) -> Void
+
+    /// Data-only equality: closures are never equal (they capture the parent
+    /// pane), so comparing them would defeat re-evaluation blocking. Closures
+    /// read/mutate shared `@State` storage, so a skipped card still behaves
+    /// correctly when the user re-enters it (UI-04).
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.entryID == rhs.entryID
+            && lhs.entryDate == rhs.entryDate
+            && lhs.index == rhs.index
+            && lhs.item == rhs.item
+            && lhs.canDelete == rhs.canDelete
+            && lhs.reviewEligible == rhs.reviewEligible
+            && lhs.isEditing == rhs.isEditing
+            && lhs.initialFocus == rhs.initialFocus
+    }
 
     @State private var showReviewPopover = false
     /// Pre-verdict note text; merges into the review when one is picked,

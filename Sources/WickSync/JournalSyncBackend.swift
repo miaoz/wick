@@ -31,15 +31,6 @@ public enum SyncBackendError: Error, Equatable {
     case server(status: Int, message: String)
     /// Network-level failure (offline, DNS, timeout) — usually transient.
     case transport(message: String)
-
-    public var isTransient: Bool {
-        switch self {
-        case .rateLimited, .transport, .cursorExpired:
-            return true
-        default:
-            return false
-        }
-    }
 }
 
 /// A cloud backend that stores the journal as plain files (Dropbox first;

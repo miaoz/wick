@@ -146,8 +146,10 @@ public struct HyperliquidInfoClient: ExchangeTradeClient, Sendable {
                 quoteQty: 0,
                 // HL reports fees as a positive cost; the app's unified
                 // commission convention is negative = paid (TR-03), so negate.
+                // `feeToken` is padded like `usdc` — trim so stable-quote
+                // matching sees "USDC", not " USDC" (TR-10).
                 commission: -(Double(fee ?? "") ?? 0),
-                commissionAsset: feeToken ?? "USDC",
+                commissionAsset: feeToken?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "USDC",
                 realizedPnl: Double(closedPnl ?? "") ?? 0,
                 effect: effect,
                 time: time

@@ -330,6 +330,10 @@ public struct OKXSwapClient: ExchangeTradeClient, Sendable {
             if envelope.code == "50011" {
                 throw ExchangeClientError.rateLimited
             }
+            // 50102 — timestamp header outside the recvWindow.
+            if envelope.code == "50102" {
+                throw ExchangeClientError.timestampOutsideRecvWindow
+            }
             // 50111 / 50113 / 50119 — invalid key / sign / passphrase
             if ["50111", "50113", "50119", "50105"].contains(envelope.code) {
                 throw ExchangeClientError.invalidCredentials(envelope.msg ?? envelope.code)

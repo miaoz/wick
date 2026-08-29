@@ -233,4 +233,22 @@ final class OKXSwapClientTests: XCTestCase {
             XCTFail("wrong error \(error)")
         }
     }
+
+    func testTimestampExpiredCodeMapsToRecvWindow() async {
+        // 50102 — timestamp header outside the recvWindow (HTTP 200 envelope).
+        let client = makeClient { _ in
+            (Data(#"{"code":"50102","msg":"Timestamp request expired","data":[]}"#.utf8), Self.http(200))
+        }
+        do {
+            _ = try await client.fetchFills(
+                from: Date(timeIntervalSince1970: 1),
+                to: Date(timeIntervalSince1970: 2)
+            )
+            XCTFail("expected throw")
+        } catch let error as ExchangeClientError {
+            XCTAssertEqual(error, .timestampOutsideRecvWindow)
+        } catch {
+            XCTFail("wrong error \(error)")
+        }
+    }
 }

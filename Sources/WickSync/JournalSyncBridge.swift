@@ -67,6 +67,13 @@ public struct JournalSyncBridge {
         Dictionary(uniqueKeysWithValues: host.entries.map { ($0.id, $0) })
     }
 
+    /// Single-point read for the sync engine's freshness path (SY-09): avoids
+    /// rebuilding the whole entry dictionary per decision. Still reads the
+    /// current in-memory state every call — the store is the freshest source.
+    public func syncEntrySnapshot(entryID: UUID) -> JournalEntry? {
+        host.entries.first { $0.id == entryID }
+    }
+
     /// Commits any in-flight editor draft before the engine's freshness check.
     public func prepareForRemoteApply(entryID: UUID) {
         host.flushEditorDrafts()

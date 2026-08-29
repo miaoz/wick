@@ -377,6 +377,27 @@ final class SymbolTagMatcherTests: XCTestCase {
         )
     }
 
+    func testPreferredTagExactTieBreaksLexicographically() {
+        // Same count and same normalized length: the pick must be stable and
+        // independent of dictionary iteration order (TR-11), so the smaller
+        // normalized key wins. Both spellings loosely match the bare coin BTC.
+        XCTAssertEqual(
+            SymbolTagMatcher.preferredTag(
+                matching: "BTC",
+                tagCounts: ["BTCUSDT": 2, "BTCUSDC": 2]
+            ),
+            "BTCUSDC"
+        )
+        // Insertion order must not matter either.
+        XCTAssertEqual(
+            SymbolTagMatcher.preferredTag(
+                matching: "BTC",
+                tagCounts: ["BTCUSDC": 2, "BTCUSDT": 2]
+            ),
+            "BTCUSDC"
+        )
+    }
+
     func testPreferredTagReusesExactSymbolSpelling() {
         XCTAssertEqual(
             SymbolTagMatcher.preferredTag(

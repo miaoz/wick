@@ -1,5 +1,35 @@
 # 维护工作清单（2026-08-29 归档）
 
+## 执行状态更新（2026-08-29 晚，含 git status 中未提交的改动）
+
+- **T1 · UI-04** ✅ 完成：`daySection` 拆为独立 `JournalDaySection`（Equatable + `.equatable()`），`JournalItemEditorCard` 同加 Equatable（数据域相等挡住重估），`drafts`/`dirtyEntryIDs` 归属不变；IME 编辑路径未动。
+- **T2 · SY-09** ✅ 完成：`JournalLocalSource` 新增单点 `syncEntrySnapshot(entryID:)`（协议 + 桥 + macOS/iOS store + 测试假源），`localEntryMatchesSnapshot` 改单点读，整本拷贝 O(N²)→O(N)，ED-01 新鲜度语义不变（原测试全绿）。
+- **T5 · SY-06** ✅ 复核确认已由 `1b3a088`（WP-H）完成：删除传播 / 交易快照已在 `JournalSyncEngine+{DeletionPropagation,TradingSnapshot}.swift`，主文件不再内联。
+- **T6 · TR-08/09** ✅ 复核确认已由 `1b3a088`（WP-H）完成：错误统一 `ExchangeClientError`、`milliseconds`/`defaultTransport` 共享；OKX pacing / HL fundingPageCap 按 AGENTS 保留各客户端。
+- **待复核池** 已逐项复核：修复 SY-07（删死 `isTransient`）、SY-08（墓碑 GC 后保留 `processedJournalTombstones`，防复活再导入，新增回归测试）、DS-08（删 `deleteItem` 尾死循环）、DS-10（删死别名、UpdateChecker 先通知后标记防永久漏通知、提醒分类随语言重注册）、TR-10（OKX 50102→recvWindow、HL `feeToken` trim，新增测试）、TR-11（`PositionAggregator` 不可达 guard、`preferredTag` 并列字典序确定性，新增测试）、IO-10（删 iOS 死 `refreshInterval`）。复核后无需改动：DS-09（XCTest 嗅探为可靠惯例，显式 override 需动全部测试 setup 且有 flaky 风险）、播种 `try?` 吞错（激活时自愈）、`sumsByOpenDay`（有测试的公共 API）、`rateLimited(retryAfter:)` 载荷、提醒时间 setter 双重调度（幂等）。
+- **T3 / T4** 仍阻塞于真实数据 / 真机 / 外部 API，需人工验证，非无人值守。
+
+## 批次二实测进展（追加）
+
+- **T3 · TR-07 ✅ 已用真实数据核实，无需改代码**：用本地 Keychain 凭证直连 `fapi.binance.com/fapi/v1/income`（`scripts/fetch_binance_income.py`）拉取「手工交易」账户全部资金费历史（2026-02-26~08-29，120 条，总额 -14.99807875 USDT），`scripts/funding_dedup_check.py` 检测 **0 个 `symbol#time` 碰撞**；App 缓存 funding（57 条 / -8.7113665）与抓取时刻 API 可见数据**逐条一致**。结论：该账户实际使用中 `symbol#time` 去重键无误删，不启用对冲双 lane 场景则无需改键（若未来启用对冲且同 symbol 同毫秒出现两条，再按 `symbol#time#金额`/`tranId` 改）。另注意 `desiredWindowStart` = 最早日记条目日期，App 只拉该窗口起的数据（非固定 180 天）。
+- **T4-3 · HL funding ✅ 已用真实 API 核实**：用「形态策略」本绑定的 0x 地址（公开，无需密钥）直连 `api.hyperliquid.xyz/info userFunding`，App 缓存 funding（136 条 / +6.008619）与真实 API **逐条一致**（0 差异）；本次窗口 <500 条未触发 500/页翻页，翻页逻辑仍需大窗口样本。
+- **T4-2（OKX，用户暂未交易）、T4-1（Dropbox 双端）、T4-4（iPhone 真机）** 待用户实测；T4-5 大库数据层已测（见 checklist），另发现并调查一处现存 bug（见下）。
+
+## 日记窗口打开即 ~25–32% CPU（调查中，2026-08-29）
+
+**现象**：打包版 v1.10.31 与源码 dev 构建均复现——日记窗口打开即持续 ~25–32% CPU（仅菜单栏 = 0%），任意本、任意天、是否含今天烛焰都一样。
+
+**机制**（`sample` 定位）：主线程每 display cycle 跑 `NSHostingView.layout → ViewGraphRootValueUpdater.render → beginNextUpdate → AG::Graph::value_set → graphInvalidation → requestUpdate → setNeedsUpdate` 的**布局反馈环**（SwiftUI 每帧写回一个值→又失效）。
+
+**二分结果**（均以窗口打开 + `ps` 采样验证）：
+- 主内容（BISECT-1）→ 编辑器（BISECT-2）→ 时间轴 day sections（Test A）→ **dayBurnStrip（Test D：去掉→0%）**。
+- 已排除：今天烛焰（8月1日静态也循环）、dayHeader `ViewThatFits`（Test B）、条目卡（Test C）、`BurnStripView` 内部（Canvas 重写无效）、编辑器 `.onChange(of: store.entries)`（Test F）。
+- **未定位到具体每帧触发源**：烛痕条「存在即循环」（几何/内容无关），疑与 LazyVStack 内 day section 的尺寸/偏好反馈有关。
+
+**待续**：接 Instruments 逐视图隔离（或测 day section 的 `.frame(maxWidth: .infinity)` / 烛痕条 `.frame(height: 8)` 与 880 上限宽度的交互）；修复前勿动 AGENTS「窗口 hosting view 布局」相关注释。
+
+---
+
 近期无新功能开发计划，本清单汇总当前全部在案的延后任务，作为下一阶段的工作依据。
 
 - 来源：`docs/code-review-optimization-plan-2026-08-28.md`（WP-A~G 已于 316cc91 完成）、`docs/cpu-optimization.md`（P0 已于 7cdc297 完成）、两轮会话的代码复核

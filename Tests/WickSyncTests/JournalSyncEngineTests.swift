@@ -191,11 +191,19 @@ final class FakeLocalSource: JournalLocalSource {
 
     func syncEntrySnapshots() -> [UUID: JournalEntry] {
         snapshotCount += 1
+        return Dictionary(uniqueKeysWithValues: days.values.map { ($0.id, $0) })
+    }
+    /// The engine's single-point freshness read (SY-09). The mid-cycle-edit
+    /// trigger lives here: the cycle-start snapshot is odd-numbered, the first
+    /// freshness read is even-numbered, which fires the mutation just like the
+    /// old second `syncEntrySnapshots()` call did.
+    func syncEntrySnapshot(entryID: UUID) -> JournalEntry? {
+        snapshotCount += 1
         if snapshotCount.isMultiple(of: 2), let mutate = mutateOnFreshnessCheck {
             mutateOnFreshnessCheck = nil
             mutate(&days)
         }
-        return Dictionary(uniqueKeysWithValues: days.values.map { ($0.id, $0) })
+        return days.values.first { $0.id == entryID }
     }
     func prepareForRemoteApply(entryID: UUID) {
         if let pending = pendingDraft, pending.entry.id == entryID {
@@ -1744,6 +1752,57 @@ final class JournalSyncEngineTests: XCTestCase {
         await engine.performSyncCycle()
 
         XCTAssertFalse(backend.hasFile(JournalSyncLayout.journalTombstonePath(for: deadID)))
+    }
+
+    /// SY-08: a GC'd journal tombstone must not re-expose the deleted journal
+    /// for re-import. The UUID stays in the device's durable ignore list even
+    /// after the marker file ages out, so a resurrected manifest is never
+    /// offered for adoption.
+    func testGarbageCollectedJournalTombstoneStaysNonAdoptable() async throws {
+        let deadID = UUID()
+        let stale = JournalDeletionTombstone(
+            journalID: deadID,
+            deletedAt: Date().addingTimeInterval(-(JournalSyncLayout.tombstoneRetention + 24 * 3600)),
+            deviceID: "X"
+        )
+        backend.seedFile(
+            JournalSyncLayout.journalTombstonePath(for: deadID),
+            data: try JournalSyncEncoding.encoder.encode(stale)
+        )
+        let manifestPath = JournalSyncLayout.manifestPath(for: deadID)
+        backend.seedFile(
+            manifestPath,
+            data: try JournalSyncEncoding.encoder.encode(
+                JournalSyncManifest(
+                    formatVersion: JournalSyncLayout.formatVersion,
+                    journalID: deadID,
+                    journalName: "Doomed",
+                    createdAt: t0,
+                    deviceID: "X"
+                )
+            )
+        )
+
+        let source = makeSource()
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        // This device treats the journal as deleted (durable ignore list).
+        engine.acknowledgeRemoteJournalDeletion(deadID)
+
+        await engine.performSyncCycle() // GC removes the stale marker
+        XCTAssertFalse(backend.hasFile(JournalSyncLayout.journalTombstonePath(for: deadID)))
+
+        // Discovery runs after GC on the next cycle: the deleted journal must
+        // still be tombstoned, so its resurrected manifest is not adoptable.
+        await engine.performSyncCycle()
+        XCTAssertTrue(
+            engine.isJournalTombstoned(deadID),
+            "GC must not clear the durable delete marker - re-import would resurrect a deleted journal (SY-08)"
+        )
+        XCTAssertEqual(
+            engine.discoveredJournals.first { $0.journalID == deadID },
+            nil,
+            "a deleted journal must never re-surface as adoptable after its tombstone is GC'd (SY-08)"
+        )
     }
 
     func testResurrectedFolderOfTombstonedJournalIsCleanedAgain() async throws {

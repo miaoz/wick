@@ -261,10 +261,60 @@ struct JournalEditorPane: View {
     @ViewBuilder
     private var dayScopedSections: some View {
         ForEach(store.filteredEntries) { entry in
-            daySection(
-                entry: entry,
-                isFocused: store.selectedEntryID == entry.id
+            let draft = drafts[entry.id] ?? entry
+            JournalDaySection(
+                entryID: entry.id,
+                draft: draft,
+                isFocused: store.selectedEntryID == entry.id,
+                isItemScoped: isItemScoped,
+                dayPnL: dayPnLs[Calendar.current.startOfDay(for: draft.date)],
+                onChangeDate: { newDate in
+                    mutateDraft(entry.id) { e in e.date = newDate }
+                    scheduleSave(for: entry.id)
+                },
+                onAddItem: { addItem(to: entry.id) },
+                onRequestDeleteDay: {
+                    pendingDeleteDayID = entry.id
+                    showDeleteDayConfirm = true
+                },
+                isShowingDatePicker: { datePickerEntryID == entry.id },
+                setShowingDatePicker: { visible in
+                    if !visible { datePickerEntryID = nil }
+                },
+                makeItemBinding: { itemID in binding(entryID: entry.id, itemID: itemID) },
+                onDeleteItem: { itemID in
+                    if isItemScoped {
+                        pendingDeleteItem = JournalItemRef(entryID: entry.id, itemID: itemID)
+                        showDeleteItemConfirm = true
+                    } else {
+                        deleteItem(itemID: itemID, from: entry.id)
+                    }
+                },
+                onPasteImage: { itemID in pasteImage(to: itemID, in: entry.id) },
+                onPickImage: { itemID in
+                    imageImportTarget = JournalItemRef(entryID: entry.id, itemID: itemID)
+                    showImageImporter = true
+                },
+                onDrop: { itemID, providers in
+                    handleDrop(providers, itemID: itemID, entryID: entry.id)
+                },
+                onItemChange: { scheduleSave(for: entry.id) },
+                onPreviewImage: { filenames, index in
+                    previewImageState = JournalImagePreviewState(filenames: filenames, currentIndex: index)
+                },
+                onBeginEditingItem: { itemID, focus in
+                    editingItemID = itemID
+                    editingFocus = focus
+                },
+                onItemDisappear: { itemID in
+                    if editingItemID == itemID {
+                        editingItemID = nil
+                    }
+                },
+                editingItemID: editingItemID,
+                editingFocus: editingFocus
             )
+            .equatable()
             .id(Self.dayScrollID(entry.id))
             .onAppear {
                 ensureDraft(for: entry.id)
@@ -327,256 +377,9 @@ struct JournalEditorPane: View {
         }
     }
 
-    // MARK: - Day section(一天 = 一页纸,秉烛 §03)
-
-    @ViewBuilder
-    private func daySection(
-        entry: JournalEntry,
-        isFocused: Bool
-    ) -> some View {
-        // UI-04: take the entry directly (the ForEach already has it) instead
-        // of a per-day O(N) lookup; the draft is the only per-keystroke input.
-        let draft = drafts[entry.id] ?? entry
-
-        VStack(alignment: .leading, spacing: 0) {
-            dayHeader(entryID: entry.id, draft: draft, isFocused: isFocused)
-
-            dayBurnStrip(for: draft.date)
-                .padding(.top, 12)
-
-            // 条目沿发丝线下排,不加卡片壳。
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(draft.items.enumerated()), id: \.element.id) { index, item in
-                    itemCard(
-                        entryID: entry.id,
-                        itemID: item.id,
-                        itemIndex: index
-                    )
-                    if index < draft.items.count - 1 {
-                        Rectangle()
-                            .fill(palette.divider.color.opacity(0.8))
-                            .frame(height: 1)
-                    }
-                }
-            }
-            .padding(.top, 4)
-
-            addItemRow(entryID: entry.id)
-                .padding(.top, 10)
-        }
-        .padding(.horizontal, 26)
-        .padding(.top, 20)
-        .padding(.bottom, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .journalPaperSheet()
-    }
-
-    /// 页眉:粗衬线大日期(点开可改日)+ 星期农历小注 + 当日已实现盈亏 + 删除。
-    /// 单行排不下时(ViewThatFits 按理想宽度判定)退成两行版——所有部件都是
-    /// fixedSize,绝不把盈亏数字压成竖排;页宽一致后各页也不会宽窄不一。
-    private func dayHeader(
-        entryID: UUID,
-        draft: JournalEntry,
-        isFocused: Bool
-    ) -> some View {
-        ViewThatFits {
-            // 舒适宽:单行全件。
-            HStack(alignment: .bottom, spacing: 14) {
-                dayHeaderDateButton(entryID: entryID, draft: draft)
-                dayHeaderStamp(draft: draft)
-                Spacer(minLength: 8)
-                dayHeaderPnL(draft: draft)
-                dayHeaderMeta(isFocused: isFocused)
-                dayHeaderTrash(entryID: entryID)
-            }
-
-            // 地板宽:大日期+小注+删除一行,盈亏与保存注挪到下行靠右。
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .bottom, spacing: 14) {
-                    dayHeaderDateButton(entryID: entryID, draft: draft)
-                    dayHeaderStamp(draft: draft)
-                    Spacer(minLength: 8)
-                    dayHeaderTrash(entryID: entryID)
-                }
-                HStack(alignment: .bottom, spacing: 10) {
-                    Spacer(minLength: 8)
-                    dayHeaderPnL(draft: draft)
-                    dayHeaderMeta(isFocused: isFocused)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    /// 大日期钮(点开改日),两种排版共用。
-    private func dayHeaderDateButton(entryID: UUID, draft: JournalEntry) -> some View {
-        Button {
-            datePickerEntryID = entryID
-        } label: {
-            Text(bigDayDate(draft.date))
-                .font(AppFont.ui(28, weight: .black, design: .serif))
-                .foregroundStyle(palette.textPrimary.color)
-                .lineLimit(1)
-                .fixedSize()
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(L10n.string(.journalChangeDate, language: settings.language)))
-        .popover(isPresented: Binding(
-            get: { datePickerEntryID == entryID },
-            set: { if !$0 { datePickerEntryID = nil } }
-        ), arrowEdge: .top) {
-            JournalDatePickerView(
-                selectedDate: Binding(
-                    get: { drafts[entryID]?.date ?? draft.date },
-                    set: { newValue in
-                        mutateDraft(entryID) { entry in
-                            entry.date = Calendar.current.startOfDay(for: newValue)
-                        }
-                        scheduleSave(for: entryID)
-                    }
-                ),
-                onSelectDate: { _ in
-                    datePickerEntryID = nil
-                }
-            )
-        }
-    }
-
-    /// 刻印小注:周几 · 农历干支(宋体);竖排两行,不折行。
-    private func dayHeaderStamp(draft: JournalEntry) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(draft.date.formatted(.dateTime.weekday(.abbreviated).locale(settings.locale)))
-            if let lunar = LunarLine.string(for: draft.date) {
-                Text(lunar)
-            }
-        }
-        .font(AppFont.paper(11))
-        .foregroundStyle(palette.textSecondary.color)
-        .lineLimit(1)
-        .fixedSize()
-        .padding(.bottom, 3)
-    }
-
-    /// 当日已实现盈亏:单据等宽数字,红盈黛亏;该日无成交则不占版。
-    /// fixedSize 钉死——宁可换行排版也绝不逐字竖排。
-    @ViewBuilder
-    private func dayHeaderPnL(draft: JournalEntry) -> some View {
-        if let pnl = dayPnLs[Calendar.current.startOfDay(for: draft.date)] {
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(L10n.string(.exchangePositionNetPnl, language: settings.language))
-                    .font(AppFont.ui(9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(palette.textTertiary.color)
-                Text(Self.format(pnl: pnl) + " USDT")
-                    .font(AppFont.ui(14, weight: .bold, design: .monospaced))
-                    .foregroundStyle(pnl >= 0 ? gainLoss.gain : gainLoss.loss)
-            }
-            .fixedSize()
-            .padding(.bottom, 2)
-        }
-    }
-
-    /// 保存状态小注(只读告警 / 已自动保存),无则空视图。
-    @ViewBuilder
-    private func dayHeaderMeta(isFocused: Bool) -> some View {
-        if store.isReadOnlyDueToLoadFailure {
-            Text(L10n.string(.journalReadOnly, language: settings.language))
-                .font(AppFont.preset(.caption))
-                .foregroundStyle(.orange)
-                .padding(.bottom, 5)
-        } else if isFocused {
-            Text(L10n.string(.journalAutosaved, language: settings.language))
-                .font(AppFont.ui(9, design: .monospaced))
-                .foregroundStyle(palette.textTertiary.color)
-                .lineLimit(1)
-                .fixedSize()
-                .padding(.bottom, 5)
-        }
-    }
-
-    private func dayHeaderTrash(entryID: UUID) -> some View {
-        Button {
-            pendingDeleteDayID = entryID
-            showDeleteDayConfirm = true
-        } label: {
-            Image(systemName: "trash")
-        }
-        .buttonStyle(JournalQuietIconButtonStyle(role: .destructive))
-        .padding(.bottom, 2)
-        .help(L10n.string(.journalDelete, language: settings.language))
-        .accessibilityLabel(Text(L10n.string(.journalDelete, language: settings.language)))
-    }
-
-    /// 页内烛痕条:今天烧到此刻(带烛苗与进度小字),过去的天天然燃尽。
-    private func dayBurnStrip(for date: Date) -> some View {
-        let isToday = Calendar.current.isDateInToday(date)
-        let elapsed = burnElapsed(for: date)
-        return VStack(spacing: 5) {
-            BurnStripView(elapsed: elapsed, ticks: 24, showsFlame: isToday, flameAnimates: isToday)
-                .frame(height: 8)
-            if isToday {
-                HStack {
-                    Text(String(
-                        format: L10n.string(.journalDayElapsedFormat, language: settings.language),
-                        Int((elapsed * 100).rounded())
-                    ))
-                    Spacer()
-                    Text("00:00 — 24:00")
-                }
-                .font(AppFont.ui(9.5, design: .monospaced))
-                .foregroundStyle(palette.textTertiary.color)
-            }
-        }
-    }
-
-    /// 新建条目:虚线位,安静的一行,不抢版面。
-    private func addItemRow(entryID: UUID) -> some View {
-        Button {
-            addItem(to: entryID)
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "plus")
-                    .font(AppFont.ui(10, weight: .semibold))
-                Text(L10n.string(.journalAddItem, language: settings.language))
-                    .font(AppFont.paper(11, weight: .medium))
-            }
-            .foregroundStyle(palette.textTertiary.color)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 7)
-            .overlay {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .strokeBorder(
-                        palette.divider.color,
-                        style: StrokeStyle(lineWidth: 1, dash: [4, 3])
-                    )
-            }
-        }
-        .buttonStyle(.plain)
-        .help(L10n.string(.journalAddItem, language: settings.language))
-        .accessibilityLabel(Text(L10n.string(.journalAddItem, language: settings.language)))
-    }
-
     /// 各日已实现盈亏(本地日分桶,与盈亏月历同一来源)。
     private var dayPnLs: [Date: Double] {
         positionCoordinator.pnlByDay
-    }
-
-    private static let pnlFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        return formatter
-    }()
-
-    private static func format(pnl: Double) -> String {
-        let sign = pnl >= 0 ? "+" : "−"
-        let digits = pnlFormatter.string(from: NSNumber(value: pnl.magnitude)) ?? "0.00"
-        return sign + digits
-    }
-
-    /// 页眉大日期:中文「8月20日」,英文「Aug 20」。
-    private func bigDayDate(_ date: Date) -> String {
-        WickDateFormat.string(from: date, template: "MMMd", locale: settings.language.locale)
     }
 
     // MARK: - Item card
@@ -628,6 +431,7 @@ struct JournalEditorPane: View {
                 editingFocus = focus
             }
         )
+        .equatable()
         .onDisappear {
             if editingItemID == itemID {
                 editingItemID = nil

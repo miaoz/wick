@@ -118,6 +118,13 @@ public protocol JournalLocalSource: AnyObject {
     /// All locally present entries keyed by their permanent UUID identity.
     func syncEntrySnapshots() -> [UUID: JournalEntry]
 
+    /// The locally present entry with this UUID, or nil when absent. A
+    /// single-point read: unlike `syncEntrySnapshots()` this must NOT copy the
+    /// whole journal, because the sync engine calls it per-entry on the
+    /// freshness path (SY-09 — an O(N) snapshot per decision is O(N²) a cycle).
+    /// It still reads the freshest on-disk state on every call (ED-01).
+    func syncEntrySnapshot(entryID: UUID) -> JournalEntry?
+
     /// Called before a remote entry apply so the platform can commit any
     /// in-flight editor draft for that entry. The engine runs this BEFORE its
     /// freshness check: once the draft is on disk, re-hashing the entry shows
