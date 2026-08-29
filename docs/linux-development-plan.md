@@ -1,6 +1,6 @@
 # Wick for Linux 开发方案（Omarchy）
 
-状态：可执行草案 · 2026-08-30（修订：视觉合同改为仓库内 `linux.html` v0.2）
+状态：可执行草案 · 2026-08-30（修订：视觉合同改为仓库内 `linux.html` v0.2；原则为三端一致）
 仓库：https://github.com/miaoz/wick
 目标机：Omarchy 4（Arch + Hyprland 0.56 + Quickshell）
 UI 栈：Qt 6 + QML（不做 Tauri / GPUI）
@@ -14,7 +14,9 @@ UI 栈：Qt 6 + QML（不做 Tauri / GPUI）
 
 Linux 版是**新壳，旧格式**。界面用 Qt/QML 重写；日记 JSON、图片规则、catalog、Dropbox 远端协议、仓位快照必须与 macOS 的 `WickSync` / `WickTrading` 兼容。Mac 是格式真源；Linux 只实现，不发明新字段。
 
-**产品目标（Linux 1.0）**：除**贴桌物理撕页黄历**外，现有 macOS 功能都要有。栏内检查器（今日事件 + 盈亏月历）在 1.0。Dropbox 与交易所仓位同步是 1.0 的一部分，不是可选项。阶段顺序只是施工顺序，不是砍功能。
+**原则：三端一致。** 除贴桌物理撕页黄历外，macOS / iOS 上已有的功能 Linux 能移植就移植。窗口铬跟 Hyprland；纸面、数据、同步、仓位、检查器跟秉烛。少做一个功能要先问，默认是做。
+
+**产品目标（Linux 1.0）**：对标现有 Wick.app / Wick iOS，只排除 `WickCalendarKit` 那条贴桌撕页彩蛋。栏内检查器（今日事件 + 盈亏月历）在 1.0。Dropbox 与交易所仓位同步是 1.0 的一部分，不是可选项。阶段顺序只是施工顺序，不是砍功能。
 
 ---
 
@@ -86,6 +88,7 @@ Linux 是第三平台，不是把 Mac 窗口贴到 Hyprland 上。视觉以已�
 7. **格式变更**：先改 Swift `WickSync` / `WickTrading` + 测试，再改 Linux。
 8. **仓位语义与 Mac 一致**：手续费负=已付；`netPnl = realized + commission + funding`；标签宽松匹配；只读不写已有条目；自动补条目规则见 README「交易所仓位同步」。
 9. **同步三不变量**（阶段 4 起）：rev 回声抑制；拉取即固定点；绝不和自己冲突。假后端测试不过，不准连真 Dropbox。
+10. **三端一致**：Mac / iOS 已有能力默认进 Linux 1.0。唯一例外是物理黄历。想砍功能先改本文，不准在实现里悄悄省略。
 
 日期/UUID 编解码与 `JournalSyncEncoding.swift` 一致。先从 `Tests/WickSyncTests`、`Tests/WickTradingTests` 抽 golden，再写 C++。
 
@@ -238,6 +241,7 @@ ninja -C linux/build
 - 日记 UI 用真实中文 IME 打一段再提交。
 - 仓位、同步的手测在 Omarchy 真机；不要只在无显示器的 CI 上宣布完成。
 - 提交信息英文，用户文档中文。
+- 三端一致：Mac / iOS 已有能力默认做进 Linux。想砍先改本文。
 
 ---
 
