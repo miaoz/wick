@@ -5,23 +5,24 @@ import SwiftUI
 public struct WickApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var journalStore = JournalStore.shared
 
     public init() {}
 
     @ViewBuilder
     private var menuBarPanelRoot: some View {
         if #available(macOS 14, *) {
-            ProgressPanelView()
-                .environmentObject(settings)
-                .environmentObject(journalStore)
-                .preferredColorScheme(settings.preferredColorScheme)
-        } else {
-            MenuBarExtraContentHost {
+            JournalStoreInjector {
                 ProgressPanelView()
             }
             .environmentObject(settings)
-            .environmentObject(journalStore)
+            .preferredColorScheme(settings.preferredColorScheme)
+        } else {
+            MenuBarExtraContentHost {
+                JournalStoreInjector {
+                    ProgressPanelView()
+                }
+            }
+            .environmentObject(settings)
             .preferredColorScheme(settings.preferredColorScheme)
         }
     }
@@ -103,6 +104,20 @@ private struct MenuBarLabelView: View {
         if text != dayPercentText {
             dayPercentText = text
         }
+    }
+}
+
+/// Observes the journal store so its publishes re-render only the panel
+/// content instead of the whole `WickApp` scene — the menu bar label shares
+/// that scene, and label churn on recent macOS is what previously wedged the
+/// status item in a `requestUpdate` loop.
+private struct JournalStoreInjector<Content: View>: View {
+    @ObservedObject private var store = JournalStore.shared
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
+            .environmentObject(store)
     }
 }
 

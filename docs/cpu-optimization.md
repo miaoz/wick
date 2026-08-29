@@ -186,3 +186,27 @@ RSS 开/关都约 221 MB，也符合关窗未拆 hosting。
 交互：点开菜单栏允许短暂升高；**收起后 1–2 秒回到 < 1%**。打开再关闭日记 / 日历，同样回到基线。
 
 本机在出包前可先 `killall Wick`。不要把未修版本设为登录项常挂。
+
+---
+
+## 实施记录（2026-08-29，Apple Silicon 实测）
+
+按上文顺序落地 1–6 与 overlay 泄漏修复；UI-01/02/04/05 交互路径仍按计划延后。
+
+| 项 | 改动 | 文件 |
+|---|---|---|
+| 火苗 | `FlameDot` 增加 `isBreathing` 开关，`repeatForever` 只在宿主可见时运行；`BurnStripView` 新增 `flameAnimates`（默认 false，漏改 = 静态火苗而非烧 CPU） | `BurnStripView.swift` |
+| 面板 | `isPanelVisible` 默认 false；探针同时 KVO `isVisible` + `occlusionState` 并从窗口重算（Sequoia 收起后 isVisible 可能仍为 true）；表头分钟 TimelineView 纳入同一开关；`MenuBarExtraPanel.dismiss` 发 `.wickMenuBarPanelDidDismiss` 显式叫停 | `ProgressPanelView.swift`、`MenuBarExtraPanel.swift`、`AppNotifications.swift` |
+| 日记窗 | 关窗即拆 hosting（`JournalRoot` 具体类型 + attach/detach），今日烛苗出树、~200 MB hosting 内存随关窗释放，重开重建 | `JournalWindowController.swift` |
+| 日历窗 | `CalendarPaperScene` 静止 ~1.5 s 后 `isPaused`（scene + SKView），抓取/纹理刷新 `wake()`；恢复步长钳制 0.05 s（CA-08） | `CalendarPaperScene.swift`、`TradingCalendarRootView.swift` |
+| 音频 | 播放后 2 s 防抖 `engine.stop()`，`audio-out` assertion 不再常驻 | `TearSound.swift` |
+| 纸纹 | `FibreGrain` 改按日种子（`year*10000+month*100+day`），随失效重掷的颗粒不再闪（CA-04） | `MacroDayPageView.swift` |
+| 调度 | 全部 `from: .now` → `.distantPast`；iOS 首页/编辑器 `by: 1` → `60`（显示粒度本就是分钟） | `ProgressPanelView.swift`、`JournalRootView.swift`、`JournalTopBarView.swift`、iOS `HomeView`/`EditorView` |
+| 其他 | `FallingPageOverlay` 窗口 3.4 s 后补 `close()`（此前每撕一页泄漏一个 NSWindow）；`WickApp` 的 journalStore 观察下沉到注入器，store 发布不再波及菜单栏 label | `FallingPageOverlay.swift`、`WickApp.swift` |
+
+**改后验收（arm64，macOS 26，面板未点开、日记/日历全关，空闲 15 s）**：
+
+- Wick CPU **0.0%**（改前同机 8.0%）；RSS 61 MB
+- `sample 5s`：主线程全部样本停在 `mach_msg`；`NSDisplayCycleFlush` / `RepeatAnimation` 均 0 帧
+- `swift test` 382 通过；`WickPhone` scheme 模拟器编译通过；`-wick-screenshot-journal` 对照改动前基线内容一致
+

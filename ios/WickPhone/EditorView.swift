@@ -110,13 +110,16 @@ struct EditorView: View {
                             }
                         }
 
-                        // Day Burn Strip
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                        // Day Burn Strip (minute tick — the strip has no
+                        // second-level reading to refresh)
+                        TimelineView(.periodic(from: .distantPast, by: 60)) { context in
                             let fraction = TimeProgressCalculator.dayFractionRemaining(at: context.date)
+                            let isToday = Calendar.current.isDateInToday(draft.date)
                             BurnStripView(
                                 elapsed: 1.0 - fraction,
                                 ticks: 24,
-                                showsFlame: Calendar.current.isDateInToday(draft.date)
+                                showsFlame: isToday,
+                                flameAnimates: isToday
                             )
                             .frame(height: 10)
                         }

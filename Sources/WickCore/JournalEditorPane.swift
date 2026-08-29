@@ -511,7 +511,7 @@ struct JournalEditorPane: View {
         let isToday = Calendar.current.isDateInToday(date)
         let elapsed = burnElapsed(for: date)
         return VStack(spacing: 5) {
-            BurnStripView(elapsed: elapsed, ticks: 24, showsFlame: isToday)
+            BurnStripView(elapsed: elapsed, ticks: 24, showsFlame: isToday, flameAnimates: isToday)
                 .frame(height: 8)
             if isToday {
                 HStack {

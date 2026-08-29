@@ -9,7 +9,12 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
     static let shared = JournalWindowController()
 
     private var window: NSWindow?
-    private var hostingController: NSViewController?
+    /// The journal's SwiftUI content. Detached (view removed, controller
+    /// dropped) whenever the window closes: the tree must not keep running —
+    /// its today-row flame breathes on the display cycle and the retained
+    /// hosting view held ~200 MB RSS on a 5K display — and is rebuilt on the
+    /// next open.
+    private var hostingController: NSHostingController<JournalRoot>?
     private var titlebarAccessoryController: NSTitlebarAccessoryViewController?
     private var titlebarBackgroundView: JournalTitlebarBackgroundView?
     private var titlebarDividerView: NSView?
@@ -78,17 +83,14 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         }
 
         if let window {
+            // The window survived a previous close with its SwiftUI content
+            // detached; rebuild the hosting tree for this session.
+            attachJournalContent(on: window)
             return window
         }
 
-        let root = JournalRootView()
-            .environmentObject(AppSettings.shared)
-            .environmentObject(JournalStore.shared)
-
-        let hosting = NSHostingController(rootView: root)
         // The window's size is owned by this controller (autosave + minSize
         // floor), never by the SwiftUI content — see the container note below.
-        hosting.sizingOptions = []
         // Keep the default safe area so the journal content starts below the
         // native titlebar accessory instead of extending behind it.
         let window = NSWindow(
@@ -103,14 +105,11 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         // and the editor ScrollView's ideal height is the full unrolled
         // timeline — the window then grows a step per layout pass until it
         // fills the screen's visible height. (Verified: sizingOptions alone
-        // does not stop it; the indirection does.)
+        // does not stop it; the indirection does.) The hosting view itself is
+        // added by `attachJournalContent`, which also runs on reopen.
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 980, height: 640))
         container.autoresizingMask = [.width, .height]
-        hosting.view.autoresizingMask = [.width, .height]
-        hosting.view.frame = container.bounds
-        container.addSubview(hosting.view)
         window.contentView = container
-        hostingController = hosting
         window.title = L10n.string(.journalTitle, language: AppSettings.shared.language)
         window.setContentSize(NSSize(width: 980, height: 640))
         window.isReleasedWhenClosed = false
@@ -151,6 +150,7 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         window.toolbar = toolbar
         installTitlebarAccessory(on: window)
         applyWindowTheme(to: window)
+        attachJournalContent(on: window)
 
         self.window = window
 
@@ -176,6 +176,31 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         }
 
         return window
+    }
+
+    // MARK: - Content attach / detach
+
+    /// Builds the journal's SwiftUI tree and installs it in the window's plain
+    /// container. Called on window creation and on every reopen after a close.
+    /// Takes the window explicitly: on the create path `self.window` is still
+    /// nil when this runs.
+    private func attachJournalContent(on hostWindow: NSWindow) {
+        guard hostingController == nil, let container = hostWindow.contentView else { return }
+        let hosting = NSHostingController(rootView: JournalRoot())
+        hosting.sizingOptions = []
+        hosting.view.autoresizingMask = [.width, .height]
+        hosting.view.frame = container.bounds
+        container.addSubview(hosting.view)
+        hostingController = hosting
+    }
+
+    /// Unmounts the journal's SwiftUI tree. `windowWillClose` calls this so a
+    /// closed journal stops burning display-cycle frames (the today-row flame
+    /// keeps breathing otherwise) and releases its hosting memory; the next
+    /// `openJournal` rebuilds the tree fresh.
+    private func detachJournalContent() {
+        hostingController?.view.removeFromSuperview()
+        hostingController = nil
     }
 
     private func installTitlebarAccessory(on window: NSWindow) {
@@ -380,6 +405,7 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         NotificationCenter.default.post(name: .wickWillFlushJournalDrafts, object: nil)
         JournalStore.shared.flushPendingWrites()
+        detachJournalContent()
         // Back to menu-bar-only presence once the journal window is gone.
         NSApp.setActivationPolicy(.accessory)
     }
@@ -428,6 +454,16 @@ final class JournalWindowController: NSObject, NSWindowDelegate {
         }
     }
     #endif
+}
+
+/// The journal content as a concrete type, so `NSHostingController<JournalRoot>`
+/// can be stored, torn down on close, and rebuilt on the next open.
+private struct JournalRoot: View {
+    var body: some View {
+        JournalRootView()
+            .environmentObject(AppSettings.shared)
+            .environmentObject(JournalStore.shared)
+    }
 }
 
 /// Observes the effective appearance of the titlebar frame. The app's

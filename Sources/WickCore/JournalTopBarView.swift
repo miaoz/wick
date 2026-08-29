@@ -30,7 +30,9 @@ struct JournalTopBarView: View {
     }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 300)) { _ in
+        // `.distantPast`: anchored to wall-clock minutes; `from: .now` would
+        // restart the 5-minute schedule on every body recompute.
+        TimelineView(.periodic(from: .distantPast, by: 300)) { _ in
             let palette = DayArcEngine.palette(at: DayArcEngine.currentDate(), scheme: colorScheme)
             content(palette: palette)
         }

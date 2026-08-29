@@ -89,6 +89,7 @@ public struct TradingCalendarRootView: View {
         .frame(width: layout.windowW, height: layout.windowH, alignment: .top)
         .onAppear {
             paperScene.sim = sim
+            paperScene.wake()
             // Pin the day on top: a pad that is never torn keeps showing this
             // same page tomorrow instead of flipping itself at midnight.
             TearOffState.saveDisplayedDate(currentDate)
@@ -410,6 +411,9 @@ public struct TradingCalendarRootView: View {
             }
             .onChanged { value in
                 if tornMidDrag { return }
+                // The scene pauses itself once the sheet settles (CA-08);
+                // any touch must have the solver running again first.
+                paperScene.wake()
                 if !dragging { beginGrab(at: value.startLocation) }
 
                 let dy = value.translation.height

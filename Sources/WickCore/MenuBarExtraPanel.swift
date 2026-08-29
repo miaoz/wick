@@ -14,6 +14,7 @@ enum MenuBarExtraPanel {
     /// Hides the open menu-bar panel, if any, without touching normal app windows.
     static func dismiss(excluding excludedWindows: [NSWindow] = []) {
         let excluded = Set(excludedWindows.map { ObjectIdentifier($0) })
+        var dismissedAny = false
 
         for window in NSApp.windows where window.isVisible {
             if excluded.contains(ObjectIdentifier(window)) {
@@ -23,6 +24,13 @@ enum MenuBarExtraPanel {
                 continue
             }
             window.orderOut(nil)
+            dismissedAny = true
+        }
+
+        // The panel's SwiftUI scene survives the orderOut; tell it to stop
+        // ticking and breathing before the visibility probe's KVO catches up.
+        if dismissedAny {
+            NotificationCenter.default.post(name: .wickMenuBarPanelDidDismiss, object: nil)
         }
     }
 

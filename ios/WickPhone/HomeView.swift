@@ -111,7 +111,9 @@ private struct TimeArcPaperCard: View {
     let language: AppLanguage
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
+        // Minute granularity: the card's texts are hours+minutes and 0.1%,
+        // so a 1 Hz tick re-laid-out the whole card for identical pixels.
+        TimelineView(.periodic(from: .distantPast, by: 60)) { context in
             let date = context.date
             let all = TimeProgressCalculator.allProgress(at: date, language: language)
             let dayProgress = all.first
@@ -202,7 +204,8 @@ private struct TimeArcPaperCard: View {
                             BurnStripView(
                                 elapsed: 1.0 - dayProgress.fractionRemaining,
                                 ticks: 24,
-                                showsFlame: true
+                                showsFlame: true,
+                                flameAnimates: true
                             )
                             .frame(height: 18)
                         }

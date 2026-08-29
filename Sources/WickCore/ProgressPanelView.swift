@@ -12,9 +12,11 @@ struct ProgressPanelView: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var settings: AppSettings
     @State private var showsSettings: Bool
-    /// False while the MenuBarExtra panel is hidden so `TimelineView` unmounts
-    /// (P4: Ventura keeps the scene alive after dismiss).
-    @State private var isPanelVisible = true
+    /// False until the probe confirms the panel window is really on screen.
+    /// MenuBarExtra keeps the SwiftUI scene alive after dismissal, so the
+    /// default must be "hidden": the minute ticks and the hero flame's
+    /// breathing only run while the panel is visible (P4 + CPU audit).
+    @State private var isPanelVisible = false
 
     init(showsSettings: Bool = false) {
         _showsSettings = State(initialValue: showsSettings)
@@ -42,15 +44,21 @@ struct ProgressPanelView: View {
                     progressHeader(theme: theme, language: language)
                     settingsDivider(theme: theme)
                     if isPanelVisible {
-                        TimelineView(.periodic(from: .now, by: 60)) { context in
+                        TimelineView(.periodic(from: .distantPast, by: 60)) { context in
                             slipContent(
                                 date: Self.minuteTruncated(context.date),
                                 theme: theme,
-                                language: language
+                                language: language,
+                                flameAnimates: true
                             )
                         }
                     } else {
-                        slipContent(date: Self.minuteDate(), theme: theme, language: language)
+                        slipContent(
+                            date: Self.minuteDate(),
+                            theme: theme,
+                            language: language,
+                            flameAnimates: false
+                        )
                     }
                 }
             }
@@ -61,16 +69,21 @@ struct ProgressPanelView: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .wickMenuBarPanelDidDismiss)) { _ in
+            // Belt and braces: an explicit dismissal must silence the flame
+            // even if the occlusion KVO callback races this notification.
+            isPanelVisible = false
+        }
     }
 
     @ViewBuilder
-    private func slipContent(date: Date, theme: PanelTheme, language: AppLanguage) -> some View {
+    private func slipContent(date: Date, theme: PanelTheme, language: AppLanguage, flameAnimates: Bool) -> some View {
         let items = TimeProgressCalculator.allProgress(
             at: date,
             language: language,
             calendar: settings.progressCalendar
         )
-        ProgressSlipContent(items: items, date: date, theme: theme, language: language)
+        ProgressSlipContent(items: items, date: date, theme: theme, language: language, flameAnimates: flameAnimates)
     }
 
     /// Paper slip shell. Kept outside the ticking content so settings can reuse
@@ -142,9 +155,28 @@ struct ProgressPanelView: View {
                     .font(AppFont.ui(17, weight: .bold, design: .serif))
                     .foregroundStyle(theme.primaryText)
 
-                TimelineView(.periodic(from: .now, by: 60)) { context in
+                // Same visibility switch as the content below: the header's
+                // minute tick must not keep a hidden panel on the display cycle.
+                if isPanelVisible {
+                    TimelineView(.periodic(from: .distantPast, by: 60)) { context in
+                        Text(
+                            Self.minuteTruncated(context.date).formatted(
+                                .dateTime
+                                .year()
+                                .month()
+                                .day()
+                                .weekday(.abbreviated)
+                                .hour()
+                                .minute()
+                                .locale(language.locale)
+                            )
+                        )
+                        .font(AppFont.ui(10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(theme.tertiaryText)
+                    }
+                } else {
                     Text(
-                        Self.minuteTruncated(context.date).formatted(
+                        Self.minuteDate().formatted(
                             .dateTime
                             .year()
                             .month()
@@ -1001,6 +1033,8 @@ private struct ProgressSlipContent: View {
     let date: Date
     let theme: PanelTheme
     let language: AppLanguage
+    /// Only true while the panel window is on screen — drives the hero flame.
+    let flameAnimates: Bool
 
     /// Tick semantics: day 24 / week 7 / month = days in month / year 12.
     private func ticks(for index: Int) -> Int {
@@ -1034,7 +1068,8 @@ private struct ProgressSlipContent: View {
                     BurnStripView(
                         elapsed: 1 - today.fractionRemaining,
                         ticks: 24,
-                        showsFlame: true
+                        showsFlame: true,
+                        flameAnimates: flameAnimates
                     )
                     .frame(height: 34)
 
@@ -1123,8 +1158,14 @@ struct PanelTheme {
 // MARK: - Panel visibility (P4)
 
 /// Reports whether this view sits in a visible window. MenuBarExtra `.window`
-/// keeps the SwiftUI scene alive after dismiss; unmounting `TimelineView`
-/// when `isVisible` goes false stops the minute tick (and the flame loop).
+/// keeps the SwiftUI scene alive after dismiss; unmounting `TimelineView` and
+/// the hero flame when `isVisible` goes false stops the minute tick and the
+/// flame loop.
+///
+/// Both `isVisible` and `occlusionState` are watched and the verdict is
+/// recomputed from the window: on Sequoia a dismissed MenuBarExtra panel can
+/// keep `isVisible == true` while its occlusion state no longer contains
+/// `.visible` (the audit sample caught AppKit still laying it out every frame).
 private struct WindowVisibilityProbe: NSViewRepresentable {
     @Binding var isVisible: Bool
 
@@ -1144,25 +1185,32 @@ private struct WindowVisibilityProbe: NSViewRepresentable {
 
     final class ProbeView: NSView {
         var onChange: ((Bool) -> Void)?
-        private var observation: NSKeyValueObservation?
+        private var observations: [NSKeyValueObservation] = []
         private var lastReported: Bool?
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            observation?.invalidate()
-            observation = nil
+            observations.removeAll()
             guard let window else {
                 report(false)
                 return
             }
-            observation = window.observe(\.isVisible, options: [.initial, .new]) { [weak self] _, change in
-                let visible = change.newValue ?? false
-                DispatchQueue.main.async {
-                    self?.report(visible)
-                }
+            observations.append(window.observe(\.isVisible, options: [.initial]) { [weak self] _, _ in
+                DispatchQueue.main.async { self?.syncFromWindow() }
+            })
+            observations.append(window.observe(\.occlusionState) { [weak self] _, _ in
+                DispatchQueue.main.async { self?.syncFromWindow() }
+            })
+        }
+
+        private func syncFromWindow() {
+            guard let window else {
+                report(false)
+                return
             }
+            report(window.isVisible && window.occlusionState.contains(.visible))
         }
 
         private func report(_ visible: Bool) {

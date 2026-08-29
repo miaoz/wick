@@ -11,6 +11,11 @@ final class CalendarPaperScene: SKScene {
     private var sprite: SKSpriteNode?
     private var sourcePositions: [vector_float2] = []
     private var lastTime: TimeInterval = 0
+    /// Consecutive frames with a frozen geometry revision. SpriteKit runs its
+    /// update loop at display rate even when nothing moves, so once the sheet
+    /// has settled the scene (and its view) pause themselves; any drag or
+    /// texture swap calls `wake()` first.
+    private var idleFrameCount = 0
     /// Last `PaperSim.geometryRevision` we built a warp for; unchanged means
     /// the page is asleep and no `SKWarpGeometryGrid` is rebuilt (PF-02).
     private var lastWarpRevision = -1
@@ -46,17 +51,39 @@ final class CalendarPaperScene: SKScene {
     /// geometry revision (texture replace / layout change).
     func markDirty() {
         lastWarpRevision = -1
+        wake()
+    }
+
+    /// Resumes the update loop after an idle pause. `lastTime` is cleared so
+    /// the first resumed step uses the nominal 1/60 s instead of the whole
+    /// pause duration as one solver step.
+    func wake() {
+        isPaused = false
+        view?.isPaused = false
+        lastTime = 0
+        idleFrameCount = 0
     }
 
     override func update(_ currentTime: TimeInterval) {
         guard let sim, let sprite else { return }
-        let dt = lastTime == 0 ? 1.0 / 60.0 : currentTime - lastTime
+        // Clamped: a stray large gap must never become one giant solver step.
+        let dt = min(lastTime == 0 ? 1.0 / 60.0 : currentTime - lastTime, 0.05)
         lastTime = currentTime
         sim.step(Float(dt))
 
         // While the page sleeps the revision is frozen, so no target arrays
-        // and no `SKWarpGeometryGrid` are allocated for it.
-        guard sim.geometryRevision != lastWarpRevision else { return }
+        // and no `SKWarpGeometryGrid` are allocated for it. After ~1.5 s of
+        // stillness the render loop stops entirely (CA-08): the pad on the
+        // desk is a static bitmap until the next grab.
+        guard sim.geometryRevision != lastWarpRevision else {
+            idleFrameCount += 1
+            if idleFrameCount >= 90 {
+                isPaused = true
+                view?.isPaused = true
+            }
+            return
+        }
+        idleFrameCount = 0
         lastWarpRevision = sim.geometryRevision
         warpBuildCount += 1
         sprite.warpGeometry = SKWarpGeometryGrid(

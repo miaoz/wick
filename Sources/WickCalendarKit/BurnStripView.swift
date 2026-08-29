@@ -15,11 +15,17 @@ public struct BurnStripView: View {
     public var ticks: Int
     /// Show the flame dot (hero tier only).
     public var showsFlame: Bool
+    /// Lets the flame breathe. Only hosts that are actually on screen may opt
+    /// in: a `repeatForever` animation keeps invalidating its SwiftUI tree
+    /// every frame even after the window is hidden or closed, which burned
+    /// 8–33% CPU on idle machines. Default false = a steady, static flame.
+    public var flameAnimates: Bool
 
-    public init(elapsed: Double, ticks: Int = 24, showsFlame: Bool = false) {
+    public init(elapsed: Double, ticks: Int = 24, showsFlame: Bool = false, flameAnimates: Bool = false) {
         self.elapsed = elapsed
         self.ticks = ticks
         self.showsFlame = showsFlame
+        self.flameAnimates = flameAnimates
     }
 
     private var fraction: Double { min(1, max(0, elapsed)) }
@@ -82,7 +88,7 @@ public struct BurnStripView: View {
 
                 // 6. Flame dot (hero tier)
                 if showsFlame, fraction > 0.002 {
-                    FlameDot()
+                    FlameDot(isBreathing: flameAnimates)
                         .frame(width: 8, height: 8)
                         .position(x: frontier, y: size.height / 2)
                         .shadow(color: palette.glow.color, radius: 5)
@@ -146,12 +152,18 @@ public struct StainShape: Shape {
     }
 }
 
-/// The small flame at the burn frontier.
+/// The small flame at the burn frontier. The breathing loop is opt-in via
+/// `isBreathing`: an unconditional `repeatForever` kept the hosting view in a
+/// per-frame layout/render cycle even with the window hidden or closed.
 public struct FlameDot: View {
     @Environment(\.wickPalette) private var palette
+    /// True only while the host window/panel is actually on screen.
+    public var isBreathing: Bool = false
     @State private var breathing = false
 
-    public init() {}
+    public init(isBreathing: Bool = false) {
+        self.isBreathing = isBreathing
+    }
 
     public var body: some View {
         TeardropShape()
@@ -168,11 +180,25 @@ public struct FlameDot: View {
                 )
             )
             .opacity(breathing ? 0.72 : 1)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                    breathing = true
-                }
+            .onAppear(perform: syncBreathing)
+            .onChange(of: isBreathing) { _ in syncBreathing() }
+    }
+
+    /// Starting/stopping the repeatForever animation with the host's
+    /// visibility keeps the display cycle idle whenever the flame is not seen.
+    private func syncBreathing() {
+        if isBreathing {
+            guard !breathing else { return }
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                breathing = true
             }
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                breathing = false
+            }
+        }
     }
 }
 

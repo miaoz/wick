@@ -71,7 +71,9 @@ struct JournalRootView: View {
         // Low-frequency day-arc palette refresh (5 min granularity is plenty).
         // This only re-resolves colors — it never writes bindings, so IME
         // composition in the editor is unaffected.
-        TimelineView(.periodic(from: .now, by: 300)) { _ in
+        // `.distantPast` keeps the schedule anchored to wall-clock minutes —
+        // a `from: .now` restarts the 5-minute timer on every body recompute.
+        TimelineView(.periodic(from: .distantPast, by: 300)) { _ in
             let palette = DayArcEngine.palette(at: DayArcEngine.currentDate(), scheme: colorScheme)
             chromeContent(palette: palette)
         }

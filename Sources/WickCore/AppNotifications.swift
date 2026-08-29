@@ -13,4 +13,10 @@ extension Notification.Name {
 
     /// Posted by ⌘F so the titlebar accessory can focus its search field (UI-03).
     static let wickJournalFocusSearch = Notification.Name("wick.journalFocusSearch")
+
+    /// Posted by `MenuBarExtraPanel.dismiss` after ordering the panel out, so
+    /// the panel's SwiftUI scene (which macOS keeps alive while hidden) can
+    /// stop its minute tick and flame breathing even if the visibility probe's
+    /// KVO races the dismissal.
+    static let wickMenuBarPanelDidDismiss = Notification.Name("wick.menuBarPanelDidDismiss")
 }

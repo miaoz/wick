@@ -62,10 +62,22 @@ struct MacroDayPageView: View {
     var body: some View {
         ZStack {
             TradingCalendarTheme.paper
-            FibreGrain()
+            FibreGrain(seed: Self.grainSeed(for: date, calendar: calendar))
             pageContent
         }
         .frame(width: layout.pageW, height: layout.pageH)
+    }
+
+    /// `TraderAlmanac`-style pure-integer day seed. The grain must be stable
+    /// per day: a `CGFloat.random` Canvas re-rolled every speck on every
+    /// invalidation of the page, so the printed paper visibly flickered while
+    /// anything animated on top of it (CA-04).
+    static func grainSeed(for date: Date, calendar: Calendar) -> UInt64 {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        let value = (components.year ?? 0) * 10_000
+            + (components.month ?? 0) * 100
+            + (components.day ?? 0)
+        return UInt64(bitPattern: Int64(value))
     }
 
     private var pageContent: some View {
@@ -805,15 +817,19 @@ struct MacroDayPageView: View {
 
 /// A light paper-fibre noise overlay so the sheet doesn't read as flat digital white.
 private struct FibreGrain: View {
+    /// Per-day seed — deterministic so re-rendering never reshuffles the specks.
+    var seed: UInt64
+
     var body: some View {
         Canvas { context, size in
             // Constant density per unit area (380 specks on the 300×400 design).
             let count = min(1600, max(380, Int(380 * size.width * size.height / 120_000)))
+            var rng = SeededRandom(seed: seed)
             for _ in 0..<count {
-                let x = CGFloat.random(in: 0..<size.width)
-                let y = CGFloat.random(in: 0..<size.height)
-                let len = CGFloat.random(in: 1...3)
-                let alpha = Double.random(in: 0.03...0.08)
+                let x = rng.cg(0...size.width)
+                let y = rng.cg(0...size.height)
+                let len = rng.cg(1...3)
+                let alpha = Double(rng.cg(0.03...0.08))
                 var path = Path()
                 path.move(to: CGPoint(x: x, y: y))
                 path.addLine(to: CGPoint(x: x + len, y: y + 0.6))

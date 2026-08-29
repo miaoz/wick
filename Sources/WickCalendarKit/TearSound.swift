@@ -12,6 +12,9 @@ final class TearSound {
     private let ripPlayer = AVAudioPlayerNode()
     private let cracklePlayer = AVAudioPlayerNode()
     private let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
+    /// Cancels the pending post-playback `engine.stop()` when a new sound
+    /// starts within the idle window.
+    private var idleStopTask: Task<Void, Never>?
     private lazy var ripBuffer = Self.renderRip(in: format)
     private lazy var crackleBuffers: [AVAudioPCMBuffer] = (0..<4).map {
         Self.renderCrackle(in: format, seed: 0xBEEF &+ UInt64($0) &* 7919)
@@ -32,11 +35,25 @@ final class TearSound {
         return true
     }
 
+    /// A started `AVAudioEngine` holds the audio output device for as long as
+    /// it runs (coreaudiod keeps a `audio-out` sleep assertion on its behalf),
+    /// so the engine is stopped again after a short idle window instead of
+    /// staying engaged until process exit. `prepare()` keeps restarts cheap.
+    private func scheduleIdleStop() {
+        idleStopTask?.cancel()
+        idleStopTask = Task { [engine] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+            engine.stop()
+        }
+    }
+
     func playRip() {
         guard ensureRunning() else { return }
         ripPlayer.stop()
         ripPlayer.scheduleBuffer(ripBuffer, at: nil)
         ripPlayer.play()
+        scheduleIdleStop()
     }
 
     /// The faint graze of fingers landing on the sheet.
@@ -45,6 +62,7 @@ final class TearSound {
         cracklePlayer.volume = 0.10
         cracklePlayer.scheduleBuffer(buffer, at: nil)
         cracklePlayer.play()
+        scheduleIdleStop()
     }
 
     func playCrackle(intensity: Float) {
@@ -52,6 +70,7 @@ final class TearSound {
         cracklePlayer.volume = 0.25 + 0.6 * min(max(intensity, 0), 1)
         cracklePlayer.scheduleBuffer(buffer, at: nil)
         cracklePlayer.play()
+        scheduleIdleStop()
     }
 
     // MARK: - Synthesis

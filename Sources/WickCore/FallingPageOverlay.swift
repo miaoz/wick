@@ -62,8 +62,12 @@ enum FallingPageOverlay {
         Task {
             try? await Task.sleep(nanoseconds: 3_400_000_000)
             main.removeChildWindow(window)
-            window.orderOut(nil)
             window.contentView = nil
+            window.orderOut(nil)
+            // Borderless windows can ignore `close()` once they are not key,
+            // so this may be a no-op — but when it lands it drops the window
+            // from NSApp.windows; without it every tear leaked one window.
+            window.close()
         }
     }
 }
