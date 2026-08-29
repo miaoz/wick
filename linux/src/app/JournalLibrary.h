@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QString>
 #include <QTimer>
+#include <QUrl>
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
@@ -116,6 +117,13 @@ public:
     Q_INVOKABLE void shiftCalendarMonth(int delta);
     Q_INVOKABLE QString lunarLineFor(const QDate &date) const;
 
+    Q_INVOKABLE QUrl imageFileUrl(const QString &filename) const;
+    Q_INVOKABLE QString addImageFromUrl(const QString &itemId, const QUrl &fileUrl);
+    Q_INVOKABLE void removeImage(const QString &itemId, const QString &filename);
+    // Empty string = success; otherwise an error message.
+    Q_INVOKABLE QString exportArchiveTo(const QUrl &destination);
+    Q_INVOKABLE QString importArchiveFrom(const QUrl &source);
+
 public slots:
     void persistSoon();
 
@@ -163,6 +171,8 @@ private:
     void rebuildAfterStructuralChange();
     void ensureSelection();
     void emitPageAndCalendar();
+    void touchActiveJournalMetadata();
+    QString recoverCatalogFromScratch();
 
     wick::JournalPaths m_paths;
     wick::JournalCatalogSnapshot m_catalog;
