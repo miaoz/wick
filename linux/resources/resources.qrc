@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="qml/ProgressPanel.qml">../qml/ProgressPanel.qml</file>
+    <file>candle.svg</file>
+  </qresource>
+</RCC>
