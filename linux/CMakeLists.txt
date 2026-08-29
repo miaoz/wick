@@ -7,6 +7,45 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+find_package(OpenSSL REQUIRED)
+
+include(FetchContent)
+FetchContent_Declare(
+  nlohmann_json
+  URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+  URL_HASH SHA256=d6c65aca6b1ed68e7a182f4757257b107ae403032760ed6ef121c9d55e81757d
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+set(JSON_BuildTests OFF CACHE INTERNAL "")
+set(JSON_Install OFF CACHE INTERNAL "")
+FetchContent_MakeAvailable(nlohmann_json)
+
+add_library(wick_core STATIC
+    src/core/JournalModels.cpp
+    src/core/JournalSyncEncoding.cpp
+    src/core/JournalCatalog.cpp
+    src/core/JournalPaths.cpp
+    src/core/JournalStore.cpp
+)
+
+target_include_directories(wick_core
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core
+)
+
+target_link_libraries(wick_core PUBLIC OpenSSL::Crypto nlohmann_json::nlohmann_json)
+
+target_compile_features(wick_core PUBLIC cxx_std_20)
+
+enable_testing()
+
+add_executable(test_journal_core
+    tests/test_journal_core.cpp
+)
+target_link_libraries(test_journal_core PRIVATE wick_core)
+add_test(NAME test_journal_core COMMAND test_journal_core)
+
+# Stage-0 tray app (unused by stage-1 core tests).
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
