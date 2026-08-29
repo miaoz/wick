@@ -23,9 +23,15 @@ fi
 
 echo "Synchronizing version to ${NEW_VERSION} (${NEW_BUILD})..."
 
-# 1. Update scripts/package_app.sh
-sed -i '' -E "s/VERSION=\"\$\{VERSION:-[^\}]+\}\"/VERSION=\"\$\{VERSION:-${NEW_VERSION}\}\"/" "$PACKAGE_SCRIPT"
-sed -i '' -E "s/BUILD=\"\$\{BUILD:-[^\}]+\}\"/BUILD=\"\$\{BUILD:-${NEW_BUILD}\}\"/" "$PACKAGE_SCRIPT"
+# 1. Update scripts/package_app.sh. Line-anchored whole-line replacement:
+# the previous inline `\$\{VERSION:-...\}` pattern never matched under BSD
+# sed -E (the version silently stayed stale while this script printed OK),
+# which made `make package` rebuild the OLD version.
+sed -i '' -E "s/^VERSION=.*/VERSION=\"\${VERSION:-${NEW_VERSION}}\"/" "$PACKAGE_SCRIPT"
+sed -i '' -E "s/^BUILD=.*/BUILD=\"\${BUILD:-${NEW_BUILD}}\"/" "$PACKAGE_SCRIPT"
+# Fail loudly if either line is now malformed (missing closing brace).
+grep -q "^VERSION=\"\${VERSION:-${NEW_VERSION}}\"$" "$PACKAGE_SCRIPT"
+grep -q "^BUILD=\"\${BUILD:-${NEW_BUILD}}\"$" "$PACKAGE_SCRIPT"
 echo "✓ Updated $PACKAGE_SCRIPT"
 
 # 2. Update ios/WickPhone.xcodeproj/project.pbxproj
