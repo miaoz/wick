@@ -15,7 +15,7 @@
 - **T4-3 · HL funding ✅ 已用真实 API 核实**：用「形态策略」本绑定的 0x 地址（公开，无需密钥）直连 `api.hyperliquid.xyz/info userFunding`，App 缓存 funding（136 条 / +6.008619）与真实 API **逐条一致**（0 差异）；本次窗口 <500 条未触发 500/页翻页，翻页逻辑仍需大窗口样本。
 - **T4-2（OKX，用户暂未交易）、T4-1（Dropbox 双端）、T4-4（iPhone 真机）** 待用户实测；T4-5 大库数据层已测（见 checklist），另发现并调查一处现存 bug（见下）。
 
-## 日记窗口打开即 ~25–32% CPU（调查中，2026-08-29）
+## 日记窗口打开即 ~25–32% CPU（已修复，2026-08-29）
 
 **现象**：打包版 v1.10.31 与源码 dev 构建均复现——日记窗口打开即持续 ~25–32% CPU（仅菜单栏 = 0%），任意本、任意天、是否含今天烛焰都一样。
 
@@ -26,7 +26,11 @@
 - 已排除：今天烛焰（8月1日静态也循环）、dayHeader `ViewThatFits`（Test B）、条目卡（Test C）、`BurnStripView` 内部（Canvas 重写无效）、编辑器 `.onChange(of: store.entries)`（Test F）。
 - **未定位到具体每帧触发源**：烛痕条「存在即循环」（几何/内容无关），疑与 LazyVStack 内 day section 的尺寸/偏好反馈有关。
 
-**待续**：接 Instruments 逐视图隔离（或测 day section 的 `.frame(maxWidth: .infinity)` / 烛痕条 `.frame(height: 8)` 与 880 上限宽度的交互）；修复前勿动 AGENTS「窗口 hosting view 布局」相关注释。
+**根因**：`JournalDaySection` 对今天的 `BurnStripView` 传入 `flameAnimates: true`，内部 `FlameDot` 的 `repeatForever` 呼吸动画按 DisplayLink 持续失效整个日记 `NSHostingView`。时间轴初始布局会先挂载今天页；`LazyVStack` 滚到历史日期后仍可能保留或延迟回收该页，因此此前“8 月 1 日静态页也循环”的排除结论实际没有证明火苗已离开 ViewGraph。
+
+**逐层复核**（macOS 26.6.2 / Apple Silicon，源码 debug 构建）：保留原 `GeometryReader`、三个 `.position`、越界光晕/阴影、背景/刻度/污渍/边框/余烬线并逐项加回，进程均为 0.0% CPU；最后仅加回 `FlameDot(isBreathing: true)` 即恢复约 19–20%。将日记调用点固定 `flameAnimates: false` 后，火苗外观保留为静态，5 秒 `sample` 的 4249 个主线程样本全部停在 `mach_msg`，`NSHostingView.layout` / `NSDisplayCycleFlush` / `RepeatAnimation` 均为 0 帧。
+
+**修复**：日记时间轴永不启用火苗呼吸；菜单栏面板仍按真实可见性启用动画。未改窗口 hosting/container 布局，也未改 `BurnStripView` 的共享绘制实现。
 
 ---
 

@@ -218,7 +218,15 @@ struct JournalDaySection: View, Equatable {
         let isToday = Calendar.current.isDateInToday(date)
         let elapsed = burnElapsed(for: date)
         return VStack(spacing: 5) {
-            BurnStripView(elapsed: elapsed, ticks: 24, showsFlame: isToday, flameAnimates: isToday)
+            // Keep timeline flames static. LazyVStack can retain today's row
+            // after it scrolls off-screen, and a repeatForever flame then
+            // invalidates the whole NSHostingView on every display cycle.
+            BurnStripView(
+                elapsed: elapsed,
+                ticks: 24,
+                showsFlame: isToday,
+                flameAnimates: false
+            )
                 .frame(height: 8)
             if isToday {
                 HStack {
