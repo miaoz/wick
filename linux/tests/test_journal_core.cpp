@@ -478,6 +478,58 @@ static void testOmitExchangeBinding() {
     CHECK(json2.find("\"venue\" : \"okx\"") != std::string::npos);
 }
 
+
+static void testMissingCatalogBootstrapCreatesDefaultDiary() {
+    auto root = makeTempDir("WickBootstrap-");
+    auto paths = JournalPaths::inRoot(root);
+    auto outcome = JournalCatalogLoader::load(paths.catalogURL(), paths.catalogBackupURL(), 1);
+    CHECK(std::holds_alternative<JournalCatalogLoader::Missing>(outcome));
+
+    JournalInfo info;
+    info.id = Uuid::generate();
+    info.name = "日记";
+    info.createdAt = timeFromUnix(1'700'000'000);
+    info.updatedAt = info.createdAt;
+    JournalCatalogSnapshot catalog;
+    catalog.version = 1;
+    catalog.activeJournalID = info.id;
+    catalog.journals = {info};
+    CHECK(persistCatalog(root, catalog));
+
+    paths.ensureJournalDirectories(info.id);
+    JournalFileStore store(paths.journalDirectory(info.id));
+    store.ensureDirectories();
+    store.entries.clear();
+    store.persist();
+
+    CHECK(std::filesystem::exists(paths.catalogURL()));
+    CHECK(std::filesystem::exists(paths.journalJSON(info.id)));
+    const auto folder = paths.journalDirectory(info.id).filename().string();
+    CHECK(folder == info.id.toString());
+    for (char c : folder) {
+        if (c >= 'a' && c <= 'f') {
+            std::cerr << "FAIL: uuid folder not uppercase: " << folder << "\n";
+            ++g_fails;
+            break;
+        }
+    }
+    auto loaded = JournalCatalogLoader::load(paths.catalogURL(), paths.catalogBackupURL(), 1);
+    CHECK(std::holds_alternative<JournalCatalogLoader::Loaded>(loaded));
+    std::filesystem::remove_all(root);
+}
+
+static void testCorruptCatalogIsNotRewritten() {
+    auto root = makeTempDir("WickBootstrapCorrupt-");
+    auto paths = JournalPaths::inRoot(root);
+    const std::string junk = "{not-json";
+    writeText(paths.catalogURL(), junk);
+    auto outcome = JournalCatalogLoader::load(paths.catalogURL(), paths.catalogBackupURL(), 1);
+    CHECK(std::holds_alternative<JournalCatalogLoader::Corrupt>(outcome));
+    CHECK(readText(paths.catalogURL()) == junk);
+    CHECK(!std::filesystem::exists(paths.catalogBackupURL()));
+    std::filesystem::remove_all(root);
+}
+
 int main() {
     testImageFilenameAcceptsSafeNames();
     testImageFilenameRejectsUnsafeNames();
@@ -499,6 +551,8 @@ int main() {
     testUnsafeImageInSnapshotIsCorrupt();
     testPathsLayout();
     testOmitExchangeBinding();
+    testMissingCatalogBootstrapCreatesDefaultDiary();
+    testCorruptCatalogIsNotRewritten();
 
     std::cout << g_passes << " passed, " << g_fails << " failed\n";
     return g_fails == 0 ? 0 : 1;

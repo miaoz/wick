@@ -3,6 +3,8 @@
 #include <QObject>
 #include <QSystemTrayIcon>
 
+class JournalLibrary;
+class JournalWindow;
 class ProgressWindow;
 class TimeProgress;
 class QMenu;
@@ -14,7 +16,9 @@ class TrayController : public QObject
     Q_OBJECT
 
 public:
-    explicit TrayController(TimeProgress *progress, QObject *parent = nullptr);
+    explicit TrayController(TimeProgress *progress,
+                            JournalLibrary *library,
+                            QObject *parent = nullptr);
     ~TrayController() override;
 
     bool isAvailable() const;
@@ -31,7 +35,9 @@ private:
     QIcon makeCandleIcon() const;
 
     TimeProgress *m_progress = nullptr;
+    JournalLibrary *m_library = nullptr;
     QSystemTrayIcon *m_tray = nullptr;
     QMenu *m_menu = nullptr;
     ProgressWindow *m_panel = nullptr;
+    JournalWindow *m_journal = nullptr;
 };

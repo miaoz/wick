@@ -1,5 +1,7 @@
 #include "TrayController.h"
 
+#include "JournalLibrary.h"
+#include "JournalWindow.h"
 #include "ProgressWindow.h"
 #include "TimeProgress.h"
 
@@ -11,9 +13,12 @@
 #include <QPixmap>
 #include <QSvgRenderer>
 
-TrayController::TrayController(TimeProgress *progress, QObject *parent)
+TrayController::TrayController(TimeProgress *progress,
+                               JournalLibrary *library,
+                               QObject *parent)
     : QObject(parent)
     , m_progress(progress)
+    , m_library(library)
 {
     m_panel = new ProgressWindow(progress);
 
@@ -33,6 +38,10 @@ TrayController::TrayController(TimeProgress *progress, QObject *parent)
             this, &TrayController::onActivated);
 
     connect(qApp, &QCoreApplication::aboutToQuit, this, [this]() {
+        if (m_library)
+            m_library->flushNow();
+        if (m_journal)
+            m_journal->hide();
         if (m_panel) {
             m_panel->hidePanel();
         }
@@ -52,6 +61,8 @@ TrayController::~TrayController()
         m_tray->setContextMenu(nullptr);
         m_tray->hide();
     }
+    delete m_journal;
+    m_journal = nullptr;
     delete m_panel;
     m_panel = nullptr;
     delete m_menu;
@@ -79,7 +90,9 @@ void TrayController::onActivated(QSystemTrayIcon::ActivationReason reason)
 
 void TrayController::openJournal()
 {
-    qInfo("秉烛: 日记 (stage 0 stub)");
+    if (!m_journal)
+        m_journal = new JournalWindow(m_library);
+    m_journal->openOrRaise();
 }
 
 void TrayController::openSettings()
@@ -89,6 +102,10 @@ void TrayController::openSettings()
 
 void TrayController::quitApp()
 {
+    if (m_library)
+        m_library->flushNow();
+    if (m_journal)
+        m_journal->hide();
     if (m_panel)
         m_panel->hidePanel();
     if (m_tray)
