@@ -7,6 +7,7 @@
 #include <QDate>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
 #include <QUrl>
 #include <QVariant>
@@ -118,6 +119,7 @@ public:
     Q_INVOKABLE QString lunarLineFor(const QDate &date) const;
 
     Q_INVOKABLE QUrl imageFileUrl(const QString &filename) const;
+    Q_INVOKABLE QStringList itemImageFilenames(const QString &itemId) const;
     Q_INVOKABLE QString addImageFromUrl(const QString &itemId, const QUrl &fileUrl);
     Q_INVOKABLE void removeImage(const QString &itemId, const QString &filename);
     // Empty string = success; otherwise an error message.
