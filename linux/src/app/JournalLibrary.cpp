@@ -506,6 +506,38 @@ QVariantList JournalLibrary::days() const
     return out;
 }
 
+QVariantList JournalLibrary::items() const
+{
+    QVariantList out;
+    const auto *entry = selectedEntry();
+    if (!entry)
+        return out;
+    int index = 0;
+    for (const auto &item : entry->items) {
+        ++index;
+        if (!itemMatchesSearch(*entry, item))
+            continue;
+        QVariantMap row;
+        row.insert(QStringLiteral("itemId"), qs(item.id.toString()));
+        row.insert(QStringLiteral("index"), index);
+        row.insert(QStringLiteral("tag"), qs(item.tag));
+        row.insert(QStringLiteral("body"), qs(item.body));
+        QString verdict;
+        QString note;
+        if (item.review) {
+            verdict = (item.review->verdict == JournalReviewVerdict::correct)
+                ? QStringLiteral("correct")
+                : QStringLiteral("wrong");
+            note = qs(item.review->note);
+        }
+        row.insert(QStringLiteral("review"), verdict);
+        row.insert(QStringLiteral("reviewNote"), note);
+        row.insert(QStringLiteral("isEmpty"), itemIsEmpty(item));
+        out.push_back(row);
+    }
+    return out;
+}
+
 QVariantList JournalLibrary::calendarDays() const
 {
     QVariantList out;
@@ -565,38 +597,6 @@ QVariantList JournalLibrary::calendarDays() const
         cell.insert(QStringLiteral("isFuture"), d > today);
         cell.insert(QStringLiteral("hasEntry"), stateByKey.contains(key));
         out.push_back(cell);
-    }
-    return out;
-}
-
-QVariantList JournalLibrary::items() const
-{
-    QVariantList out;
-    const auto *entry = selectedEntry();
-    if (!entry)
-        return out;
-    int index = 0;
-    for (const auto &item : entry->items) {
-        ++index;
-        if (!itemMatchesSearch(*entry, item))
-            continue;
-        QVariantMap row;
-        row.insert(QStringLiteral("itemId"), qs(item.id.toString()));
-        row.insert(QStringLiteral("index"), index);
-        row.insert(QStringLiteral("tag"), qs(item.tag));
-        row.insert(QStringLiteral("body"), qs(item.body));
-        QString verdict;
-        QString note;
-        if (item.review) {
-            verdict = (item.review->verdict == JournalReviewVerdict::correct)
-                ? QStringLiteral("correct")
-                : QStringLiteral("wrong");
-            note = qs(item.review->note);
-        }
-        row.insert(QStringLiteral("review"), verdict);
-        row.insert(QStringLiteral("reviewNote"), note);
-        row.insert(QStringLiteral("isEmpty"), itemIsEmpty(item));
-        out.push_back(row);
     }
     return out;
 }
