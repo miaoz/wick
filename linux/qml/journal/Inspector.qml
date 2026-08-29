@@ -34,14 +34,14 @@ Rectangle {
                     Text {
                         text: "今日事件"
                         color: theme.ink1
-                        font.family: "Noto Serif SC"
+                        font.family: theme.fontPrint
                         font.pixelSize: 12
                         font.weight: Font.Bold
                     }
                     Text {
                         text: library.todayWeekday
                         color: theme.ink3
-                        font.family: "JetBrains Mono"
+                        font.family: theme.fontMono
                         font.pixelSize: 9
                     }
                     Item { Layout.fillWidth: true }
@@ -53,14 +53,14 @@ Rectangle {
                     Text {
                         text: library.todayDateLabel
                         color: theme.ink1
-                        font.family: "Inter, Noto Serif SC"
+                        font.family: theme.fontPrint
                         font.pixelSize: 21
                         font.weight: Font.Black
                     }
                     Text {
                         text: library.todayLunar
                         color: theme.ink2
-                        font.family: "Noto Serif SC"
+                        font.family: theme.fontPrint
                         font.pixelSize: 10
                         visible: library.todayLunar.length > 0
                     }
@@ -85,7 +85,7 @@ Rectangle {
                             anchors.centerIn: parent
                             text: library.todayIsWeekend ? "休市" : "本日无事"
                             color: Qt.rgba(224 / 255, 106 / 255, 76 / 255, 0.85)
-                            font.family: "Noto Serif SC"
+                            font.family: theme.fontPrint
                             font.pixelSize: 11
                             font.weight: Font.Bold
                             font.letterSpacing: 2
@@ -97,7 +97,7 @@ Rectangle {
                     Layout.fillWidth: true
                     text: "宏观 / 财报未接入（WickCalendarKit 未移植）"
                     color: theme.ink3
-                    font.family: "Noto Sans SC"
+                    font.family: theme.fontUi
                     font.pixelSize: 10
                     wrapMode: Text.Wrap
                 }
@@ -120,7 +120,7 @@ Rectangle {
                 Text {
                     text: "盈亏月历"
                     color: theme.ink1
-                    font.family: "Noto Serif SC"
+                    font.family: theme.fontPrint
                     font.pixelSize: 12
                     font.weight: Font.Bold
                 }
@@ -142,7 +142,7 @@ Rectangle {
                     Text {
                         text: library.calendarMonthLabel
                         color: theme.ink1
-                        font.family: "Noto Serif SC"
+                        font.family: theme.fontPrint
                         font.pixelSize: 12
                         font.weight: Font.Bold
                     }
@@ -174,7 +174,7 @@ Rectangle {
                             horizontalAlignment: Text.AlignHCenter
                             text: modelData
                             color: theme.ink3
-                            font.family: "Noto Sans SC"
+                            font.family: theme.fontUi
                             font.pixelSize: 9
                         }
                     }
@@ -202,7 +202,7 @@ Rectangle {
                             Text {
                                 anchors.centerIn: parent
                                 text: modelData.dayNumber
-                                font.family: "JetBrains Mono"
+                                font.family: theme.fontMono
                                 font.pixelSize: 10
                                 font.weight: modelData.isToday ? Font.Black : Font.Medium
                                 color: {
