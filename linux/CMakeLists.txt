@@ -26,11 +26,16 @@ add_library(wick_core STATIC
     src/core/JournalCatalog.cpp
     src/core/JournalPaths.cpp
     src/core/JournalStore.cpp
+    src/sync/FakeSyncBackend.cpp
+    src/sync/JournalDayMerge.cpp
+    src/sync/JournalSyncState.cpp
+    src/sync/JournalSyncEngine.cpp
 )
 
 target_include_directories(wick_core
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/sync
 )
 
 target_link_libraries(wick_core PUBLIC OpenSSL::Crypto nlohmann_json::nlohmann_json)
@@ -44,6 +49,12 @@ add_executable(test_journal_core
 )
 target_link_libraries(test_journal_core PRIVATE wick_core)
 add_test(NAME test_journal_core COMMAND test_journal_core)
+
+add_executable(test_journal_sync
+    tests/test_journal_sync.cpp
+)
+target_link_libraries(test_journal_sync PRIVATE wick_core)
+add_test(NAME test_journal_sync COMMAND test_journal_sync)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -71,6 +82,8 @@ qt_add_executable(wick
     src/app/SettingsWindow.h
     src/app/ReminderScheduler.cpp
     src/app/ReminderScheduler.h
+    src/app/JournalSyncCoordinator.cpp
+    src/app/JournalSyncCoordinator.h
     resources/resources.qrc
 )
 

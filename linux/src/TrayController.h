@@ -5,6 +5,7 @@
 
 class AppSettings;
 class JournalLibrary;
+class JournalSyncCoordinator;
 class JournalWindow;
 class ProgressWindow;
 class SettingsWindow;
@@ -21,6 +22,7 @@ public:
     explicit TrayController(TimeProgress *progress,
                             JournalLibrary *library,
                             AppSettings *settings,
+                            JournalSyncCoordinator *sync = nullptr,
                             QObject *parent = nullptr);
     ~TrayController() override;
 
@@ -42,6 +44,7 @@ private:
     TimeProgress *m_progress = nullptr;
     JournalLibrary *m_library = nullptr;
     AppSettings *m_settings = nullptr;
+    JournalSyncCoordinator *m_sync = nullptr;
     QSystemTrayIcon *m_tray = nullptr;
     QMenu *m_menu = nullptr;
     ProgressWindow *m_panel = nullptr;
