@@ -139,7 +139,6 @@ void AppSettings::load()
 {
     m_language = normalizeLanguage(
         m_store.value(QLatin1String(kLanguage), QStringLiteral("zh-Hans")).toString());
-    // Linux / Omarchy default is 暗, not system (Mac default).
     m_appearance = normalizeAppearance(
         m_store.value(QLatin1String(kAppearance), QStringLiteral("dark")).toString());
     m_phase = normalizePhase(
@@ -408,6 +407,14 @@ void AppSettings::stubImport()
     emit dataStatusChanged();
 }
 
+void AppSettings::setDataStatus(const QString &text)
+{
+    if (text == m_dataStatusText)
+        return;
+    m_dataStatusText = text;
+    emit dataStatusChanged();
+}
+
 void AppSettings::openReleasesPage()
 {
     QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/miaoz/wick/releases")));
@@ -477,10 +484,6 @@ void AppSettings::finishUpdateCheck(QNetworkReply *reply)
     emit updateStatusChanged();
 }
 
-// ---------------------------------------------------------------------------
-// systemd --user unit
-// ---------------------------------------------------------------------------
-
 QString LaunchAtLogin::unitPath()
 {
     const QString home = QDir::homePath();
@@ -532,7 +535,6 @@ LaunchAtLogin::Result LaunchAtLogin::setEnabled(bool enabled)
                    {QStringLiteral("--user"), QStringLiteral("daemon-reload")});
         proc.waitForFinished(3000);
 
-        // enable without --now: we are already running; --now would spawn a second instance.
         proc.start(QStringLiteral("systemctl"),
                    {QStringLiteral("--user"), QStringLiteral("enable"),
                     QStringLiteral("wick.service")});
