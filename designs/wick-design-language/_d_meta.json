@@ -95,8 +95,17 @@
           "status": "needs-review"
         }
       ]
+    },
+    "Wick Linux · Omarchy 定稿草案": {
+      "versions": [
+        {
+          "path": "linux.html",
+          "createdAt": "2026-08-29T13:49:43.250Z",
+          "status": "needs-review"
+        }
+      ]
     }
   },
   "createdAt": "2026-08-20T14:56:24.530Z",
-  "updatedAt": "2026-08-24T13:51:00.000Z"
+  "updatedAt": "2026-08-29T14:45:30.145Z"
 }

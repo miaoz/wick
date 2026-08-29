@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="zh" data-scheme="dark" data-phase="night">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>秉烛 · Linux 定稿草案 v0.1 — Wick for Omarchy</title>
+<link rel="stylesheet" href="tokens-v2.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700;900&display=swap" rel="stylesheet">
+<style>
+  /* ===== Linux 平台字态落地(定稿 §字态四声部,Linux 替换实现) ===== */
+  :root {
+    --f-ui: "Inter", "Noto Sans SC", "PingFang SC", sans-serif;
+    --f-print: "Noto Serif SC", "Songti SC", serif;
+    --f-disp: "Inter", "Noto Serif SC", serif;
+    --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+    /* Omarchy OS 铬(东京夜系,仅用于「桌面语境」示意,非 Wick 颜色) */
+    --os-bg-0: #0B0D16;
+    --os-bg-1: #141726;
+    --os-bar: rgba(16, 19, 32, 0.92);
+    --os-bar-line: rgba(122, 162, 247, 0.14);
+    --os-fg: #A9B1D6;
+    --os-fg-dim: #565F89;
+    --os-accent: #7AA2F7;
+    --os-border-idle: rgba(169, 177, 214, 0.18);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--f-ui); color: var(--ink-1); background: var(--desk); min-height: 100vh; text-wrap: pretty; }
+  .grain-layer { position: fixed; inset: 0; pointer-events: none; opacity: var(--grain-opacity); }
+  .page { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 56px 40px 120px; }
+
+  .theme-bar { position: fixed; top: 14px; right: 16px; z-index: 50; display: flex; gap: 8px; align-items: center;
+    padding: 5px 6px; background: var(--paper-hi); border: 1px solid var(--rule); box-shadow: var(--sh-page); }
+  .theme-bar .grp { display: flex; gap: 2px; }
+  .theme-bar button { font-family: var(--f-ui); font-size: 12px; font-weight: 600; color: var(--ink-2); background: transparent; border: none; cursor: pointer; padding: 6px 10px; transition: all 0.18s ease; }
+  .theme-bar button:hover { color: var(--ink-1); }
+  .theme-bar button.is-on { background: var(--ember); color: #FFF3E0; }
+  .theme-bar .sep { width: 1px; height: 18px; background: var(--rule); }
+
+  .masthead { padding: 26px 0 38px; border-bottom: 2px solid var(--ink-1); display: flex; align-items: flex-end; gap: 24px; }
+  .flame-mark { width: 56px; height: 56px; display: grid; place-items: center; background: var(--char-1); border-radius: 6px; box-shadow: 0 0 30px var(--glow); flex: none; }
+  .masthead h1 { font-family: var(--f-print); font-size: 42px; font-weight: 900; line-height: 1.05; }
+  .masthead h1 small { font-family: var(--f-ui); font-size: 12px; font-weight: 600; letter-spacing: 0.26em; color: var(--ink-3); display: block; margin-bottom: 7px; }
+  .masthead .meta { margin-left: auto; text-align: right; font-family: var(--f-mono); font-size: 11.5px; color: var(--ink-3); line-height: 1.9; }
+  .masthead .meta b { color: var(--cinnabar); }
+
+  section { margin-top: 60px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
+  .sec-head .no { font-family: var(--f-mono); font-size: 13px; color: var(--cinnabar); font-weight: 700; }
+  .sec-head h2 { font-family: var(--f-print); font-size: 25px; font-weight: 900; }
+  .sec-head .en { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+  .lead { color: var(--ink-2); font-size: 14px; line-height: 1.9; max-width: 820px; margin-bottom: 24px; }
+  .lead b { color: var(--ink-1); }
+
+  .sheet { background: var(--paper); box-shadow: var(--sh-page); padding: 26px 30px; }
+  .sheet-edge { height: 5px; margin: 0 6px; background: var(--paper-edge); box-shadow: var(--sh-page); }
+
+  table.spec { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.spec th, table.spec td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--rule); vertical-align: top; line-height: 1.7; }
+  table.spec th { font-size: 10.5px; letter-spacing: 0.1em; color: var(--ink-3); text-transform: uppercase; }
+  table.spec tr:last-child td { border-bottom: none; }
+  table.spec td:first-child { white-space: nowrap; font-weight: 700; }
+  table.spec td .mono, code { font-family: var(--f-mono); font-size: 11.5px; }
+  table.spec td.dim { color: var(--ink-2); }
+
+  .decisions { display: flex; flex-direction: column; }
+  .dec { display: flex; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--rule); }
+  .dec:last-child { border-bottom: none; }
+  .dec .dv { flex: none; width: 78px; font-family: var(--f-mono); font-size: 11px; color: var(--ink-3); padding-top: 2px; }
+  .dec .dt { flex: 1; font-size: 13px; line-height: 1.8; color: var(--ink-2); }
+  .dec .dt b { color: var(--ink-1); }
+  .dec .dt .kept { color: var(--cinnabar); font-weight: 700; }
+
+  /* ============================================================
+     桌面语境框:Omarchy(Quickshell bar + Hyprland 磁贴)
+     OS 部分一律用 --os-* 常量,不消耗秉烛颜料。
+     ============================================================ */
+  .scene { position: relative; border: 1px solid var(--rule); box-shadow: var(--sh-lift); overflow: hidden;
+    background:
+      radial-gradient(120% 90% at 78% -10%, #1E2440 0%, transparent 55%),
+      radial-gradient(90% 70% at 8% 110%, #162033 0%, transparent 60%),
+      linear-gradient(165deg, var(--os-bg-1), var(--os-bg-0)); }
+  .scene.desktop { aspect-ratio: 16 / 10; min-height: 560px; }
+  .scene-cap { margin-top: 12px; font-size: 12px; color: var(--ink-2); line-height: 1.8; display: flex; gap: 18px; flex-wrap: wrap; }
+  .scene-cap b { color: var(--ink-1); }
+  .scene-cap .k { font-family: var(--f-mono); font-size: 10.5px; color: var(--cinnabar); letter-spacing: 0.08em; }
+
+  /* Quickshell bar */
+  .osbar { position: absolute; top: 0; left: 0; right: 0; height: 36px; z-index: 6;
+    display: flex; align-items: center; gap: 14px; padding: 0 12px;
+    background: var(--os-bar); border-bottom: 1px solid var(--os-bar-line);
+    font-family: var(--f-mono); font-size: 11px; color: var(--os-fg); }
+  .osbar .om { display: flex; align-items: center; gap: 7px; font-weight: 700; color: var(--os-accent); letter-spacing: 0.06em; }
+  .osbar .ws { display: flex; gap: 5px; margin-left: 6px; }
+  .osbar .ws i { width: 16px; height: 16px; display: grid; place-items: center; border: 1px solid var(--os-border-idle); border-radius: 4px;
+    font-size: 9px; font-style: normal; color: var(--os-fg-dim); }
+  .osbar .ws i.on { border-color: var(--os-accent); color: var(--os-accent); background: rgba(122, 162, 247, 0.12); }
+  .osbar .clock { position: absolute; left: 50%; transform: translateX(-50%); letter-spacing: 0.04em; }
+  .osbar .tray { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+  .osbar .tray .ti { width: 26px; height: 24px; display: grid; place-items: center; border-radius: 5px; color: var(--os-fg-dim); }
+  .osbar .tray .ti.wick { color: var(--ember); background: rgba(245, 154, 60, 0.1); box-shadow: inset 0 0 0 1px rgba(245, 154, 60, 0.28); }
+  .osbar .tray svg { width: 13px; height: 13px; display: block; }
+
+  /* Hyprland 窗口(示意):系统描边 + 圆角 + 磁贴间隙;无红绿灯、无假标题栏 */
+  .hwin { position: relative; background: var(--paper); border: 2px solid var(--os-accent); border-radius: 10px;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45); overflow: hidden; display: flex; flex-direction: column; }
+  .hwin.idle { border-color: var(--os-border-idle); }
+  .hwin .wtag { position: absolute; top: -2px; left: 14px; z-index: 5; font-family: var(--f-mono); font-size: 9px; letter-spacing: 0.1em;
+    color: var(--os-accent); background: var(--os-bg-0); border: 1px solid var(--os-accent); border-top: none; border-radius: 0 0 4px 4px; padding: 2px 7px; }
+
+  /* ============ 托盘进度面板(layer-shell 浮动纸签;结构对齐 ProgressSlipContent) ============ */
+  .wick-pop { width: 352px; background: var(--paper); box-shadow: var(--sh-lift); border: 1px solid var(--rule);
+    display: flex; flex-direction: column; }
+  .wick-pop .pp-hero { padding: 16px 18px 6px; }
+  .wick-pop .pp-hero-top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+  .wick-pop .pp-hero-top .lbl { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: var(--ink-2); }
+  .wick-pop .pp-hero-top .big { font-family: var(--f-disp); font-size: 32px; font-weight: 800; color: var(--ink-1); font-variant-numeric: tabular-nums; }
+  .wick-pop .pp-hero-top .big i { font-style: normal; font-size: 15px; margin-left: 2px; color: var(--ink-2); }
+  .wick-pop .pp-hero-sub { display: flex; justify-content: space-between; margin-top: 6px;
+    font-family: var(--f-mono); font-size: 9.5px; color: var(--ink-3); }
+  .wick-pop .pp-strips { padding: 12px 18px 4px; display: flex; flex-direction: column; gap: 11px; }
+  .wick-pop .pp-row { display: flex; align-items: center; gap: 12px; }
+  .wick-pop .pp-row .lbl { width: 30px; flex: none; font-size: 11px; font-weight: 600; color: var(--ink-2); }
+  .wick-pop .pp-row.thin .burnstrip { height: 12px; flex: 1; }
+  .wick-pop .pp-row .val { width: 44px; flex: none; text-align: right; font-family: var(--f-mono); font-size: 10.5px; color: var(--ink-2); }
+  .wick-pop .pp-motto { display: flex; justify-content: space-between; align-items: baseline; padding: 2px 18px 0;
+    font-family: var(--f-print); font-size: 11px; color: var(--ink-3); }
+  .wick-pop .pp-motto .mono { font-family: var(--f-mono); font-size: 9px; opacity: 0.75; }
+  .wick-pop .pp-sync { margin: 8px 18px 0; padding: 9px 0; border-top: 1px solid var(--rule);
+    display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-2); }
+  .wick-pop .pp-sync .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ember); box-shadow: 0 0 7px var(--glow); flex: none; }
+  .wick-pop .pp-sync small { margin-left: auto; font-family: var(--f-mono); font-size: 10px; color: var(--ink-3); }
+  .wick-pop .pp-actions { display: flex; gap: 8px; padding: 12px 18px 15px; }
+  .wick-pop .pp-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; height: 32px;
+    background: transparent; border: 1px solid var(--ink-3); border-radius: 4px; color: var(--ink-2);
+    font-family: var(--f-ui); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.18s ease; }
+  .wick-pop .pp-btn:hover { border-color: var(--ember); color: var(--ember); box-shadow: 0 0 8px var(--glow); }
+  .wick-pop .pp-btn.primary { background: var(--ember); border-color: var(--ember); color: #FFF3E0; }
+  .wick-pop .pp-btn.primary:hover { box-shadow: 0 0 12px var(--glow); }
+  .wick-pop .pp-btn svg { width: 13px; height: 13px; }
+
+  /* ============ 秉烛主窗内容(纸面,与平台无关) ============ */
+  .jtb { flex: none; height: 46px; display: flex; align-items: center; gap: 10px; padding: 0 14px;
+    background: linear-gradient(180deg, var(--paper-hi), var(--paper)); border-bottom: 1px solid var(--rule); }
+  .jtb .id { display: flex; align-items: center; gap: 8px; font-family: var(--f-print); font-weight: 900; font-size: 15px; }
+  .jtb .id .fm { width: 24px; height: 24px; display: grid; place-items: center; background: var(--char-1); border-radius: 5px; box-shadow: 0 0 14px var(--glow); }
+  .jtb .search { margin-left: 8px; width: 190px; height: 28px; display: flex; align-items: center; gap: 7px; padding: 0 9px;
+    border: 1px solid var(--rule); border-radius: 4px; color: var(--ink-3); font-size: 12px; background: transparent; }
+  .jtb .search svg { width: 12px; height: 12px; flex: none; }
+  .jtb .sp { flex: 1; }
+  .jtb .sync-pill { display: flex; align-items: center; gap: 6px; font-family: var(--f-mono); font-size: 10px; color: var(--ink-3); margin-right: 2px; }
+  .jtb .sync-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ember); box-shadow: 0 0 6px var(--glow); }
+
+  .jcols { flex: 1; display: flex; min-height: 0; }
+  .jnav { width: 176px; flex: none; border-right: 1px solid var(--rule); background: color-mix(in srgb, var(--paper) 55%, var(--desk) 45%);
+    padding: 12px 10px; display: flex; flex-direction: column; gap: 14px; overflow: hidden; }
+  .jnav .nh { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: var(--ink-3); display: flex; align-items: center; }
+  .jnav .nh .plus { margin-left: auto; }
+  .jnav .book { display: flex; align-items: baseline; gap: 8px; padding: 6px 8px; border-radius: 4px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+  .jnav .book small { margin-left: auto; font-family: var(--f-mono); font-size: 9.5px; color: var(--ink-3); font-weight: 400; }
+  .jnav .book.on { color: var(--ink-1); background: var(--paper-hi); box-shadow: inset 2px 0 0 var(--ember); }
+  .jnav .tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px; }
+
+  .jlist { width: 216px; flex: none; border-right: 1px solid var(--rule); overflow: hidden; display: flex; flex-direction: column; }
+  .jlist .lr { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border-bottom: 1px solid var(--rule); font-size: 12px; }
+  .jlist .lr .ld { font-family: var(--f-disp); font-weight: 700; font-size: 13.5px; white-space: nowrap; }
+  .jlist .lr .lm { color: var(--ink-3); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .jlist .lr .lp { margin-left: auto; font-family: var(--f-mono); font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+  .jlist .lr .up { color: var(--dai); }
+  .jlist .lr .down { color: var(--cinnabar); }
+  .jlist .lr.on { background: var(--paper-hi); box-shadow: inset 2px 0 0 var(--ember); }
+  .jlist .lr.dim { color: var(--ink-3); }
+
+  /* ============ 账册页(对齐 JournalDaySection / JournalItemEditorCard) ============ */
+  .jpage { flex: 1; background: var(--paper-hi); overflow: hidden; padding: 20px 26px 14px; display: flex; flex-direction: column; }
+  .jpage .ph2 { display: flex; align-items: flex-end; gap: 14px; }
+  .jpage .ph2 .big { font-family: var(--f-disp); font-size: 28px; font-weight: 800; white-space: nowrap; line-height: 1; }
+  .jpage .ph2 .stamp { font-family: var(--f-print); font-size: 11px; color: var(--ink-2); line-height: 1.5; padding-bottom: 3px; white-space: nowrap; }
+  .jpage .ph2 .sp { flex: 1; min-width: 8px; }
+  .jpage .ph2 .pnl { text-align: right; padding-bottom: 2px; white-space: nowrap; }
+  .jpage .ph2 .pnl small { display: block; font-family: var(--f-mono); font-size: 9px; color: var(--ink-3); }
+  .jpage .ph2 .pnl b { font-family: var(--f-mono); font-size: 14px; font-weight: 700; color: var(--dai); }
+  .jpage .ph2 .saved { font-family: var(--f-mono); font-size: 9px; color: var(--ink-3); padding-bottom: 5px; white-space: nowrap; }
+  .qbtn { width: 24px; height: 24px; display: inline-grid; place-items: center; background: none; border: none; color: var(--ink-3); cursor: pointer; padding: 0; }
+  .qbtn:hover { color: var(--ink-1); }
+  .qbtn svg { width: 13px; height: 13px; }
+  .jpage .dayburn { margin-top: 12px; }
+  .jpage .burnlabel { display: flex; justify-content: space-between; margin-top: 5px; font-family: var(--f-mono); font-size: 9.5px; color: var(--ink-3); }
+  .jitems { margin-top: 4px; }
+  .jentry { padding: 12px 0; position: relative; }
+  .jentry + .jentry { border-top: 1px solid var(--rule); }
+  .jentry .etop { display: flex; align-items: center; gap: 10px; margin-bottom: 2px; }
+  .jentry .enum { font-family: var(--f-mono); font-size: 10px; color: var(--ink-3); }
+  .jentry .etag { font-family: var(--f-print); font-size: 12.5px; font-weight: 700; color: var(--cinnabar); margin: 2px 0 6px; }
+  .jentry .body { font-family: var(--f-print); font-size: 13.5px; line-height: 2.0; color: var(--ink-1); max-width: 62ch; }
+  .review-cta { font-family: var(--f-print); font-size: 12px; font-weight: 700; color: var(--cinnabar); opacity: 0.8; transform: rotate(-3deg);
+    width: 44px; height: 44px; display: inline-grid; place-items: center; background: none; border: none; cursor: pointer; }
+  .jentry .floatseal { position: absolute; right: 2px; bottom: 6px; opacity: 0.82; }
+  .add-item { margin-top: 10px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 0;
+    border: 1px dashed var(--rule); border-radius: 4px; background: none; color: var(--ink-3); font-family: var(--f-print); font-size: 11px; cursor: pointer; }
+  .add-item:hover { color: var(--ink-2); border-color: var(--ink-3); }
+
+  /* 复盘章改体:字形恒为 ✓/✗,印泥随盈亏约定(✓ 盈色 / ✗ 亏色);现行实现见 JournalReviewBadge。
+     默认绿涨红跌:盈 = 黛青,亏 = 朱砂(pnlUp=朱砂/pnlDown=黛青,greenUp 下对调)。 */
+  .chop.gain::before { background:
+    radial-gradient(130% 130% at 28% 20%, rgba(247, 231, 210, 0.3), transparent 44%),
+    radial-gradient(150% 150% at 50% 55%, transparent 50%, rgba(10, 24, 18, 0.42)),
+    var(--dai); }
+
+  /* 本稿按默认约定「绿涨红跌」绘制:列表 / 月历 / 单据的盈亏色全部跟随约定。
+     tokens-v2.css 的 receipt .up/.down 字面是红盈,实现应按约定绑定,勿照抄字面。 */
+  .receipt .up { color: #3E5C50; }
+  .receipt .down { color: #B0341E; }
+
+  /* ============ 检查器(第四栏:今日事件 + 盈亏月历) ============ */
+  .jinsp { width: 252px; flex: none; border-left: 1px solid var(--rule); background: var(--paper);
+    display: flex; flex-direction: column; overflow: hidden; }
+  .jinsp .isec { padding: 11px 13px 12px; border-bottom: 1px solid var(--rule); }
+  .jinsp .isec:last-child { border-bottom: none; }
+  .jinsp .ish { display: flex; align-items: baseline; gap: 8px; margin-bottom: 9px; }
+  .jinsp .ish b { font-family: var(--f-print); font-size: 12px; font-weight: 700; }
+  .jinsp .ish small { font-family: var(--f-mono); font-size: 9px; color: var(--ink-3); }
+  .jinsp .ish .chev { margin-left: auto; font-size: 9px; color: var(--ink-3); }
+  .jinsp .idt { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .jinsp .idt .big { font-family: var(--f-disp); font-size: 21px; font-weight: 800; }
+  .jinsp .idt .lunar { font-family: var(--f-print); font-size: 10px; color: var(--ink-2); }
+  .jinsp .idt .gseal { margin-left: auto; display: inline-grid; place-items: center; width: 30px; height: 30px;
+    background: var(--cinnabar); color: #FAEBD7; border-radius: 4px; transform: rotate(-3deg);
+    font-family: var(--f-print); font-size: 11px; font-weight: 700; line-height: 1.15; text-align: center;
+    box-shadow: 0 1px 2px rgba(43, 32, 20, 0.3); padding: 2px; }
+  .jinsp .yiji { display: flex; flex-direction: column; gap: 5px; margin-bottom: 7px; }
+  .jinsp .yiji .yr { display: flex; align-items: center; gap: 5px; font-family: var(--f-print); font-size: 9.5px; color: var(--ink-2); }
+  .jinsp .yiji .ym { flex: none; font-size: 8.5px; font-weight: 700; padding: 1px 5px; border-radius: 2px; }
+  .jinsp .yiji .ym.yi { background: var(--cinnabar); color: #FAEBD7; }
+  .jinsp .yiji .ym.ji { background: var(--ink-1); color: var(--paper); }
+  .jinsp .imeta { font-family: var(--f-print); font-size: 8.5px; color: var(--ink-3); margin-bottom: 8px; }
+  .jinsp .itabs { display: flex; gap: 6px; margin-bottom: 8px; }
+  .jinsp .itabs .it { font-family: var(--f-print); font-size: 10px; font-weight: 500; color: var(--cinnabar);
+    border: 1px solid var(--cinnabar); border-radius: 2px; padding: 2px 9px; }
+  .jinsp .itabs .it.on { background: var(--cinnabar); color: #FAEBD7; font-weight: 700; }
+  .jinsp .itabs .sort { margin-left: auto; font-family: var(--f-print); font-size: 9.5px; color: var(--ink-2);
+    border: 0.8px solid var(--rule); border-radius: 2px; padding: 2px 6px; background: transparent; }
+  .jinsp .ev { display: flex; align-items: baseline; gap: 7px; padding: 4px 0; font-size: 10.5px; border-top: 1px dashed var(--rule); }
+  .jinsp .ev:first-of-type { border-top: none; }
+  .jinsp .ev .et2 { flex: none; font-family: var(--f-mono); font-size: 9px; color: var(--ink-3); width: 34px; }
+  .jinsp .ev .et1 { font-family: var(--f-print); color: var(--ink-1); line-height: 1.5; }
+  .jinsp .ev .ev2 { margin-left: auto; flex: none; font-family: var(--f-mono); font-size: 9px; color: var(--ink-2); }
+  .jinsp .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .jinsp .cal i { font-style: normal; display: grid; place-items: center; aspect-ratio: 1; border-radius: 3px;
+    font-family: var(--f-mono); font-size: 8.5px; color: var(--ink-3); }
+  .jinsp .cal i.hd { color: var(--ink-3); opacity: 0.7; }
+  .jinsp .cal i.up { background: var(--dai-soft); color: var(--dai); font-weight: 700; }
+  .jinsp .cal i.down { background: var(--cinnabar-soft); color: var(--cinnabar); font-weight: 700; }
+  .jinsp .cal i.jrn { background: color-mix(in srgb, var(--stain-2) 30%, transparent); color: var(--ink-2); }
+  .jinsp .cal i.today { box-shadow: inset 0 0 0 1.5px var(--ember); color: var(--ink-1); font-weight: 700; }
+
+  /* ============ 设置窗 ============ */
+  .sbody { flex: 1; display: flex; min-height: 0; }
+  .snav { width: 132px; flex: none; border-right: 1px solid var(--rule); background: color-mix(in srgb, var(--paper) 55%, var(--desk) 45%); padding: 12px 8px; display: flex; flex-direction: column; gap: 2px; }
+  .snav .si { padding: 7px 10px; border-radius: 4px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); display: flex; align-items: center; gap: 8px; }
+  .snav .si.on { color: var(--ink-1); background: var(--paper-hi); box-shadow: inset 2px 0 0 var(--ember); }
+  .smain { flex: 1; padding: 18px 24px; overflow: hidden; display: flex; flex-direction: column; gap: 4px; }
+  .ssec { padding: 11px 0; border-bottom: 1px solid var(--rule); }
+  .ssec:last-child { border-bottom: none; }
+  .ssec .sh { font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; color: var(--ink-3); margin-bottom: 9px; }
+  .srow { display: flex; align-items: center; gap: 10px; font-size: 12.5px; padding: 4.5px 0; }
+  .srow small { color: var(--ink-3); font-size: 10.5px; line-height: 1.6; }
+  .srow .mono { font-family: var(--f-mono); font-size: 11px; color: var(--ink-2); }
+  .seg { margin-left: auto; display: flex; border: 1px solid var(--ink-3); border-radius: 4px; overflow: hidden; }
+  .seg b { font-weight: 600; font-size: 11px; padding: 4px 11px; color: var(--ink-2); }
+  .seg b.on { background: var(--ember); color: #FFF3E0; }
+  .toggle { margin-left: auto; width: 34px; height: 20px; border-radius: 10px; background: var(--rule); position: relative; flex: none; }
+  .toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--paper-hi); box-shadow: 0 1px 2px rgba(0,0,0,0.25); }
+  .toggle.on { background: var(--ember); }
+  .toggle.on::after { left: 16px; }
+  .phase-chips { margin-left: auto; display: flex; gap: 6px; }
+  .phase-chips i { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--rule); display: block; }
+  .keyhint { font-family: var(--f-mono); font-size: 10px; background: var(--paper-hi); border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; color: var(--ink-2); }
+
+  .comps { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .comp { background: var(--paper); box-shadow: var(--sh-page); padding: 20px 24px; }
+  .comp > h4 { font-size: 11px; color: var(--ink-3); letter-spacing: 0.08em; margin-bottom: 14px; font-weight: 700; text-transform: uppercase; }
+  .comp.wide { grid-column: 1 / -1; }
+  .chop-row { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+
+  footer { margin-top: 80px; padding-top: 20px; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-3); }
+  footer a { color: var(--cinnabar); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="grain-layer grain"></div>
+
+<svg width="0" height="0" style="position: absolute;" aria-hidden="true">
+  <filter id="f-char" x="-5%" y="-30%" width="110%" height="160%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.012 0.35" numOctaves="3" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="f-torn" x="-5%" y="-12%" width="110%" height="124%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.035 0.28" numOctaves="3" seed="11" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="f-seal" x="-8%" y="-8%" width="116%" height="116%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="2" seed="9" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="2.4"/>
+  </filter>
+</svg>
+
+<div class="theme-bar">
+  <div class="grp">
+    <button data-set-phase="dawn">拂晓</button>
+    <button data-set-phase="day">正午</button>
+    <button data-set-phase="dusk">黄昏</button>
+    <button data-set-phase="night">子夜</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button data-set-scheme="light">亮</button>
+    <button data-set-scheme="dark">暗</button>
+  </div>
+</div>
+
+<div class="page">
+
+  <header class="masthead">
+    <div class="flame-mark">
+      <svg width="28" height="28" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+        <path d="M9 1.4 C7.6 3.1 6.6 4.6 6.6 6.1 C6.6 7.8 7.7 9 9 9 C10.3 9 11.4 7.8 11.4 6.1 C11.4 4.6 10.4 3.1 9 1.4 Z" fill="#F7B261"/>
+        <rect x="8.5" y="9.2" width="1" height="2" fill="#C9B795"/>
+        <path d="M5.6 11.2 L12.4 11.2 L12.8 15.6 Q12.85 16.6 11.6 16.6 L6.4 16.6 Q5.15 16.6 5.2 15.6 Z" fill="#E8DCC0"/>
+      </svg>
+    </div>
+    <h1><small>WICK FOR LINUX · OMARCHY</small>秉烛 · 第三平台</h1>
+    <div class="meta">
+      v0.2 草案 · 2026-08-29<br>
+      视觉方向:<b>纸面跟秉烛,窗口铬跟 Hyprland</b><br>
+      <span data-clock></span>
+    </div>
+  </header>
+
+  <!-- ==================== 00 平台定位 ==================== -->
+  <section data-screen-label="平台定位">
+    <div class="sec-head"><span class="no">00</span><h2>平台定位</h2><span class="en">Third platform, not a port</span></div>
+    <p class="lead">Linux 版是<b>同一叠纸落在另一张书桌上</b>:纸、墨、烛、章、单据全部沿用秉烛定稿(token 源 <code>tokens-v2.css</code> 不变);变的是桌面——窗口 chrome、磁贴、托盘、动效节奏都服从 Omarchy / Hyprland 的规矩。纸面身份只出现在内容里,窗口铬不伪造 macOS。</p>
+    <div class="sheet">
+      <div class="decisions">
+        <div class="dec"><div class="dv">窗口铬</div><div class="dt"><b>跟 Hyprland,不演 Mac。</b>系统描边 + 圆角 + 磁贴间隙;无红绿灯、无假 titlebar、无无边框宣纸贴桌。窗口装饰是 OS 的地盘,Wick 不碰。</div></div>
+        <div class="dec"><div class="dv">进度面板</div><div class="dt"><b>浮动,不磁贴。</b>layer-shell / 托盘弹出的纸签,结构对齐现行 Mac 面板(hero 大百分比 + 今日大烛痕条 + 周/月/年细条 + 页脚格言),出现在 Quickshell bar 的托盘区下方,点外即收。</div></div>
+        <div class="dec"><div class="dv">日记主窗</div><div class="dt"><b>可磁贴,四栏全开也成立。</b>导航 / 日期列表 / 账册页 + <span class="kept">第四栏检查器(今日事件 + 盈亏月历)保留</span>——黄历不撕页,但入栏。栏位全可独立开关(导航三态 × 检查器开关,共 3×2);磁贴半屏不够宽时自动先收检查器再收导航,落「仅列表 / 专注」,不硬撑四栏。</div></div>
+        <div class="dec"><div class="dv">纸的物理</div><div class="dt"><b>纸不透明。</b>不用 Hyprland blur / 透明:秉烛的纸是有克重的东西,透了就不是纸。OS 侧自己的 bar 可以半透明,那是它的事。</div></div>
+        <div class="dec"><div class="dv">字态落地</div><div class="dt">圆体(活数据)→ <b>Inter + Noto Sans SC</b>;宋体(印刷 / 存档)→ <b>Noto Serif SC</b>;单据等宽 → <b>JetBrains Mono</b>(Omarchy 默认等宽)。Qt 走系统字体,不内嵌。</div></div>
+        <div class="dec"><div class="dv">四相位</div><div class="dt"><span class="kept">弧光引擎原样保留。</span>Omarchy 是暗色桌面,默认落在「暗 · 子夜」;亮 / 暗 / 跟随系统在设置里,四相位随一天流动——这是秉烛的魂,不为桌面风格砍掉。</div></div>
+        <div class="dec"><div class="dv">修订 0.2</div><div class="dt"><b>对齐现行实现而非旧定稿。</b>① 复盘章 = 白文方章,字形恒为 <span class="kept">✓ / ✗</span>,印泥随盈亏约定(✓ 盈色 / ✗ 亏色),不再是朱砂「对/错」;② 进度面板按现行 hero 结构重画;③ 检查器(栏内黄历)回到 1.0 范围——裁剪的只有贴桌物理彩蛋。</div></div>
+        <div class="dec"><div class="dv">盈亏约定</div><div class="dt"><b>默认绿涨红跌,全界面跟随。</b>色值只有两组:pnlUp = 朱砂、pnlDown = 黛青;约定只交换语义绑定。复盘章印泥、日期列表盈亏、单据数字、盈亏月历一律走约定;黄历的「宜 / 方印」永远朱砂,不参与交换。设置里可切红涨绿跌(A 股习惯),Linux 同一套。</div></div>
+      </div>
+    </div>
+    <div class="sheet-edge"></div>
+  </section>
+
+  <!-- ==================== 01 桌面语境 + 托盘进度面板 ==================== -->
+  <section data-screen-label="桌面语境与托盘">
+    <div class="sec-head"><span class="no">01</span><h2>桌面语境 · 托盘进度面板</h2><span class="en">Tray &amp; layer-shell popup</span></div>
+    <p class="lead">蜡烛以<b>模板图标</b>进驻 Quickshell bar 的 <code>omarchy.tray</code>(StatusNotifierItem),平时只余一粒烛火色;左键唤出浮动纸签——<b>hero 大衬线百分比 + 今日大烛痕条(00:00 → 24:00 终)+ 周 / 月 / 年细条 + 页脚格言</b>,与现行 Mac 面板同一结构;同步状态与三枚行动压底。这是 Mac 菜单栏纸签的 Linux 对位。</p>
+
+    <div class="scene desktop">
+      <!-- Quickshell bar(OS 铬,非 Wick 表面) -->
+      <div class="osbar">
+        <span class="om">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="6" cy="6" r="1.6"/></svg>
+          omarchy
+        </span>
+        <span class="ws"><i class="on">1</i><i>2</i><i>3</i><i>4</i></span>
+        <span class="clock" data-clock></span>
+        <span class="tray">
+          <span class="ti" title="Dropbox"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 3l4 2.5L12 3l-4-2L4 3zM4 9l4 2.5L12 9l-4-2L4 9zM8 6.5L4 9M8 6.5L12 9"/></svg></span>
+          <span class="ti wick" title="Wick">
+            <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <path d="M9 1.4 C7.6 3.1 6.6 4.6 6.6 6.1 C6.6 7.8 7.7 9 9 9 C10.3 9 11.4 7.8 11.4 6.1 C11.4 4.6 10.4 3.1 9 1.4 Z" fill="currentColor"/>
+              <rect x="8.5" y="9.2" width="1" height="2" fill="currentColor" opacity="0.7"/>
+              <path d="M5.6 11.2 L12.4 11.2 L12.8 15.6 Q12.85 16.6 11.6 16.6 L6.4 16.6 Q5.15 16.6 5.2 15.6 Z" fill="currentColor"/>
+            </svg>
+          </span>
+          <span class="ti" title="Network"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 10.5a9 9 0 0 1 12 0M4.5 13a5.5 5.5 0 0 1 7 0"/><circle cx="8" cy="14.8" r="1" fill="currentColor" stroke="none"/></svg></span>
+          <span class="ti" title="Battery"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="5.5" width="10.5" height="6" rx="1.5"/><path d="M14 7.5v2"/><rect x="3.6" y="7.1" width="5" height="2.8" rx="0.8" fill="currentColor" stroke="none"/></svg></span>
+        </span>
+      </div>
+
+      <!-- 相邻磁贴:Foot 终端(OS 铬,演示 Wick 窗与系统磁贴共存) -->
+      <div style="position: absolute; left: 22px; top: 58px; width: 340px; height: 210px; z-index: 5;
+        border: 2px solid var(--os-border-idle); border-radius: 10px; background: rgba(11, 13, 22, 0.85);
+        padding: 12px 14px; font-family: var(--f-mono); font-size: 10.5px; line-height: 1.9; color: var(--os-fg); overflow: hidden;">
+        <span style="color: var(--os-fg-dim);">miaoz@omarchy</span> <span style="color: var(--os-accent);">~</span> $ fastfetch<br>
+        <span style="color: var(--os-fg-dim);">OS</span>&nbsp;&nbsp;Omarchy 4.1.0<br>
+        <span style="color: var(--os-fg-dim);">WM</span>&nbsp;&nbsp;Hyprland 0.56 (Wayland)<br>
+        <span style="color: var(--os-fg-dim);">Shell</span>&nbsp;Quickshell 0.3<br>
+        <span style="color: var(--os-fg-dim);">Term</span>&nbsp;foot<br>
+        <span style="color: var(--os-fg-dim);">miaoz@omarchy</span> <span style="color: var(--os-accent);">~</span> $ <span style="display: inline-block; width: 7px; height: 12px; background: var(--os-fg); vertical-align: -2px;"></span>
+      </div>
+
+      <!-- 托盘弹出:秉烛纸签(layer-shell 浮动,不透明纸;结构对齐现行 ProgressSlipContent) -->
+      <div class="wick-pop" style="position: absolute; top: 44px; right: 12px; z-index: 7;">
+        <div class="pp-hero">
+          <div class="pp-hero-top">
+            <span class="lbl">今日剩余</span>
+            <span class="big"><span data-burn-day-label>38</span><i>%</i></span>
+          </div>
+          <div class="burnstrip" data-burn-day style="--p: 62%; --ticks: 24; height: 34px;"><div class="char"></div><div class="emberline"></div><div class="flame"></div></div>
+          <div class="pp-hero-sub"><span>00:00</span><span>24:00 终</span></div>
+        </div>
+        <div class="pp-strips">
+          <div class="pp-row thin">
+            <span class="lbl">本周</span>
+            <div class="burnstrip" style="--p: 71.4%; --ticks: 7;"><div class="char"></div><div class="emberline"></div></div>
+            <span class="val">28.6%</span>
+          </div>
+          <div class="pp-row thin">
+            <span class="lbl">本月</span>
+            <div class="burnstrip" style="--p: 90.3%; --ticks: 31;"><div class="char"></div><div class="emberline"></div></div>
+            <span class="val">9.7%</span>
+          </div>
+          <div class="pp-row thin">
+            <span class="lbl">今年</span>
+            <div class="burnstrip" style="--p: 66.0%; --ticks: 12;"><div class="char"></div><div class="emberline"></div></div>
+            <span class="val">34.0%</span>
+          </div>
+        </div>
+        <div class="pp-motto">
+          <span>秉烛而记,落子无悔</span>
+          <span class="mono">v1.0</span>
+        </div>
+        <div class="pp-sync">
+          <span class="dot"></span>
+          Dropbox 已连接 · 仓位快照同步中
+          <small>12:40</small>
+        </div>
+        <div class="pp-actions">
+          <button class="pp-btn primary">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 3.5h4a2 2 0 0 1 2 2v8a2 2 0 0 0-2-2h-4zM13.5 3.5h-4a2 2 0 0 0-2 2v8a2 2 0 0 1 2-2h4z"/></svg>
+            打开日记
+          </button>
+          <button class="pp-btn">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.8M8 12.4v1.8M1.8 8h1.8M12.4 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M12.4 3.6l-1.3 1.3M4.9 11.1l-1.3 1.3"/></svg>
+            设置
+          </button>
+          <button class="pp-btn">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6.5 2.5H3.5v11h3M10 5l3 3-3 3M13 8H6.5"/></svg>
+            退出
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="scene-cap">
+      <span><span class="k">A</span> <b>模板图标</b>:托盘蜡烛单色素描,跟随 bar 着色;唤起时一点烛火色是全场唯一「发光」的 OS 元素</span>
+      <span><span class="k">B</span> <b>浮动纸签</b>:不透明纸 + 薄投影,锚在托盘下方;刻度参数化(日 24 / 周 7 / 月 31 / 年 12)</span>
+      <span><span class="k">C</span> <b>右键菜单</b>:日记 / 设置 / 退出,原生 SNI 菜单,不画自绘菜单</span>
+    </div>
+  </section>
+
+  <!-- ==================== 02 日记主窗 ==================== -->
+  <section data-screen-label="日记主窗">
+    <div class="sec-head"><span class="no">02</span><h2>日记主窗 · 可磁贴四栏</h2><span class="en">Journal window, tiled</span></div>
+    <p class="lead">一个守规矩的 Hyprland tile:<b>2px 系统描边(Omarchy 主题 accent 色,非 Wick 颜色)</b>、圆角、无 titlebar——第一行就是秉烛工具行。栏内是现行实现的语言:导航 / 日期列表(盈亏色随约定 + ✓/✗ 复盘小章)/ 账册页(宋体条目 + 胶带单据 + 复盘方章)/ <b>第四栏检查器 = 今日事件(宜忌 + 宏观/财报)+ 盈亏月历</b>。黄历不撕页,但入栏。</p>
+
+    <div class="scene" style="padding: 56px 26px 26px;">
+      <div class="hwin" style="height: 620px;">
+        <span class="wtag">wick · 日记</span>
+        <div class="jtb">
+          <span class="id">
+            <span class="fm">
+              <svg width="13" height="13" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path d="M9 1.4 C7.6 3.1 6.6 4.6 6.6 6.1 C6.6 7.8 7.7 9 9 9 C10.3 9 11.4 7.8 11.4 6.1 C11.4 4.6 10.4 3.1 9 1.4 Z" fill="#F7B261"/>
+                <rect x="8.5" y="9.2" width="1" height="2" fill="#C9B795"/>
+                <path d="M5.6 11.2 L12.4 11.2 L12.8 15.6 Q12.85 16.6 11.6 16.6 L6.4 16.6 Q5.15 16.6 5.2 15.6 Z" fill="#E8DCC0"/>
+              </svg>
+            </span>
+            秉烛日记
+          </span>
+          <span class="search">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg>
+            搜索条目…
+          </span>
+          <button class="inkbtn" title="栏位:全导航 → 仅列表 → 专注"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M6 2.5v11M10.5 2.5v11"/></svg></button>
+          <button class="inkbtn" title="检查器:今日事件 + 盈亏月历(⌥⌘0 对位)" style="border-color: var(--ember); color: var(--ember);"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M10.5 2.5v11"/></svg></button>
+          <span class="sp"></span>
+          <span class="sync-pill"><span class="dot"></span>已同步 12:40</span>
+          <button class="inkbtn" title="导入 / 导出"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M2.5 12.5h11v1.5h-11z"/></svg></button>
+          <button class="inkbtn" title="新建今日条目 Ctrl+N"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 2.5v11M2.5 8h11"/></svg></button>
+        </div>
+        <div class="jcols">
+          <div class="jnav">
+            <div>
+              <div class="nh">日记本<span class="plus"><button class="inkbtn" style="width: 20px; height: 20px;"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 2.5v11M2.5 8h11"/></svg></button></span></div>
+              <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 2px;">
+                <div class="book on">交易日志<small>Binance</small></div>
+                <div class="book">生活 · 读书<small>128 篇</small></div>
+              </div>
+            </div>
+            <div>
+              <div class="nh">标签</div>
+              <div class="tags" style="margin-top: 7px;">
+                <span class="ptag on">BTC</span><span class="ptag">ETH</span><span class="ptag">SOL</span>
+                <span class="ptag">宏观</span><span class="ptag">复盘</span><span class="ptag">心态</span><span class="ptag">风控</span>
+              </div>
+            </div>
+            <div style="margin-top: auto;">
+              <div class="nh">存储</div>
+              <div style="margin-top: 6px; font-family: var(--f-mono); font-size: 9.5px; color: var(--ink-3); line-height: 1.8; word-break: break-all;">~/.local/share/wick/Journals</div>
+            </div>
+          </div>
+          <div class="jlist">
+            <div class="lr on"><span class="ld">8月29日</span><span class="lm">周六 · 今天 · 1 条目</span><span class="lp"></span></div>
+            <div class="lr"><span class="ld">8月28日</span><span class="lm">周五 · 3 条目</span><span class="lp up">+431.4</span></div>
+            <div class="lr"><span class="ld">8月27日</span><span class="lm">周四 · 2 条目</span>
+              <span class="lp"><span class="chop gain" style="width: 20px; height: 20px; font-size: 11px;"><span>✓</span></span></span></div>
+            <div class="lr"><span class="ld">8月26日</span><span class="lm">周三 · 2 条目</span><span class="lp down">−311.3</span></div>
+            <div class="lr dim"><span class="ld">8月25日</span><span class="lm">周二</span><span class="lp">—</span></div>
+            <div class="lr"><span class="ld">8月24日</span><span class="lm">周一 · 4 条目</span><span class="lp up">+96.0</span></div>
+          </div>
+          <div class="jpage">
+            <div class="ph">
+              <span class="big">8月28日 <span style="font-size: 15px; color: var(--ink-3); font-weight: 400;">周五</span></span>
+              <span class="sub">3 条目 · 已复盘 1</span>
+              <div class="burnstrip" style="--p: 100%; --ticks: 24;"><div class="char"></div></div>
+            </div>
+
+            <div class="jentry">
+              <div class="et">
+                <span class="ptag on">BTC</span>
+                <span class="etime">21:40</span>
+                <span class="ereview"><span class="chop gain" style="width: 34px; height: 34px; font-size: 16px;"><span>✓</span></span></span>
+              </div>
+              <p class="body">多头拿了两天,突破后回踩不破,按计划在 114.2k 落袋。这笔的教训是加仓点选得急,第二次 VWAP 被抬高了一截——下次等回踩确认再补。</p>
+              <div class="receipt" style="max-width: 430px;">
+                <div class="r-head"><b>BTCUSDT 永续 · 多</b><span>08-26 09:41 → 08-28 21:35</span></div>
+                <div class="r-row"><span>开仓 → 平仓 VWAP</span><span>112,480.5 → 114,206.0</span></div>
+                <div class="r-row"><span>数量 · 持有</span><span>0.250 BTC · 2 天 11 小时</span></div>
+                <div class="r-row"><span>手续费 · 资金费</span><span>−6.12 · +2.40</span></div>
+                <div class="r-row r-total"><span>已实现盈亏</span><span class="up">+431.38 USDT</span></div>
+              </div>
+            </div>
+
+            <div class="jentry">
+              <div class="et">
+                <span class="ptag">心态</span>
+                <span class="etime">23:05</span>
+                <span class="ereview"><span class="review-slot">复盘</span></span>
+              </div>
+              <p class="body">空仓过夜。这周第三次想追 SOL 的突破,忍住了。把「想追」写下来之后,冲动就过去了一半。</p>
+            </div>
+          </div>
+          <div class="jinsp">
+            <div class="isec">
+              <div class="ish"><b>交易日历</b><small>周六</small><span class="chev">▾</span></div>
+              <div class="idt">
+                <span class="big">8月29日</span>
+                <span class="lunar">七月十七 · 乙巳</span>
+                <span class="gseal">休市</span>
+              </div>
+              <div class="yiji">
+                <div class="yr"><span class="ym yi">宜</span>复盘 · 整理仓位 · 早睡</div>
+                <div class="yr"><span class="ym ji">忌</span>追突破 · 开新仓 · 盯盘</div>
+              </div>
+              <div class="imeta">吉神:天德 · 月德 | 煞方:北</div>
+              <div class="itabs">
+                <span class="it on">宏观</span><span class="it">财报</span>
+                <span class="sort">按时间</span>
+              </div>
+              <div class="ev"><span class="et2">20:30</span><span class="et1">美国 7 月核心 PCE 物价指数年率</span><span class="ev2">今 2.9</span></div>
+              <div class="ev"><span class="et2">22:00</span><span class="et1">美国 8 月密歇根大学消费者信心指数终值</span><span class="ev2">预 58.3</span></div>
+              <div class="ev"><span class="et2">次日</span><span class="et1">CME 美联储副主席杰斐逊讲话</span><span class="ev2">—</span></div>
+            </div>
+            <div class="isec" style="flex: 1;">
+              <div class="ish"><b>盈亏月历</b><small>8月 · +216.1</small><span class="chev">▾</span></div>
+              <div class="cal">
+                <i class="hd">一</i><i class="hd">二</i><i class="hd">三</i><i class="hd">四</i><i class="hd">五</i><i class="hd">六</i><i class="hd">日</i>
+                <i></i><i></i><i></i><i></i><i></i><i>1</i><i>2</i>
+                <i>3</i><i class="up">4</i><i>5</i><i class="down">6</i><i class="up">7</i><i>8</i><i>9</i>
+                <i class="jrn">10</i><i>11</i><i class="up">12</i><i>13</i><i class="down">14</i><i>15</i><i>16</i>
+                <i>17</i><i class="jrn">18</i><i>19</i><i class="up">20</i><i>21</i><i>22</i><i>23</i>
+                <i class="up">24</i><i class="jrn">25</i><i class="down">26</i><i class="up">27</i><i class="up">28</i><i class="today jrn">29</i><i>30</i>
+                <i>31</i><i></i><i></i><i></i><i></i><i></i><i></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="scene-cap">
+      <span><span class="k">A</span> <b>窗口描边</b>:Hyprland 活动窗 accent(图示为 Tokyo Night 蓝),Wick 不自绘;失焦自动转灰</span>
+      <span><span class="k">B</span> <b>无 titlebar</b>:Omarchy 默认关窗 <span class="keyhint">Super+Q</span>、移动 <span class="keyhint">Super+拖拽</span>;工具行只做秉烛的事</span>
+      <span><span class="k">C</span> <b>四栏全可开关</b>:导航三态 × 检查器开关,共 3×2 组合;半屏 tile 先收检查器再收导航,落「仅列表 / 专注」</span>
+      <span><span class="k">D</span> <b>复盘章</b>:白文方章,字形恒为 ✓/✗,印泥随盈亏约定——默认绿涨红跌(✓ 黛青 / ✗ 朱砂),盖下 0.3s 落印</span>
+      <span><span class="k">E</span> <b>检查器</b>:今日事件(大日期 + 农历 + 朱砂方印 + 宜/忌 + 宏观/财报 tab)+ 盈亏月历;无暗室、无撕页——那是贴桌彩蛋的形态,不在 1.0</span>
+    </div>
+  </section>
+
+  <!-- ==================== 03 设置窗 ==================== -->
+  <section data-screen-label="设置窗">
+    <div class="sec-head"><span class="no">03</span><h2>设置窗 · 独立 tile</h2><span class="en">Settings</span></div>
+    <p class="lead">设置从 Mac 的「纸签第二态」改为<b>独立小窗</b>——Linux 没有菜单栏弹层里翻页的惯例,独立窗更合平铺桌面的肌肉记忆。内容对齐 Linux 1.0 范围:<b>栏内黄历(检查器)保留开关,贴桌物理彩蛋不做</b>;交易所绑定按日记本。</p>
+
+    <div class="scene" style="padding: 40px 24px 24px; display: grid; place-items: center;">
+      <div class="hwin idle" style="width: 640px; height: 660px;">
+        <span class="wtag" style="color: var(--os-fg-dim); border-color: var(--os-border-idle);">wick · 设置</span>
+        <div class="sbody">
+          <div class="snav">
+            <div class="si on">通用</div>
+            <div class="si">外观</div>
+            <div class="si">同步</div>
+            <div class="si">交易所</div>
+            <div class="si">数据</div>
+            <div class="si">关于</div>
+          </div>
+          <div class="smain">
+            <div class="ssec">
+              <div class="sh">通用</div>
+              <div class="srow">语言<span class="seg"><b class="on">简体中文</b><b>English</b></span></div>
+              <div class="srow">涨跌颜色<small>章 / 单据 / 月历全局跟随</small><span class="seg"><b class="on">绿涨红跌</b><b>红涨绿跌</b></span></div>
+              <div class="srow">每周从周一开始<span class="toggle on"></span></div>
+              <div class="srow">登录时启动<small>systemd --user 服务</small><span class="toggle on"></span></div>
+              <div class="srow">托盘旁显示今日剩余百分比<span class="toggle"></span></div>
+            </div>
+            <div class="ssec">
+              <div class="sh">外观 · 秉烛四相位</div>
+              <div class="srow">亮 / 暗<span class="seg"><b>亮</b><b class="on">暗</b><b>跟随系统</b></span></div>
+              <div class="srow">烛火随一天流动<small>此刻:子夜</small>
+                <span class="phase-chips">
+                  <i style="background: linear-gradient(160deg, #2B2118, #181110);"></i>
+                  <i style="background: linear-gradient(160deg, #2C2214, #191209);"></i>
+                  <i style="background: linear-gradient(160deg, #2E2010, #1B1208);"></i>
+                  <i style="background: linear-gradient(160deg, #241C10, #120D07); box-shadow: 0 0 0 1.5px var(--ember);"></i>
+                </span>
+              </div>
+              <div class="srow">界面字体<small>圆体 · 活数据</small><span class="mono" style="margin-left: auto;">Inter / Noto Sans SC</span></div>
+              <div class="srow">印刷字体<small>宋体 · 账册与单据</small><span class="mono" style="margin-left: auto;">Noto Serif SC</span></div>
+            </div>
+            <div class="ssec">
+              <div class="sh">提醒 · 交易日历</div>
+              <div class="srow">每日提醒写日记<small>21:00 · freedesktop 通知</small><span class="toggle on"></span></div>
+              <div class="srow">在主窗检查器显示黄历<small>今日事件 + 宜忌;贴桌物理彩蛋不在 1.0</small><span class="toggle on"></span></div>
+            </div>
+            <div class="ssec">
+              <div class="sh">同步与交易所</div>
+              <div class="srow">Dropbox<small>已连接 · 2 分钟前 · 墓碑删除同步</small><span class="toggle on"></span></div>
+              <div class="srow">同步仓位快照<small>密钥永不上云</small><span class="toggle"></span></div>
+              <div class="srow">交易所绑定<small>当前日记本「交易日志」</small><span class="mono" style="margin-left: auto;">Binance 只读 Key · libsecret</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="scene-cap">
+      <span><span class="k">A</span> <b>左栏分组</b>:通用 / 外观 / 同步 / 交易所 / 数据 / 关于,对标 Mac 设置分区;「交易日历」保留(管检查器显隐),只减去贴桌彩蛋开关</span>
+      <span><span class="k">B</span> <b>失焦描边</b>:图示为非活动窗(idle border);同一时刻 Hyprland 只有一扇窗亮 accent</span>
+    </div>
+  </section>
+
+  <!-- ==================== 04 与 Mac 的差异 ==================== -->
+  <section data-screen-label="平台差异">
+    <div class="sec-head"><span class="no">04</span><h2>与 Mac 的对位与差异</h2><span class="en">Parity table</span></div>
+    <div class="sheet">
+      <table class="spec">
+        <tr><th>面</th><th>macOS(现状)</th><th>Linux · Omarchy(本稿)</th></tr>
+        <tr><td>常驻入口</td><td class="dim">MenuBarExtra 蜡烛 + 360pt 撕边纸签</td><td class="dim">SNI 模板蜡烛 + layer-shell 浮动纸签,352px,锚定托盘下方</td></tr>
+        <tr><td>窗口 chrome</td><td class="dim">红绿灯 + 空 NSToolbar 建立标题栏几何</td><td class="dim">Hyprland 系统描边 + 圆角 + 磁贴;无 titlebar,工具行即首行</td></tr>
+        <tr><td>主窗骨架</td><td class="dim">手动三栏 + 可选检查器,⌃⌘S 三态循环</td><td class="dim">同款三栏 + 第四栏检查器(今日事件 + 盈亏月历);栏位 3×2 自由开关,窄窗自动折「仅列表 / 专注」</td></tr>
+        <tr><td>设置</td><td class="dim">菜单栏纸签第二态(齿轮翻页)</td><td class="dim">独立小窗,左栏分组;平铺桌面不养弹层翻页的惯例</td></tr>
+        <tr><td>黄历</td><td class="dim">检查器版(默认)+ 贴桌物理彩蛋(撕页 / 暗室)</td><td class="dim">检查器版保留;<b>贴桌物理彩蛋 1.0 不做</b>,界面不留入口</td></tr>
+        <tr><td>字态</td><td class="dim">SF Rounded / Songti SC / New York / SF Mono</td><td class="dim">Inter + Noto Sans SC / Noto Serif SC / JetBrains Mono,全部走系统已装字体</td></tr>
+        <tr><td>密钥</td><td class="dim">Keychain(dev 走 0600 文件)</td><td class="dim">libsecret(dev 走 <code>~/.local/share/wick/dev-secrets.json</code>,0600)</td></tr>
+        <tr><td>登录启动</td><td class="dim">SMAppService</td><td class="dim">systemd --user 服务</td></tr>
+        <tr><td>更新</td><td class="dim">GitHub Releases 检查</td><td class="dim">同款检查;安装走 PKGBUILD / pacman,不自更新</td></tr>
+        <tr><td>动效节奏</td><td class="dim">界面反馈 180ms,烛苗呼吸 1.7s,落印 0.3s</td><td class="dim">同值沿用;Hyprland 自己的窗管动效(开合 / 工作区)由 OS 负责</td></tr>
+      </table>
+    </div>
+    <div class="sheet-edge"></div>
+  </section>
+
+  <!-- ==================== 05 沿用组件 ==================== -->
+  <section data-screen-label="沿用组件">
+    <div class="sec-head"><span class="no">05</span><h2>秉烛组件 · 原样沿用</h2><span class="en">Components carried over, untouched</span></div>
+    <p class="lead">以下基元与 Mac / iOS 完全同一份 token 与结构,Qt/QML 实现时照抄 <code>tokens-v2.css</code> 的数值即可,不发明平台变体。</p>
+    <div class="comps">
+      <div class="comp">
+        <h4>烛痕条 · 刻度参数化(日 24 / 周 7 / 月 31 / 年 12)</h4>
+        <div style="display: flex; flex-direction: column; gap: 13px;">
+          <div style="display: flex; align-items: center; gap: 12px;"><span style="width: 40px; font-size: 12px; font-weight: 700; color: var(--ink-2);">今日</span><div class="burnstrip" data-burn-day style="--p: 62%; height: 15px; flex: 1;"><div class="char"></div><div class="emberline"></div><div class="flame"></div></div></div>
+          <div style="display: flex; align-items: center; gap: 12px;"><span style="width: 40px; font-size: 12px; font-weight: 700; color: var(--ink-2);">本周</span><div class="burnstrip" style="--p: 71.4%; --ticks: 7; height: 9px; flex: 1;"><div class="char"></div><div class="emberline"></div></div></div>
+        </div>
+      </div>
+      <div class="comp">
+        <h4>复盘方章(✓/✗,印泥随盈亏约定:默认绿涨红跌)· 签条 · 功能钮</h4>
+        <div class="chop-row" style="margin-bottom: 16px;">
+          <span class="chop gain" style="width: 46px; height: 46px; font-size: 22px;"><span>✓</span></span>
+          <span class="chop" style="width: 46px; height: 46px; font-size: 22px; transform: rotate(4deg);"><span>✗</span></span>
+          <span class="chop gain" style="width: 20px; height: 20px; font-size: 11px;"><span>✓</span></span>
+          <span class="chop" style="width: 58px; height: 30px; font-size: 12px; letter-spacing: 0.1em; padding-left: 0.1em; transform: rotate(-3deg); border-radius: 4px;"><span>休市</span></span>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;">
+          <span class="ptag on">趋势跟踪</span><span class="ptag">震荡</span><span class="ptag">心态</span>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button class="inkbtn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg></button>
+          <button class="inkbtn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 2.5v11M2.5 8h11"/></svg></button>
+        </div>
+      </div>
+      <div class="comp wide">
+        <h4>交易所单据 · 撕边物理纸,暗色下不反色(单据恒为纸)</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px;">
+          <div class="receipt">
+            <div class="r-head"><b>BTCUSDT 永续 · 多</b><span>08-26 09:41 → 08-28 21:35</span></div>
+            <div class="r-row"><span>开仓 → 平仓 VWAP</span><span>112,480.5 → 114,206.0</span></div>
+            <div class="r-row"><span>数量 · 持有</span><span>0.250 BTC · 2 天 11 小时</span></div>
+            <div class="r-row r-total"><span>已实现盈亏</span><span class="up">+431.38 USDT</span></div>
+          </div>
+          <div class="receipt" style="transform: rotate(0.5deg);">
+            <div class="r-head"><b>ETHUSDT 永续 · 空</b><span>08-28 21:01 → 21:48</span></div>
+            <div class="r-row"><span>开仓 → 平仓 VWAP</span><span>4,218.40 → 4,322.15</span></div>
+            <div class="r-row"><span>数量 · 持有</span><span>3.00 ETH · 47 分钟</span></div>
+            <div class="r-row r-total"><span>已实现盈亏</span><span class="down">−311.25 USDT</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>秉烛 · Linux 定稿草案 v0.1 · token 源 <code>tokens-v2.css</code> · OS 铬示意色仅用于桌面语境</span>
+    <span><a href="final.html">秉烛定稿 v1.0 →</a> · <a href="index.html">设计语言首页 →</a></span>
+  </footer>
+</div>
+
+<script>
+  /* Linux 稿默认落在「暗 · 子夜」(Omarchy 是暗色桌面);用户显式选择过则尊重其选择 */
+  if (!localStorage.getItem("wick-scheme")) localStorage.setItem("wick-scheme", "dark");
+  if (!localStorage.getItem("wick-phase")) localStorage.setItem("wick-phase", "night");
+</script>
+<script src="theme.js"></script>
+</body>
+</html>
