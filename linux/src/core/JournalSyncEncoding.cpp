@@ -73,7 +73,6 @@ public:
             switch (c) {
             case '"': out += "\\\""; break;
             case '\\': out += "\\\\"; break;
-            case '/': out += "\\/"; break; // default JSONEncoder escapes slashes
             case '\b': out += "\\b"; break;
             case '\f': out += "\\f"; break;
             case '\n': out += "\\n"; break;

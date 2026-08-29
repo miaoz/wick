@@ -299,6 +299,8 @@ public enum L10n {
         case calendarShareThisPage
 
         // Settings extras
+        case appearanceAndLanguageSection
+        case journalAndReminderSection
         case generalSection
         case menuBarPercentage
         case weekStartsOnMonday
@@ -352,7 +354,7 @@ public enum L10n {
         public var chinese: String {
             switch self {
             case .motto: return "一寸光阴一寸金。"
-            case .panelWordmark: return "秉烛"
+            case .panelWordmark: return "秉烛日记"
             case .panelHeroToday: return "今日剩余"
             case .quit: return "退出"
             case .settings: return "设置"
@@ -603,9 +605,11 @@ public enum L10n {
             case .macroEventsFlipHintTouch: return "轻点翻页 · 点栏目切换"
             case .calendarShareThisPage: return "分享本页…"
 
+            case .appearanceAndLanguageSection: return "外观与语言"
+            case .journalAndReminderSection: return "日记与提醒"
             case .generalSection: return "通用"
             case .menuBarPercentage: return "菜单栏显示今日剩余"
-            case .weekStartsOnMonday: return "周从周一开始"
+            case .weekStartsOnMonday: return "每周从周一开始"
             case .launchAtLogin: return "登录时启动"
             case .launchAtLoginNeedsApproval: return "请在系统设置中允许 Wick 登录启动"
             case .openLoginItems: return "打开登录项设置"
@@ -909,6 +913,8 @@ public enum L10n {
             case .macroEventsFlipHintTouch: return "Tap to flip · tap a tab to switch"
             case .calendarShareThisPage: return "Share This Page…"
 
+            case .appearanceAndLanguageSection: return "Appearance & Language"
+            case .journalAndReminderSection: return "Journal & Reminders"
             case .generalSection: return "General"
             case .menuBarPercentage: return "Show day remaining in menu bar"
             case .weekStartsOnMonday: return "Week starts on Monday"
