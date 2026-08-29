@@ -34,6 +34,7 @@ class TimeProgress : public QObject
 
     Q_PROPERTY(int monthTicks READ monthTicks NOTIFY updated)
     Q_PROPERTY(QString appVersion READ appVersion CONSTANT)
+    Q_PROPERTY(bool weekStartsOnMonday READ weekStartsOnMonday WRITE setWeekStartsOnMonday NOTIFY updated)
 
 public:
     explicit TimeProgress(QObject *parent = nullptr);
@@ -58,6 +59,9 @@ public:
 
     int monthTicks() const { return m_monthTicks; }
     QString appVersion() const;
+
+    bool weekStartsOnMonday() const { return m_weekStartsOnMonday; }
+    void setWeekStartsOnMonday(bool monday);
 
     /// Same clamp as `TimeProgressCalculator.remainingFraction`.
     static double remainingFraction(const QDateTime &start,
@@ -89,4 +93,5 @@ private:
     QString m_yearPercentText;
     QString m_dayPercentNumber;
     int m_monthTicks = 31;
+    bool m_weekStartsOnMonday = true;
 };

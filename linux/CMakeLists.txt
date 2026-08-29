@@ -49,7 +49,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Quick Widgets Svg QuickControls2)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Quick Widgets Svg QuickControls2 Network)
 
 qt_add_executable(wick
     src/main.cpp
@@ -65,6 +65,12 @@ qt_add_executable(wick
     src/app/JournalWindow.h
     src/app/LunarCalendar.cpp
     src/app/LunarCalendar.h
+    src/app/AppSettings.cpp
+    src/app/AppSettings.h
+    src/app/SettingsWindow.cpp
+    src/app/SettingsWindow.h
+    src/app/ReminderScheduler.cpp
+    src/app/ReminderScheduler.h
     resources/resources.qrc
 )
 
@@ -79,6 +85,7 @@ target_link_libraries(wick PRIVATE
     Qt6::Widgets
     Qt6::Svg
     Qt6::QuickControls2
+    Qt6::Network
 )
 
 target_compile_definitions(wick PRIVATE
