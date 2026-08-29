@@ -91,6 +91,26 @@ std::string Uuid::toString() const {
     return s;
 }
 
+std::string Uuid::toLowerString() const {
+    std::string s = toString();
+    for (char& c : s) {
+        if (c >= 'A' && c <= 'F') c = static_cast<char>(c - 'A' + 'a');
+    }
+    return s;
+}
+
+std::string trimCopy(std::string_view s) {
+    size_t a = 0;
+    size_t b = s.size();
+    while (a < b && std::isspace(static_cast<unsigned char>(s[a]))) ++a;
+    while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1]))) --b;
+    return std::string(s.substr(a, b - a));
+}
+
+bool JournalItem::isEmpty() const {
+    return trimCopy(tag).empty() && trimCopy(body).empty() && imageFilenames.empty();
+}
+
 bool JournalImageFilename::isValid(std::string_view filename) {
     if (filename.empty()) return false;
     if (filename.find('\0') != std::string_view::npos) return false;
