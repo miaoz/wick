@@ -289,7 +289,7 @@ JournalReview decodeReview(const json& j) {
     return r;
 }
 
-JournalItem decodeItem(const json& j) {
+JournalItem decodeItemObj(const json& j) {
     if (!j.is_object()) throw DecodeError("item must be an object");
     JournalItem item;
     item.id = requireUuid(j, "id");
@@ -316,7 +316,7 @@ JournalEntry decodeEntryObj(const json& j) {
     e.title = requireString(j, "title");
     const auto& items = require(j, "items");
     if (!items.is_array()) throw DecodeError("items must be an array");
-    for (const auto& it : items) e.items.push_back(decodeItem(it));
+    for (const auto& it : items) e.items.push_back(decodeItemObj(it));
     e.createdAt = requireDate(j, "createdAt");
     e.updatedAt = requireDate(j, "updatedAt");
     return e;
@@ -358,12 +358,17 @@ json parseOrThrow(std::string_view text) {
 namespace JournalSyncEncoding {
 
 std::string encode(const JournalEntry& entry) { return dump(encodeEntry(entry)); }
+std::string encode(const JournalItem& item) { return dump(encodeItem(item)); }
 std::string encode(const JournalSnapshot& snapshot) { return dump(encodeSnapshot(snapshot)); }
 std::string encode(const JournalCatalogSnapshot& catalog) { return dump(encodeCatalog(catalog)); }
 std::string encode(const JournalInfo& info) { return dump(encodeInfo(info)); }
 
 JournalEntry decodeEntry(std::string_view jsonText) {
     return decodeEntryObj(parseOrThrow(jsonText));
+}
+
+JournalItem decodeItem(std::string_view jsonText) {
+    return decodeItemObj(parseOrThrow(jsonText));
 }
 
 JournalSnapshot decodeSnapshot(std::string_view jsonText) {
