@@ -20,14 +20,27 @@ set(JSON_BuildTests OFF CACHE INTERNAL "")
 set(JSON_Install OFF CACHE INTERNAL "")
 FetchContent_MakeAvailable(nlohmann_json)
 
+# miniz 3.0.2 split sources (same files the local CTest run used).
+# Vendoring via push_files exceeded payload size; FetchContent keeps the tree small.
+FetchContent_Declare(
+  miniz
+  URL https://github.com/richgel999/miniz/archive/refs/tags/3.0.2.tar.gz
+  URL_HASH SHA256=c4b4c25a4eb81883448ff8924e6dba95c800094a198dc9ce66a292ac2ef8e018
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_GetProperties(miniz)
+if(NOT miniz_POPULATED)
+  FetchContent_Populate(miniz)
+endif()
+
 add_library(wick_miniz STATIC
-    third_party/miniz/miniz.c
-    third_party/miniz/miniz_tdef.c
-    third_party/miniz/miniz_tinfl.c
-    third_party/miniz/miniz_zip.c
+    ${miniz_SOURCE_DIR}/miniz.c
+    ${miniz_SOURCE_DIR}/miniz_tdef.c
+    ${miniz_SOURCE_DIR}/miniz_tinfl.c
+    ${miniz_SOURCE_DIR}/miniz_zip.c
 )
 set_target_properties(wick_miniz PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED ON)
-target_include_directories(wick_miniz PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniz)
+target_include_directories(wick_miniz PUBLIC ${miniz_SOURCE_DIR})
 target_compile_options(wick_miniz PRIVATE -w)
 
 add_library(wick_core STATIC
