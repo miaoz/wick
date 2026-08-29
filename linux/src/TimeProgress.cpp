@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <algorithm>
+#include <QLocale>
 
 TimeProgress::TimeProgress(QObject *parent)
     : QObject(parent)
@@ -11,6 +12,14 @@ TimeProgress::TimeProgress(QObject *parent)
     connect(&m_timer, &QTimer::timeout, this, &TimeProgress::tick);
     recalculate(QDateTime::currentDateTime());
     armMinuteTimer();
+}
+
+void TimeProgress::setWeekStartsOnMonday(bool monday)
+{
+    if (m_weekStartsOnMonday == monday)
+        return;
+    m_weekStartsOnMonday = monday;
+    recalculate(QDateTime::currentDateTime());
 }
 
 QString TimeProgress::appVersion() const
@@ -50,11 +59,17 @@ void TimeProgress::recalculate(const QDateTime &at)
     const QDateTime dayStart = date.startOfDay();
     const QDateTime dayEnd = date.addDays(1).startOfDay();
 
-    // Qt: dayOfWeek() is 1 = Monday … 7 = Sunday. Stage 0 week starts Monday
-    // (Mac `weekStartsOnMonday` → Calendar.firstWeekday = 2).
-    const QDate monday = date.addDays(1 - date.dayOfWeek());
-    const QDateTime weekStart = monday.startOfDay();
-    const QDateTime weekEnd = monday.addDays(7).startOfDay();
+    // Qt: dayOfWeek() is 1 = Monday … 7 = Sunday.
+    int first = 1; // Monday
+    if (!m_weekStartsOnMonday) {
+        const int loc = static_cast<int>(QLocale().firstDayOfWeek()); // 1=Mon … 7=Sun
+        if (loc >= 1 && loc <= 7)
+            first = loc;
+    }
+    const int delta = (date.dayOfWeek() - first + 7) % 7;
+    const QDate weekBegin = date.addDays(-delta);
+    const QDateTime weekStart = weekBegin.startOfDay();
+    const QDateTime weekEnd = weekBegin.addDays(7).startOfDay();
 
     const QDate monthFirst(date.year(), date.month(), 1);
     const QDateTime monthStart = monthFirst.startOfDay();

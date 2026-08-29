@@ -1,4 +1,5 @@
 #include "JournalWindow.h"
+#include "AppSettings.h"
 #include "JournalLibrary.h"
 
 #include <QEvent>
@@ -19,6 +20,7 @@ JournalWindow::JournalWindow(JournalLibrary *library, QWindow *parent)
     resize(1280, 800);
 
     rootContext()->setContextProperty(QStringLiteral("journalLibrary"), m_library);
+    rootContext()->setContextProperty(QStringLiteral("appSettings"), AppSettings::instance());
     setSource(QUrl(QStringLiteral("qrc:/qml/journal/JournalWindow.qml")));
 
     if (status() == QQuickView::Error) {

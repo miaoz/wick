@@ -37,7 +37,7 @@ Rectangle {
                 anchors.margins: 8
                 text: journalLibrary.errorBanner
                 color: theme.cinnabar
-                font.family: "Noto Sans SC"
+                font.family: theme.fontUi
                 font.pixelSize: 12
                 wrapMode: Text.Wrap
             }
@@ -54,7 +54,7 @@ Rectangle {
                 anchors.margins: 8
                 text: journalLibrary.restoreBanner
                 color: theme.ember
-                font.family: "Noto Sans SC"
+                font.family: theme.fontUi
                 font.pixelSize: 12
                 wrapMode: Text.Wrap
             }
@@ -111,7 +111,7 @@ Rectangle {
                         anchors.centerIn: parent
                         text: "烛"
                         color: theme.emberHi
-                        font.family: "Noto Serif SC"
+                        font.family: theme.fontPrint
                         font.pixelSize: 11
                         font.weight: Font.Bold
                     }
@@ -120,7 +120,7 @@ Rectangle {
                 Text {
                     text: "秉烛日记"
                     color: theme.ink1
-                    font.family: "Noto Serif SC"
+                    font.family: theme.fontPrint
                     font.pixelSize: 15
                     font.weight: Font.Black
                 }
@@ -128,7 +128,7 @@ Rectangle {
                 Text {
                     text: journalLibrary.activeJournalName
                     color: theme.ink2
-                    font.family: "Inter, Noto Sans SC"
+                    font.family: theme.fontUi
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
                     visible: journalLibrary.activeJournalName.length > 0
@@ -152,7 +152,7 @@ Rectangle {
                         placeholderText: "搜索条目…"
                         color: theme.ink1
                         placeholderTextColor: theme.ink3
-                        font.family: "Inter, Noto Sans SC"
+                        font.family: theme.fontUi
                         font.pixelSize: 12
                         background: Item {}
                         readOnly: journalLibrary.isCatalogReadOnly
@@ -293,7 +293,7 @@ Rectangle {
                 Text {
                     text: "新建日记本"
                     color: theme.ink1
-                    font.family: "Noto Serif SC"
+                    font.family: theme.fontPrint
                     font.pixelSize: 16
                     font.weight: Font.Bold
                 }
@@ -303,7 +303,7 @@ Rectangle {
                     placeholderText: "日记"
                     color: theme.ink1
                     placeholderTextColor: theme.ink3
-                    font.family: "Noto Sans SC"
+                    font.family: theme.fontUi
                     font.pixelSize: 13
                     background: Rectangle {
                         color: "transparent"

@@ -27,7 +27,7 @@ Rectangle {
                 Text {
                     text: "日记本"
                     color: theme.ink3
-                    font.family: "Inter, Noto Sans SC"
+                    font.family: theme.fontUi
                     font.pixelSize: 11
                     font.weight: Font.Bold
                     font.letterSpacing: 1.2
@@ -66,7 +66,7 @@ Rectangle {
                         Text {
                             text: modelData.name
                             color: modelData.isActive ? "#FFF3E0" : theme.ink1
-                            font.family: "Inter, Noto Sans SC"
+                            font.family: theme.fontUi
                             font.pixelSize: 13
                             font.weight: modelData.isActive ? Font.DemiBold : Font.Normal
                             elide: Text.ElideRight
@@ -75,7 +75,7 @@ Rectangle {
                         Text {
                             text: modelData.entryCount + " 篇"
                             color: modelData.isActive ? Qt.rgba(1, 0.95, 0.88, 0.65) : theme.ink3
-                            font.family: "JetBrains Mono"
+                            font.family: theme.fontMono
                             font.pixelSize: 10
                         }
                     }
@@ -98,7 +98,7 @@ Rectangle {
                 Layout.leftMargin: 10
                 text: "标签"
                 color: theme.ink3
-                font.family: "Inter, Noto Sans SC"
+                font.family: theme.fontUi
                 font.pixelSize: 11
                 font.weight: Font.Bold
                 font.letterSpacing: 1.2
@@ -124,7 +124,7 @@ Rectangle {
                             anchors.centerIn: parent
                             text: modelData.tag
                             color: theme.cinnabar
-                            font.family: "Noto Serif SC"
+                            font.family: theme.fontPrint
                             font.pixelSize: 11
                         }
                         MouseArea {

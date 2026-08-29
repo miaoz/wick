@@ -49,7 +49,7 @@ Rectangle {
                     verticalAlignment: Text.AlignVCenter
                     text: library.isCatalogReadOnly ? "目录不可用" : "选择一日，或点 ＋ 写下今天"
                     color: theme.ink3
-                    font.family: "Noto Serif SC"
+                    font.family: theme.fontPrint
                     font.pixelSize: 14
                 }
 
@@ -65,7 +65,7 @@ Rectangle {
                         Text {
                             text: library.pageDateLabel
                             color: theme.ink1
-                            font.family: "Inter, Noto Serif SC"
+                            font.family: theme.fontPrint
                             font.pixelSize: 28
                             font.weight: Font.Black
                         }
@@ -76,13 +76,13 @@ Rectangle {
                             Text {
                                 text: library.pageWeekday
                                 color: theme.ink2
-                                font.family: "Noto Serif SC"
+                                font.family: theme.fontPrint
                                 font.pixelSize: 11
                             }
                             Text {
                                 text: library.pageLunar
                                 color: theme.ink2
-                                font.family: "Noto Serif SC"
+                                font.family: theme.fontPrint
                                 font.pixelSize: 11
                                 visible: library.pageLunar.length > 0
                             }
@@ -93,7 +93,7 @@ Rectangle {
                         Text {
                             text: library.pageSavedState
                             color: library.isReadOnly ? theme.cinnabar : theme.ink3
-                            font.family: "JetBrains Mono"
+                            font.family: theme.fontMono
                             font.pixelSize: 9
                             Layout.bottomMargin: 5
                             visible: library.pageSavedState.length > 0
@@ -146,14 +146,14 @@ Rectangle {
                             Text {
                                 text: Math.round(library.pageBurnElapsed * 100) + "% 已过"
                                 color: theme.ink3
-                                font.family: "JetBrains Mono"
+                                font.family: theme.fontMono
                                 font.pixelSize: 9
                             }
                             Item { Layout.fillWidth: true }
                             Text {
                                 text: "00:00 — 24:00"
                                 color: theme.ink3
-                                font.family: "JetBrains Mono"
+                                font.family: theme.fontMono
                                 font.pixelSize: 9
                             }
                         }
@@ -196,7 +196,7 @@ Rectangle {
                                         Text {
                                             text: modelData.index
                                             color: theme.ink3
-                                            font.family: "JetBrains Mono"
+                                            font.family: theme.fontMono
                                             font.pixelSize: 10
                                         }
                                         Item { Layout.fillWidth: true }
@@ -221,7 +221,7 @@ Rectangle {
                                         placeholderText: "标签"
                                         color: theme.pnlUp
                                         placeholderTextColor: theme.ink3
-                                        font.family: "Noto Serif SC"
+                                        font.family: theme.fontPrint
                                         font.pixelSize: 13
                                         font.weight: Font.Bold
                                         readOnly: library.isReadOnly
@@ -237,7 +237,7 @@ Rectangle {
                                         placeholderText: "记下此刻…"
                                         color: theme.ink1
                                         placeholderTextColor: theme.ink3
-                                        font.family: "Noto Serif SC"
+                                        font.family: theme.fontPrint
                                         font.pixelSize: 14
                                         wrapMode: TextEdit.Wrap
                                         readOnly: library.isReadOnly
@@ -255,7 +255,7 @@ Rectangle {
                                         Text {
                                             text: "复盘"
                                             color: Qt.rgba(224 / 255, 106 / 255, 76 / 255, 0.8)
-                                            font.family: "Noto Serif SC"
+                                            font.family: theme.fontPrint
                                             font.pixelSize: 12
                                             font.weight: Font.Bold
                                             rotation: -3
@@ -280,13 +280,13 @@ Rectangle {
                                                 height: 40
                                                 radius: 3
                                                 rotation: -6
-                                                color: modelData === "correct" ? theme.pnlUp : theme.pnlDown
+                                                color: modelData === "correct" ? theme.gain : theme.loss
                                                 opacity: (itemBlock.modelData.review === modelData || itemBlock.modelData.review.length === 0) ? 1 : 0.3
                                                 Text {
                                                     anchors.centerIn: parent
                                                     text: modelData === "correct" ? "✓" : "✗"
                                                     color: theme.sealInk
-                                                    font.family: "Noto Serif SC"
+                                                    font.family: theme.fontPrint
                                                     font.pixelSize: 20
                                                     font.weight: Font.Bold
                                                 }
@@ -304,7 +304,7 @@ Rectangle {
                                             visible: itemBlock.modelData.review.length > 0
                                             text: "清除"
                                             color: theme.ink3
-                                            font.family: "Noto Sans SC"
+                                            font.family: theme.fontUi
                                             font.pixelSize: 12
                                             anchors.verticalCenter: parent.verticalCenter
                                             MouseArea {
@@ -327,7 +327,7 @@ Rectangle {
                                     radius: 4
                                     rotation: -6
                                     opacity: 0.82
-                                    color: modelData.review === "correct" ? theme.pnlUp : theme.pnlDown
+                                    color: modelData.review === "correct" ? theme.gain : theme.loss
                                     anchors.right: parent.right
                                     anchors.bottom: parent.bottom
                                     anchors.rightMargin: 2
@@ -337,7 +337,7 @@ Rectangle {
                                         anchors.centerIn: parent
                                         text: modelData.review === "correct" ? "✓" : "✗"
                                         color: theme.sealInk
-                                        font.family: "Noto Serif SC"
+                                        font.family: theme.fontPrint
                                         font.pixelSize: 28
                                         font.weight: Font.Bold
                                     }
@@ -366,7 +366,7 @@ Rectangle {
                             anchors.centerIn: parent
                             text: "+  添加条目"
                             color: theme.ink3
-                            font.family: "Noto Serif SC"
+                            font.family: theme.fontPrint
                             font.pixelSize: 11
                         }
 

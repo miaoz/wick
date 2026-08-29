@@ -1,4 +1,6 @@
+#include "AppSettings.h"
 #include "JournalLibrary.h"
+#include "ReminderScheduler.h"
 #include "TimeProgress.h"
 #include "TrayController.h"
 
@@ -20,16 +22,32 @@ int main(int argc, char *argv[])
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
+    AppSettings *settings = AppSettings::instance();
+
     JournalLibrary library;
     library.bootstrap();
 
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &library, &JournalLibrary::flushNow);
 
     TimeProgress progress;
-    TrayController tray(&progress, &library);
+    progress.setWeekStartsOnMonday(settings->weekStartsOnMonday());
+    QObject::connect(settings, &AppSettings::weekStartsOnMondayChanged, &progress, [settings, &progress]() {
+        progress.setWeekStartsOnMonday(settings->weekStartsOnMonday());
+    });
+
+    TrayController tray(&progress, &library, settings);
+
+    ReminderScheduler reminder(settings, tray.trayIcon());
+    QObject::connect(&reminder, &ReminderScheduler::openJournalRequested,
+                     &tray, &TrayController::openJournal);
+
+    if (settings->checkForUpdatesAutomatically())
+        settings->checkForUpdates();
 
     if (app.arguments().contains(QStringLiteral("--journal")))
         tray.openJournal();
+    if (app.arguments().contains(QStringLiteral("--settings")))
+        tray.openSettings();
 
     return app.exec();
 }
