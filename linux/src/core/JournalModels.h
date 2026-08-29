@@ -23,9 +23,13 @@ struct Uuid {
     static std::optional<Uuid> parse(std::string_view text);
 
     std::string toString() const; // uppercase dashed
+    std::string toLowerString() const; // Dropbox path segments (Mac uuidString.lowercased)
     bool operator==(const Uuid& other) const { return bytes == other.bytes; }
     bool operator!=(const Uuid& other) const { return !(*this == other); }
+    bool operator<(const Uuid& other) const { return bytes < other.bytes; }
 };
+
+std::string trimCopy(std::string_view s);
 
 struct JournalImageFilename {
     struct InvalidReference : std::runtime_error {
@@ -67,6 +71,7 @@ struct JournalItem {
         return id == o.id && tag == o.tag && body == o.body
             && imageFilenames == o.imageFilenames && review == o.review;
     }
+    bool isEmpty() const;
 };
 
 struct JournalEntry {

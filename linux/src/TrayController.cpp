@@ -18,11 +18,13 @@
 TrayController::TrayController(TimeProgress *progress,
                                JournalLibrary *library,
                                AppSettings *settings,
+                               JournalSyncCoordinator *sync,
                                QObject *parent)
     : QObject(parent)
     , m_progress(progress)
     , m_library(library)
     , m_settings(settings)
+    , m_sync(sync)
 {
     m_panel = new ProgressWindow(progress);
 
@@ -114,7 +116,7 @@ void TrayController::openJournal()
 void TrayController::openSettings()
 {
     if (!m_settingsWindow)
-        m_settingsWindow = new SettingsWindow(m_settings, m_library);
+        m_settingsWindow = new SettingsWindow(m_settings, m_library, m_sync);
     m_settingsWindow->openOrRaise();
 }
 

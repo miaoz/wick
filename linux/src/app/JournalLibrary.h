@@ -2,6 +2,7 @@
 
 #include "JournalCatalog.h"
 #include "JournalPaths.h"
+#include "JournalLocalSource.h"
 #include "JournalStore.h"
 
 #include <QDate>
@@ -12,12 +13,14 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 
 /// QObject surface for the journal window. Owns catalog + active JournalFileStore.
-class JournalLibrary : public QObject
+class JournalLibrary : public QObject, public wick::JournalLocalSource
 {
     Q_OBJECT
 
@@ -116,10 +119,29 @@ public:
     Q_INVOKABLE void shiftCalendarMonth(int delta);
     Q_INVOKABLE QString lunarLineFor(const QDate &date) const;
 
+    // JournalLocalSource (engine; Qt-free tests use FakeLocalSource)
+    std::optional<wick::Uuid> syncJournalID() const override;
+    std::string syncJournalName() const override;
+    bool syncIsWritable() const override;
+    std::map<wick::Uuid, wick::JournalEntry> syncEntrySnapshots() override;
+    std::optional<wick::JournalEntry> syncEntrySnapshot(const wick::Uuid &entryID) override;
+    void prepareForRemoteApply(const wick::Uuid &entryID) override;
+    std::set<wick::Uuid> applySyncedChanges(const std::vector<wick::JournalSyncMutation> &changes,
+                                            const wick::Uuid &journalID) override;
+    void applySyncedEntry(const wick::JournalEntry &entry, const wick::Uuid &journalID) override;
+    void removeSyncedEntry(const wick::Uuid &entryID, const wick::Uuid &journalID) override;
+    std::string applySyncedJournalName(const std::string &name, const wick::Uuid &journalID) override;
+    std::set<std::string> syncedImageFilenames() override;
+    std::optional<std::string> syncedImageData(const std::string &filename) override;
+    bool hasSyncedImage(const std::string &filename) override;
+    void storeSyncedImage(const std::string &filename, std::string_view data,
+                          const wick::Uuid &journalID) override;
+
 public slots:
     void persistSoon();
 
 signals:
+    void journalContentChanged();
     void journalsChanged();
     void tagsChanged();
     void daysChanged();
@@ -152,6 +174,7 @@ private:
     bool entryMatchesSearch(const wick::JournalEntry &entry) const;
     bool itemIsEmpty(const wick::JournalItem &item) const;
     QString uniquifyName(const QString &base) const;
+    QString uniquifyName(const QString &base, const wick::Uuid &excluding) const;
 
     void bindActive(const wick::Uuid &id);
     void seedDefaultJournal();
