@@ -82,8 +82,7 @@ struct EntrySettlement {
     static EntrySettlement pushSettled(std::string h) {
         return {EntrySettlementKind::pushSettled, std::move(h)};
     }
-    static EntrySettlement adoptRemote() { return {EntrySettlementKind::adoptRemote, {}};
-    }
+    static EntrySettlement adoptRemote() { return {EntrySettlementKind::adoptRemote, {}}; }
     static EntrySettlement markSettled(std::string h) {
         return {EntrySettlementKind::markSettled, std::move(h)};
     }
