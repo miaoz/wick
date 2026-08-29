@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 Rectangle {
     id: root
@@ -117,7 +118,6 @@ Rectangle {
         }
     }
 
-    // ----- shared bits -----
     component Hairline: Rectangle {
         Layout.fillWidth: true
         height: 1
@@ -281,13 +281,11 @@ Rectangle {
         }
     }
 
-    // 1. 外观与语言
     Component {
         id: appearancePage
         ColumnLayout {
             spacing: 0
             SectionLabel { text: t("外观与语言", "APPEARANCE & LANGUAGE") }
-
             SettingRow {
                 label: t("语言", "Language")
                 Seg {
@@ -411,7 +409,6 @@ Rectangle {
         }
     }
 
-    // 2. 通用
     Component {
         id: generalPage
         ColumnLayout {
@@ -450,7 +447,6 @@ Rectangle {
         }
     }
 
-    // 3. 日记与提醒 — no 打开日记
     Component {
         id: reminderPage
         ColumnLayout {
@@ -513,7 +509,6 @@ Rectangle {
         }
     }
 
-    // 4. 同步 — Dropbox stub, no snapshot toggle
     Component {
         id: syncPage
         ColumnLayout {
@@ -537,7 +532,6 @@ Rectangle {
         }
     }
 
-    // 5. 交易所 — prefs only, snapshot moved here
     Component {
         id: exchangePage
         ColumnLayout {
@@ -630,7 +624,6 @@ Rectangle {
         }
     }
 
-    // 6. 数据
     Component {
         id: dataPage
         ColumnLayout {
@@ -672,13 +665,12 @@ Rectangle {
             }
             ActionRow {
                 text: t("导出日记…", "Export journal…")
-                coming: true
-                onClicked: appSettings.stubExport()
+                enabled: !journalLibrary.isReadOnly
+                onClicked: exportDialog.open()
             }
             ActionRow {
                 text: t("导入日记…", "Import journal…")
-                coming: true
-                onClicked: appSettings.stubImport()
+                onClicked: importDialog.open()
             }
             ActionRow {
                 text: t("在文件管理器中显示数据", "Reveal data in file manager")
@@ -696,7 +688,6 @@ Rectangle {
         }
     }
 
-    // 7. 关于 — no Quit
     Component {
         id: aboutPage
         ColumnLayout {
@@ -747,6 +738,37 @@ Rectangle {
                 font.family: theme.fontPrint
                 font.pixelSize: 10
             }
+        }
+    }
+
+    FileDialog {
+        id: exportDialog
+        fileMode: FileDialog.SaveFile
+        nameFilters: [root.t("Zip 归档 (*.zip)", "Zip archive (*.zip)")]
+        defaultSuffix: "zip"
+        onAccepted: {
+            const err = journalLibrary.exportArchiveTo(selectedFile)
+            if (err.length === 0)
+                appSettings.setDataStatus(root.t("已导出", "Exported"))
+            else
+                appSettings.setDataStatus(err)
+        }
+    }
+
+    FileDialog {
+        id: importDialog
+        fileMode: FileDialog.OpenFile
+        nameFilters: [
+            root.t("秉烛归档 (*.zip *.json)", "Wick archive (*.zip *.json)"),
+            root.t("Zip (*.zip)", "Zip (*.zip)"),
+            root.t("JSON (*.json)", "JSON (*.json)")
+        ]
+        onAccepted: {
+            const err = journalLibrary.importArchiveFrom(selectedFile)
+            if (err.length === 0)
+                appSettings.setDataStatus(root.t("已导入", "Imported"))
+            else
+                appSettings.setDataStatus(err)
         }
     }
 }

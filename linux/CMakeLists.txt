@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 # Prefer Qt 6.8 (Debian 13 / Omarchy). 6.4 is the floor if 6.8 is not findable.
-project(wick VERSION 0.1.0 LANGUAGES CXX)
+project(wick VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,12 +20,36 @@ set(JSON_BuildTests OFF CACHE INTERNAL "")
 set(JSON_Install OFF CACHE INTERNAL "")
 FetchContent_MakeAvailable(nlohmann_json)
 
+# miniz 3.0.2 split sources (same files the local CTest run used).
+# Vendoring via push_files exceeded payload size; FetchContent keeps the tree small.
+FetchContent_Declare(
+  miniz
+  URL https://github.com/richgel999/miniz/archive/refs/tags/3.0.2.tar.gz
+  URL_HASH SHA256=c4b4c25a4eb81883448ff8924e6dba95c800094a198dc9ce66a292ac2ef8e018
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_GetProperties(miniz)
+if(NOT miniz_POPULATED)
+  FetchContent_Populate(miniz)
+endif()
+
+add_library(wick_miniz STATIC
+    ${miniz_SOURCE_DIR}/miniz.c
+    ${miniz_SOURCE_DIR}/miniz_tdef.c
+    ${miniz_SOURCE_DIR}/miniz_tinfl.c
+    ${miniz_SOURCE_DIR}/miniz_zip.c
+)
+set_target_properties(wick_miniz PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED ON)
+target_include_directories(wick_miniz PUBLIC ${miniz_SOURCE_DIR})
+target_compile_options(wick_miniz PRIVATE -w)
+
 add_library(wick_core STATIC
     src/core/JournalModels.cpp
     src/core/JournalSyncEncoding.cpp
     src/core/JournalCatalog.cpp
     src/core/JournalPaths.cpp
     src/core/JournalStore.cpp
+    src/core/JournalArchive.cpp
 )
 
 target_include_directories(wick_core
@@ -33,7 +57,7 @@ target_include_directories(wick_core
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core
 )
 
-target_link_libraries(wick_core PUBLIC OpenSSL::Crypto nlohmann_json::nlohmann_json)
+target_link_libraries(wick_core PUBLIC OpenSSL::Crypto nlohmann_json::nlohmann_json wick_miniz)
 
 target_compile_features(wick_core PUBLIC cxx_std_20)
 
@@ -45,11 +69,17 @@ add_executable(test_journal_core
 target_link_libraries(test_journal_core PRIVATE wick_core)
 add_test(NAME test_journal_core COMMAND test_journal_core)
 
+add_executable(test_journal_archive
+    tests/test_journal_archive.cpp
+)
+target_link_libraries(test_journal_archive PRIVATE wick_core)
+add_test(NAME test_journal_archive COMMAND test_journal_archive)
+
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Quick Widgets Svg QuickControls2 Network)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Quick Widgets Svg QuickControls2 Network QuickDialogs2)
 
 qt_add_executable(wick
     src/main.cpp
@@ -61,6 +91,7 @@ qt_add_executable(wick
     src/ProgressWindow.h
     src/app/JournalLibrary.cpp
     src/app/JournalLibrary.h
+    src/app/JournalLibraryZip.cpp
     src/app/JournalWindow.cpp
     src/app/JournalWindow.h
     src/app/LunarCalendar.cpp
@@ -86,6 +117,7 @@ target_link_libraries(wick PRIVATE
     Qt6::Svg
     Qt6::QuickControls2
     Qt6::Network
+    Qt6::QuickDialogs2
 )
 
 target_compile_definitions(wick PRIVATE
