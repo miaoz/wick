@@ -268,77 +268,81 @@ struct SettingsContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // 1. 外观与语言
             settingsSection(
-                title: L10n.string(.language, language: language)
+                title: L10n.string(.appearanceAndLanguageSection, language: language)
             ) {
-                HStack(spacing: 6) {
-                    ForEach(AppLanguage.allCases) { option in
-                        settingsOptionButton(
-                            title: option.displayName,
-                            isSelected: settings.language == option
-                        ) {
-                            withAnimation(.easeInOut(duration: 0.18)) {
-                                settings.language = option
+                VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(L10n.string(.language, language: language))
+                            .font(AppFont.ui(12, weight: .medium, design: .rounded))
+                            .foregroundStyle(theme.secondaryText)
+                        HStack(spacing: 6) {
+                            ForEach(AppLanguage.allCases) { option in
+                                settingsOptionButton(
+                                    title: option.displayName,
+                                    isSelected: settings.language == option
+                                ) {
+                                    withAnimation(.easeInOut(duration: 0.18)) {
+                                        settings.language = option
+                                    }
+                                }
                             }
                         }
+                    }
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(L10n.string(.appearance, language: language))
+                            .font(AppFont.ui(12, weight: .medium, design: .rounded))
+                            .foregroundStyle(theme.secondaryText)
+                        HStack(spacing: 6) {
+                            ForEach(AppAppearance.allCases) { option in
+                                settingsOptionButton(
+                                    title: option.displayName(language: language),
+                                    isSelected: settings.appearance == option,
+                                    expands: true
+                                ) {
+                                    withAnimation(.easeInOut(duration: 0.18)) {
+                                        settings.appearance = option
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(L10n.string(.pnlColorConvention, language: language))
+                            .font(AppFont.ui(12, weight: .medium, design: .rounded))
+                            .foregroundStyle(theme.secondaryText)
+                        HStack(spacing: 6) {
+                            ForEach(PnlColorConvention.allCases) { option in
+                                settingsOptionButton(
+                                    title: option.displayName(language: language),
+                                    isSelected: settings.pnlColorConvention == option,
+                                    expands: true
+                                ) {
+                                    withAnimation(.easeInOut(duration: 0.18)) {
+                                        settings.pnlColorConvention = option
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(L10n.string(.journalFontStyle, language: language))
+                            .font(AppFont.ui(12, weight: .medium, design: .rounded))
+                            .foregroundStyle(theme.secondaryText)
+                        FontPickerSettingRow(theme: theme)
                     }
                 }
             }
 
-            settingsSection(
-                title: L10n.string(.appearance, language: language)
-            ) {
-                HStack(spacing: 6) {
-                    ForEach(AppAppearance.allCases) { option in
-                        settingsOptionButton(
-                            title: option.displayName(language: language),
-                            isSelected: settings.appearance == option,
-                            expands: true
-                        ) {
-                            withAnimation(.easeInOut(duration: 0.18)) {
-                                settings.appearance = option
-                            }
-                        }
-                    }
-                }
-            }
-
-            settingsSection(
-                title: L10n.string(.pnlColorConvention, language: language)
-            ) {
-                HStack(spacing: 6) {
-                    ForEach(PnlColorConvention.allCases) { option in
-                        settingsOptionButton(
-                            title: option.displayName(language: language),
-                            isSelected: settings.pnlColorConvention == option,
-                            expands: true
-                        ) {
-                            withAnimation(.easeInOut(duration: 0.18)) {
-                                settings.pnlColorConvention = option
-                            }
-                        }
-                    }
-                }
-            }
-
-            settingsSection(
-                title: L10n.string(.journalFontStyle, language: language)
-            ) {
-                FontPickerSettingRow(theme: theme)
-            }
-
+            // 2. 通用
             settingsSection(
                 title: L10n.string(.generalSection, language: language)
             ) {
                 VStack(alignment: .leading, spacing: 9) {
-                    Toggle(isOn: $settings.showMenuBarPercentage) {
-                        Text(L10n.string(.menuBarPercentage, language: language))
-                            .font(AppFont.ui(13, weight: .medium, design: .rounded))
-                            .foregroundStyle(theme.primaryText)
-                    }
-                    .toggleStyle(.switch)
-                    .tint(theme.selectionAccent)
-
                     Toggle(isOn: $settings.weekStartsOnMonday) {
                         Text(L10n.string(.weekStartsOnMonday, language: language))
                             .font(AppFont.ui(13, weight: .medium, design: .rounded))
@@ -368,20 +372,22 @@ struct SettingsContentView: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(theme.selectionAccent)
                     }
+
+                    Toggle(isOn: $settings.showMenuBarPercentage) {
+                        Text(L10n.string(.menuBarPercentage, language: language))
+                            .font(AppFont.ui(13, weight: .medium, design: .rounded))
+                            .foregroundStyle(theme.primaryText)
+                    }
+                    .toggleStyle(.switch)
+                    .tint(theme.selectionAccent)
                 }
             }
 
+            // 3. 日记与提醒
             settingsSection(
-                title: L10n.string(.journalSection, language: language)
+                title: L10n.string(.journalAndReminderSection, language: language)
             ) {
                 VStack(alignment: .leading, spacing: 8) {
-                    actionRowButton(
-                        title: L10n.string(.journalOpenAction, language: language),
-                        systemImage: "book.closed"
-                    ) {
-                        JournalWindowController.shared.openJournal()
-                    }
-
                     Toggle(isOn: $settings.journalReminderEnabled) {
                         Text(L10n.string(.journalReminderEnabled, language: language))
                             .font(AppFont.ui(13, weight: .medium, design: .rounded))
@@ -398,6 +404,7 @@ struct SettingsContentView: View {
                 }
             }
 
+            // 4. 交易日历
             settingsSection(
                 title: L10n.string(.tradingCalendar, language: language)
             ) {
@@ -438,69 +445,7 @@ struct SettingsContentView: View {
                 }
             }
 
-            settingsSection(
-                title: L10n.string(.dataSection, language: language)
-            ) {
-                VStack(alignment: .leading, spacing: 7) {
-                    if journalStore.isReadOnlyDueToLoadFailure {
-                        Text(L10n.string(.journalLoadFailureTitle, language: language))
-                            .font(AppFont.ui(12.5, weight: .semibold, design: .rounded))
-                            .foregroundStyle(theme.primaryText)
-                        Text(L10n.string(.journalLoadFailureBody, language: language))
-                            .font(AppFont.preset(.caption))
-                            .foregroundStyle(theme.secondaryText)
-                        if let detail = journalStore.loadFailureMessage {
-                            Text(detail)
-                                .font(AppFont.preset(.caption2))
-                                .foregroundStyle(theme.tertiaryText)
-                        }
-                        Button {
-                            showStartFreshConfirm = true
-                        } label: {
-                            Text(L10n.string(.journalStartFresh, language: language))
-                                .font(AppFont.ui(12.5, weight: .medium, design: .rounded))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(theme.palette.pnlUp.color)
-                    } else if journalStore.didRestoreFromBackup {
-                        Text(L10n.string(.journalRestoredFromBackup, language: language))
-                            .font(AppFont.preset(.caption))
-                            .foregroundStyle(theme.secondaryText)
-                    }
-
-                    actionRowButton(
-                        title: L10n.string(.journalExport, language: language),
-                        systemImage: "square.and.arrow.up"
-                    ) {
-                        exportJournal()
-                    }
-                    actionRowButton(
-                        title: L10n.string(.journalImport, language: language),
-                        systemImage: "square.and.arrow.down"
-                    ) {
-                        importJournal()
-                    }
-                    actionRowButton(
-                        title: L10n.string(.journalRevealData, language: language),
-                        systemImage: "folder"
-                    ) {
-                        journalStore.revealDataDirectoryInFinder()
-                    }
-
-                    if let dataStatusText {
-                        Text(dataStatusText)
-                            .font(AppFont.preset(.caption))
-                            .foregroundStyle(theme.secondaryText)
-                    }
-                }
-            }
-
-            settingsSection(
-                title: L10n.string(.exchangeSection, language: language)
-            ) {
-                ExchangeSettingsContent(theme: theme, language: language)
-            }
-
+            // 5. 同步
             settingsSection(
                 title: L10n.string(.syncSection, language: language)
             ) {
@@ -519,19 +464,6 @@ struct SettingsContentView: View {
                         }
 
                         syncStatusFooter
-
-                        Toggle(isOn: $settings.syncTradingSnapshots) {
-                            Text(L10n.string(.syncTradingSnapshots, language: language))
-                                .font(AppFont.ui(13, weight: .medium, design: .rounded))
-                                .foregroundStyle(theme.primaryText)
-                        }
-                        .toggleStyle(.switch)
-                        .tint(theme.selectionAccent)
-
-                        Text(L10n.string(.syncTradingSnapshotsHint, language: language))
-                            .font(AppFont.preset(.caption2))
-                            .foregroundStyle(theme.tertiaryText)
-                            .fixedSize(horizontal: false, vertical: true)
 
                         let adoptableJournals = syncCoordinator.engine.discoveredJournals.filter { manifest in
                             !journalStore.journals.contains { $0.id == manifest.journalID }
@@ -609,21 +541,91 @@ struct SettingsContentView: View {
                 }
             }
 
+            // 6. 交易所
+            settingsSection(
+                title: L10n.string(.exchangeSection, language: language)
+            ) {
+                VStack(alignment: .leading, spacing: 10) {
+                    ExchangeSettingsContent(theme: theme, language: language)
+
+                    Toggle(isOn: $settings.syncTradingSnapshots) {
+                        Text(L10n.string(.syncTradingSnapshots, language: language))
+                            .font(AppFont.ui(13, weight: .medium, design: .rounded))
+                            .foregroundStyle(theme.primaryText)
+                    }
+                    .toggleStyle(.switch)
+                    .tint(theme.selectionAccent)
+
+                    Text(L10n.string(.syncTradingSnapshotsHint, language: language))
+                        .font(AppFont.preset(.caption2))
+                        .foregroundStyle(theme.tertiaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            // 7. 数据
+            settingsSection(
+                title: L10n.string(.dataSection, language: language)
+            ) {
+                VStack(alignment: .leading, spacing: 7) {
+                    if journalStore.isReadOnlyDueToLoadFailure {
+                        Text(L10n.string(.journalLoadFailureTitle, language: language))
+                            .font(AppFont.ui(12.5, weight: .semibold, design: .rounded))
+                            .foregroundStyle(theme.primaryText)
+                        Text(L10n.string(.journalLoadFailureBody, language: language))
+                            .font(AppFont.preset(.caption))
+                            .foregroundStyle(theme.secondaryText)
+                        if let detail = journalStore.loadFailureMessage {
+                            Text(detail)
+                                .font(AppFont.preset(.caption2))
+                                .foregroundStyle(theme.tertiaryText)
+                        }
+                        Button {
+                            showStartFreshConfirm = true
+                        } label: {
+                            Text(L10n.string(.journalStartFresh, language: language))
+                                .font(AppFont.ui(12.5, weight: .medium, design: .rounded))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(theme.palette.pnlUp.color)
+                    } else if journalStore.didRestoreFromBackup {
+                        Text(L10n.string(.journalRestoredFromBackup, language: language))
+                            .font(AppFont.preset(.caption))
+                            .foregroundStyle(theme.secondaryText)
+                    }
+
+                    actionRowButton(
+                        title: L10n.string(.journalExport, language: language),
+                        systemImage: "square.and.arrow.up"
+                    ) {
+                        exportJournal()
+                    }
+                    actionRowButton(
+                        title: L10n.string(.journalImport, language: language),
+                        systemImage: "square.and.arrow.down"
+                    ) {
+                        importJournal()
+                    }
+                    actionRowButton(
+                        title: L10n.string(.journalRevealData, language: language),
+                        systemImage: "folder"
+                    ) {
+                        journalStore.revealDataDirectoryInFinder()
+                    }
+
+                    if let dataStatusText {
+                        Text(dataStatusText)
+                            .font(AppFont.preset(.caption))
+                            .foregroundStyle(theme.secondaryText)
+                    }
+                }
+            }
+
+            // 8. 关于
             settingsSection(
                 title: L10n.string(.aboutSection, language: language)
             ) {
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text(L10n.string(.versionLabel, language: language))
-                            .font(AppFont.ui(12.5, weight: .medium, design: .rounded))
-                            .foregroundStyle(theme.secondaryText)
-                        Spacer()
-                        Text(AppInfo.versionDisplay)
-                            .font(AppFont.ui(12.5, weight: .semibold, design: .rounded, monospacedDigit: true))
-                            .foregroundStyle(theme.primaryText)
-                            .textSelection(.enabled)
-                    }
-
                     Toggle(isOn: $settings.checkForUpdatesAutomatically) {
                         Text(L10n.string(.checkForUpdatesAutomatically, language: language))
                             .font(AppFont.ui(13, weight: .medium, design: .rounded))
@@ -690,7 +692,20 @@ struct SettingsContentView: View {
             ) {
                 NSApplication.shared.terminate(nil)
             }
-            .padding(.top, 12)
+            .padding(.top, 10)
+
+            // 版本号与品牌底部小注
+            VStack(spacing: 3) {
+                Text(language == .chinese ? "Wick for macOS · 秉烛日记" : "Wick for macOS")
+                    .font(AppFont.paper(11.5, weight: .bold))
+                    .foregroundStyle(theme.secondaryText)
+                Text("v\(AppInfo.versionDisplay)")
+                    .font(AppFont.paper(10, weight: .medium))
+                    .foregroundStyle(theme.tertiaryText)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
         }
         .confirmationDialog(
             L10n.string(.syncDisconnectConfirmTitle, language: language),

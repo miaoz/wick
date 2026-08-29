@@ -21,6 +21,7 @@ struct SettingsView: View {
     @AppStorage("wick.appearance") private var appearanceRaw = AppAppearance.system.rawValue
     @AppStorage("wick.pnlColorConvention") private var pnlConventionRaw = PnlColorConvention.redUp.rawValue
     @AppStorage("wick.calendar.physicalEasterEgg") private var physicalEasterEgg = false
+    @AppStorage("wick.calendar.weekStartsOnMonday") private var weekStartsOnMonday = false
 
     // Reminder Settings
     @AppStorage("wick.journal.reminder.enabled") private var reminderEnabled = false
@@ -116,8 +117,8 @@ struct SettingsView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
-                    // 1. Appearance & Theme
-                    SettingsCard(title: L10n.string(.settingsAppearanceTheme, language: language)) {
+                    // 1. Appearance & Language
+                    SettingsCard(title: L10n.string(.appearanceAndLanguageSection, language: language)) {
                         SettingsRow(
                             title: L10n.string(.language, language: language),
                             subtitle: language == .chinese ? "中文 / English" : "English / 中文"
@@ -181,8 +182,21 @@ struct SettingsView: View {
                         }
                     }
 
-                    // 2. Daily Notification Reminder
-                    SettingsCard(title: L10n.string(.journalReminder, language: language)) {
+                    // 2. General
+                    SettingsCard(title: L10n.string(.generalSection, language: language)) {
+                        SettingsRow(
+                            title: L10n.string(.weekStartsOnMonday, language: language),
+                            subtitle: language == .chinese ? "周一作为每周第一天" : "Monday as the first day of the week",
+                            isLast: true
+                        ) {
+                            Toggle("", isOn: $weekStartsOnMonday)
+                                .labelsHidden()
+                                .tint(PhoneTheme.ember)
+                        }
+                    }
+
+                    // 3. Journal & Reminders
+                    SettingsCard(title: L10n.string(.journalAndReminderSection, language: language)) {
                         SettingsRow(
                             title: L10n.string(.journalReminderEnabled, language: language),
                             subtitle: L10n.string(.dailyReviewReminderSubtitle, language: language),
@@ -223,12 +237,12 @@ struct SettingsView: View {
                         }
                     }
 
-                    // 3. Trading Calendar & Easter Egg
+                    // 4. Trading Calendar & Easter Egg
                     SettingsCard(title: L10n.string(.tradingCalendar, language: language)) {
                         SettingsRow(
                             title: language == .chinese ? "数据源" : "Data Feed",
                             subtitle: language == .chinese ? "华尔街见闻 REST 直连缓存" : "WallStreetCN REST cache",
-                            isLast: true
+                            isLast: false
                         ) {
                             Text(language == .chinese ? "实时在线" : "Online")
                                 .font(PhoneFont.paper(11, weight: .medium))
@@ -272,7 +286,99 @@ struct SettingsView: View {
                         .padding(.bottom, 12)
                     }
 
-                    // 4. Per-Journal Exchange Binding
+                    // 5. Dropbox Sync
+                    SettingsCard(title: L10n.string(.syncSection, language: language)) {
+                        if sync.syncEnabled && sync.backend.isAuthorized {
+                            SettingsRow(title: language == .chinese ? "Dropbox 账号" : "Dropbox Account") {
+                                Text(sync.accountEmail.isEmpty ? (language == .chinese ? "已授权" : "Authorized") : sync.accountEmail)
+                                    .font(PhoneFont.paper(11.5))
+                                    .foregroundColor(PhoneTheme.inkSecondary)
+                            }
+
+                            SettingsRow(title: language == .chinese ? "同步状态" : "Sync Status") {
+                                statusRow
+                            }
+
+                            SettingsRow(title: L10n.string(.syncNow, language: language)) {
+                                Button {
+                                    sync.engine.syncNow()
+                                } label: {
+                                    Text(L10n.string(.syncNow, language: language))
+                                        .font(PhoneFont.paper(12, weight: .bold))
+                                        .foregroundColor(PhoneTheme.cinnabar)
+                                }
+                            }
+
+                            SettingsRow(
+                                title: L10n.string(.syncDisconnect, language: language),
+                                isLast: sync.engine.pendingConflicts.isEmpty
+                            ) {
+                                Button(role: .destructive) {
+                                    showDisconnectConfirm = true
+                                } label: {
+                                    Text(L10n.string(.syncDisconnect, language: language))
+                                        .font(PhoneFont.paper(12, weight: .medium))
+                                        .foregroundColor(PhoneTheme.cinnabar)
+                                }
+                            }
+                        } else {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(L10n.string(.syncExplanation, language: language))
+                                    .font(PhoneFont.paper(11))
+                                    .foregroundColor(PhoneTheme.inkSecondary)
+
+                                Button {
+                                    connect()
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.triangle.2.circlepath")
+                                            .font(PhoneFont.ui(11))
+                                        Text(isConnecting ? L10n.string(.syncConnecting, language: language) : L10n.string(.syncConnect, language: language))
+                                            .font(PhoneFont.paper(12, weight: .bold))
+                                    }
+                                    .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(PhoneTheme.cinnabar)
+                                    .cornerRadius(4)
+                                    .shadow(color: PhoneTheme.cinnabar.opacity(0.3), radius: 3, y: 1)
+                                }
+                                .disabled(isConnecting)
+
+                                if sync.syncEnabled, !sync.backend.isAuthorized {
+                                    Text(L10n.string(.syncStatusNeedsAuth, language: language))
+                                        .font(PhoneFont.paper(10.5))
+                                        .foregroundColor(PhoneTheme.cinnabar)
+                                }
+                                if let error = sync.lastAuthError {
+                                    Text(error)
+                                        .font(PhoneFont.paper(10))
+                                        .foregroundColor(PhoneTheme.inkTertiary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                        }
+
+                        if !sync.engine.pendingConflicts.isEmpty {
+                            ForEach(Array(sync.engine.pendingConflicts.enumerated()), id: \.element.id) { index, conflict in
+                                SettingsRow(
+                                    title: conflict.displayDay,
+                                    subtitle: language == .chinese ? "双方内容均已合并保留" : "Merged and preserved both versions",
+                                    isLast: index == sync.engine.pendingConflicts.count - 1
+                                ) {
+                                    Button(L10n.string(.syncConflictDismiss, language: language)) {
+                                        sync.engine.dismissConflict(id: conflict.id)
+                                    }
+                                    .font(PhoneFont.paper(11, weight: .bold))
+                                    .foregroundColor(PhoneTheme.cinnabar)
+                                }
+                            }
+                        }
+                    }
+
+                    // 6. Per-Journal Exchange Binding
                     SettingsCard(title: L10n.string(.exchangeSection, language: language)) {
                         SettingsRow(
                             title: language == .chinese ? "绑定日记本" : "Bound Journal",
@@ -394,94 +500,6 @@ struct SettingsView: View {
                         }
                     }
 
-                    // 5. Dropbox Sync
-                    SettingsCard(title: L10n.string(.syncSection, language: language)) {
-                        if sync.syncEnabled && sync.backend.isAuthorized {
-                            SettingsRow(title: language == .chinese ? "Dropbox 账号" : "Dropbox Account") {
-                                Text(sync.accountEmail.isEmpty ? (language == .chinese ? "已授权" : "Authorized") : sync.accountEmail)
-                                    .font(PhoneFont.paper(11.5))
-                                    .foregroundColor(PhoneTheme.inkSecondary)
-                            }
-
-                            SettingsRow(title: language == .chinese ? "同步状态" : "Sync Status") {
-                                statusRow
-                            }
-
-                            SettingsRow(title: L10n.string(.syncNow, language: language)) {
-                                Button {
-                                    sync.engine.syncNow()
-                                } label: {
-                                    Text(L10n.string(.syncNow, language: language))
-                                        .font(PhoneFont.paper(12, weight: .bold))
-                                        .foregroundColor(PhoneTheme.cinnabar)
-                                }
-                            }
-
-                            SettingsRow(title: L10n.string(.syncDisconnect, language: language), isLast: true) {
-                                Button(role: .destructive) {
-                                    showDisconnectConfirm = true
-                                } label: {
-                                    Text(L10n.string(.syncDisconnect, language: language))
-                                        .font(PhoneFont.paper(12, weight: .medium))
-                                        .foregroundColor(PhoneTheme.cinnabar)
-                                }
-                            }
-                        } else {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(L10n.string(.syncExplanation, language: language))
-                                    .font(PhoneFont.paper(11))
-                                    .foregroundColor(PhoneTheme.inkSecondary)
-
-                                Button {
-                                    connect()
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "arrow.triangle.2.circlepath")
-                                            .font(PhoneFont.ui(11))
-                                        Text(isConnecting ? L10n.string(.syncConnecting, language: language) : L10n.string(.syncConnect, language: language))
-                                            .font(PhoneFont.paper(12, weight: .bold))
-                                    }
-                                    .foregroundColor(Color(red: 0.98, green: 0.95, blue: 0.90))
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(PhoneTheme.cinnabar)
-                                    .cornerRadius(4)
-                                    .shadow(color: PhoneTheme.cinnabar.opacity(0.3), radius: 3, y: 1)
-                                }
-                                .disabled(isConnecting)
-
-                                if sync.syncEnabled, !sync.backend.isAuthorized {
-                                    Text(L10n.string(.syncStatusNeedsAuth, language: language))
-                                        .font(PhoneFont.paper(10.5))
-                                        .foregroundColor(PhoneTheme.cinnabar)
-                                }
-                                if let error = sync.lastAuthError {
-                                    Text(error)
-                                        .font(PhoneFont.paper(10))
-                                        .foregroundColor(PhoneTheme.inkTertiary)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                        }
-                    }
-
-                    // 6. Conflicts
-                    if !sync.engine.pendingConflicts.isEmpty {
-                        SettingsCard(title: language == .chinese ? "对账冲突" : "Sync Conflicts") {
-                            ForEach(sync.engine.pendingConflicts) { conflict in
-                                SettingsRow(title: conflict.displayDay, subtitle: language == .chinese ? "双方内容均已合并保留" : "Merged and preserved both versions") {
-                                    Button(L10n.string(.syncConflictDismiss, language: language)) {
-                                        sync.engine.dismissConflict(id: conflict.id)
-                                    }
-                                    .font(PhoneFont.paper(11, weight: .bold))
-                                    .foregroundColor(PhoneTheme.cinnabar)
-                                }
-                            }
-                        }
-                    }
-
                     // 7. Storage & Backup
                     SettingsCard(title: L10n.string(.dataSection, language: language)) {
                         if store.isReadOnlyDueToLoadFailure {
@@ -532,7 +550,7 @@ struct SettingsView: View {
                         }
                     }
 
-                    // 8. About & Version
+                    // Version & Branding Footer
                     VStack(spacing: 4) {
                         Text(language == .chinese ? "Wick for iOS · 秉烛日记" : "Wick for iOS")
                             .font(PhoneFont.paper(12, weight: .bold))
@@ -542,6 +560,7 @@ struct SettingsView: View {
                             .font(PhoneFont.paper(10.5, weight: .medium))
                             .foregroundColor(PhoneTheme.inkTertiary)
                     }
+                    .frame(maxWidth: .infinity)
                     .padding(.top, 8)
                     .padding(.bottom, 24)
                 }

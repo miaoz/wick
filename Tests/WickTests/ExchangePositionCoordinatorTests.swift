@@ -863,7 +863,7 @@ final class ExchangePositionCoordinatorTests: XCTestCase {
         let coordinator = ExchangePositionCoordinator.shared
         let journalID = bindActiveJournal()
 
-        let now = Date()
+        let now = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: Date()) ?? Date()
         let dayKey = JournalDayKey.make(from: now)
 
         // One closed position and one open position on the same day.

@@ -649,10 +649,8 @@
         <tr><td rowspan="3">2 · 通用</td><td>每周从周一开始</td><td class="dim">✓</td><td class="dim">✓ 新增</td><td class="dim">✓</td></tr>
         <tr><td>登录启动</td><td class="dim">✓ SMAppService</td><td class="dim">—</td><td class="dim">✓ systemd --user</td></tr>
         <tr><td>菜单栏 / 托盘显示剩余百分比</td><td class="dim">✓</td><td class="dim">—</td><td class="dim">✓</td></tr>
-        <tr><td rowspan="2">3 · 日记与提醒</td><td>打开日记(入口按钮)</td><td class="dim">✓</td><td class="dim">—</td><td class="dim">— 在托盘菜单</td></tr>
-        <tr><td>每日提醒 + 时间</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓ freedesktop 通知</td></tr>
-        <tr><td rowspan="2">4 · 交易日历</td><td>主窗显示黄历(检查器 / Tab)</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓</td></tr>
-        <tr><td>贴桌物理黄历(彩蛋)</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">— 1.0 不做</td></tr>
+        <tr><td>3 · 日记与提醒</td><td>每日提醒 + 时间</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓ freedesktop 通知</td></tr>
+        <tr><td>4 · 交易日历</td><td>贴桌物理黄历(彩蛋)</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">— 1.0 不做</td></tr>
         <tr><td rowspan="2">5 · 同步</td><td>Dropbox 连接 / 状态 / 立即同步 / 断开</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓</td></tr>
         <tr><td>对账冲突列表</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓</td></tr>
         <tr><td rowspan="2">6 · 交易所</td><td>按日记本绑定 / 凭据 / 状态 / 刷新 / 解绑</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓ 凭据进 libsecret</td></tr>
@@ -660,18 +658,18 @@
         <tr><td rowspan="3">7 · 数据</td><td>导出 / 导入(zip · journal.json)</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓</td></tr>
         <tr><td>显示数据目录</td><td class="dim">✓</td><td class="dim">—</td><td class="dim">✓</td></tr>
         <tr><td>只读告警(加载失败 / catalog 保护)</td><td class="dim">✓</td><td class="dim">✓</td><td class="dim">✓</td></tr>
-        <tr><td rowspan="3">8 · 关于</td><td>版本号</td><td class="dim">✓</td><td class="dim">✓ 新增</td><td class="dim">✓</td></tr>
-        <tr><td>检查更新</td><td class="dim">✓ GitHub Releases</td><td class="dim">— 商店分发</td><td class="dim">✓ 只检查,安装走 pacman</td></tr>
+        <tr><td rowspan="3">8 · 关于 / 底部</td><td>检查更新</td><td class="dim">✓ GitHub Releases</td><td class="dim">— 商店分发</td><td class="dim">✓ 只检查,安装走 pacman</td></tr>
         <tr><td>退出</td><td class="dim">✓</td><td class="dim">—</td><td class="dim">— 在托盘菜单</td></tr>
+        <tr><td>版本号与品牌注记</td><td class="dim">✓ 面板最底部居中</td><td class="dim">✓ 面板最底部居中</td><td class="dim">✓ 面板最底部居中</td></tr>
       </table>
     </div>
     <div class="sheet-edge"></div>
 
     <div class="sheet" style="margin-top: 22px;">
       <div class="decisions">
-        <div class="dec"><div class="dv">macOS 迁移</div><div class="dt">四个顶层段(语言 / 外观 / 涨跌颜色 / 字体)合并为 <b>1 · 外观与语言</b>;「日记」段更名 <b>3 · 日记与提醒</b>;「交易日历」段补「主窗显示黄历」行(现状只在工具栏)。其余段原样重编号。</div></div>
-        <div class="dec"><div class="dv">iOS 迁移</div><div class="dt">「外观主题」卡更名 <b>1 · 外观与语言</b>(内容已一致);「日记提醒」更名 <b>3 · 日记与提醒</b>;新增 <b>2 · 通用</b>(每周从周一开始)与 <b>8 · 关于</b>(版本号)。</div></div>
-        <div class="dec"><div class="dv">Linux 实施</div><div class="dt">按上表建八组,不留私货;「—」的项界面不出现(贴桌彩蛋不留入口,而不是灰显)。</div></div>
+        <div class="dec"><div class="dv">macOS 迁移</div><div class="dt">四个顶层段(语言 / 外观 / 涨跌颜色 / 字体)合并为 <b>1 · 外观与语言</b>(保留各子项项名与层次);「日记」段更名 <b>3 · 日记与提醒</b>(精简移除冗余「打开日记」);「交易日历」段聚焦贴桌彩蛋;版本号与品牌注记(<code>Wick for macOS · 秉烛日记</code>)置于面板最底部居中。</div></div>
+        <div class="dec"><div class="dv">iOS 迁移</div><div class="dt">「外观主题」卡更名 <b>1 · 外观与语言</b>;「日记提醒」更名 <b>3 · 日记与提醒</b>;新增 <b>2 · 通用</b>(每周从周一开始);底部居中品牌与版本注记(<code>Wick for iOS · 秉烛日记</code>)。</div></div>
+        <div class="dec"><div class="dv">Linux 实施</div><div class="dt">按上表建组,不留私货;「—」的项界面不出现(贴桌彩蛋不留入口,而不是灰显);底部居中展示品牌与版本注记(<code>Wick for Linux · 秉烛日记</code>)。</div></div>
       </div>
     </div>
     <div class="sheet-edge"></div>

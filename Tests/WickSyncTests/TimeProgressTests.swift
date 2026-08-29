@@ -142,4 +142,33 @@ final class TimeProgressTests: XCTestCase {
             "4 · flat"
         )
     }
+
+    func testUnifiedSettingsSectionTitles() {
+        XCTAssertEqual(L10n.string(.appearanceAndLanguageSection, language: .chinese), "外观与语言")
+        XCTAssertEqual(L10n.string(.appearanceAndLanguageSection, language: .english), "Appearance & Language")
+
+        XCTAssertEqual(L10n.string(.generalSection, language: .chinese), "通用")
+        XCTAssertEqual(L10n.string(.generalSection, language: .english), "General")
+
+        XCTAssertEqual(L10n.string(.journalAndReminderSection, language: .chinese), "日记与提醒")
+        XCTAssertEqual(L10n.string(.journalAndReminderSection, language: .english), "Journal & Reminders")
+
+        XCTAssertEqual(L10n.string(.tradingCalendar, language: .chinese), "交易日历")
+        XCTAssertEqual(L10n.string(.tradingCalendar, language: .english), "Trading Calendar")
+
+        XCTAssertEqual(L10n.string(.syncSection, language: .chinese), "同步")
+        XCTAssertEqual(L10n.string(.syncSection, language: .english), "Sync")
+
+        XCTAssertEqual(L10n.string(.exchangeSection, language: .chinese), "交易所")
+        XCTAssertEqual(L10n.string(.exchangeSection, language: .english), "Exchange")
+
+        XCTAssertEqual(L10n.string(.dataSection, language: .chinese), "数据")
+        XCTAssertEqual(L10n.string(.dataSection, language: .english), "Data")
+
+        XCTAssertEqual(L10n.string(.aboutSection, language: .chinese), "关于")
+        XCTAssertEqual(L10n.string(.aboutSection, language: .english), "About")
+
+        XCTAssertEqual(L10n.string(.weekStartsOnMonday, language: .chinese), "每周从周一开始")
+        XCTAssertEqual(L10n.string(.weekStartsOnMonday, language: .english), "Week starts on Monday")
+    }
 }
