@@ -116,6 +116,7 @@ public:
     Q_INVOKABLE void revealDataDirectory();
     Q_INVOKABLE void stubExport();
     Q_INVOKABLE void stubImport();
+    Q_INVOKABLE void setDataStatus(const QString &text);
     Q_INVOKABLE QString t(const QString &zh, const QString &en) const;
 
 signals:
