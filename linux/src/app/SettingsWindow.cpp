@@ -2,13 +2,15 @@
 
 #include "AppSettings.h"
 #include "JournalLibrary.h"
+#include "JournalSyncCoordinator.h"
 
 #include <QEvent>
 #include <QQmlContext>
 #include <QQmlError>
 #include <QDebug>
 
-SettingsWindow::SettingsWindow(AppSettings *settings, JournalLibrary *library, QWindow *parent)
+SettingsWindow::SettingsWindow(AppSettings *settings, JournalLibrary *library,
+                               JournalSyncCoordinator *sync, QWindow *parent)
     : QQuickView(parent)
     , m_settings(settings)
 {
@@ -22,6 +24,7 @@ SettingsWindow::SettingsWindow(AppSettings *settings, JournalLibrary *library, Q
 
     rootContext()->setContextProperty(QStringLiteral("appSettings"), m_settings);
     rootContext()->setContextProperty(QStringLiteral("journalLibrary"), library);
+    rootContext()->setContextProperty(QStringLiteral("syncCoordinator"), sync);
     setSource(QUrl(QStringLiteral("qrc:/qml/settings/SettingsWindow.qml")));
 
     if (status() == QQuickView::Error) {
