@@ -1,12 +1,14 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 Rectangle {
     id: page
     required property var theme
     required property var library
     color: theme.paper
+    property string pendingImageItemId: ""
 
     Flickable {
         id: flick
@@ -248,6 +250,77 @@ Rectangle {
                                         }
                                     }
 
+                                    Flow {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        Repeater {
+                                            model: library.itemImageFilenames(itemBlock.modelData.itemId)
+                                            delegate: Item {
+                                                id: thumb
+                                                required property string modelData
+                                                width: 72
+                                                height: 72
+                                                Image {
+                                                    anchors.fill: parent
+                                                    source: library.imageFileUrl(thumb.modelData)
+                                                    fillMode: Image.PreserveAspectCrop
+                                                    asynchronous: true
+                                                }
+                                                Rectangle {
+                                                    anchors.fill: parent
+                                                    color: "transparent"
+                                                    border.color: theme.rule
+                                                    border.width: 1
+                                                }
+                                                Rectangle {
+                                                    visible: !library.isReadOnly
+                                                    width: 16
+                                                    height: 16
+                                                    radius: 8
+                                                    anchors.top: parent.top
+                                                    anchors.right: parent.right
+                                                    anchors.margins: 2
+                                                    color: theme.paperHi
+                                                    border.color: theme.ink3
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: "×"
+                                                        color: theme.ink2
+                                                        font.pixelSize: 10
+                                                    }
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: library.removeImage(itemBlock.modelData.itemId, thumb.modelData)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        Rectangle {
+                                            visible: !library.isReadOnly
+                                            width: 72
+                                            height: 72
+                                            radius: 4
+                                            color: "transparent"
+                                            border.color: theme.rule
+                                            border.width: 1
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "+"
+                                                color: theme.ink3
+                                                font.pixelSize: 20
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    page.pendingImageItemId = itemBlock.modelData.itemId
+                                                    attachDialog.open()
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     RowLayout {
                                         Layout.fillWidth: true
                                         visible: library.pageReviewEligible && modelData.review.length === 0
@@ -380,6 +453,17 @@ Rectangle {
                     Item { Layout.preferredHeight: 14 }
                 }
             }
+        }
+    }
+
+    FileDialog {
+        id: attachDialog
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["Images (*.png *.jpg *.jpeg *.gif *.webp *.bmp *.tif *.tiff *.heic)"]
+        onAccepted: {
+            if (page.pendingImageItemId.length > 0)
+                library.addImageFromUrl(page.pendingImageItemId, selectedFile)
+            page.pendingImageItemId = ""
         }
     }
 }
