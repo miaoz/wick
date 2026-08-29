@@ -530,9 +530,38 @@ Rectangle {
                 wrapMode: Text.Wrap
             }
             ActionRow {
-                text: t("连接 Dropbox", "Connect Dropbox")
-                coming: true
-                enabled: false
+                text: (syncCoordinator && syncCoordinator.connected)
+                      ? t("断开 Dropbox", "Disconnect Dropbox")
+                      : t("连接 Dropbox", "Connect Dropbox")
+                coming: !(syncCoordinator && syncCoordinator.fakeSyncAvailable)
+                enabled: !!(syncCoordinator && syncCoordinator.fakeSyncAvailable)
+                onClicked: {
+                    if (!syncCoordinator)
+                        return
+                    if (syncCoordinator.connected)
+                        syncCoordinator.signOut()
+                    else
+                        syncCoordinator.connectDropbox()
+                }
+            }
+            Text {
+                visible: !!(syncCoordinator && syncCoordinator.fakeSyncAvailable)
+                Layout.fillWidth: true
+                Layout.topMargin: 6
+                text: {
+                    if (!syncCoordinator)
+                        return ""
+                    if (syncCoordinator.connected)
+                        return t("已连接（调试假后端）", "Connected (debug fake backend)")
+                            + (syncCoordinator.accountEmail ? " · " + syncCoordinator.accountEmail : "")
+                            + (syncCoordinator.statusText ? " · " + syncCoordinator.statusText : "")
+                    return t("WICK_FAKE_SYNC=1：用内存假后端跑同步循环，不访问真实 Dropbox。",
+                             "WICK_FAKE_SYNC=1: run the engine against an in-memory fake, no real Dropbox.")
+                }
+                color: theme.ink3
+                font.family: theme.fontUi
+                font.pixelSize: 11
+                wrapMode: Text.Wrap
             }
         }
     }
