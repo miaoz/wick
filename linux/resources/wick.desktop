@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=秉烛
+Name[en]=Wick
+Comment=秉烛而记,落子无悔
+Exec=wick
+Icon=wick
+Terminal=false
+Categories=Office;Utility;
+StartupNotify=false
+StartupWMClass=wick
+X-GNOME-UsesNotifications=false
