@@ -69,6 +69,12 @@ add_executable(test_journal_core
 target_link_libraries(test_journal_core PRIVATE wick_core)
 add_test(NAME test_journal_core COMMAND test_journal_core)
 
+add_executable(test_journal_archive
+    tests/test_journal_archive.cpp
+)
+target_link_libraries(test_journal_archive PRIVATE wick_core)
+add_test(NAME test_journal_archive COMMAND test_journal_archive)
+
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
@@ -85,6 +91,7 @@ qt_add_executable(wick
     src/ProgressWindow.h
     src/app/JournalLibrary.cpp
     src/app/JournalLibrary.h
+    src/app/JournalLibraryZip.cpp
     src/app/JournalWindow.cpp
     src/app/JournalWindow.h
     src/app/LunarCalendar.cpp
