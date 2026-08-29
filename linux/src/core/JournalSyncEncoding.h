@@ -11,7 +11,7 @@ namespace wick {
 // Canonical JSON matching Swift JournalSyncEncoding:
 // JSONEncoder outputFormatting = prettyPrinted + sortedKeys, iso8601 dates.
 // Pretty print: 2-space indent, space BEFORE and after colon (`"key" : value`).
-// Slashes escaped (JSONEncoder does not set withoutEscapingSlashes).
+// Slashes unescaped to match Mac NSJSONSerialization / Darwin JSONEncoder (no \/).
 // Nil optionals omitted. Legacy `dayKey` is never emitted.
 namespace JournalSyncEncoding {
 

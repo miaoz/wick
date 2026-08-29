@@ -1,6 +1,6 @@
 # Wick for Linux 开发方案（Omarchy）
 
-状态：可执行草案 · 2026-08-30（修订：视觉合同改为仓库内 `linux.html` v0.2；原则为三端一致）
+状态：可执行草案 · 2026-08-30（修订：Omarchy UI 改为 Quickshell `bar-widget` + KeyboardPanel；JSON 斜杠不转义 `\/`；视觉合同 `linux.html` v0.2；原则为三端一致）
 仓库：https://github.com/miaoz/wick
 目标机：Omarchy 4（Arch + Hyprland 0.56 + Quickshell）
 UI 栈：Qt 6 + QML（不做 Tauri / GPUI）
@@ -24,7 +24,7 @@ Linux 版是**新壳，旧格式**。界面用 Qt/QML 重写；日记 JSON、图
 
 ### Linux 1.0 必须有（对标现有 Wick.app）
 
-- **托盘蜡烛**：StatusNotifierItem，出现在 `omarchy.tray`；进度面板对齐现行 Mac `ProgressSlipContent`（hero 大百分比 + 今日大烛痕条 + 周/月/年细条 + 页脚格言）；可选托盘百分比
+- **Omarchy 蜡烛（1.0）**：Quickshell `bar-widget` `linux/omarchy/wick.progress`；点击打开系统 `KeyboardPanel` 下拉（与时钟 / 网络同一套），结构对齐 Mac `ProgressSlipContent`（hero 大百分比 + 今日大烛痕条 + 周/月/年细条 + 页脚格言）。用户已否决浮动 Qt 进度窗。Qt SNI 托盘只作为非 Omarchy 发行版的后备，不是 Omarchy UI。
 - **日记**：四栏可磁贴（导航 / 日期列表 / 账册页 / 检查器）；多日记本、一天多条目、标签 + 正文 + 图片、条目检索、复盘（✓/✗ 方章）、导入/导出 zip 或 `journal.json`
 - **检查器**：今日事件（宜忌 + 宏观/财报）+ 盈亏月历。黄历不撕页，但入栏。栏位可关；半屏先收检查器再收导航
 - **数据安全**：退出/关窗强制落盘、`journal.json.bak` 与滚动备份、加载失败只读
@@ -39,7 +39,7 @@ Linux 版是**新壳，旧格式**。界面用 Qt/QML 重写；日记 JSON、图
 ### 1.0 明确不做
 
 - **贴桌物理撕页黄历**（`WickCalendarKit`：撕页物理、桌面透明贴窗、程序合成撕纸音）。宏观/财报与宜忌走日记检查器，不另开贴桌窗。这是唯一对现有功能的裁剪。
-- Quickshell `bar-widget`（顶栏内嵌蜡烛）。Mac 对应物是菜单栏托盘，Linux 用 `omarchy.tray` 即算对齐；内嵌顶栏是 1.0 之后的增强。
+- **浮动 Qt 进度窗**（layer-shell / 托盘弹出纸签）。Omarchy 上用户已否决；蜡烛走栏内 `bar-widget` + `KeyboardPanel`。
 - macOS 壳层细节：`MenuBarExtra` 几何 hack、`SMAppService`、钥匙串弹窗、`LSUIElement`
 - GPUI / Tauri / Electron / GTK
 
@@ -49,9 +49,9 @@ Linux 是第三平台，不是把 Mac 窗口贴到 Hyprland 上。视觉以已�
 
 - **纸面身份**只出现在内容里：四相位弧光、墨/烛/朱砂/黛青、方章、交割单。token 源 `tokens-v2.css`。OS 铬用页面里的 `--os-*`（东京夜系示意），不消耗秉烛颜料。
 - **窗口铬跟 Hyprland**：2px 系统描边（Omarchy accent）+ 圆角 + 磁贴间隙；无红绿灯、无假 titlebar、无无边框宣纸贴桌。
-- **进度面板浮动**（layer-shell / 托盘弹出），结构对齐 Mac `ProgressSlipContent`，不是四张独立 metric-card，也不是一块磁贴。
+- **进度面板**：Omarchy 上走 Quickshell `KeyboardPanel` 下拉（不是浮动 Qt 窗），结构对齐 Mac `ProgressSlipContent`，不是四张独立 metric-card。非 Omarchy 后备才用 SNI 托盘弹出。
 - **日记四栏**：导航 / 日期列表 / 账册页 / 检查器。磁贴半屏不够宽时自动先收检查器再收导航，落「仅列表 / 专注」。
-- **纸不透明**，不用 Hyprland blur。托盘蜡烛用模板图标；唤起时一点烛火色。
+- **纸不透明**，不用 Hyprland blur。Omarchy 栏内蜡烛走 `wick.progress`；唤起时一点烛火色。非 Omarchy 后备托盘用模板图标。
 - **字态**：圆体 → Inter + Noto Sans SC；宋体 → Noto Serif SC；单据等宽 → JetBrains Mono。Qt 走系统字体，不走网页 CDN。
 - **四相位原样保留**。Omarchy 默认「暗 · 子夜」。
 - **盈亏约定**：默认绿涨红跌。色值两组固定：`pnlUp` = 朱砂、`pnlDown` = 黛青；约定只交换语义绑定。复盘章印泥、列表、单据、月历一律走约定。黄历「宜 / 方印」永远朱砂。设置可切红涨绿跌。
@@ -61,14 +61,14 @@ Linux 是第三平台，不是把 Mac 窗口贴到 Hyprland 上。视觉以已�
 
 | 阶段 | 进 1.0？ | 内容 |
 | --- | --- | --- |
-| 0 | 是 | 托盘 + 进度窗口 |
+| 0 | 是 | Omarchy Quickshell `bar-widget` + KeyboardPanel（Qt SNI 托盘仅非 Omarchy 后备） |
 | 1 | 是 | 本地 JSON 核心 + 备份/只读 |
 | 2 | 是 | 日记四栏主窗 + 检查器 + IME + 图片 + 检索 + zip |
 | 3 | 是 | 设置、主题、字体、提醒、开机启动、打包骨架 |
 | 4 | 是 | Dropbox 同步 |
 | 5 | 是 | 交易所仓位 + 快照同步开关 |
 | （1.0 发布） | | 日常可当第二台 Wick 用 |
-| 6 | 否，1.0 后 | Quickshell 顶栏插件 |
+| 6 | 否，1.0 后 | 其余 Quickshell 增强（插件已在 1.0 / 阶段 0，不再是「上插件」） |
 
 没有「把仓位留到 1.3」这一说。阶段 5 没做完，不打 Linux 1.0。
 
@@ -80,11 +80,11 @@ Linux 是第三平台，不是把 Mac 窗口贴到 Hyprland 上。视觉以已�
    - Mac：`~/Library/Application Support/Wick/Journals/`
    - Linux：`~/.local/share/wick/Journals/`
    - 其下：`catalog.json` + `catalog.json.bak` + `<uuid>/{journal.json,journal.json.bak,backups/,images/}`
-2. **JSON 版本**：`JournalSnapshot.currentVersion = 2`；`JournalCatalogSnapshot.currentVersion = 1`。读到更高版本：只读，不准改写。
+2. **JSON 版本**：`JournalSnapshot.currentVersion = 2`；`JournalCatalogSnapshot.currentVersion = 1`。读到更高版本：只读，不准改写。编码器斜杠策略与 Mac 一致：`/` 原样写出，禁止 `\/`（NSJSONSerialization / Darwin JSONEncoder 默认不转义斜杠；Linux `SwiftWriter::writeString` 必须同样处理，否则带 URL 的 body 哈希会与 Mac 分叉）。
 3. **图片文件名**：单层相对名，拒绝 `/` `\\` `.` `..` NUL。解码失败整份拒收（`JournalImageFilename`）。
 4. **加载失败**：只读，禁止写盘与导出。
 5. **密钥**：libsecret，schema 前缀 `com.miaoz.wick`。开发构建可写 `~/.local/share/wick/dev-secrets.json`（0600），对标 Mac 的 `dev-secrets.json`。
-6. **窗口**：Wayland 优先。托盘走 StatusNotifierItem，不用 XEmbed。
+6. **窗口**：Wayland 优先。Omarchy 蜡烛走 Quickshell `bar-widget`，不用浮动 Qt 窗。非 Omarchy 后备托盘走 StatusNotifierItem，不用 XEmbed。
 7. **格式变更**：先改 Swift `WickSync` / `WickTrading` + 测试，再改 Linux。
 8. **仓位语义与 Mac 一致**：手续费负=已付；`netPnl = realized + commission + funding`；标签宽松匹配；只读不写已有条目；自动补条目规则见 README「交易所仓位同步」。
 9. **同步三不变量**（阶段 4 起）：rev 回声抑制；拉取即固定点；绝不和自己冲突。假后端测试不过，不准连真 Dropbox。
@@ -101,7 +101,8 @@ Linux 是第三平台，不是把 Mac 窗口贴到 Hyprland 上。视觉以已�
 | UI | Qt 6.8+ Quick / QML，Controls 2 | 近 SwiftUI；Omarchy 已带 Qt |
 | 应用胶 | C++20 | 第一期不要 cxx-qt |
 | 构建 | CMake 3.22 + Ninja | Arch 默认 |
-| 托盘 | `Qt.labs.platform` `SystemTrayIcon` | 进 `omarchy.tray` |
+| Omarchy 蜡烛 | Quickshell `linux/omarchy/wick.progress` + `KeyboardPanel` | 1.0 栏内 UI；用户否决浮动 Qt 窗 |
+| 托盘（后备） | `Qt.labs.platform` `SystemTrayIcon` | 非 Omarchy 发行版 SNI，不是 Omarchy UI |
 | 通知 | freedesktop Notifications | Quickshell 收 |
 | 密钥 | libsecret | 对标钥匙串 |
 | HTTP / HMAC | Qt Network + OpenSSL（交易所签名） | 对标 `WickTrading` |
@@ -144,6 +145,8 @@ wick/
 │   │   ├── journal/
 │   │   ├── settings/            # 含交易所、同步开关
 │   │   └── positions/           # 条目上的仓位卡片
+│   ├── omarchy/
+│   │   └── wick.progress       # 阶段 0/1.0：Omarchy bar-widget
 │   ├── tests/
 │   ├── resources/wick.desktop
 │   └── packaging/PKGBUILD
@@ -154,14 +157,16 @@ wick/
 
 ## 5. 阶段（施工顺序，全部通向 1.0）
 
-### 阶段 0 — 托盘能点（2–3 天）
+### 阶段 0 — Omarchy 栏内蜡烛（2–3 天）
 
-1. `linux/` 最小工程：托盘蜡烛（模板图标）+ 浮动进度纸签。
-2. 左键开关进度；右键原生 SNI 菜单：日记 / 设置 / 退出（不画自绘菜单）。
-3. 纸签结构对齐 `ProgressSlipContent`：hero 大百分比、今日大烛痕条（00:00→24:00）、周/月/年细条、页脚格言。
-4. `wick.desktop`。
+Omarchy UI 是 Quickshell `linux/omarchy/wick.progress` `bar-widget` + 系统 `KeyboardPanel`。用户已否决浮动 Qt 进度窗。Qt SNI 托盘只作为非 Omarchy 后备，不要拿它当 Omarchy UI。
 
-完成标准：Omarchy 上编译运行；托盘可见可点；杀进程无残留。
+1. `linux/omarchy/wick.progress`：顶栏蜡烛；点击打开 `KeyboardPanel` 下拉。
+2. 面板结构对齐 `ProgressSlipContent`：hero 大百分比、今日大烛痕条（00:00→24:00）、周/月/年细条、页脚格言。
+3. 安装：拷到 `~/.config/omarchy/plugins/`，在 `shell.json` 的 `bar.layout.right` 加上 `{"id": "wick.progress"}`，然后 `omarchy-restart-shell`。
+4. `wick.desktop`（日记主窗仍是 Qt）。非 Omarchy：才启用 SNI 托盘。
+
+完成标准：Omarchy 栏内蜡烛可见可点，下拉是 KeyboardPanel；不弹出浮动 Qt 窗。
 
 ### 阶段 1 — 本地库核心（1–2 周）
 
@@ -211,22 +216,25 @@ wick/
 
 **阶段 5 完成 = Linux 1.0。** 可以当 Omarchy 上的第二台 Wick 用，和 Mac 共用 Dropbox。
 
-### 阶段 6 — Quickshell 插件（1.0 之后）
+### 阶段 6 — 其余 Quickshell 增强（1.0 之后）
 
-`linux/omarchy-plugin/`：顶栏内嵌蜡烛。不算现有功能缺口。
+顶栏蜡烛插件已在阶段 0 / Linux 1.0（`linux/omarchy/wick.progress` + KeyboardPanel）。本阶段只做插件之上的增强，不再是「上插件」。
 
 ---
 
 ## 6. 阶段 0 当天命令
 
-在 **Omarchy 本机**验收托盘（云上无图形会话不算）：
+在 **Omarchy 本机**验收栏内蜡烛（云上无图形会话不算）。Qt 二进制仍要编（日记主窗），但 Omarchy UI 走插件：
 
 ```bash
 sudo pacman -S --needed qt6-base qt6-declarative qt6-wayland cmake ninja gcc openssl libsecret
 
-git clone https://github.com/miaoz/wick.git
-cd wick
-# 按 linux/CMakeLists.txt 落地后：
+# 栏内蜡烛（1.0）：
+cp linux/omarchy/wick.progress ~/.config/omarchy/plugins/
+# 在 ~/.config/omarchy/shell.json 的 bar.layout.right 加上 {"id": "wick.progress"}
+omarchy-restart-shell
+
+# 日记主窗（Qt，非浮动进度窗）：
 cmake -G Ninja -B linux/build -S linux
 ninja -C linux/build
 ./linux/build/wick
@@ -252,7 +260,7 @@ ninja -C linux/build
 | 日期 JSON 与 Swift `Date` 不一致 | 先对 golden |
 | 同步或仓位先做、本地格式未绿 | 禁止；会写坏 Mac 日记 |
 | 交易所限流 / OKX 张单位 | 照 `AGENTS.md` 交易口径，测试锁死 |
-| Hyprland 磁贴日记窗 | 进度面板浮动；主窗可磁贴 |
+| Hyprland 磁贴日记窗 | Omarchy 进度走 KeyboardPanel；主窗可磁贴 |
 | 托盘要用 `QApplication` | 不准改成 `QGuiApplication` |
 | 秉烛主题耗时 | 阶段 3 必须有四相位，但可先做能用的过渡，再抠动画 |
 
@@ -260,7 +268,7 @@ ninja -C linux/build
 
 ## 9. 现在立刻做的下一件事
 
-本文件进仓之后，下一提交是阶段 0（最小托盘），不是同步，也不是仓位。视觉以 `designs/wick-design-language/linux.html` 为准。
+本文件进仓之后，下一提交是阶段 0（Omarchy `wick.progress` bar-widget + KeyboardPanel），不是同步，也不是仓位。不要做浮动 Qt 进度窗。视觉以 `designs/wick-design-language/linux.html` 为准。
 
 1. 本文件（本次 PR）
-2. `linux/` 最小 CMake + 托盘模板图标 + 浮动进度纸签（在 Omarchy 真机验收）
+2. `linux/omarchy/wick.progress` 栏内蜡烛 + KeyboardPanel（在 Omarchy 真机验收）；Qt SNI 仅非 Omarchy 后备

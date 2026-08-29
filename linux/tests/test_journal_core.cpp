@@ -280,6 +280,23 @@ static void testCanonicalEncodingIsDeterministicAcrossRoundTrip() {
     CHECK(first.find("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee") == std::string::npos);
 }
 
+
+static void testEncodeDoesNotEscapeSlashes() {
+    JournalEntry e;
+    e.id = mustUuid("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    e.date = timeFromUnix(0);
+    e.title = "";
+    e.createdAt = timeFromUnix(0);
+    e.updatedAt = timeFromUnix(0);
+    JournalItem item;
+    item.id = mustUuid("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    item.body = "https://example.com/a";
+    e.items = {item};
+    const auto json = JournalSyncEncoding::encode(e);
+    CHECK(json.find("https://example.com/a") != std::string::npos);
+    CHECK(json.find("https:\\/\\/example.com\\/a") == std::string::npos);
+}
+
 static void testContentHashMatchesSHA256KnownVector() {
     CHECK(JournalSyncEncoding::contentHash(std::string_view{})
           == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
@@ -540,6 +557,7 @@ int main() {
     testCatalogLoaderMatrix();
     testEmptyCatalogJournalsIsCorrupt();
     testCanonicalEncodingIsDeterministicAcrossRoundTrip();
+    testEncodeDoesNotEscapeSlashes();
     testContentHashMatchesSHA256KnownVector();
     testPrettyPrintWhitespace();
     testTruncatedPrimaryValidBakRestores();
