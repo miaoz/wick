@@ -1,6 +1,9 @@
 #include "JournalSyncCoordinator.h"
 
 #include "AppSettings.h"
+#include "DropboxAuthSession.h"
+#include "DropboxSyncBackend.h"
+#include "FakeSyncBackend.h"
 #include "JournalLibrary.h"
 #include "JournalPaths.h"
 
@@ -8,6 +11,7 @@
 #include <QDeadlineTimer>
 #include <QDebug>
 #include <QSettings>
+#include <QUrl>
 
 #include <cstdlib>
 
@@ -45,14 +49,27 @@ JournalSyncCoordinator::JournalSyncCoordinator(JournalLibrary *library,
         });
     }
 
+    ensureEngine();
     if (m_fakeAvailable && m_settings && m_settings->syncEnabled()) {
-        ensureEngine();
-        if (m_backend)
-            m_backend->authorized = true;
-        m_periodic.start();
+        if (auto *fake = dynamic_cast<wick::FakeSyncBackend *>(m_backend.get()))
+            fake->authorized = true;
+        startPeriodicIfEnabled();
         refreshStatus();
         QTimer::singleShot(0, this, &JournalSyncCoordinator::syncNow);
+    } else if (!m_fakeAvailable && connected()) {
+        startPeriodicIfEnabled();
+        refreshStatus();
+        if (m_settings && m_settings->syncEnabled())
+            QTimer::singleShot(0, this, &JournalSyncCoordinator::syncNow);
+    } else {
+        refreshStatus();
     }
+}
+
+void JournalSyncCoordinator::startPeriodicIfEnabled()
+{
+    if (m_settings && m_settings->syncEnabled() && connected())
+        m_periodic.start();
 }
 
 bool JournalSyncCoordinator::connected() const
@@ -74,7 +91,16 @@ void JournalSyncCoordinator::ensureEngine()
         return;
     if (!m_library)
         return;
-    m_backend = std::make_unique<wick::FakeSyncBackend>();
+
+    if (m_fakeAvailable) {
+        m_backend = std::make_unique<wick::FakeSyncBackend>();
+    } else {
+        auto dropbox = std::make_unique<wick::DropboxSyncBackend>();
+        dropbox->setAuthSession([](const QUrl &url, const QString &scheme) {
+            return DropboxAuthSession::run(url, scheme);
+        });
+        m_backend = std::move(dropbox);
+    }
     wick::JournalSyncStateStore store(stateDirectory());
     m_engine = std::make_unique<wick::JournalSyncEngine>(*m_backend, *m_library, deviceID(), store);
 }
@@ -93,31 +119,45 @@ std::string JournalSyncCoordinator::deviceID() const
 std::filesystem::path JournalSyncCoordinator::stateDirectory() const
 {
     auto root = wick::JournalPaths::defaultPaths().librariesRoot;
-    // ~/.local/share/wick/Journals -> sibling sync/
     return root.parent_path() / "sync";
 }
 
 void JournalSyncCoordinator::connectDropbox()
 {
-    if (!m_fakeAvailable) {
-        qWarning("秉烛: real Dropbox OAuth is slice B; set WICK_FAKE_SYNC=1 to exercise the engine.");
+    if (m_authorizing)
         return;
-    }
     ensureEngine();
     if (!m_backend || !m_engine)
         return;
+    m_authorizing = true;
+    m_statusText = m_settings && m_settings->isChinese()
+        ? QStringLiteral("正在登录…")
+        : QStringLiteral("Signing in…");
+    emit statusChanged();
     try {
         m_backend->authorize();
-        m_backend->authorized = true;
         if (m_settings)
             m_settings->setSyncEnabled(true);
         m_periodic.start();
         emit connectedChanged();
         m_engine->syncOnce();
         refreshStatus();
+    } catch (const wick::SyncBackendError &e) {
+        if (e.kind == wick::SyncBackendError::Kind::authorizationCancelled) {
+            m_statusText = m_settings && m_settings->isChinese()
+                ? QStringLiteral("已取消登录")
+                : QStringLiteral("Sign-in cancelled");
+        } else {
+            m_statusText = QString::fromStdString(e.what());
+        }
+        emit statusChanged();
+        qWarning("秉烛: Dropbox connect failed: %s", e.what());
     } catch (const std::exception &e) {
-        qWarning("秉烛: fake Dropbox connect failed: %s", e.what());
+        m_statusText = QString::fromStdString(e.what());
+        emit statusChanged();
+        qWarning("秉烛: Dropbox connect failed: %s", e.what());
     }
+    m_authorizing = false;
 }
 
 void JournalSyncCoordinator::signOut()
@@ -161,8 +201,9 @@ void JournalSyncCoordinator::syncOnceBeforeQuit(std::chrono::milliseconds timeou
 
 void JournalSyncCoordinator::refreshStatus()
 {
-    if (!m_engine) {
-        m_statusText.clear();
+    if (!m_engine || !connected()) {
+        if (!m_authorizing)
+            m_statusText.clear();
         emit statusChanged();
         return;
     }

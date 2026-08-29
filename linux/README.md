@@ -1,5 +1,15 @@
 # 秉烛 · Linux
 
+## Stage 4B：Dropbox OAuth PKCE + HTTP backend
+
+Settings 「连接 Dropbox」 runs the real Dropbox app (`hm5yscsy9a11g0q`, redirect `db-hm5yscsy9a11g0q://2/token`). `WICK_FAKE_SYNC=1` still uses the in-memory fake backend.
+
+Callback: `wick.desktop` registers `x-scheme-handler/db-hm5yscsy9a11g0q`; the running instance listens on `$XDG_RUNTIME_DIR/wick-dropbox-auth.sock`. A second process `wick --dropbox-callback <url>` forwards the URL and exits. First authorize also runs `xdg-mime default wick.desktop x-scheme-handler/db-hm5yscsy9a11g0q` (best-effort) and writes a user desktop file with the current binary path.
+
+Refresh token: libsecret schema `com.miaoz.wick` (service `com.miaoz.wick.dropbox` / account `refresh-token`). Never QSettings. `WICK_DEV_SECRETS=1` → `~/.local/share/wick/dev-secrets.json` mode 0600.
+
+# 秉烛 · Linux
+
 ## Stage 3：设置 + 托盘壳
 
 托盘「设置」打开可磁贴的设置窗（左栏七组：外观与语言 / 通用 / 日记与提醒 / 同步 / 交易所 / 数据 / 关于）。Linux 1.0 **不出现「交易日历」**。关窗只隐藏，不退出。QSettings：`~/.config/wick/秉烛.conf`，键名对齐 Mac `wick.*`。登录启动写用户 systemd 单元 `~/.config/systemd/user/wick.service`。每日提醒走托盘 `showMessage`。

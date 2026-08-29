@@ -38,9 +38,9 @@ void DropboxAuthSession::ensureMimeDefault() {
     const QString contents = QStringLiteral(
                                  "[Desktop Entry]\n"
                                  "Type=Application\n"
-                                 "Name=秉炽\n"
+                                 "Name=秉烛\n"
                                  "Name[en]=Wick\n"
-                                 "Comment=秉炽而记,落子无悔\n"
+                                 "Comment=秉烛而记,落子无悔\n"
                                  "Exec=%1 --dropbox-callback %u\n"
                                  "Icon=wick\n"
                                  "Terminal=false\n"
@@ -70,7 +70,7 @@ int DropboxAuthSession::forwardCallback(const QString& url) {
     QLocalSocket sock;
     sock.connectToServer(socketPath());
     if (!sock.waitForConnected(2000)) {
-        qWarning("秉炽: no running instance to receive Dropbox callback (%s)",
+        qWarning("秉烛: no running instance to receive Dropbox callback (%s)",
                  qPrintable(sock.errorString()));
         return 1;
     }

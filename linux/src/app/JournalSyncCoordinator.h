@@ -1,6 +1,5 @@
 #pragma once
 
-#include "FakeSyncBackend.h"
 #include "JournalSyncEngine.h"
 
 #include <QObject>
@@ -15,8 +14,8 @@
 class AppSettings;
 class JournalLibrary;
 
-/// Owns the journal sync engine. Slice A talks to FakeSyncBackend when
-/// WICK_FAKE_SYNC=1; real Dropbox OAuth is slice B.
+/// Owns the journal sync engine. WICK_FAKE_SYNC=1 uses FakeSyncBackend;
+/// otherwise DropboxSyncBackend (OAuth PKCE + HTTP).
 class JournalSyncCoordinator : public QObject
 {
     Q_OBJECT
@@ -47,15 +46,17 @@ signals:
 private:
     void ensureEngine();
     void refreshStatus();
+    void startPeriodicIfEnabled();
     std::string deviceID() const;
     std::filesystem::path stateDirectory() const;
 
     JournalLibrary *m_library = nullptr;
     AppSettings *m_settings = nullptr;
     bool m_fakeAvailable = false;
+    bool m_authorizing = false;
     QString m_statusText;
     QTimer m_debounce;
     QTimer m_periodic;
-    std::unique_ptr<wick::FakeSyncBackend> m_backend;
+    std::unique_ptr<wick::JournalSyncBackend> m_backend;
     std::unique_ptr<wick::JournalSyncEngine> m_engine;
 };

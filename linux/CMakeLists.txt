@@ -20,6 +20,11 @@ set(JSON_BuildTests OFF CACHE INTERNAL "")
 set(JSON_Install OFF CACHE INTERNAL "")
 FetchContent_MakeAvailable(nlohmann_json)
 
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+  pkg_check_modules(LIBSECRET IMPORTED_TARGET libsecret-1)
+endif()
+
 add_library(wick_core STATIC
     src/core/JournalModels.cpp
     src/core/JournalSyncEncoding.cpp
@@ -30,6 +35,8 @@ add_library(wick_core STATIC
     src/sync/JournalDayMerge.cpp
     src/sync/JournalSyncState.cpp
     src/sync/JournalSyncEngine.cpp
+    src/sync/PKCE.cpp
+    src/sync/SecretTokenStore.cpp
 )
 
 target_include_directories(wick_core
@@ -39,6 +46,14 @@ target_include_directories(wick_core
 )
 
 target_link_libraries(wick_core PUBLIC OpenSSL::Crypto nlohmann_json::nlohmann_json)
+
+if(TARGET PkgConfig::LIBSECRET)
+  target_link_libraries(wick_core PUBLIC PkgConfig::LIBSECRET)
+  target_compile_definitions(wick_core PUBLIC WICK_HAVE_LIBSECRET=1)
+  message(STATUS "libsecret-1: found, Dropbox refresh tokens use the Secret Service")
+else()
+  message(WARNING "libsecret-1 not found; Dropbox refresh tokens cannot be stored (stub SecretTokenStore). Set WICK_DEV_SECRETS=1 for a 0600 file under ~/.local/share/wick/dev-secrets.json.")
+endif()
 
 target_compile_features(wick_core PUBLIC cxx_std_20)
 
@@ -55,6 +70,12 @@ add_executable(test_journal_sync
 )
 target_link_libraries(test_journal_sync PRIVATE wick_core)
 add_test(NAME test_journal_sync COMMAND test_journal_sync)
+
+add_executable(test_pkce
+    tests/test_pkce.cpp
+)
+target_link_libraries(test_pkce PRIVATE wick_core)
+add_test(NAME test_pkce COMMAND test_pkce)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -84,6 +105,10 @@ qt_add_executable(wick
     src/app/ReminderScheduler.h
     src/app/JournalSyncCoordinator.cpp
     src/app/JournalSyncCoordinator.h
+    src/app/DropboxAuthSession.cpp
+    src/app/DropboxAuthSession.h
+    src/sync/DropboxSyncBackend.cpp
+    src/sync/DropboxSyncBackend.h
     resources/resources.qrc
 )
 
@@ -109,3 +134,19 @@ target_compile_definitions(wick PRIVATE
 set_target_properties(wick PROPERTIES
     OUTPUT_NAME wick
 )
+
+add_executable(test_dropbox_backend
+    tests/test_dropbox_backend.cpp
+    src/sync/DropboxSyncBackend.cpp
+    src/sync/DropboxSyncBackend.h
+)
+target_include_directories(test_dropbox_backend PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/sync
+)
+target_link_libraries(test_dropbox_backend PRIVATE
+    wick_core
+    Qt6::Network
+    Qt6::Core
+)
+add_test(NAME test_dropbox_backend COMMAND test_dropbox_backend)

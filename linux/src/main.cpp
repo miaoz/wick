@@ -1,4 +1,5 @@
 #include "AppSettings.h"
+#include "DropboxAuthSession.h"
 #include "JournalLibrary.h"
 #include "JournalSyncCoordinator.h"
 #include "ReminderScheduler.h"
@@ -25,6 +26,9 @@ int main(int argc, char *argv[])
     app.setWindowIcon(QIcon(QStringLiteral(":/candle.svg")));
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));
+
+    if (const int cb = DropboxAuthSession::maybeForwardAndExit(app.arguments()); cb >= 0)
+        return cb;
 
     AppSettings *settings = AppSettings::instance();
 
