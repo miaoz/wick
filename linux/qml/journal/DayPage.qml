@@ -50,7 +50,7 @@ Rectangle {
         for (let i = 0; i < timelineRepeater.count; ++i) {
             const item = timelineRepeater.itemAt(i)
             if (item && item.entryId === targetId) {
-                const targetY = Math.max(0, item.y - 10)
+                const targetY = Math.max(0, item.y - 20)
                 scrollAnim.stop()
                 scrollAnim.from = timelineFlickable.contentY
                 scrollAnim.to = targetY
@@ -85,7 +85,7 @@ Rectangle {
         id: timelineFlickable
         anchors.fill: parent
         contentWidth: width
-        contentHeight: timelineCol.implicitHeight + 80
+        contentHeight: timelineCol.implicitHeight + 40
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
@@ -94,6 +94,8 @@ Rectangle {
             id: timelineCol
             width: Math.min(page.width - 48, 760)
             anchors.horizontalCenter: parent.horizontalCenter
+            topPadding: 20
+            bottomPadding: 20
             spacing: 30
 
             Text {

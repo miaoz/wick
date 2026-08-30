@@ -139,7 +139,7 @@ Rectangle {
                             }
                             Text {
                                 visible: modelData.isActive
-                                text: modelData.todayMark || ((appSettings && appSettings.isChinese) ? "今" : "TODAY")
+                                text: modelData.todayMark || ((appSettings && appSettings.isChinese) ? "今" : "NOW")
                                 color: Qt.rgba(1, 0.95, 0.88, 0.85)
                                 font.family: theme.fontMono
                                 font.pixelSize: 11
@@ -187,7 +187,7 @@ Rectangle {
                             }
                             Text {
                                 visible: modelData.isActive
-                                text: modelData.todayMark || ((appSettings && appSettings.isChinese) ? "今" : "TODAY")
+                                text: modelData.todayMark || ((appSettings && appSettings.isChinese) ? "今" : "NOW")
                                 color: Qt.rgba(1, 0.95, 0.88, 0.85)
                                 font.family: theme.fontMono
                                 font.pixelSize: 11

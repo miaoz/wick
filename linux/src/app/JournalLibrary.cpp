@@ -524,7 +524,7 @@ QVariantList JournalLibrary::journals() const
                 statsText += QStringLiteral(" · %1 pos").arg(posCount);
         }
         row.insert(QStringLiteral("statsText"), statsText);
-        row.insert(QStringLiteral("todayMark"), zh ? QStringLiteral("今") : QStringLiteral("TODAY"));
+        row.insert(QStringLiteral("todayMark"), zh ? QStringLiteral("今") : QStringLiteral("NOW"));
 
         if (j.exchangeBinding) {
             row.insert(QStringLiteral("exchangeBound"), true);
