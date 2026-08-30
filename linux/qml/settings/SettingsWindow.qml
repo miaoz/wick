@@ -9,18 +9,19 @@ Rectangle {
 
     Theme { id: theme }
 
-    property int currentGroup: 0
-    readonly property var groups: [
-        appSettings.t("外观与语言", "Appearance & language"),
-        appSettings.t("通用", "General"),
-        appSettings.t("日记与提醒", "Journal & reminder"),
-        appSettings.t("同步", "Sync"),
-        appSettings.t("交易所", "Exchanges"),
-        appSettings.t("数据", "Data"),
-        appSettings.t("关于", "About")
-    ]
+    function t(zh, en) {
+        return (appSettings && appSettings.isChinese) ? zh : en
+    }
 
-    function t(zh, en) { return appSettings.t(zh, en) }
+    readonly property var groups: [
+        t("外观与语言", "Appearance & language"),
+        t("通用", "General"),
+        t("日记与提醒", "Journal & reminder"),
+        t("同步", "Sync"),
+        t("交易所", "Exchanges"),
+        t("数据", "Data"),
+        t("关于", "About")
+    ]
 
     RowLayout {
         anchors.fill: parent

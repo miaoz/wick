@@ -164,7 +164,7 @@ Item {
                     Text {
                         id: laneText
                         anchors.centerIn: parent
-                        text: d.laneLabel || (d.isLong ? "多" : "空")
+                        text: d.laneLabel || (d.isLong ? ((appSettings && appSettings.isChinese) ? "多" : "LONG") : ((appSettings && appSettings.isChinese) ? "空" : "SHORT"))
                         color: d.isLong ? (theme ? theme.cinnabar : "#B0341E") : (theme ? theme.dai : "#3E5C50")
                         font.family: theme ? theme.fontUi : "Inter"
                         font.pixelSize: 9
@@ -206,7 +206,7 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 Text {
-                    text: "开仓 → 平仓 VWAP"
+                    text: (appSettings && appSettings.isChinese) ? "开仓 → 平仓 VWAP" : "Entry → Exit VWAP"
                     color: theme ? theme.ink2 : Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.72)
                     font.family: theme ? theme.fontUi : "Inter"
                     font.pixelSize: 10
@@ -224,7 +224,7 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 Text {
-                    text: "数量 · 持有"
+                    text: (appSettings && appSettings.isChinese) ? "数量 · 持有" : "Size · Duration"
                     color: theme ? theme.ink2 : Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.72)
                     font.family: theme ? theme.fontUi : "Inter"
                     font.pixelSize: 10
@@ -242,7 +242,7 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 Text {
-                    text: "手续费 · 资金费"
+                    text: (appSettings && appSettings.isChinese) ? "手续费 · 资金费" : "Fees · Funding"
                     color: theme ? theme.ink2 : Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.72)
                     font.family: theme ? theme.fontUi : "Inter"
                     font.pixelSize: 10
@@ -297,7 +297,9 @@ Item {
                             font.bold: true
                         }
                         Text {
-                            text: d.isClosed ? "净已实现盈亏" : "持仓状态"
+                            text: d.isClosed
+                                ? ((appSettings && appSettings.isChinese) ? "净已实现盈亏" : "Net Realized PnL")
+                                : ((appSettings && appSettings.isChinese) ? "持仓状态" : "Status")
                             color: theme ? theme.receiptInk : "#33291A"
                             font.family: theme ? theme.fontUi : "Inter"
                             font.pixelSize: 11
@@ -316,7 +318,7 @@ Item {
                 Item { Layout.fillWidth: true }
 
                 Text {
-                    text: d.isClosed ? (d.netPnlText || "") : "持仓中"
+                    text: d.isClosed ? (d.netPnlText || "") : ((appSettings && appSettings.isChinese) ? "持仓中" : "OPEN")
                     color: {
                         if (!d.isClosed)
                             return theme ? theme.ink3 : Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.75)
@@ -354,7 +356,7 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
-                        text: "  已实现盈亏"
+                        text: (appSettings && appSettings.isChinese) ? "  已实现盈亏" : "  Realized PnL"
                         color: theme ? theme.ink2 : Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.65)
                         font.family: theme ? theme.fontUi : "Inter"
                         font.pixelSize: 10
@@ -371,7 +373,7 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
-                        text: "  手续费"
+                        text: (appSettings && appSettings.isChinese) ? "  手续费" : "  Commission"
                         color: theme ? theme.ink2 : Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.65)
                         font.family: theme ? theme.fontUi : "Inter"
                         font.pixelSize: 10
@@ -388,7 +390,7 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
-                        text: "  资金费"
+                        text: (appSettings && appSettings.isChinese) ? "  资金费" : "  Funding"
                         color: theme ? theme.ink2 : Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.65)
                         font.family: theme ? theme.fontUi : "Inter"
                         font.pixelSize: 10

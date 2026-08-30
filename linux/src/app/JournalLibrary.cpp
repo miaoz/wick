@@ -1,10 +1,12 @@
 #include "JournalLibrary.h"
+#include "AppSettings.h"
 #include "JournalSyncEncoding.h"
 #include "LunarCalendar.h"
 #include "SymbolTagMatcher.h"
 
 #include <QDateTime>
 #include <QHash>
+#include <QLocale>
 #include <QTimeZone>
 
 #include <algorithm>
@@ -69,6 +71,16 @@ JournalLibrary::JournalLibrary(wick::JournalPaths paths, QObject *parent)
     m_saveTimer.setSingleShot(true);
     m_saveTimer.setInterval(400);
     connect(&m_saveTimer, &QTimer::timeout, this, &JournalLibrary::flushNow);
+
+    if (auto *app = AppSettings::instance()) {
+        connect(app, &AppSettings::languageChanged, this, [this]() {
+            emit selectionChanged();
+            emit daysChanged();
+            emit calendarChanged();
+            emit savedStateChanged();
+            emit journalsChanged();
+        });
+    }
 }
 
 void JournalLibrary::bootstrap()
@@ -297,26 +309,43 @@ std::string JournalLibrary::dayKeyOf(const JournalEntry &entry) const
 
 QString JournalLibrary::weekdayName(const QDate &date) const
 {
-    static const char *kNames[] = {"", "周一", "周二", "周三", "周四", "周五", "周六", "周日"};
     const int d = date.dayOfWeek();
     if (d < 1 || d > 7)
         return {};
-    return QString::fromUtf8(kNames[d]);
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
+    if (zh) {
+        static const char *kNames[] = {"", "周一", "周二", "周三", "周四", "周五", "周六", "周日"};
+        return QString::fromUtf8(kNames[d]);
+    } else {
+        static const char *kNamesEn[] = {"", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+        return QString::fromUtf8(kNamesEn[d]);
+    }
 }
 
 QString JournalLibrary::bigDateLabel(const QDate &date) const
 {
-    return QStringLiteral("%1月%2日").arg(date.month()).arg(date.day());
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
+    if (zh)
+        return QStringLiteral("%1月%2日").arg(date.month()).arg(date.day());
+    return QLocale(QLocale::English, QLocale::UnitedStates).toString(date, QStringLiteral("MMM d"));
 }
 
 QString JournalLibrary::monthLabel(int month) const
 {
-    static const char *kNames[] = {
-        "", "一月", "二月", "三月", "四月", "五月", "六月",
-        "七月", "八月", "九月", "十月", "十一月", "十二月"};
     if (month < 1 || month > 12)
         return {};
-    return QString::fromUtf8(kNames[month]);
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
+    if (zh) {
+        static const char *kNames[] = {
+            "", "一月", "二月", "三月", "四月", "五月", "六月",
+            "七月", "八月", "九月", "十月", "十一月", "十二月"};
+        return QString::fromUtf8(kNames[month]);
+    } else {
+        static const char *kNamesEn[] = {
+            "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+        return QString::fromUtf8(kNamesEn[month]);
+    }
 }
 
 QString JournalLibrary::lunarLineFor(const QDate &date) const
@@ -609,19 +638,25 @@ QVariantList JournalLibrary::days() const
         row.insert(QStringLiteral("closedPositions"), closed);
         row.insert(QStringLiteral("openPositions"), opened);
 
+        const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
         QString statsLine;
         if (hasTrading) {
             if (closed > 0 && opened > 0) {
-                statsLine = QStringLiteral("%1 条 · %2 笔已平仓 · %3 笔持仓中").arg(itemCount).arg(closed).arg(opened);
+                statsLine = zh ? QStringLiteral("%1 条 · %2 笔已平仓 · %3 笔持仓中").arg(itemCount).arg(closed).arg(opened)
+                               : QStringLiteral("%1 items · %2 closed · %3 open").arg(itemCount).arg(closed).arg(opened);
             } else if (closed > 0) {
-                statsLine = QStringLiteral("%1 条 · %2 笔已平仓").arg(itemCount).arg(closed);
+                statsLine = zh ? QStringLiteral("%1 条 · %2 笔已平仓").arg(itemCount).arg(closed)
+                               : QStringLiteral("%1 items · %2 closed").arg(itemCount).arg(closed);
             } else if (opened > 0) {
-                statsLine = QStringLiteral("%1 条 · %2 笔持仓中").arg(itemCount).arg(opened);
+                statsLine = zh ? QStringLiteral("%1 条 · %2 笔持仓中").arg(itemCount).arg(opened)
+                               : QStringLiteral("%1 items · %2 open").arg(itemCount).arg(opened);
             } else {
-                statsLine = QStringLiteral("%1 条 · 无持仓").arg(itemCount);
+                statsLine = zh ? QStringLiteral("%1 条 · 无持仓").arg(itemCount)
+                               : QStringLiteral("%1 items · flat").arg(itemCount);
             }
         } else {
-            statsLine = QStringLiteral("%1 条").arg(itemCount);
+            statsLine = zh ? QStringLiteral("%1 条").arg(itemCount)
+                           : (itemCount == 1 ? QStringLiteral("1 item") : QStringLiteral("%1 items").arg(itemCount));
         }
         row.insert(QStringLiteral("statsLine"), statsLine);
 
@@ -938,15 +973,20 @@ QString JournalLibrary::selectedDayStamp() const
 {
     const auto *e = selectedEntry();
     const QDate d = e ? dateOf(*e) : QDate::currentDate();
-    const QString day = QString::number(d.month()) + QStringLiteral("月") + QString::number(d.day()) + QStringLiteral("日");
+    const QString day = bigDateLabel(d);
     const QString weekday = weekdayName(d);
     return day + QStringLiteral(" · ") + weekday;
 }
 
 QString JournalLibrary::pageSavedState() const
 {
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
     if (isReadOnly())
-        return QStringLiteral("只读");
+        return zh ? QStringLiteral("只读") : QStringLiteral("Read-only");
+    if (!zh && m_savedState == QLatin1String("已保存"))
+        return QStringLiteral("Saved");
+    if (!zh && m_savedState == QLatin1String("保存中…"))
+        return QStringLiteral("Saving…");
     return m_savedState;
 }
 
@@ -1004,7 +1044,10 @@ bool JournalLibrary::todayIsWeekend() const
 
 QString JournalLibrary::calendarMonthLabel() const
 {
-    return QStringLiteral("%1年%2月").arg(m_calendarMonth.year()).arg(m_calendarMonth.month());
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
+    if (zh)
+        return QStringLiteral("%1年%2月").arg(m_calendarMonth.year()).arg(m_calendarMonth.month());
+    return QLocale(QLocale::English, QLocale::UnitedStates).toString(m_calendarMonth, QStringLiteral("MMMM yyyy"));
 }
 
 bool JournalLibrary::hasCalendarMonthPnl() const

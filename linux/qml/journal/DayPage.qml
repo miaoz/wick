@@ -16,6 +16,10 @@ Rectangle {
     property int lightboxIndex: 0
     property string lastScrolledEntryId: ""
 
+    function t(zh, en) {
+        return (appSettings && appSettings.isChinese) ? zh : en
+    }
+
     function openLightbox(images, index) {
         lightboxImages = images
         lightboxIndex = index
@@ -48,6 +52,7 @@ Rectangle {
             if (item && item.entryId === targetId) {
                 const targetY = Math.max(0, item.y - 10)
                 scrollAnim.stop()
+                scrollAnim.from = timelineFlickable.contentY
                 scrollAnim.to = targetY
                 scrollAnim.start()
                 return
@@ -64,34 +69,30 @@ Rectangle {
             page.scrollToSelectedDay(false)
         }
         function onDaysChanged() {
-            Qt.callLater(() => page.scrollToSelectedDay(false))
+            Qt.callLater(() => { page.scrollToSelectedDay(false) })
         }
     }
 
     NumberAnimation {
         id: scrollAnim
-        target: flick
+        target: timelineFlickable
         property: "contentY"
         duration: 250
-        easing.type: Easing.InOutQuad
+        easing.type: Easing.OutCubic
     }
 
     Flickable {
-        id: flick
+        id: timelineFlickable
         anchors.fill: parent
-        anchors.topMargin: 20
-        anchors.bottomMargin: 20
-        anchors.leftMargin: 28
-        anchors.rightMargin: 28
         contentWidth: width
-        contentHeight: timelineCol.implicitHeight + 40
+        contentHeight: timelineCol.implicitHeight + 80
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
         Column {
             id: timelineCol
-            width: Math.min(parent.width, 880)
+            width: Math.min(page.width - 48, 760)
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 30
 
@@ -101,7 +102,7 @@ Rectangle {
                 height: 120
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
-                text: library.isCatalogReadOnly ? "目录不可用" : "选择一日，或点 ＋ 写下今天"
+                text: library.isCatalogReadOnly ? page.t("目录不可用", "Catalog Unavailable") : page.t("选择一日，或点 ＋ 写下今天", "Select a day, or click + to write today")
                 color: theme.ink3
                 font.family: theme.fontPrint
                 font.pixelSize: 14
@@ -194,7 +195,7 @@ Rectangle {
                                     Layout.bottomMargin: 2
                                     Text {
                                         anchors.right: parent.right
-                                        text: "净盈亏"
+                                        text: page.t("净盈亏", "Net PnL")
                                         color: theme.ink3
                                         font.family: theme.fontMono
                                         font.pixelSize: 9
@@ -227,7 +228,7 @@ Rectangle {
                                     radius: 3
                                     color: trashBtnHover.containsMouse ? Qt.rgba(224 / 255, 76 / 255, 76 / 255, 0.15) : "transparent"
                                     ToolTip.visible: trashBtnHover.containsMouse
-                                    ToolTip.text: "删除本日日记"
+                                    ToolTip.text: page.t("删除本日日记", "Delete Today's Journal")
                                     WickIcon {
                                         anchors.centerIn: parent
                                         name: "trash"
@@ -366,7 +367,7 @@ Rectangle {
                                                 spacing: 8
 
                                                 Text {
-                                                    text: modelData.indexLabel || ("条目 " + (index + 1))
+                                                    text: modelData.indexLabel || (page.t("条目 ", "Entry ") + (index + 1))
                                                     color: theme.ink3
                                                     font.family: theme.fontPrint
                                                     font.pixelSize: 11
@@ -382,7 +383,7 @@ Rectangle {
                                                     radius: 3
                                                     color: imgBtnHover.containsMouse ? Qt.rgba(245 / 255, 168 / 255, 60 / 255, 0.15) : "transparent"
                                                     ToolTip.visible: imgBtnHover.containsMouse
-                                                    ToolTip.text: "添加图片"
+                                                    ToolTip.text: page.t("添加图片", "Add image")
                                                     WickIcon {
                                                         anchors.centerIn: parent
                                                         name: "photo.badge.plus"
@@ -395,8 +396,8 @@ Rectangle {
                                                         hoverEnabled: true
                                                         cursorShape: Qt.PointingHandCursor
                                                         onClicked: {
-                                                            page.pendingImageItemId = modelData.itemId
-                                                            attachDialog.open()
+                                                             page.pendingImageItemId = modelData.itemId
+                                                             attachDialog.open()
                                                         }
                                                     }
                                                 }
@@ -409,7 +410,7 @@ Rectangle {
                                                     radius: 3
                                                     color: delItemHover.containsMouse ? Qt.rgba(224 / 255, 76 / 255, 76 / 255, 0.15) : "transparent"
                                                     ToolTip.visible: delItemHover.containsMouse
-                                                    ToolTip.text: "删除条目"
+                                                    ToolTip.text: page.t("删除条目", "Delete entry")
                                                     WickIcon {
                                                         anchors.centerIn: parent
                                                         name: "minus.circle"
@@ -441,7 +442,7 @@ Rectangle {
                                                 topPadding: 0
                                                 bottomPadding: 0
                                                 text: modelData.tag
-                                                placeholderText: "标签"
+                                                placeholderText: page.t("标签", "Tag")
                                                 color: theme.pnlUp
                                                 placeholderTextColor: theme.ink3
                                                 font.family: theme.fontPrint
@@ -461,7 +462,7 @@ Rectangle {
                                                 bottomPadding: 0
                                                 Layout.preferredHeight: Math.max(68, implicitHeight)
                                                 text: modelData.body
-                                                placeholderText: "记下此刻…"
+                                                placeholderText: page.t("记下此刻…", "Write something…")
                                                 color: theme.ink1
                                                 placeholderTextColor: theme.ink3
                                                 font.family: theme.fontPrint
@@ -605,7 +606,7 @@ Rectangle {
                                                         }
 
                                                         Text {
-                                                            text: "复盘"
+                                                            text: page.t("复盘", "Review")
                                                             color: theme.cinnabar
                                                             font.family: theme.fontPrint
                                                             font.pixelSize: 11
@@ -644,7 +645,7 @@ Rectangle {
                                                         spacing: 10
 
                                                         Text {
-                                                            text: "复盘定论"
+                                                            text: page.t("复盘定论", "Review Verdict")
                                                             color: theme.ink2
                                                             font.family: theme.fontPrint
                                                             font.pixelSize: 11
@@ -669,7 +670,7 @@ Rectangle {
                                                                     border.width: 1
                                                                     Text {
                                                                         anchors.centerIn: parent
-                                                                        text: modelData === "correct" ? "✓ 正确" : "✗ 失误"
+                                                                        text: modelData === "correct" ? page.t("✓ 正确", "✓ Good") : page.t("✗ 失误", "✗ Bad")
                                                                         color: itemBlock.modelData.review === modelData
                                                                                ? "#FFF"
                                                                                : (modelData === "correct" ? theme.dai : theme.cinnabar)
@@ -697,7 +698,7 @@ Rectangle {
                                                                 border.width: 1
                                                                 Text {
                                                                     anchors.centerIn: parent
-                                                                    text: "清除"
+                                                                    text: page.t("清除", "Clear")
                                                                     color: theme.ink3
                                                                     font.family: theme.fontUi
                                                                     font.pixelSize: 10
@@ -713,7 +714,7 @@ Rectangle {
                                                             }
 
                                                             Text {
-                                                                text: "完成"
+                                                                text: page.t("完成", "Done")
                                                                 color: theme.ember
                                                                 font.family: theme.fontUi
                                                                 font.pixelSize: 11
@@ -733,7 +734,7 @@ Rectangle {
                                                         Layout.fillWidth: true
                                                         Layout.preferredHeight: Math.max(48, implicitHeight)
                                                         text: itemBlock.modelData.reviewNote || ""
-                                                        placeholderText: "写下这笔交易/决策的复盘体会、教训或规则…"
+                                                        placeholderText: page.t("写下这笔交易/决策的复盘体会、教训或规则…", "Write review notes, lessons, or rules for this trade/decision…")
                                                         color: theme.ink1
                                                         placeholderTextColor: theme.ink3
                                                         font.family: theme.fontPrint
@@ -798,7 +799,7 @@ Rectangle {
                                         color: addBtnHover.containsMouse ? theme.ember : theme.ink3
                                     }
                                     Text {
-                                        text: "添加条目"
+                                        text: page.t("添加条目", "Add entry")
                                         color: addBtnHover.containsMouse ? theme.ember : theme.ink3
                                         font.family: theme.fontPrint
                                         font.pixelSize: 11
@@ -860,7 +861,7 @@ Rectangle {
                 spacing: 12
 
                 Text {
-                    text: "删除日记"
+                    text: page.t("删除日记", "Delete Journal")
                     color: theme.ink1
                     font.family: theme.fontPrint
                     font.pixelSize: 14
@@ -868,7 +869,8 @@ Rectangle {
                 }
 
                 Text {
-                    text: "确定要删除该日期的所有日记与条目吗？此操作无法撤销。"
+                    text: page.t("确定要删除该日期的所有日记与条目吗？此操作无法撤销。",
+                                 "Are you sure you want to delete this full day journal and all its entries? This cannot be undone.")
                     color: theme.ink2
                     font.family: theme.fontUi
                     font.pixelSize: 12
@@ -883,18 +885,18 @@ Rectangle {
                     spacing: 10
 
                     Button {
-                        text: "取消"
+                        text: page.t("取消", "Cancel")
                         font.family: theme.fontUi
                         font.pixelSize: 12
                         onClicked: deleteDayConfirmDialog.close()
                     }
 
                     Button {
-                        text: "删除"
+                        text: page.t("删除", "Delete")
                         font.family: theme.fontUi
                         font.pixelSize: 12
                         contentItem: Text {
-                            text: "删除"
+                            text: page.t("删除", "Delete")
                             color: theme.cinnabar
                             font.family: theme.fontUi
                             font.pixelSize: 12
@@ -943,7 +945,7 @@ Rectangle {
                 spacing: 12
 
                 Text {
-                    text: "删除条目"
+                    text: page.t("删除条目", "Delete Entry")
                     color: theme.ink1
                     font.family: theme.fontPrint
                     font.pixelSize: 14
@@ -951,7 +953,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: "确定要删除该条目吗？"
+                    text: page.t("确定要删除该条目吗？", "Are you sure you want to delete this entry?")
                     color: theme.ink2
                     font.family: theme.fontUi
                     font.pixelSize: 12
@@ -965,18 +967,18 @@ Rectangle {
                     spacing: 10
 
                     Button {
-                        text: "取消"
+                        text: page.t("取消", "Cancel")
                         font.family: theme.fontUi
                         font.pixelSize: 12
                         onClicked: deleteItemConfirmDialog.close()
                     }
 
                     Button {
-                        text: "删除"
+                        text: page.t("删除", "Delete")
                         font.family: theme.fontUi
                         font.pixelSize: 12
                         contentItem: Text {
-                            text: "删除"
+                            text: page.t("删除", "Delete")
                             color: theme.cinnabar
                             font.family: theme.fontUi
                             font.pixelSize: 12

@@ -31,7 +31,7 @@ Rectangle {
                 Layout.leftMargin: 10
                 Layout.rightMargin: 10
                 Text {
-                    text: "日记本"
+                    text: (appSettings && appSettings.isChinese) ? "日记本" : "JOURNALS"
                     color: theme.ink3
                     font.family: theme.fontUi
                     font.pixelSize: 11
@@ -252,12 +252,12 @@ Rectangle {
                         Menu {
                             id: rowMenu
                             MenuItem {
-                                text: "重命名"
+                                text: (appSettings && appSettings.isChinese) ? "重命名" : "Rename"
                                 enabled: !library.isCatalogReadOnly
                                 onTriggered: nav.renameJournalRequested(modelData.id, modelData.name)
                             }
                             MenuItem {
-                                text: "删除"
+                                text: (appSettings && appSettings.isChinese) ? "删除" : "Delete"
                                 enabled: !library.isCatalogReadOnly && library.journals.length > 1
                                 onTriggered: nav.deleteJournalRequested(modelData.id, modelData.name)
                             }
@@ -274,7 +274,7 @@ Rectangle {
 
             Text {
                 Layout.leftMargin: 10
-                text: "标签"
+                text: (appSettings && appSettings.isChinese) ? "标签" : "TAGS"
                 color: theme.ink3
                 font.family: theme.fontUi
                 font.pixelSize: 11

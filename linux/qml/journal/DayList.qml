@@ -18,7 +18,9 @@ Rectangle {
             Layout.fillHeight: true
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            text: library.searchText.length > 0 ? "无匹配条目" : "还没有日记\n点 ＋ 写下今天"
+            text: library.searchText.length > 0
+                ? ((appSettings && appSettings.isChinese) ? "无匹配条目" : "No matching entries")
+                : ((appSettings && appSettings.isChinese) ? "还没有日记\n点 ＋ 写下今天" : "No journals yet\nClick + to write today")
             color: theme.ink3
             font.family: theme.fontPrint
             font.pixelSize: 13

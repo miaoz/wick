@@ -1,5 +1,6 @@
 #include "ProgressWindow.h"
 
+#include "AppSettings.h"
 #include "TimeProgress.h"
 
 #include <QDebug>
@@ -20,6 +21,7 @@ ProgressWindow::ProgressWindow(TimeProgress *progress, QWindow *parent)
     setObjectName(QStringLiteral("wick-pop"));
 
     rootContext()->setContextProperty(QStringLiteral("timeProgress"), progress);
+    rootContext()->setContextProperty(QStringLiteral("appSettings"), AppSettings::instance());
     setSource(QUrl(QStringLiteral("qrc:/qml/ProgressPanel.qml")));
 
     if (status() == QQuickView::Error) {

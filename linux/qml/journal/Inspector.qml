@@ -14,6 +14,10 @@ Rectangle {
     property var expandedEventIds: ({})
     property var expandedEarningIds: ({})
 
+    function t(zh, en) {
+        return (appSettings && appSettings.isChinese) ? zh : en
+    }
+
     Component.onCompleted: if (typeof calendarStore !== "undefined" && calendarStore)
                                calendarStore.loadIfNeeded()
 
@@ -81,7 +85,7 @@ Rectangle {
                 Text {
                     id: yiMark
                     anchors.centerIn: parent
-                    text: "宜"
+                    text: (appSettings && appSettings.isChinese) ? "宜" : "DO"
                     color: "#FAEBD7"
                     font.family: theme.fontPrint
                     font.pixelSize: 9
@@ -106,7 +110,7 @@ Rectangle {
                 Text {
                     id: jiMark
                     anchors.centerIn: parent
-                    text: "忌"
+                    text: (appSettings && appSettings.isChinese) ? "忌" : "AVOID"
                     color: theme.paper
                     font.family: theme.fontPrint
                     font.pixelSize: 9
@@ -131,9 +135,9 @@ Rectangle {
                     return ""
                 var bits = []
                 if (calendarStore.lucky.length > 0)
-                    bits.push("吉神 " + calendarStore.lucky)
+                    bits.push(((appSettings && appSettings.isChinese) ? "吉神 " : "Lucky: ") + calendarStore.lucky)
                 if (calendarStore.sha.length > 0)
-                    bits.push("煞方 " + calendarStore.sha)
+                    bits.push(((appSettings && appSettings.isChinese) ? "煞方 " : "Sha: ") + calendarStore.sha)
                 return bits.join("  ·  ")
             }
             color: theme.ink3
@@ -148,8 +152,8 @@ Rectangle {
             spacing: 6
             Repeater {
                 model: [
-                    { id: "macro", label: "宏观" },
-                    { id: "earnings", label: "财报" }
+                    { id: "macro", label: insp.t("宏观", "Macro") },
+                    { id: "earnings", label: insp.t("财报", "Earnings") }
                 ]
                 delegate: Rectangle {
                     required property var modelData
@@ -195,7 +199,7 @@ Rectangle {
                         color: theme.ink3
                     }
                     Text {
-                        text: insp.sortImportance ? "按重要" : "按时间"
+                        text: insp.sortImportance ? insp.t("按重要", "By Stars") : insp.t("按时间", "By Time")
                         color: theme.ink2
                         font.family: theme.fontPrint
                         font.pixelSize: 10
@@ -219,7 +223,7 @@ Rectangle {
 
         Text {
             visible: calendarStore && calendarStore.loading
-            text: "加载中…"
+            text: insp.t("加载中…", "Loading…")
             color: theme.ink3
             font.family: theme.fontUi
             font.pixelSize: 11
@@ -564,7 +568,7 @@ Rectangle {
             Layout.fillWidth: true
             visible: library.hasCalendarMonthPnl
             Text {
-                text: "已实现合计"
+                text: insp.t("已实现合计", "Realized Total")
                 color: theme.ink3
                 font.family: theme.fontMono
                 font.pixelSize: 10
@@ -586,7 +590,7 @@ Rectangle {
             rowSpacing: 3
 
             Repeater {
-                model: ["一", "二", "三", "四", "五", "六", "日"]
+                model: (appSettings && appSettings.isChinese) ? ["一", "二", "三", "四", "五", "六", "日"] : ["M", "T", "W", "T", "F", "S", "S"]
                 Text {
                     required property string modelData
                     Layout.fillWidth: true
@@ -671,7 +675,7 @@ Rectangle {
                 spacing: 8
 
                 Text {
-                    text: "交易日历"
+                    text: insp.t("交易日历", "TRADING CALENDAR")
                     color: theme.ink1
                     font.family: theme.fontPrint
                     font.pixelSize: 12
@@ -769,7 +773,7 @@ Rectangle {
                         spacing: 8
 
                         Text {
-                            text: "月度总览"
+                            text: insp.t("月度总览", "MONTHLY OVERVIEW")
                             color: theme.ink1
                             font.family: theme.fontPrint
                             font.pixelSize: 12
@@ -817,7 +821,7 @@ Rectangle {
                 spacing: 8
 
                 Text {
-                    text: "月度总览"
+                    text: insp.t("月度总览", "MONTHLY OVERVIEW")
                     color: theme.ink1
                     font.family: theme.fontPrint
                     font.pixelSize: 12

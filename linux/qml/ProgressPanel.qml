@@ -108,7 +108,7 @@ Rectangle {
                 spacing: 8
 
                 Text {
-                    text: "今日剩余"
+                    text: (appSettings && appSettings.isChinese) ? "今日剩余" : "Left today"
                     color: paper.ink2
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
@@ -156,7 +156,7 @@ Rectangle {
                 }
                 Item { Layout.fillWidth: true }
                 Text {
-                    text: "24:00 终"
+                    text: (appSettings && appSettings.isChinese) ? "24:00 终" : "24:00 End"
                     color: paper.ink3
                     font.pixelSize: 10
                     font.family: paper.fontMono
@@ -176,12 +176,12 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 12
                 Text {
-                    text: "本周"
+                    text: (appSettings && appSettings.isChinese) ? "本周" : "Week"
                     color: paper.ink2
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
                     font.family: paper.fontUi
-                    Layout.preferredWidth: 30
+                    Layout.preferredWidth: (appSettings && appSettings.isChinese) ? 30 : 40
                 }
                 BurnStrip {
                     Layout.fillWidth: true
@@ -204,12 +204,12 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 12
                 Text {
-                    text: "本月"
+                    text: (appSettings && appSettings.isChinese) ? "本月" : "Month"
                     color: paper.ink2
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
                     font.family: paper.fontUi
-                    Layout.preferredWidth: 30
+                    Layout.preferredWidth: (appSettings && appSettings.isChinese) ? 30 : 40
                 }
                 BurnStrip {
                     Layout.fillWidth: true
@@ -232,12 +232,12 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 12
                 Text {
-                    text: "今年"
+                    text: (appSettings && appSettings.isChinese) ? "今年" : "Year"
                     color: paper.ink2
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
                     font.family: paper.fontUi
-                    Layout.preferredWidth: 30
+                    Layout.preferredWidth: (appSettings && appSettings.isChinese) ? 30 : 40
                 }
                 BurnStrip {
                     Layout.fillWidth: true
@@ -265,7 +265,7 @@ Rectangle {
             Layout.bottomMargin: 14
 
             Text {
-                text: "一寸光阴一寸金"
+                text: (appSettings && appSettings.isChinese) ? "一寸光阴一寸金。" : "Time is precious."
                 color: paper.ink3
                 font.pixelSize: 11
                 font.family: paper.fontPrint

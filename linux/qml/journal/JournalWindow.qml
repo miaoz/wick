@@ -9,6 +9,10 @@ Rectangle {
 
     Theme { id: theme }
 
+    function t(zh, en) {
+        return (appSettings && appSettings.isChinese) ? zh : en
+    }
+
     readonly property int navWidth: 200
     readonly property int listWidth: 240
     readonly property int inspectorWidth: 268
@@ -169,12 +173,12 @@ Rectangle {
                     }
 
                     ToolTip.visible: colBtnHover.containsMouse
-                    ToolTip.text: "切换栏位模式 (Ctrl+Shift+S)"
+                    ToolTip.text: root.t("切换栏位模式 (Ctrl+Shift+S)", "Toggle column mode (Ctrl+Shift+S)")
                     ToolTip.delay: 400
                 }
 
                 Text {
-                    text: journalLibrary.activeJournalName.length > 0 ? journalLibrary.activeJournalName : "主日记本"
+                    text: journalLibrary.activeJournalName.length > 0 ? journalLibrary.activeJournalName : root.t("主日记本", "Main Journal")
                     color: theme.ink1
                     font.family: theme.fontUi
                     font.pixelSize: 13
@@ -203,7 +207,7 @@ Rectangle {
                         anchors.fill: parent
                         anchors.leftMargin: 8
                         anchors.rightMargin: 8
-                        placeholderText: "搜索条目…"
+                        placeholderText: root.t("搜索条目…", "Search entries…")
                         color: theme.ink1
                         placeholderTextColor: theme.ink3
                         font.family: theme.fontUi
@@ -247,7 +251,7 @@ Rectangle {
                     }
 
                     ToolTip.visible: todayBtnHover.containsMouse
-                    ToolTip.text: "今日日记 (Ctrl+N)"
+                    ToolTip.text: root.t("今日日记 (Ctrl+N)", "Today's Journal (Ctrl+N)")
                     ToolTip.delay: 400
                 }
 
@@ -276,7 +280,7 @@ Rectangle {
                     }
 
                     ToolTip.visible: inspBtnHover.containsMouse
-                    ToolTip.text: "检查器 (Ctrl+I)"
+                    ToolTip.text: root.t("检查器 (Ctrl+I)", "Inspector (Ctrl+I)")
                     ToolTip.delay: 400
                 }
             }
@@ -367,9 +371,9 @@ Rectangle {
                 anchors.margins: 18
                 spacing: 10
                 Text {
-                    text: journalDialog.mode === "rename" ? "重命名日记本"
-                          : journalDialog.mode === "delete" ? "删除日记本"
-                          : "新建日记本"
+                    text: journalDialog.mode === "rename" ? root.t("重命名日记本", "Rename Journal")
+                          : journalDialog.mode === "delete" ? root.t("删除日记本", "Delete Journal")
+                          : root.t("新建日记本", "New Journal")
                     color: theme.ink1
                     font.family: theme.fontPrint
                     font.pixelSize: 16
@@ -378,7 +382,8 @@ Rectangle {
                 Text {
                     visible: journalDialog.mode === "delete"
                     Layout.fillWidth: true
-                    text: "删除「" + journalDialog.targetName + "」？此操作不可撤销，且会从所有已同步设备移除。"
+                    text: root.t("删除「" + journalDialog.targetName + "」？此操作不可撤销，且会从所有已同步设备移除。",
+                                 "Delete \"" + journalDialog.targetName + "\"? This cannot be undone and will remove it from all synced devices.")
                     color: theme.ink2
                     font.family: theme.fontUi
                     font.pixelSize: 12
@@ -388,7 +393,7 @@ Rectangle {
                     id: journalNameField
                     visible: journalDialog.mode !== "delete"
                     Layout.fillWidth: true
-                    placeholderText: "日记"
+                    placeholderText: root.t("日记", "Journal")
                     color: theme.ink1
                     placeholderTextColor: theme.ink3
                     font.family: theme.fontUi
@@ -405,15 +410,15 @@ Rectangle {
                     Layout.fillWidth: true
                     Item { Layout.fillWidth: true }
                     Button {
-                        text: "取消"
+                        text: root.t("取消", "Cancel")
                         font.family: theme.fontUi
                         font.pixelSize: 12
                         onClicked: journalDialog.visible = false
                     }
                     Button {
-                        text: journalDialog.mode === "rename" ? "保存"
-                              : journalDialog.mode === "delete" ? "删除"
-                              : "创建"
+                        text: journalDialog.mode === "rename" ? root.t("保存", "Save")
+                              : journalDialog.mode === "delete" ? root.t("删除", "Delete")
+                              : root.t("创建", "Create")
                         font.family: theme.fontUi
                         font.pixelSize: 12
                         onClicked: root.commitJournalDialog()

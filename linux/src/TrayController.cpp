@@ -83,10 +83,17 @@ TrayController::TrayController(TimeProgress *progress,
         m_panel = new ProgressWindow(progress);
 
     m_menu = new QMenu();
-    m_menu->addAction(QStringLiteral("日记"), this, &TrayController::openJournal);
-    m_menu->addAction(QStringLiteral("设置"), this, &TrayController::openSettings);
-    m_menu->addSeparator();
-    m_menu->addAction(QStringLiteral("退出"), this, &TrayController::quitApp);
+    auto rebuildMenu = [this]() {
+        if (!m_menu)
+            return;
+        m_menu->clear();
+        const bool zh = m_settings ? m_settings->isChinese() : true;
+        m_menu->addAction(zh ? QStringLiteral("日记") : QStringLiteral("Journal"), this, &TrayController::openJournal);
+        m_menu->addAction(zh ? QStringLiteral("设置") : QStringLiteral("Settings"), this, &TrayController::openSettings);
+        m_menu->addSeparator();
+        m_menu->addAction(zh ? QStringLiteral("退出") : QStringLiteral("Quit"), this, &TrayController::quitApp);
+    };
+    rebuildMenu();
 
     m_tray = new QSystemTrayIcon(this);
     m_tray->setIcon(makeCandleIcon());
@@ -106,6 +113,8 @@ TrayController::TrayController(TimeProgress *progress,
     if (m_settings) {
         connect(m_settings, &AppSettings::showMenuBarPercentageChanged,
                 this, &TrayController::refreshTrayIcon);
+        connect(m_settings, &AppSettings::languageChanged,
+                this, rebuildMenu);
     }
 
     connect(qApp, &QCoreApplication::aboutToQuit, this, [this]() {
