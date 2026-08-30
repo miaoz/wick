@@ -19,11 +19,11 @@ echo "========================================="
 
 mkdir -p "$DIST_DIR"
 
-# 1. Build Linux release binary
+# 1. Build Linux release binary and tests
 echo "--> Configuring CMake (Release)..."
 cmake -G Ninja -B "$BUILD_DIR" -S "$LINUX_DIR" -DCMAKE_BUILD_TYPE=Release
-echo "--> Building target wick..."
-cmake --build "$BUILD_DIR" --target wick -j"$(nproc 2>/dev/null || echo 4)"
+echo "--> Building targets..."
+cmake --build "$BUILD_DIR" -j"$(nproc 2>/dev/null || echo 4)"
 
 # 2. Run unit tests
 echo "--> Running CTests..."
