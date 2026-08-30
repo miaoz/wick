@@ -93,6 +93,18 @@ std::string TradingPosition::durationText(bool isChinese) const
     }
 }
 
+std::string TradingPosition::headerTitle(bool isChinese) const
+{
+    std::string header = symbol;
+    auto endsWith = [](const std::string &str, const std::string &suffix) {
+        return str.size() >= suffix.size() && str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
+    };
+    if (!endsWith(header, "永续") && !endsWith(header, "PERP") && header.find(' ') == std::string::npos) {
+        header += isChinese ? " 永续" : " PERP";
+    }
+    return header;
+}
+
 std::string TradingPosition::quoteAsset() const
 {
     if (const auto q = SymbolTagMatcher::quoteAsset(symbol))

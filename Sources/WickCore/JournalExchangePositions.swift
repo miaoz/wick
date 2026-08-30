@@ -260,7 +260,7 @@ private struct ReceiptView: View {
     // MARK: Text
 
     private var headerTitle: String {
-        position.symbol
+        position.headerTitle(isChinese: settings.language == .chinese)
     }
 
     private var dateRange: String {

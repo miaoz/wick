@@ -66,6 +66,7 @@ struct TradingPosition {
         return realizedPnl + commissionTotal() + fundingPnl;
     }
     std::string durationText(bool isChinese = true) const;
+    std::string headerTitle(bool isChinese = true) const;
     std::string quoteAsset() const;
 };
 

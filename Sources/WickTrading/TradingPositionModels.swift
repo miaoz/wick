@@ -282,6 +282,15 @@ public struct TradingPosition: Codable, Identifiable, Equatable, Sendable {
             return "< 1 min"
         }
     }
+
+    /// Formatted display title for receipt headers (e.g. "BTCUSDT 永续" or "BTCUSDT PERP").
+    public func headerTitle(isChinese: Bool = true) -> String {
+        var header = symbol
+        if !header.hasSuffix("永续") && !header.hasSuffix("PERP") && !header.contains(" ") {
+            header += isChinese ? " 永续" : " PERP"
+        }
+        return header
+    }
 }
 
 /// Cached sync state persisted between launches.

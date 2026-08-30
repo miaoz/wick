@@ -57,7 +57,7 @@ struct PhoneReceiptCard: View {
         VStack(alignment: .leading, spacing: 4) {
             // Header: Symbol + Side + Time Range
             HStack(alignment: .firstTextBaseline) {
-                Text(position.symbol)
+                Text(position.headerTitle(isChinese: currentLanguage == .chinese))
                     .font(PhoneFont.ui(11.5, weight: .bold, monospacedDigit: true))
                     .foregroundColor(PhoneTheme.receiptInk)
 

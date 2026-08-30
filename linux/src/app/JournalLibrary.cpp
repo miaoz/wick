@@ -778,10 +778,7 @@ QVariantList JournalLibrary::itemsForEntry(const JournalEntry &entry) const
                         ? (zh ? QStringLiteral("多") : QStringLiteral("Long"))
                         : (zh ? QStringLiteral("空") : QStringLiteral("Short")));
 
-            QString header = QString::fromStdString(p.symbol);
-            if (!header.endsWith(QStringLiteral("永续")) && !header.endsWith(QStringLiteral("PERP")) && !header.contains(QLatin1Char(' ')))
-                header += zh ? QStringLiteral(" 永续") : QStringLiteral(" PERP");
-            pRow.insert(QStringLiteral("headerTitle"), header);
+            pRow.insert(QStringLiteral("headerTitle"), QString::fromStdString(p.headerTitle(zh)));
 
             const QDateTime openDt = QDateTime::fromMSecsSinceEpoch(p.openTime);
             QString dateRange = openDt.toString(QStringLiteral("MM-dd HH:mm"));
