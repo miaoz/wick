@@ -186,7 +186,10 @@ ExchangeCoordinator::ExchangeCoordinator(JournalLibrary *library, QObject *paren
 ExchangeCoordinator::~ExchangeCoordinator()
 {
     m_thread.quit();
-    m_thread.wait(4000);
+    if (!m_thread.wait(1500)) {
+        m_thread.terminate();
+        m_thread.wait(1000);
+    }
 }
 
 void ExchangeCoordinator::setTargetJournalId(const QString &id)

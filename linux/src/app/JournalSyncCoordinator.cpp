@@ -83,9 +83,13 @@ JournalSyncCoordinator::JournalSyncCoordinator(JournalLibrary *library,
 
 JournalSyncCoordinator::~JournalSyncCoordinator()
 {
+    m_periodic.stop();
     if (m_thread) {
         m_thread->quit();
-        m_thread->wait(4000);
+        if (!m_thread->wait(1500)) {
+            m_thread->terminate();
+            m_thread->wait(1000);
+        }
     }
 }
 
