@@ -570,6 +570,52 @@ static void testCorruptCatalogIsNotRewritten() {
     std::filesystem::remove_all(root);
 }
 
+static void testReorderJournalsPersists() {
+    auto root = makeTempDir("WickReorder-");
+    auto paths = JournalPaths::inRoot(root);
+
+    JournalInfo a;
+    a.id = Uuid::generate();
+    a.name = "A";
+    a.createdAt = timeFromUnix(1'700'000'000);
+    a.updatedAt = a.createdAt;
+
+    JournalInfo b;
+    b.id = Uuid::generate();
+    b.name = "B";
+    b.createdAt = timeFromUnix(1'700'000'000);
+    b.updatedAt = b.createdAt;
+
+    JournalInfo c;
+    c.id = Uuid::generate();
+    c.name = "C";
+    c.createdAt = timeFromUnix(1'700'000'000);
+    c.updatedAt = c.createdAt;
+
+    JournalCatalogSnapshot catalog;
+    catalog.version = 1;
+    catalog.activeJournalID = a.id;
+    catalog.journals = {a, b, c};
+    CHECK(persistCatalog(root, catalog));
+
+    // Reorder: move C (index 2) to index 0 -> C, A, B
+    auto moving = catalog.journals[2];
+    catalog.journals.erase(catalog.journals.begin() + 2);
+    catalog.journals.insert(catalog.journals.begin() + 0, moving);
+    CHECK(persistCatalog(root, catalog));
+
+    auto outcome = JournalCatalogLoader::load(paths.catalogURL(), paths.catalogBackupURL(), 1);
+    CHECK(std::holds_alternative<JournalCatalogLoader::Loaded>(outcome));
+    auto loaded = std::get<JournalCatalogLoader::Loaded>(outcome).catalog;
+    CHECK(loaded.journals.size() == 3);
+    CHECK(loaded.journals[0].name == "C");
+    CHECK(loaded.journals[1].name == "A");
+    CHECK(loaded.journals[2].name == "B");
+    CHECK(loaded.activeJournalID == a.id);
+
+    std::filesystem::remove_all(root);
+}
+
 int main() {
     testImageFilenameAcceptsSafeNames();
     testImageFilenameRejectsUnsafeNames();
@@ -595,6 +641,7 @@ int main() {
     testMissingCatalogBootstrapCreatesDefaultDiary();
     testEntryCountOnDiskIsReadOnly();
     testCorruptCatalogIsNotRewritten();
+    testReorderJournalsPersists();
 
     std::cout << g_passes << " passed, " << g_fails << " failed\n";
     return g_fails == 0 ? 0 : 1;

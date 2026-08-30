@@ -989,6 +989,28 @@ bool JournalLibrary::deleteJournal(const QString &id)
     return true;
 }
 
+bool JournalLibrary::moveJournal(int fromIndex, int toIndex)
+{
+    if (m_catalogReadOnly)
+        return false;
+    const int count = static_cast<int>(m_catalog.journals.size());
+    if (fromIndex < 0 || fromIndex >= count)
+        return false;
+    if (toIndex < 0 || toIndex >= count)
+        return false;
+    if (fromIndex == toIndex)
+        return true;
+
+    auto moving = m_catalog.journals[static_cast<size_t>(fromIndex)];
+    m_catalog.journals.erase(m_catalog.journals.begin() + fromIndex);
+    m_catalog.journals.insert(m_catalog.journals.begin() + toIndex, moving);
+
+    if (!writeCatalog())
+        return false;
+    emit journalsChanged();
+    return true;
+}
+
 void JournalLibrary::setExchangeBinding(const Uuid &id, std::optional<JournalExchangeBinding> binding)
 {
     if (m_catalogReadOnly)

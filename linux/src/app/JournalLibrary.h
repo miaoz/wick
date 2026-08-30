@@ -110,6 +110,7 @@ public:
     Q_INVOKABLE void addJournal(const QString &name);
     Q_INVOKABLE bool renameJournal(const QString &id, const QString &name);
     Q_INVOKABLE bool deleteJournal(const QString &id);
+    Q_INVOKABLE bool moveJournal(int fromIndex, int toIndex);
     void setExchangeBinding(const wick::Uuid &id, std::optional<wick::JournalExchangeBinding> binding);
     int ensurePositionEntries(const wick::Uuid &journalID,
                               const std::vector<std::pair<QDate, std::vector<wick::JournalItem>>> &skeletons);
