@@ -121,9 +121,8 @@ AppSettings::AppSettings(QObject *parent)
     , m_store(QStringLiteral("wick"), QStringLiteral("秉烛"))
 {
     load();
-    m_fontFamilies = QFontDatabase::families();
-    std::sort(m_fontFamilies.begin(), m_fontFamilies.end(),
-              [](const QString &a, const QString &b) { return a.localeAwareCompare(b) < 0; });
+    loadApplicationFonts();
+    refreshFontFamilies();
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     if (auto *hints = QGuiApplication::styleHints()) {
@@ -133,6 +132,67 @@ AppSettings::AppSettings(QObject *parent)
         });
     }
 #endif
+}
+
+void AppSettings::loadApplicationFonts()
+{
+    const QString fontsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+        + QStringLiteral("/wick/fonts");
+    QDir dir(fontsDir);
+    if (!dir.exists())
+        dir.mkpath(QStringLiteral("."));
+
+    const auto entries = dir.entryInfoList(
+        {QStringLiteral("*.otf"), QStringLiteral("*.ttf"), QStringLiteral("*.woff2"), QStringLiteral("*.ttc")},
+        QDir::Files);
+    for (const auto &fi : entries) {
+        QFontDatabase::addApplicationFont(fi.absoluteFilePath());
+    }
+}
+
+void AppSettings::refreshFontFamilies()
+{
+    m_fontFamilies = QFontDatabase::families();
+    std::sort(m_fontFamilies.begin(), m_fontFamilies.end(),
+              [](const QString &a, const QString &b) { return a.localeAwareCompare(b) < 0; });
+    emit fontFamiliesChanged();
+}
+
+QString AppSettings::importFontFile(const QUrl &fileUrl)
+{
+    const QString src = fileUrl.isLocalFile() ? fileUrl.toLocalFile() : fileUrl.toString();
+    if (src.isEmpty())
+        return {};
+    QFileInfo fi(src);
+    if (!fi.exists())
+        return {};
+
+    const QString fontsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+        + QStringLiteral("/wick/fonts");
+    QDir dir(fontsDir);
+    if (!dir.exists())
+        dir.mkpath(QStringLiteral("."));
+
+    const QString dest = dir.absoluteFilePath(fi.fileName());
+    if (dest != fi.absoluteFilePath()) {
+        if (QFile::exists(dest))
+            QFile::remove(dest);
+        if (!QFile::copy(src, dest))
+            return {};
+    }
+
+    const int id = QFontDatabase::addApplicationFont(dest);
+    if (id < 0)
+        return {};
+
+    const QStringList families = QFontDatabase::applicationFontFamilies(id);
+    refreshFontFamilies();
+
+    if (!families.isEmpty()) {
+        setJournalFontName(families.first());
+        return families.first();
+    }
+    return {};
 }
 
 void AppSettings::load()

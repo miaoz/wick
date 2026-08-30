@@ -51,7 +51,7 @@ class AppSettings : public QObject
     Q_PROPERTY(QString dataStatusText READ dataStatusText NOTIFY dataStatusChanged)
     Q_PROPERTY(QString updateStatusText READ updateStatusText NOTIFY updateStatusChanged)
     Q_PROPERTY(bool isCheckingUpdates READ isCheckingUpdates NOTIFY updateStatusChanged)
-    Q_PROPERTY(QStringList fontFamilies READ fontFamilies CONSTANT)
+    Q_PROPERTY(QStringList fontFamilies READ fontFamilies NOTIFY fontFamiliesChanged)
 
 public:
     static AppSettings *instance();
@@ -118,6 +118,7 @@ public:
     Q_INVOKABLE void stubImport();
     Q_INVOKABLE void setDataStatus(const QString &text);
     Q_INVOKABLE QString t(const QString &zh, const QString &en) const;
+    Q_INVOKABLE QString importFontFile(const QUrl &fileUrl);
 
 signals:
     void languageChanged();
@@ -134,9 +135,12 @@ signals:
     void exchangeChanged();
     void dataStatusChanged();
     void updateStatusChanged();
+    void fontFamiliesChanged();
 
 private:
     void load();
+    void loadApplicationFonts();
+    void refreshFontFamilies();
     void write(const QString &key, const QVariant &value);
     bool hasKey(const QString &key) const;
     void applyLaunchAtLogin();

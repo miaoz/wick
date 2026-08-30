@@ -649,10 +649,59 @@ Rectangle {
                                     font.pixelSize: 12
                                 }
                             }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 1
+                                color: theme.rule
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 32
+                                color: importFontHover.containsMouse ? Qt.rgba(0, 0, 0, 0.04) : "transparent"
+
+                                RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    WickIcon {
+                                        name: "plus"
+                                        size: 11
+                                        color: theme.ember
+                                    }
+                                    Text {
+                                        text: t("导入字体文件 (.otf / .ttf)...", "Import font file (.otf / .ttf)...")
+                                        color: theme.ember
+                                        font.family: theme.fontUi
+                                        font.pixelSize: 11
+                                        font.weight: Font.Medium
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: importFontHover
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        fontPopup.close()
+                                        fontImportDialog.open()
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+
+    FileDialog {
+        id: fontImportDialog
+        fileMode: FileDialog.OpenFile
+        nameFilters: [t("字体文件 (*.otf *.ttf *.woff2 *.ttc)", "Font files (*.otf *.ttf *.woff2 *.ttc)")]
+        onAccepted: {
+            appSettings.importFontFile(selectedFile)
         }
     }
 
