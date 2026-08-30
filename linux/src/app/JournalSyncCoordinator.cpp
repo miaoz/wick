@@ -3,14 +3,18 @@
 #include "AppSettings.h"
 #include "DropboxAuthSession.h"
 #include "DropboxSyncBackend.h"
-#include "FakeSyncBackend.h"
 #include "JournalLibrary.h"
+#include "JournalModels.h"
 #include "JournalPaths.h"
+#include "SyncWorker.h"
 
 #include <QCoreApplication>
-#include <QDeadlineTimer>
 #include <QDebug>
+#include <QEventLoop>
+#include <QMetaObject>
 #include <QSettings>
+#include <QThread>
+#include <QTimer>
 #include <QUrl>
 
 #include <cstdlib>
@@ -27,42 +31,61 @@ JournalSyncCoordinator::JournalSyncCoordinator(JournalLibrary *library,
 
     m_debounce.setSingleShot(true);
     m_debounce.setInterval(15000);
-    connect(&m_debounce, &QTimer::timeout, this, &JournalSyncCoordinator::syncNow);
+    connect(&m_debounce, &QTimer::timeout, this, &JournalSyncCoordinator::requestSync);
 
     m_periodic.setInterval(60000);
-    connect(&m_periodic, &QTimer::timeout, this, &JournalSyncCoordinator::syncNow);
+    connect(&m_periodic, &QTimer::timeout, this, &JournalSyncCoordinator::requestSync);
 
     if (m_library) {
         connect(m_library, &JournalLibrary::journalContentChanged, this, [this]() {
             if (connected())
                 m_debounce.start();
         });
+        connect(m_library, &JournalLibrary::activeJournalChanged, this, [this]() {
+            if (connected())
+                requestSync();
+        });
     }
     if (m_settings) {
         connect(m_settings, &AppSettings::syncChanged, this, [this]() {
             if (m_settings->syncEnabled() && connected()) {
                 m_periodic.start();
-                syncNow();
+                requestSync();
             } else {
                 m_periodic.stop();
             }
         });
     }
 
-    ensureEngine();
-    if (m_fakeAvailable && m_settings && m_settings->syncEnabled()) {
-        if (auto *fake = dynamic_cast<wick::FakeSyncBackend *>(m_backend.get()))
-            fake->authorized = true;
-        startPeriodicIfEnabled();
-        refreshStatus();
-        QTimer::singleShot(0, this, &JournalSyncCoordinator::syncNow);
-    } else if (!m_fakeAvailable && connected()) {
-        startPeriodicIfEnabled();
-        refreshStatus();
-        if (m_settings && m_settings->syncEnabled())
-            QTimer::singleShot(0, this, &JournalSyncCoordinator::syncNow);
-    } else {
-        refreshStatus();
+    m_thread = new QThread(this);
+    m_worker = new SyncWorker(m_library, m_fakeAvailable, deviceID(), stateDirectory());
+    m_worker->moveToThread(m_thread);
+    connect(m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
+    connect(m_thread, &QThread::started, m_worker, &SyncWorker::startEngine);
+    connect(m_worker, &SyncWorker::statusTextChanged, this, [this](const QString &text) {
+        m_statusText = text;
+        emit statusChanged();
+    });
+    connect(m_worker, &SyncWorker::authorizedChanged, this, [this](bool ok, const QString &email) {
+        m_connected = ok;
+        if (!email.isEmpty())
+            m_accountEmail = email;
+        if (!ok)
+            m_accountEmail.clear();
+        emit connectedChanged();
+        if (ok) {
+            startPeriodicIfEnabled();
+            requestSync();
+        }
+    });
+    m_thread->start();
+}
+
+JournalSyncCoordinator::~JournalSyncCoordinator()
+{
+    if (m_thread) {
+        m_thread->quit();
+        m_thread->wait(4000);
     }
 }
 
@@ -72,37 +95,11 @@ void JournalSyncCoordinator::startPeriodicIfEnabled()
         m_periodic.start();
 }
 
-bool JournalSyncCoordinator::connected() const
+void JournalSyncCoordinator::requestSync()
 {
-    return m_backend && m_backend->isAuthorized();
-}
-
-QString JournalSyncCoordinator::accountEmail() const
-{
-    if (!m_backend)
-        return {};
-    auto email = m_backend->accountEmail();
-    return email ? QString::fromStdString(*email) : QString();
-}
-
-void JournalSyncCoordinator::ensureEngine()
-{
-    if (m_engine)
+    if (!m_worker || !connected())
         return;
-    if (!m_library)
-        return;
-
-    if (m_fakeAvailable) {
-        m_backend = std::make_unique<wick::FakeSyncBackend>();
-    } else {
-        auto dropbox = std::make_unique<wick::DropboxSyncBackend>();
-        dropbox->setAuthSession([](const QUrl &url, const QString &scheme) {
-            return DropboxAuthSession::run(url, scheme);
-        });
-        m_backend = std::move(dropbox);
-    }
-    wick::JournalSyncStateStore store(stateDirectory());
-    m_engine = std::make_unique<wick::JournalSyncEngine>(*m_backend, *m_library, deviceID(), store);
+    QMetaObject::invokeMethod(m_worker, "syncActive", Qt::QueuedConnection);
 }
 
 std::string JournalSyncCoordinator::deviceID() const
@@ -126,22 +123,29 @@ void JournalSyncCoordinator::connectDropbox()
 {
     if (m_authorizing)
         return;
-    ensureEngine();
-    if (!m_backend || !m_engine)
-        return;
     m_authorizing = true;
     m_statusText = m_settings && m_settings->isChinese()
         ? QStringLiteral("正在登录…")
         : QStringLiteral("Signing in…");
     emit statusChanged();
     try {
-        m_backend->authorize();
+        wick::DropboxSyncBackend oauth;
+        oauth.setAuthSession([](const QUrl &url, const QString &scheme) {
+            return DropboxAuthSession::run(url, scheme);
+        });
+        const std::string email = oauth.authorize();
+        m_accountEmail = QString::fromStdString(email);
+        m_connected = true;
         if (m_settings)
             m_settings->setSyncEnabled(true);
         m_periodic.start();
         emit connectedChanged();
-        m_engine->syncOnce();
-        refreshStatus();
+        if (m_worker)
+            QMetaObject::invokeMethod(m_worker, "syncActive", Qt::QueuedConnection);
+        m_statusText = m_settings && m_settings->isChinese()
+            ? QStringLiteral("同步中…")
+            : QStringLiteral("Syncing…");
+        emit statusChanged();
     } catch (const wick::SyncBackendError &e) {
         if (e.kind == wick::SyncBackendError::Kind::authorizationCancelled) {
             m_statusText = m_settings && m_settings->isChinese()
@@ -162,76 +166,33 @@ void JournalSyncCoordinator::connectDropbox()
 
 void JournalSyncCoordinator::signOut()
 {
-    if (m_backend)
-        m_backend->signOut();
     if (m_settings)
         m_settings->setSyncEnabled(false);
     m_periodic.stop();
+    m_connected = false;
+    m_accountEmail.clear();
+    m_statusText.clear();
     emit connectedChanged();
-    refreshStatus();
+    emit statusChanged();
+    if (m_worker)
+        QMetaObject::invokeMethod(m_worker, "signOut", Qt::QueuedConnection);
 }
 
 void JournalSyncCoordinator::syncNow()
 {
-    if (!m_engine || !connected())
-        return;
-    try {
-        m_engine->syncOnce();
-        refreshStatus();
-    } catch (const std::exception &e) {
-        qWarning("秉烛: sync failed: %s", e.what());
-        refreshStatus();
-    }
+    requestSync();
 }
 
 void JournalSyncCoordinator::syncOnceBeforeQuit(std::chrono::milliseconds timeout)
 {
-    if (!m_engine || !connected())
+    if (!m_worker || !connected())
         return;
-    QDeadlineTimer deadline(timeout);
-    try {
-        m_engine->syncOnce();
-        refreshStatus();
-    } catch (const std::exception &e) {
-        qWarning("秉烛: quit-time sync failed: %s", e.what());
-    }
-    if (deadline.hasExpired())
-        qWarning("秉烛: quit-time sync hit timeout, continuing quit");
-}
-
-void JournalSyncCoordinator::refreshStatus()
-{
-    if (!m_engine || !connected()) {
-        if (!m_authorizing)
-            m_statusText.clear();
-        emit statusChanged();
-        return;
-    }
-    using S = wick::JournalSyncEngine::Status;
-    switch (m_engine->status()) {
-    case S::idle:
-        m_statusText = m_settings && m_settings->isChinese()
-            ? QStringLiteral("已同步")
-            : QStringLiteral("Synced");
-        break;
-    case S::syncing:
-        m_statusText = m_settings && m_settings->isChinese()
-            ? QStringLiteral("同步中…")
-            : QStringLiteral("Syncing…");
-        break;
-    case S::needsAuth:
-        m_statusText = m_settings && m_settings->isChinese()
-            ? QStringLiteral("需要登录")
-            : QStringLiteral("Needs sign-in");
-        break;
-    case S::offline:
-        m_statusText = m_settings && m_settings->isChinese()
-            ? QStringLiteral("离线")
-            : QStringLiteral("Offline");
-        break;
-    case S::error:
-        m_statusText = QString::fromStdString(m_engine->errorDetail());
-        break;
-    }
-    emit statusChanged();
+    QEventLoop loop;
+    QTimer limiter;
+    limiter.setSingleShot(true);
+    QObject::connect(&limiter, &QTimer::timeout, &loop, &QEventLoop::quit);
+    QObject::connect(m_worker, &SyncWorker::statusTextChanged, &loop, &QEventLoop::quit);
+    limiter.start(static_cast<int>(timeout.count()));
+    QMetaObject::invokeMethod(m_worker, "syncActive", Qt::QueuedConnection);
+    loop.exec();
 }

@@ -33,6 +33,12 @@ if(NOT miniz_POPULATED)
   FetchContent_Populate(miniz)
 endif()
 
+# miniz's CMake generates this via GenerateExportHeader. We compile the
+# split sources directly, so write a static-lib stub.
+if(NOT EXISTS "${miniz_SOURCE_DIR}/miniz_export.h")
+  file(WRITE "${miniz_SOURCE_DIR}/miniz_export.h" "#define MINIZ_EXPORT\n#define MINIZ_NO_EXPORT\n")
+endif()
+
 add_library(wick_miniz STATIC
     ${miniz_SOURCE_DIR}/miniz.c
     ${miniz_SOURCE_DIR}/miniz_tdef.c
@@ -136,8 +142,12 @@ qt_add_executable(wick
     src/app/ReminderScheduler.h
     src/app/JournalSyncCoordinator.cpp
     src/app/JournalSyncCoordinator.h
+    src/app/SyncWorker.cpp
+    src/app/SyncWorker.h
     src/app/DropboxAuthSession.cpp
     src/app/DropboxAuthSession.h
+    src/app/WickIpc.cpp
+    src/app/WickIpc.h
     src/sync/DropboxSyncBackend.cpp
     src/sync/DropboxSyncBackend.h
     resources/resources.qrc

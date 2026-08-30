@@ -53,6 +53,8 @@ public:
 
     bool isAuthorized() const override;
     std::optional<std::string> accountEmail() const override { return accountEmail_; }
+    /// Drop the in-memory refresh/access cache and re-read libsecret.
+    void reloadFromStore();
 
     std::string authorize() override;
     void signOut() override;

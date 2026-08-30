@@ -129,6 +129,14 @@ std::string DropboxSyncBackend::authorize() {
     return email;
 }
 
+void DropboxSyncBackend::reloadFromStore()
+{
+    didProbeStore_ = false;
+    cachedRefreshToken_.reset();
+    accessToken_.reset();
+    accessTokenExpiry_.reset();
+}
+
 void DropboxSyncBackend::signOut() {
     cachedRefreshToken_.reset();
     accessToken_.reset();
@@ -418,7 +426,16 @@ std::string DropboxSyncBackend::rpcCall(const std::string& path, const std::opti
 }
 
 std::string DropboxSyncBackend::apiArg(const std::string& jsonObject) {
-    return jsonObject;
+    // nlohmann dump() emits `\/`; Dropbox-API-Arg should match NSJSONSerialization
+    // (unescaped slashes). Paths never contain a literal backslash.
+    std::string out;
+    out.reserve(jsonObject.size());
+    for (size_t i = 0; i < jsonObject.size(); ++i) {
+        if (jsonObject[i] == '\\' && i + 1 < jsonObject.size() && jsonObject[i + 1] == '/')
+            continue;
+        out.push_back(jsonObject[i]);
+    }
+    return out;
 }
 
 DropboxSyncBackend::HttpResult DropboxSyncBackend::perform(
@@ -440,7 +457,9 @@ DropboxSyncBackend::HttpResult DropboxSyncBackend::perform(
     QNetworkReply* reply = nam_->sendCustomRequest(req, method, body);
     QEventLoop loop;
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
+    // Nested waits must not process clicks: requireJournal() aborts the cycle
+    // as journalSwitched if the user changes the active journal mid-download.
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
 
     if (reply->error() == QNetworkReply::TimeoutError
         || reply->error() == QNetworkReply::ConnectionRefusedError

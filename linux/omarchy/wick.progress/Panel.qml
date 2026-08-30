@@ -356,7 +356,63 @@ Panel {
             font.pixelSize: Style.font.caption
           }
         }
+
+        Rectangle {
+          width: parent.width
+          height: 1
+          color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+        }
+
+        Row {
+          width: parent.width
+          spacing: Style.space(8)
+
+          Repeater {
+            model: [
+              { label: "日记", flag: "journal" },
+              { label: "设置", flag: "settings" }
+            ]
+            delegate: Rectangle {
+              required property var modelData
+              width: (parent.width - parent.spacing) / 2
+              height: Style.space(28)
+              radius: Style.space(4)
+              color: tap.containsMouse ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.10) : "transparent"
+              border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.16)
+              border.width: 1
+
+              Text {
+                anchors.centerIn: parent
+                text: modelData.label
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+              }
+
+              MouseArea {
+                id: tap
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.launchWick(modelData.flag)
+              }
+            }
+          }
+        }
       }
     }
+  }
+
+  function launchWick(mode) {
+    root.close()
+    Quickshell.execDetached([
+      "bash",
+      "-lc",
+      'bin=$(cat "$HOME/.local/share/wick/current-executable" 2>/dev/null); ' +
+      'if [ ! -x "$bin" ]; then bin=$(command -v wick); fi; ' +
+      'if [ ! -x "$bin" ]; then exit 1; fi; ' +
+      'exec "$bin" --' + mode
+    ])
   }
 }

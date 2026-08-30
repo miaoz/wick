@@ -5,6 +5,7 @@
 #include "ReminderScheduler.h"
 #include "TimeProgress.h"
 #include "TrayController.h"
+#include "WickIpc.h"
 
 #include <QApplication>
 #include <QIcon>
@@ -27,7 +28,7 @@ int main(int argc, char *argv[])
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-    if (const int cb = DropboxAuthSession::maybeForwardAndExit(app.arguments()); cb >= 0)
+    if (const int cb = WickIpc::maybeForwardAndExit(app.arguments()); cb >= 0)
         return cb;
 
     AppSettings *settings = AppSettings::instance();
@@ -49,6 +50,12 @@ int main(int argc, char *argv[])
     });
 
     TrayController tray(&progress, &library, settings, &sync);
+
+    WickIpc ipc;
+    ipc.listen();
+    DropboxAuthSession::ensureMimeDefault();
+    QObject::connect(&ipc, &WickIpc::openJournalRequested, &tray, &TrayController::openJournal);
+    QObject::connect(&ipc, &WickIpc::openSettingsRequested, &tray, &TrayController::openSettings);
 
     ReminderScheduler reminder(settings, tray.trayIcon());
     QObject::connect(&reminder, &ReminderScheduler::openJournalRequested,

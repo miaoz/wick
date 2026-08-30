@@ -784,6 +784,51 @@ QString JournalLibrary::uniquifyName(const QString &base, const wick::Uuid &excl
     return name + QLatin1Char(' ') + QString::number(i);
 }
 
+bool JournalLibrary::hasJournal(const Uuid &id) const
+{
+    for (const auto &j : m_catalog.journals) {
+        if (j.id == id)
+            return true;
+    }
+    return false;
+}
+
+std::vector<Uuid> JournalLibrary::journalIds() const
+{
+    std::vector<Uuid> ids;
+    ids.reserve(m_catalog.journals.size());
+    for (const auto &j : m_catalog.journals)
+        ids.push_back(j.id);
+    return ids;
+}
+
+std::optional<JournalInfo> JournalLibrary::registerRemoteJournal(const Uuid &id, const QString &name)
+{
+    if (m_catalogReadOnly)
+        return std::nullopt;
+    for (const auto &j : m_catalog.journals) {
+        if (j.id == id)
+            return j;
+    }
+
+    JournalInfo info;
+    info.id = id;
+    info.name = ss(uniquifyName(name, id));
+    info.createdAt = nowTp();
+    info.updatedAt = info.createdAt;
+    m_paths.ensureJournalDirectories(info.id);
+    JournalFileStore seed(m_paths.journalDirectory(info.id));
+    seed.ensureDirectories();
+    seed.entries.clear();
+    seed.persist();
+
+    m_catalog.journals.push_back(info);
+    writeCatalog();
+    emit journalsChanged();
+    emit journalContentChanged();
+    return info;
+}
+
 void JournalLibrary::selectJournal(const QString &id)
 {
     if (m_catalogReadOnly)
@@ -809,6 +854,7 @@ void JournalLibrary::selectJournal(const QString &id)
     rebuildAfterStructuralChange();
     emit readOnlyChanged();
     emit bannersChanged();
+    emit activeJournalChanged();
 }
 
 void JournalLibrary::addJournal(const QString &name)
@@ -834,6 +880,7 @@ void JournalLibrary::addJournal(const QString &name)
     rebuildAfterStructuralChange();
     emit readOnlyChanged();
     emit bannersChanged();
+    emit activeJournalChanged();
 }
 
 void JournalLibrary::selectDay(const QString &entryId)
@@ -1034,8 +1081,13 @@ std::optional<Uuid> JournalLibrary::syncJournalID() const
 
 std::string JournalLibrary::syncJournalName() const
 {
+    return journalNameFor(m_catalog.activeJournalID);
+}
+
+std::string JournalLibrary::journalNameFor(const Uuid &id) const
+{
     for (const auto &j : m_catalog.journals) {
-        if (j.id == m_catalog.activeJournalID)
+        if (j.id == id)
             return j.name;
     }
     return {};
@@ -1043,7 +1095,16 @@ std::string JournalLibrary::syncJournalName() const
 
 bool JournalLibrary::syncIsWritable() const
 {
-    return !isReadOnly() && !m_catalogReadOnly;
+    return journalWritable(m_catalog.activeJournalID);
+}
+
+bool JournalLibrary::journalWritable(const Uuid &id) const
+{
+    if (m_catalogReadOnly)
+        return false;
+    if (m_store && id == m_catalog.activeJournalID)
+        return !isReadOnly();
+    return true;
 }
 
 std::map<Uuid, JournalEntry> JournalLibrary::syncEntrySnapshots()
@@ -1056,11 +1117,36 @@ std::map<Uuid, JournalEntry> JournalLibrary::syncEntrySnapshots()
     return out;
 }
 
+std::map<Uuid, JournalEntry> JournalLibrary::entrySnapshotsFor(const Uuid &journalID)
+{
+    if (m_store && journalID == m_catalog.activeJournalID)
+        return syncEntrySnapshots();
+    JournalFileStore store(m_paths.journalDirectory(journalID));
+    store.load();
+    std::map<Uuid, JournalEntry> out;
+    for (const auto &e : store.entries)
+        out[e.id] = e;
+    return out;
+}
+
 std::optional<JournalEntry> JournalLibrary::syncEntrySnapshot(const Uuid &entryID)
 {
     if (!m_store)
         return std::nullopt;
     for (const auto &e : m_store->entries) {
+        if (e.id == entryID)
+            return e;
+    }
+    return std::nullopt;
+}
+
+std::optional<JournalEntry> JournalLibrary::entrySnapshotFor(const Uuid &journalID, const Uuid &entryID)
+{
+    if (m_store && journalID == m_catalog.activeJournalID)
+        return syncEntrySnapshot(entryID);
+    JournalFileStore store(m_paths.journalDirectory(journalID));
+    store.load();
+    for (const auto &e : store.entries) {
         if (e.id == entryID)
             return e;
     }
@@ -1094,19 +1180,33 @@ bool localHashMatches(const std::vector<JournalEntry> &entries, const Uuid &entr
 std::set<Uuid> JournalLibrary::applySyncedChanges(const std::vector<JournalSyncMutation> &changes,
                                                  const Uuid &journalID)
 {
-    if (!(journalID == m_catalog.activeJournalID) || !m_store || isReadOnly())
+    if (m_catalogReadOnly)
         return {};
-    flushNow();
+    const bool active = m_store && journalID == m_catalog.activeJournalID;
+    std::unique_ptr<JournalFileStore> owned;
+    JournalFileStore *store = nullptr;
+    if (active) {
+        if (isReadOnly())
+            return {};
+        flushNow();
+        store = m_store.get();
+    } else {
+        owned = std::make_unique<JournalFileStore>(m_paths.journalDirectory(journalID));
+        owned->load();
+        if (owned->isReadOnlyDueToLoadFailure)
+            return {};
+        store = owned.get();
+    }
     std::set<Uuid> applied;
     for (const auto &change : changes) {
-        if (!localHashMatches(m_store->entries, change.entryID, change.expectedLocalHash))
+        if (!localHashMatches(store->entries, change.entryID, change.expectedLocalHash))
             continue;
         if (change.kind == JournalSyncMutation::Kind::upsert) {
             JournalEntry appliedEntry = change.entry;
             if (appliedEntry.items.empty())
                 appliedEntry.items.push_back(JournalItem{Uuid::generate(), "", "", {}, std::nullopt});
             bool found = false;
-            for (auto &e : m_store->entries) {
+            for (auto &e : store->entries) {
                 if (e.id == appliedEntry.id) {
                     e = appliedEntry;
                     found = true;
@@ -1114,12 +1214,12 @@ std::set<Uuid> JournalLibrary::applySyncedChanges(const std::vector<JournalSyncM
                 }
             }
             if (!found)
-                m_store->entries.push_back(appliedEntry);
+                store->entries.push_back(appliedEntry);
             applied.insert(change.entryID);
         } else {
-            for (auto it = m_store->entries.begin(); it != m_store->entries.end(); ++it) {
+            for (auto it = store->entries.begin(); it != store->entries.end(); ++it) {
                 if (it->id == change.entryID) {
-                    m_store->entries.erase(it);
+                    store->entries.erase(it);
                     applied.insert(change.entryID);
                     break;
                 }
@@ -1128,21 +1228,40 @@ std::set<Uuid> JournalLibrary::applySyncedChanges(const std::vector<JournalSyncM
     }
     if (applied.empty())
         return {};
-    persistActive();
-    rebuildAfterStructuralChange();
+    store->persist();
+    if (active) {
+        m_dirty = false;
+        if (!m_store->isReadOnlyDueToLoadFailure)
+            m_savedState = QStringLiteral("已自动保存");
+        rebuildAfterStructuralChange();
+    }
     return applied;
 }
 
 void JournalLibrary::applySyncedEntry(const JournalEntry &entry, const Uuid &journalID)
 {
-    if (!(journalID == m_catalog.activeJournalID) || !m_store || isReadOnly())
+    if (m_catalogReadOnly)
         return;
-    flushNow();
+    const bool active = m_store && journalID == m_catalog.activeJournalID;
+    std::unique_ptr<JournalFileStore> owned;
+    JournalFileStore *store = nullptr;
+    if (active) {
+        if (isReadOnly())
+            return;
+        flushNow();
+        store = m_store.get();
+    } else {
+        owned = std::make_unique<JournalFileStore>(m_paths.journalDirectory(journalID));
+        owned->load();
+        if (owned->isReadOnlyDueToLoadFailure)
+            return;
+        store = owned.get();
+    }
     JournalEntry applied = entry;
     if (applied.items.empty())
         applied.items.push_back(JournalItem{Uuid::generate(), "", "", {}, std::nullopt});
     bool found = false;
-    for (auto &e : m_store->entries) {
+    for (auto &e : store->entries) {
         if (e.id == applied.id) {
             e = applied;
             found = true;
@@ -1150,20 +1269,38 @@ void JournalLibrary::applySyncedEntry(const JournalEntry &entry, const Uuid &jou
         }
     }
     if (!found)
-        m_store->entries.push_back(applied);
-    persistActive();
-    rebuildAfterStructuralChange();
+        store->entries.push_back(applied);
+    store->persist();
+    if (active) {
+        m_dirty = false;
+        rebuildAfterStructuralChange();
+    }
 }
 
 void JournalLibrary::removeSyncedEntry(const Uuid &entryID, const Uuid &journalID)
 {
-    if (!(journalID == m_catalog.activeJournalID) || !m_store || isReadOnly())
+    if (m_catalogReadOnly)
         return;
-    for (auto it = m_store->entries.begin(); it != m_store->entries.end(); ++it) {
+    const bool active = m_store && journalID == m_catalog.activeJournalID;
+    std::unique_ptr<JournalFileStore> owned;
+    JournalFileStore *store = nullptr;
+    if (active) {
+        if (isReadOnly())
+            return;
+        store = m_store.get();
+    } else {
+        owned = std::make_unique<JournalFileStore>(m_paths.journalDirectory(journalID));
+        owned->load();
+        if (owned->isReadOnlyDueToLoadFailure)
+            return;
+        store = owned.get();
+    }
+    for (auto it = store->entries.begin(); it != store->entries.end(); ++it) {
         if (it->id == entryID) {
-            m_store->entries.erase(it);
-            persistActive();
-            rebuildAfterStructuralChange();
+            store->entries.erase(it);
+            store->persist();
+            if (active)
+                rebuildAfterStructuralChange();
             return;
         }
     }
@@ -1181,7 +1318,7 @@ std::string JournalLibrary::applySyncedJournalName(const std::string &name, cons
             break;
         }
     }
-    if (!(journalID == m_catalog.activeJournalID) || index < 0)
+    if (index < 0)
         return current.empty() ? syncJournalName() : current;
     const QString resolved = trimmed.isEmpty()
         ? QString::fromStdString(current)
@@ -1199,10 +1336,17 @@ std::string JournalLibrary::applySyncedJournalName(const std::string &name, cons
 
 std::set<std::string> JournalLibrary::syncedImageFilenames()
 {
+    const auto id = syncJournalID();
+    if (!id)
+        return {};
+    return imageFilenamesFor(*id);
+}
+
+std::set<std::string> JournalLibrary::imageFilenamesFor(const Uuid &journalID)
+{
     std::set<std::string> out;
-    if (!m_store)
-        return out;
-    for (const auto &e : m_store->entries) {
+    const auto snaps = entrySnapshotsFor(journalID);
+    for (const auto &[_, e] : snaps) {
         for (const auto &item : e.items) {
             for (const auto &f : item.imageFilenames)
                 out.insert(f);
@@ -1213,30 +1357,38 @@ std::set<std::string> JournalLibrary::syncedImageFilenames()
 
 std::optional<std::string> JournalLibrary::syncedImageData(const std::string &filename)
 {
-    if (!JournalImageFilename::isValid(filename))
-        return std::nullopt;
     const auto id = syncJournalID();
     if (!id)
         return std::nullopt;
-    return wick::readFileBytes(m_paths.imagesDirectory(*id) / filename);
+    return imageDataFor(*id, filename);
+}
+
+std::optional<std::string> JournalLibrary::imageDataFor(const Uuid &journalID, const std::string &filename)
+{
+    if (!JournalImageFilename::isValid(filename))
+        return std::nullopt;
+    return wick::readFileBytes(m_paths.imagesDirectory(journalID) / filename);
 }
 
 bool JournalLibrary::hasSyncedImage(const std::string &filename)
 {
-    if (!JournalImageFilename::isValid(filename))
-        return false;
     const auto id = syncJournalID();
     if (!id)
         return false;
+    return hasImageFor(*id, filename);
+}
+
+bool JournalLibrary::hasImageFor(const Uuid &journalID, const std::string &filename)
+{
+    if (!JournalImageFilename::isValid(filename))
+        return false;
     std::error_code ec;
-    return std::filesystem::exists(m_paths.imagesDirectory(*id) / filename, ec);
+    return std::filesystem::exists(m_paths.imagesDirectory(journalID) / filename, ec);
 }
 
 void JournalLibrary::storeSyncedImage(const std::string &filename, std::string_view data,
                                       const Uuid &journalID)
 {
-    if (!(journalID == m_catalog.activeJournalID))
-        return;
     if (!JournalImageFilename::isValid(filename))
         return;
     wick::atomicWriteFile(m_paths.imagesDirectory(journalID) / filename, data);

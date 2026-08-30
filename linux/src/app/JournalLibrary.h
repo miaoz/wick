@@ -20,6 +20,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <vector>
 
 /// QObject surface for the journal window. Owns catalog + active JournalFileStore.
 class JournalLibrary : public QObject, public wick::JournalLocalSource
@@ -107,6 +108,9 @@ public:
 
     Q_INVOKABLE void selectJournal(const QString &id);
     Q_INVOKABLE void addJournal(const QString &name);
+    bool hasJournal(const wick::Uuid &id) const;
+    std::vector<wick::Uuid> journalIds() const;
+    std::optional<wick::JournalInfo> registerRemoteJournal(const wick::Uuid &id, const QString &name);
     Q_INVOKABLE void selectDay(const QString &entryId);
     Q_INVOKABLE void openOrCreateToday();
     Q_INVOKABLE void addItem();
@@ -131,9 +135,16 @@ public:
     // JournalLocalSource (engine; Qt-free tests use FakeLocalSource)
     std::optional<wick::Uuid> syncJournalID() const override;
     std::string syncJournalName() const override;
+    std::string journalNameFor(const wick::Uuid &id) const;
     bool syncIsWritable() const override;
+    bool journalWritable(const wick::Uuid &id) const;
     std::map<wick::Uuid, wick::JournalEntry> syncEntrySnapshots() override;
+    std::map<wick::Uuid, wick::JournalEntry> entrySnapshotsFor(const wick::Uuid &journalID);
     std::optional<wick::JournalEntry> syncEntrySnapshot(const wick::Uuid &entryID) override;
+    std::optional<wick::JournalEntry> entrySnapshotFor(const wick::Uuid &journalID, const wick::Uuid &entryID);
+    std::set<std::string> imageFilenamesFor(const wick::Uuid &journalID);
+    std::optional<std::string> imageDataFor(const wick::Uuid &journalID, const std::string &filename);
+    bool hasImageFor(const wick::Uuid &journalID, const std::string &filename);
     void prepareForRemoteApply(const wick::Uuid &entryID) override;
     std::set<wick::Uuid> applySyncedChanges(const std::vector<wick::JournalSyncMutation> &changes,
                                             const wick::Uuid &journalID) override;
@@ -152,6 +163,7 @@ public slots:
 signals:
     void journalContentChanged();
     void journalsChanged();
+    void activeJournalChanged();
     void tagsChanged();
     void daysChanged();
     void itemsChanged();

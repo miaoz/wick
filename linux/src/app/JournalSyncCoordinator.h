@@ -1,7 +1,5 @@
 #pragma once
 
-#include "JournalSyncEngine.h"
-
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -9,13 +7,14 @@
 #include <chrono>
 #include <filesystem>
 #include <memory>
-#include <optional>
 
 class AppSettings;
 class JournalLibrary;
+class SyncWorker;
+class QThread;
 
-/// Owns the journal sync engine. WICK_FAKE_SYNC=1 uses FakeSyncBackend;
-/// otherwise DropboxSyncBackend (OAuth PKCE + HTTP).
+/// Owns the journal sync engine on a worker thread. WICK_FAKE_SYNC=1 uses
+/// FakeSyncBackend; otherwise DropboxSyncBackend (OAuth PKCE + HTTP).
 class JournalSyncCoordinator : public QObject
 {
     Q_OBJECT
@@ -26,10 +25,11 @@ class JournalSyncCoordinator : public QObject
 
 public:
     JournalSyncCoordinator(JournalLibrary *library, AppSettings *settings, QObject *parent = nullptr);
+    ~JournalSyncCoordinator() override;
 
     bool fakeSyncAvailable() const { return m_fakeAvailable; }
-    bool connected() const;
-    QString accountEmail() const;
+    bool connected() const { return m_connected; }
+    QString accountEmail() const { return m_accountEmail; }
     QString statusText() const { return m_statusText; }
 
     Q_INVOKABLE void connectDropbox();
@@ -44,8 +44,7 @@ signals:
     void statusChanged();
 
 private:
-    void ensureEngine();
-    void refreshStatus();
+    void requestSync();
     void startPeriodicIfEnabled();
     std::string deviceID() const;
     std::filesystem::path stateDirectory() const;
@@ -54,9 +53,11 @@ private:
     AppSettings *m_settings = nullptr;
     bool m_fakeAvailable = false;
     bool m_authorizing = false;
+    bool m_connected = false;
+    QString m_accountEmail;
     QString m_statusText;
     QTimer m_debounce;
     QTimer m_periodic;
-    std::unique_ptr<wick::JournalSyncBackend> m_backend;
-    std::unique_ptr<wick::JournalSyncEngine> m_engine;
+    QThread *m_thread = nullptr;
+    SyncWorker *m_worker = nullptr;
 };
