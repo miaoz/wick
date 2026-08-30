@@ -84,34 +84,47 @@ struct PhoneReceiptCard: View {
                 .fill(PhoneTheme.receiptInk.opacity(0.15))
                 .frame(height: 1)
 
-            // Price & Size row
+            // Row 1: VWAP
             HStack {
-                Text("\(L10n.string(.exchangePositionVwap, language: currentLanguage)): \(formatPrice(position.entryPrice))")
-                    .font(PhoneFont.ui(10, monospacedDigit: true))
+                Text(L10n.string(.exchangePositionVwap, language: currentLanguage))
+                    .font(PhoneFont.ui(10, weight: .medium))
                     .foregroundColor(PhoneTheme.receiptInk.opacity(0.8))
 
                 Spacer()
 
-                if let exitPrice = position.exitPrice {
-                    let exitLabel = currentLanguage == .chinese ? "平仓" : "Exit"
-                    Text("\(exitLabel): \(formatPrice(exitPrice))")
-                        .font(PhoneFont.ui(10, monospacedDigit: true))
-                        .foregroundColor(PhoneTheme.receiptInk.opacity(0.8))
-                }
+                let priceText = position.exitPrice.map { "\(formatPrice(position.entryPrice)) → \(formatPrice($0))" } ?? formatPrice(position.entryPrice)
+                Text(priceText)
+                    .font(PhoneFont.ui(10, monospacedDigit: true))
+                    .foregroundColor(PhoneTheme.receiptInk.opacity(0.8))
+            }
+
+            // Row 2: Size · Duration
+            HStack {
+                Text(L10n.string(.exchangePositionSize, language: currentLanguage))
+                    .font(PhoneFont.ui(10, weight: .medium))
+                    .foregroundColor(PhoneTheme.receiptInk.opacity(0.8))
+
+                Spacer()
+
+                let base = SymbolTagMatcher.baseAsset(of: position.symbol)
+                let duration = position.durationText(isChinese: currentLanguage == .chinese)
+                Text("\(formatPrice(position.peakSize)) \(base) · \(duration)")
+                    .font(PhoneFont.ui(10, monospacedDigit: true))
+                    .foregroundColor(PhoneTheme.receiptInk.opacity(0.8))
             }
 
             // Total / Holding Row
             if position.isClosed {
                 HStack {
-                    Text(L10n.string(.exchangePositionRealizedPnl, language: currentLanguage))
+                    Text(L10n.string(.exchangePositionNetPnl, language: currentLanguage))
                         .font(PhoneFont.paper(10.5, weight: .semibold))
                         .foregroundColor(PhoneTheme.receiptInk)
 
                     Spacer()
 
-                    let pnl = position.realizedPnl
-                    let isGain = pnl >= 0
-                    Text(formatPnl(pnl))
+                    let net = position.netPnl
+                    let isGain = net >= 0
+                    Text(formatPnl(net))
                         .font(PhoneFont.ui(12, weight: .bold, monospacedDigit: true))
                         .foregroundColor(PhoneTheme.pnlColor(isGain: isGain))
                 }

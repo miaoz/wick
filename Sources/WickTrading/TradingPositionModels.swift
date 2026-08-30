@@ -235,6 +235,53 @@ public struct TradingPosition: Codable, Identifiable, Equatable, Sendable {
     public var netPnl: Double {
         realizedPnl + commissionTotal + fundingPnl
     }
+
+    /// Localized holding duration of this position.
+    public func durationText(isChinese: Bool = true) -> String {
+        guard let close = closeTime else {
+            return isChinese ? "持仓中" : "Open"
+        }
+        var diffSec = Int64(close.timeIntervalSince(openTime))
+        if diffSec < 0 { diffSec = 0 }
+        let days = diffSec / 86400
+        let hours = (diffSec % 86400) / 3600
+        let minutes = (diffSec % 3600) / 60
+        if isChinese {
+            if days > 0 {
+                if hours > 0 {
+                    return "\(days) 天 \(hours) 小时"
+                }
+                return "\(days) 天"
+            }
+            if hours > 0 {
+                if minutes > 0 {
+                    return "\(hours) 小时 \(minutes) 分钟"
+                }
+                return "\(hours) 小时"
+            }
+            if minutes > 0 {
+                return "\(minutes) 分钟"
+            }
+            return "1 分钟内"
+        } else {
+            if days > 0 {
+                if hours > 0 {
+                    return "\(days)d \(hours)h"
+                }
+                return "\(days)\(days == 1 ? " day" : " days")"
+            }
+            if hours > 0 {
+                if minutes > 0 {
+                    return "\(hours)h \(minutes)m"
+                }
+                return "\(hours)\(hours == 1 ? " hr" : " hrs")"
+            }
+            if minutes > 0 {
+                return "\(minutes)\(minutes == 1 ? " min" : " mins")"
+            }
+            return "< 1 min"
+        }
+    }
 }
 
 /// Cached sync state persisted between launches.

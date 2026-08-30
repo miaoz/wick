@@ -288,7 +288,11 @@ private struct ReceiptView: View {
     }
 
     private var sizeText: String {
-        Self.format(quantity: position.peakSize)
+        let isChinese = settings.language == .chinese
+        let qty = Self.format(quantity: position.peakSize)
+        let base = SymbolTagMatcher.baseAsset(of: position.symbol)
+        let duration = position.durationText(isChinese: isChinese)
+        return "\(qty) \(base) · \(duration)"
     }
 
     private var netText: String {

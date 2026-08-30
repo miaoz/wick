@@ -164,7 +164,7 @@ Item {
                     Text {
                         id: laneText
                         anchors.centerIn: parent
-                        text: d.laneLabel || (d.isLong ? ((appSettings && appSettings.isChinese) ? "多" : "LONG") : ((appSettings && appSettings.isChinese) ? "空" : "SHORT"))
+                        text: d.laneLabel || (d.isLong ? ((appSettings && appSettings.isChinese) ? "多" : "Long") : ((appSettings && appSettings.isChinese) ? "空" : "Short"))
                         color: d.isLong ? (theme ? theme.cinnabar : "#B0341E") : (theme ? theme.dai : "#3E5C50")
                         font.family: theme ? theme.fontUi : "Inter"
                         font.pixelSize: 9
@@ -206,7 +206,7 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 Text {
-                    text: (appSettings && appSettings.isChinese) ? "开仓 → 平仓 VWAP" : "Entry → Exit VWAP"
+                    text: (appSettings && appSettings.isChinese) ? "开仓 → 平仓 VWAP" : "Open → Close VWAP"
                     color: theme ? theme.ink2 : Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.72)
                     font.family: theme ? theme.fontUi : "Inter"
                     font.pixelSize: 10
@@ -238,47 +238,10 @@ Item {
                 }
             }
 
-            // Row 3: Fees & Funding summary or expandable
+            // Total Realized PnL (Clickable to toggle breakdown)
             RowLayout {
                 Layout.fillWidth: true
-                Text {
-                    text: (appSettings && appSettings.isChinese) ? "手续费 · 资金费" : "Fees · Funding"
-                    color: theme ? theme.ink2 : Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.72)
-                    font.family: theme ? theme.fontUi : "Inter"
-                    font.pixelSize: 10
-                }
-                Item { Layout.fillWidth: true }
-                Text {
-                    text: d.feesText || ""
-                    color: theme ? theme.receiptInk : "#33291A"
-                    font.family: theme ? theme.fontMono : "JetBrains Mono"
-                    font.pixelSize: 10
-                }
-            }
-
-            // Dashed total rule
-            Canvas {
-                id: dashedRule2
-                Layout.fillWidth: true
-                Layout.preferredHeight: 1
-                Layout.topMargin: 2
-                Layout.bottomMargin: 2
-                onPaint: {
-                    var ctx = getContext("2d")
-                    ctx.reset()
-                    ctx.strokeStyle = theme ? theme.receiptRule : Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.35)
-                    ctx.lineWidth = 0.8
-                    ctx.setLineDash([3, 2.5])
-                    ctx.beginPath()
-                    ctx.moveTo(0, 0.5)
-                    ctx.lineTo(width, 0.5)
-                    ctx.stroke()
-                }
-            }
-
-            // Row 4: Total Realized PnL (Clickable to toggle breakdown)
-            RowLayout {
-                Layout.fillWidth: true
+                Layout.topMargin: 3
 
                 Item {
                     implicitWidth: toggleRow.implicitWidth
@@ -298,7 +261,7 @@ Item {
                         }
                         Text {
                             text: d.isClosed
-                                ? ((appSettings && appSettings.isChinese) ? "净已实现盈亏" : "Net Realized PnL")
+                                ? ((appSettings && appSettings.isChinese) ? "净盈亏" : "Net PnL")
                                 : ((appSettings && appSettings.isChinese) ? "持仓中" : "Open")
                             color: theme ? theme.receiptInk : "#33291A"
                             font.family: theme ? theme.fontUi : "Inter"

@@ -775,8 +775,8 @@ QVariantList JournalLibrary::itemsForEntry(const JournalEntry &entry) const
             pRow.insert(QStringLiteral("symbol"), QString::fromStdString(p.symbol));
             pRow.insert(QStringLiteral("isLong"), p.side == TradingPositionSide::longSide);
             pRow.insert(QStringLiteral("laneLabel"), p.side == TradingPositionSide::longSide
-                        ? (zh ? QStringLiteral("多") : QStringLiteral("LONG"))
-                        : (zh ? QStringLiteral("空") : QStringLiteral("SHORT")));
+                        ? (zh ? QStringLiteral("多") : QStringLiteral("Long"))
+                        : (zh ? QStringLiteral("空") : QStringLiteral("Short")));
 
             QString header = QString::fromStdString(p.symbol);
             if (!header.endsWith(QStringLiteral("永续")) && !header.endsWith(QStringLiteral("PERP")) && !header.contains(QLatin1Char(' ')))
