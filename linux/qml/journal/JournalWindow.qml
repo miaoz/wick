@@ -13,7 +13,7 @@ Rectangle {
         return (appSettings && appSettings.isChinese) ? zh : en
     }
 
-    readonly property int navWidth: 200
+    readonly property int navWidth: 220
     readonly property int listWidth: 240
     readonly property int inspectorWidth: 268
 

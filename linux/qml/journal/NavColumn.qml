@@ -119,9 +119,9 @@ Rectangle {
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            spacing: 6
+                            anchors.leftMargin: 6
+                            anchors.rightMargin: 6
+                            spacing: 5
                             Text {
                                 text: modelData.name
                                 color: modelData.isActive ? "#FFF3E0" : theme.ink1
@@ -130,20 +130,24 @@ Rectangle {
                                 font.weight: modelData.isActive ? Font.DemiBold : Font.Normal
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
+                                Layout.minimumWidth: 20
+                                Layout.alignment: Qt.AlignVCenter
                             }
                             Text {
                                 text: modelData.statsText || (modelData.entryCount + ((appSettings && appSettings.isChinese) ? " 篇" : (modelData.entryCount === 1 ? " entry" : " entries")))
-                                color: modelData.isActive ? Qt.rgba(1, 0.95, 0.88, 0.65) : theme.ink3
+                                color: modelData.isActive ? Qt.rgba(1, 0.95, 0.88, 0.65) : Qt.rgba(theme.ink3.r, theme.ink3.g, theme.ink3.b, 0.7)
                                 font.family: theme.fontMono
                                 font.pixelSize: 10
+                                Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                             }
                             Text {
                                 visible: modelData.isActive
                                 text: modelData.todayMark || ((appSettings && appSettings.isChinese) ? "今" : "NOW")
                                 color: Qt.rgba(1, 0.95, 0.88, 0.85)
                                 font.family: theme.fontMono
-                                font.pixelSize: 11
+                                font.pixelSize: 10
                                 font.weight: Font.Medium
+                                Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                             }
                         }
                     }
@@ -167,9 +171,9 @@ Rectangle {
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            spacing: 6
+                            anchors.leftMargin: 6
+                            anchors.rightMargin: 6
+                            spacing: 5
                             Text {
                                 text: modelData.name
                                 color: modelData.isActive ? "#FFF3E0" : theme.ink1
@@ -178,20 +182,24 @@ Rectangle {
                                 font.weight: Font.DemiBold
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
+                                Layout.minimumWidth: 20
+                                Layout.alignment: Qt.AlignVCenter
                             }
                             Text {
                                 text: modelData.statsText || (modelData.entryCount + ((appSettings && appSettings.isChinese) ? " 篇" : (modelData.entryCount === 1 ? " entry" : " entries")))
-                                color: modelData.isActive ? Qt.rgba(1, 0.95, 0.88, 0.65) : theme.ink3
+                                color: modelData.isActive ? Qt.rgba(1, 0.95, 0.88, 0.65) : Qt.rgba(theme.ink3.r, theme.ink3.g, theme.ink3.b, 0.7)
                                 font.family: theme.fontMono
                                 font.pixelSize: 10
+                                Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                             }
                             Text {
                                 visible: modelData.isActive
                                 text: modelData.todayMark || ((appSettings && appSettings.isChinese) ? "今" : "NOW")
                                 color: Qt.rgba(1, 0.95, 0.88, 0.85)
                                 font.family: theme.fontMono
-                                font.pixelSize: 11
+                                font.pixelSize: 10
                                 font.weight: Font.Medium
+                                Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                             }
                         }
                     }
