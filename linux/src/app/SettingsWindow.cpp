@@ -5,10 +5,12 @@
 #include "JournalLibrary.h"
 #include "JournalSyncCoordinator.h"
 
+#include <QDebug>
 #include <QEvent>
+#include <QGuiApplication>
 #include <QQmlContext>
 #include <QQmlError>
-#include <QDebug>
+#include <QScreen>
 
 SettingsWindow::SettingsWindow(AppSettings *settings, JournalLibrary *library,
                                JournalSyncCoordinator *sync, ExchangeCoordinator *exchange,
@@ -16,8 +18,9 @@ SettingsWindow::SettingsWindow(AppSettings *settings, JournalLibrary *library,
     : QQuickView(parent)
     , m_settings(settings)
 {
+    setFlags(Qt::Dialog | Qt::WindowCloseButtonHint | Qt::WindowTitleHint | Qt::CustomizeWindowHint);
     setResizeMode(QQuickView::SizeRootObjectToView);
-    setTitle(QStringLiteral("设置"));
+    setTitle(QStringLiteral("设置 — 秉烛"));
     setObjectName(QStringLiteral("wick-settings"));
     setColor(QColor(0x24, 0x1C, 0x10));
     setMinimumWidth(640);
@@ -49,6 +52,19 @@ SettingsWindow::SettingsWindow(AppSettings *settings, JournalLibrary *library,
 
 void SettingsWindow::openOrRaise()
 {
+    if (!isVisible()) {
+        QScreen *scr = screen();
+        if (!scr)
+            scr = QGuiApplication::primaryScreen();
+        if (scr) {
+            const QRect geom = scr->availableGeometry();
+            const int w = width() > 0 ? width() : 780;
+            const int h = height() > 0 ? height() : 580;
+            const int x = geom.x() + (geom.width() - w) / 2;
+            const int y = geom.y() + (geom.height() - h) / 2;
+            setGeometry(x, y, w, h);
+        }
+    }
     show();
     raise();
     requestActivate();
