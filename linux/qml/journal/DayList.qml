@@ -76,9 +76,9 @@ Rectangle {
 
                         Rectangle {
                             visible: modelData.isSelected
-                            width: 3
+                            width: 2
                             height: parent.height
-                            color: theme.cinnabar
+                            color: theme.ember
                         }
 
                         RowLayout {
@@ -116,20 +116,20 @@ Rectangle {
                             }
 
                             Row {
-                                spacing: 3
-                                Text {
+                                spacing: 4
+                                ReviewSeal {
                                     visible: modelData.hasCorrect
-                                    text: "✓"
-                                    color: theme.gain
-                                    font.pixelSize: 12
-                                    font.weight: Font.Bold
+                                    theme: list.theme
+                                    verdict: "correct"
+                                    size: 18
+                                    mini: true
                                 }
-                                Text {
+                                ReviewSeal {
                                     visible: modelData.hasWrong
-                                    text: "✗"
-                                    color: theme.loss
-                                    font.pixelSize: 12
-                                    font.weight: Font.Bold
+                                    theme: list.theme
+                                    verdict: "wrong"
+                                    size: 18
+                                    mini: true
                                 }
                             }
                         }

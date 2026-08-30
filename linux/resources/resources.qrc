@@ -6,6 +6,7 @@
     <file alias="qml/journal/NavColumn.qml">../qml/journal/NavColumn.qml</file>
     <file alias="qml/journal/DayList.qml">../qml/journal/DayList.qml</file>
     <file alias="qml/journal/DayPage.qml">../qml/journal/DayPage.qml</file>
+    <file alias="qml/journal/ReviewSeal.qml">../qml/journal/ReviewSeal.qml</file>
     <file alias="qml/journal/Inspector.qml">../qml/journal/Inspector.qml</file>
     <file alias="qml/settings/Theme.qml">../qml/journal/Theme.qml</file>
     <file alias="qml/settings/SettingsWindow.qml">../qml/settings/SettingsWindow.qml</file>

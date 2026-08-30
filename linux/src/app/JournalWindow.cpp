@@ -1,6 +1,7 @@
 #include "JournalWindow.h"
 #include "AppSettings.h"
 #include "JournalLibrary.h"
+#include "MacroCalendarStore.h"
 
 #include <QEvent>
 #include <QQmlContext>
@@ -19,8 +20,10 @@ JournalWindow::JournalWindow(JournalLibrary *library, QWindow *parent)
     setMinimumHeight(480);
     resize(1280, 800);
 
+    auto *calendar = new MacroCalendarStore(this);
     rootContext()->setContextProperty(QStringLiteral("journalLibrary"), m_library);
     rootContext()->setContextProperty(QStringLiteral("appSettings"), AppSettings::instance());
+    rootContext()->setContextProperty(QStringLiteral("calendarStore"), calendar);
     setSource(QUrl(QStringLiteral("qrc:/qml/journal/JournalWindow.qml")));
 
     if (status() == QQuickView::Error) {

@@ -18,20 +18,42 @@ Rectangle {
         anchors.leftMargin: 28
         anchors.rightMargin: 28
         contentWidth: width
-        contentHeight: sheet.implicitHeight
+        contentHeight: sheetWrap.implicitHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-        Rectangle {
-            id: sheet
+        Item {
+            id: sheetWrap
             width: Math.min(parent.width, 880)
             anchors.horizontalCenter: parent.horizontalCenter
-            implicitHeight: sheetCol.implicitHeight + 34
-            color: theme.paperHi
-            border.color: theme.rule
-            border.width: 1
-            radius: 4
+            implicitHeight: sheet.implicitHeight + 6
+            height: implicitHeight
+
+            // Dual contact shadow (design: 0 1px 2px / 0 5px 14px at 8%).
+            Rectangle {
+                anchors.fill: sheet
+                anchors.topMargin: 5
+                radius: 4
+                color: Qt.rgba(0, 0, 0, 0.08)
+            }
+            Rectangle {
+                anchors.fill: sheet
+                anchors.topMargin: 1
+                radius: 4
+                color: Qt.rgba(0, 0, 0, 0.08)
+            }
+
+            Rectangle {
+                id: sheet
+                anchors.left: parent.left
+                anchors.right: parent.right
+                implicitHeight: sheetCol.implicitHeight + 34
+                height: implicitHeight
+                color: theme.paperHi
+                border.color: theme.rule
+                border.width: 1
+                radius: 4
 
             ColumnLayout {
                 id: sheetCol
@@ -130,6 +152,7 @@ Rectangle {
                             }
 
                             Rectangle {
+                                id: burnFill
                                 width: Math.max(0, Math.min(1, library.pageBurnElapsed)) * burnTrack.width
                                 height: burnTrack.height
                                 gradient: Gradient {
@@ -137,6 +160,14 @@ Rectangle {
                                     GradientStop { position: 0.0; color: theme.stain1 }
                                     GradientStop { position: 1.0; color: theme.stain2 }
                                 }
+                            }
+                            Rectangle {
+                                visible: library.pageIsToday && library.pageBurnElapsed > 0.002
+                                         && library.pageBurnElapsed < 0.998
+                                width: 3
+                                height: burnTrack.height
+                                x: burnFill.width - 1
+                                color: theme.ember
                             }
                         }
 
@@ -241,6 +272,8 @@ Rectangle {
                                         placeholderTextColor: theme.ink3
                                         font.family: theme.fontPrint
                                         font.pixelSize: 14
+                                        lineHeight: 2.0
+                                        lineHeightMode: Text.ProportionalHeight
                                         wrapMode: TextEdit.Wrap
                                         readOnly: library.isReadOnly
                                         background: Item {}
@@ -347,22 +380,14 @@ Rectangle {
                                         spacing: 12
                                         Repeater {
                                             model: ["correct", "wrong"]
-                                            delegate: Rectangle {
+                                            delegate: ReviewSeal {
                                                 required property string modelData
-                                                width: 40
-                                                height: 40
-                                                radius: 3
-                                                rotation: -6
-                                                color: modelData === "correct" ? theme.gain : theme.loss
-                                                opacity: (itemBlock.modelData.review === modelData || itemBlock.modelData.review.length === 0) ? 1 : 0.3
-                                                Text {
-                                                    anchors.centerIn: parent
-                                                    text: modelData === "correct" ? "✓" : "✗"
-                                                    color: theme.sealInk
-                                                    font.family: theme.fontPrint
-                                                    font.pixelSize: 20
-                                                    font.weight: Font.Bold
-                                                }
+                                                theme: page.theme
+                                                verdict: modelData
+                                                size: 40
+                                                mini: true
+                                                dimmed: itemBlock.modelData.review.length > 0
+                                                        && itemBlock.modelData.review !== modelData
                                                 MouseArea {
                                                     anchors.fill: parent
                                                     cursorShape: Qt.PointingHandCursor
@@ -393,27 +418,17 @@ Rectangle {
                                     }
                                 }
 
-                                Rectangle {
+                                ReviewSeal {
                                     visible: modelData.review.length > 0
-                                    width: 56
-                                    height: 56
-                                    radius: 4
-                                    rotation: -6
-                                    opacity: 0.82
-                                    color: modelData.review === "correct" ? theme.gain : theme.loss
+                                    theme: page.theme
+                                    verdict: modelData.review
+                                    size: 56
+                                    floating: true
                                     anchors.right: parent.right
                                     anchors.bottom: parent.bottom
                                     anchors.rightMargin: 2
                                     anchors.bottomMargin: 6
                                     z: 2
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: modelData.review === "correct" ? "✓" : "✗"
-                                        color: theme.sealInk
-                                        font.family: theme.fontPrint
-                                        font.pixelSize: 28
-                                        font.weight: Font.Bold
-                                    }
                                     MouseArea {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
@@ -433,6 +448,8 @@ Rectangle {
                         color: "transparent"
                         border.color: theme.rule
                         border.width: 1
+                        // Hairline stand-in for the design's dashed add-item row.
+                        opacity: 0.9
                         visible: !library.isReadOnly
 
                         Text {
@@ -452,6 +469,7 @@ Rectangle {
 
                     Item { Layout.preferredHeight: 14 }
                 }
+            }
             }
         }
     }

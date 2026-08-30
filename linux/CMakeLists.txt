@@ -146,6 +146,10 @@ qt_add_executable(wick
     src/app/JournalWindow.h
     src/app/LunarCalendar.cpp
     src/app/LunarCalendar.h
+    src/app/TraderAlmanac.cpp
+    src/app/TraderAlmanac.h
+    src/app/MacroCalendarStore.cpp
+    src/app/MacroCalendarStore.h
     src/app/AppSettings.cpp
     src/app/AppSettings.h
     src/app/SettingsWindow.cpp
