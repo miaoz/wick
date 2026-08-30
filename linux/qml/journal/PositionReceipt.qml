@@ -299,7 +299,7 @@ Item {
                         Text {
                             text: d.isClosed
                                 ? ((appSettings && appSettings.isChinese) ? "净已实现盈亏" : "Net Realized PnL")
-                                : ((appSettings && appSettings.isChinese) ? "持仓状态" : "Status")
+                                : ((appSettings && appSettings.isChinese) ? "持仓中" : "Open")
                             color: theme ? theme.receiptInk : "#33291A"
                             font.family: theme ? theme.fontUi : "Inter"
                             font.pixelSize: 11
@@ -318,15 +318,15 @@ Item {
                 Item { Layout.fillWidth: true }
 
                 Text {
-                    text: d.isClosed ? (d.netPnlText || "") : ((appSettings && appSettings.isChinese) ? "持仓中" : "OPEN")
+                    text: d.isClosed ? (d.netPnlText || "") : (d.dateRange || ((appSettings && appSettings.isChinese) ? "持仓中" : "Open"))
                     color: {
                         if (!d.isClosed)
                             return theme ? theme.ink3 : Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.75)
                         return (d.netPnl || 0) >= 0 ? (theme ? theme.gain : "#3E5C50") : (theme ? theme.loss : "#B0341E")
                     }
                     font.family: theme ? theme.fontMono : "JetBrains Mono"
-                    font.pixelSize: 12
-                    font.weight: Font.Bold
+                    font.pixelSize: d.isClosed ? 12 : 10
+                    font.weight: d.isClosed ? Font.Bold : Font.Medium
                 }
             }
 

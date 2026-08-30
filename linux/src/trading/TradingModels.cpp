@@ -52,29 +52,45 @@ std::vector<TradingFill> TradingFill::clipped(const std::vector<TradingFill> &fi
     return out;
 }
 
-std::string TradingPosition::durationText() const
+std::string TradingPosition::durationText(bool isChinese) const
 {
     if (!closeTime.has_value())
-        return "持仓中";
+        return isChinese ? "持仓中" : "Open";
     int64_t diffSec = (*closeTime - openTime) / 1000;
     if (diffSec < 0)
         diffSec = 0;
     const int64_t days = diffSec / 86400;
     const int64_t hours = (diffSec % 86400) / 3600;
     const int64_t minutes = (diffSec % 3600) / 60;
-    if (days > 0) {
-        if (hours > 0)
-            return std::to_string(days) + " 天 " + std::to_string(hours) + " 小时";
-        return std::to_string(days) + " 天";
-    }
-    if (hours > 0) {
+    if (isChinese) {
+        if (days > 0) {
+            if (hours > 0)
+                return std::to_string(days) + " 天 " + std::to_string(hours) + " 小时";
+            return std::to_string(days) + " 天";
+        }
+        if (hours > 0) {
+            if (minutes > 0)
+                return std::to_string(hours) + " 小时 " + std::to_string(minutes) + " 分钟";
+            return std::to_string(hours) + " 小时";
+        }
         if (minutes > 0)
-            return std::to_string(hours) + " 小时 " + std::to_string(minutes) + " 分钟";
-        return std::to_string(hours) + " 小时";
+            return std::to_string(minutes) + " 分钟";
+        return "1 分钟内";
+    } else {
+        if (days > 0) {
+            if (hours > 0)
+                return std::to_string(days) + "d " + std::to_string(hours) + "h";
+            return std::to_string(days) + (days == 1 ? " day" : " days");
+        }
+        if (hours > 0) {
+            if (minutes > 0)
+                return std::to_string(hours) + "h " + std::to_string(minutes) + "m";
+            return std::to_string(hours) + (hours == 1 ? " hr" : " hrs");
+        }
+        if (minutes > 0)
+            return std::to_string(minutes) + (minutes == 1 ? " min" : " mins");
+        return "< 1 min";
     }
-    if (minutes > 0)
-        return std::to_string(minutes) + " 分钟";
-    return "1 分钟内";
 }
 
 std::string TradingPosition::quoteAsset() const

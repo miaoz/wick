@@ -799,7 +799,7 @@ QVariantList JournalLibrary::itemsForEntry(const JournalEntry &entry) const
             const QString quote = QString::fromStdString(p.quoteAsset());
             const QString base = QString::fromStdString(SymbolTagMatcher::baseAsset(p.symbol));
             QString sizeText = formatQty(p.peakSize) + QStringLiteral(" ") + base;
-            sizeText += QStringLiteral(" · ") + QString::fromStdString(p.durationText());
+            sizeText += QStringLiteral(" · ") + QString::fromStdString(p.durationText(zh));
             pRow.insert(QStringLiteral("sizeText"), sizeText);
 
             const double comm = p.commissionTotal();
