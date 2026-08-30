@@ -122,7 +122,10 @@ public:
     Q_INVOKABLE void selectDay(const QString &entryId);
     Q_INVOKABLE void openOrCreateToday();
     Q_INVOKABLE void addItem();
+    Q_INVOKABLE void deleteItem(const QString &itemId);
     Q_INVOKABLE void deleteEmptyItem(const QString &itemId);
+    Q_INVOKABLE void deleteSelectedDay();
+    Q_INVOKABLE void deleteDay(const QString &entryId);
     Q_INVOKABLE void setItemTag(const QString &itemId, const QString &tag);
     Q_INVOKABLE void setItemBody(const QString &itemId, const QString &body);
     Q_INVOKABLE void setItemReview(const QString &itemId, const QString &verdict, const QString &note = QString());

@@ -590,6 +590,7 @@ QVariantList JournalLibrary::items() const
         QVariantMap row;
         row.insert(QStringLiteral("itemId"), qs(item.id.toString()));
         row.insert(QStringLiteral("index"), index);
+        row.insert(QStringLiteral("indexLabel"), QStringLiteral("条目 %1").arg(index));
         row.insert(QStringLiteral("tag"), qs(item.tag));
         row.insert(QStringLiteral("body"), qs(item.body));
         QString verdict;
@@ -1302,6 +1303,40 @@ void JournalLibrary::addItem()
     rebuildAfterStructuralChange();
 }
 
+void JournalLibrary::deleteItem(const QString &itemId)
+{
+    if (isReadOnly())
+        return;
+    auto *entry = selectedEntry();
+    if (!entry)
+        return;
+    const auto id = parseUuid(itemId);
+    if (!id)
+        return;
+    auto it = std::find_if(entry->items.begin(), entry->items.end(),
+                           [&](const JournalItem &item) { return item.id == *id; });
+    if (it == entry->items.end())
+        return;
+    for (const auto &fn : it->imageFilenames) {
+        if (m_store)
+            m_store->removeImage(fn, entry->id, *id);
+    }
+    entry->items.erase(it);
+    if (entry->items.empty()) {
+        const Uuid entryId = entry->id;
+        m_store->entries.erase(
+            std::remove_if(m_store->entries.begin(), m_store->entries.end(),
+                           [&](const JournalEntry &e) { return e.id == entryId; }),
+            m_store->entries.end());
+        m_selectedEntryId.clear();
+        ensureSelection();
+    } else {
+        entry->updatedAt = nowTp();
+    }
+    persistActive();
+    rebuildAfterStructuralChange();
+}
+
 void JournalLibrary::deleteEmptyItem(const QString &itemId)
 {
     if (isReadOnly())
@@ -1318,17 +1353,41 @@ void JournalLibrary::deleteEmptyItem(const QString &itemId)
         return;
     if (!itemIsEmpty(*it))
         return;
-    entry->items.erase(it);
-    if (entry->items.empty()) {
-        const Uuid entryId = entry->id;
-        m_store->entries.erase(
-            std::remove_if(m_store->entries.begin(), m_store->entries.end(),
-                           [&](const JournalEntry &e) { return e.id == entryId; }),
-            m_store->entries.end());
+    deleteItem(itemId);
+}
+
+void JournalLibrary::deleteSelectedDay()
+{
+    if (isReadOnly() || !m_store)
+        return;
+    auto *entry = selectedEntry();
+    if (!entry)
+        return;
+    const Uuid entryId = entry->id;
+    m_store->entries.erase(
+        std::remove_if(m_store->entries.begin(), m_store->entries.end(),
+                       [&](const JournalEntry &e) { return e.id == entryId; }),
+        m_store->entries.end());
+    m_selectedEntryId.clear();
+    ensureSelection();
+    persistActive();
+    rebuildAfterStructuralChange();
+}
+
+void JournalLibrary::deleteDay(const QString &entryId)
+{
+    if (isReadOnly() || !m_store)
+        return;
+    const auto id = parseUuid(entryId);
+    if (!id)
+        return;
+    m_store->entries.erase(
+        std::remove_if(m_store->entries.begin(), m_store->entries.end(),
+                       [&](const JournalEntry &e) { return e.id == *id; }),
+        m_store->entries.end());
+    if (m_selectedEntryId == entryId) {
         m_selectedEntryId.clear();
         ensureSelection();
-    } else {
-        entry->updatedAt = nowTp();
     }
     persistActive();
     rebuildAfterStructuralChange();

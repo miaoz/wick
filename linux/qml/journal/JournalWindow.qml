@@ -70,13 +70,15 @@ Rectangle {
         onActivated: root.requestSettings()
     }
 
-    Repeater {
-        model: 9
-        Shortcut {
-            sequence: "Ctrl+" + (index + 1)
-            onActivated: journalLibrary.selectJournalByIndex(index)
-        }
-    }
+    Shortcut { sequence: "Ctrl+1"; onActivated: journalLibrary.selectJournalByIndex(0) }
+    Shortcut { sequence: "Ctrl+2"; onActivated: journalLibrary.selectJournalByIndex(1) }
+    Shortcut { sequence: "Ctrl+3"; onActivated: journalLibrary.selectJournalByIndex(2) }
+    Shortcut { sequence: "Ctrl+4"; onActivated: journalLibrary.selectJournalByIndex(3) }
+    Shortcut { sequence: "Ctrl+5"; onActivated: journalLibrary.selectJournalByIndex(4) }
+    Shortcut { sequence: "Ctrl+6"; onActivated: journalLibrary.selectJournalByIndex(5) }
+    Shortcut { sequence: "Ctrl+7"; onActivated: journalLibrary.selectJournalByIndex(6) }
+    Shortcut { sequence: "Ctrl+8"; onActivated: journalLibrary.selectJournalByIndex(7) }
+    Shortcut { sequence: "Ctrl+9"; onActivated: journalLibrary.selectJournalByIndex(8) }
 
     ColumnLayout {
         anchors.fill: parent

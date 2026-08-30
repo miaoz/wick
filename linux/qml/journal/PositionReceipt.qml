@@ -5,69 +5,117 @@ Item {
     id: receiptItem
     property var position: null
     property var theme
+    property real tilt: 0
 
     readonly property var d: position || {}
+    property bool showsBreakdown: false
 
     Layout.fillWidth: true
-    implicitHeight: card.implicitHeight + 14
+    implicitHeight: card.implicitHeight + 16
 
-    Rectangle {
+    Item {
         id: card
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.topMargin: 8
+        anchors.topMargin: 10
         anchors.bottomMargin: 6
-        implicitHeight: contentCol.implicitHeight + 20
-        rotation: (typeof d.tilt === "number") ? d.tilt : 0
+        implicitHeight: contentCol.implicitHeight + 24
+        rotation: (typeof d.tilt === "number" && d.tilt !== 0) ? d.tilt : receiptItem.tilt
         transformOrigin: Item.Center
 
-        color: (theme && theme.scheme === "dark") ? "#F5EEDC" : "#FFFDF4"
-        radius: 3
-        border.color: Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.18)
-        border.width: 1
-
-        // Drop shadow feel
-        Rectangle {
-            z: -1
+        // Torn Paper Canvas
+        Canvas {
+            id: paperBg
             anchors.fill: parent
-            anchors.topMargin: 2
-            anchors.leftMargin: 1
-            anchors.rightMargin: -1
-            anchors.bottomMargin: -2
-            radius: 3
-            color: Qt.rgba(0, 0, 0, 0.06)
+            anchors.margins: -4
+            antialiasing: true
+            z: 0
+
+            onPaint: {
+                var ctx = getContext("2d")
+                var w = width
+                var h = height
+                ctx.reset()
+                ctx.clearRect(0, 0, w, h)
+
+                var tearAmplitude = 1.4
+                var seed = 11
+
+                function tear(t, phase) {
+                    return Math.sin(t * 24 + phase) * tearAmplitude * 0.5
+                         + Math.sin(t * 57 + phase * 2.1) * tearAmplitude * 0.32
+                         + Math.sin(t * 8 + phase * 0.8) * tearAmplitude * 0.42
+                }
+
+                var inset = tearAmplitude + 4
+                var top = inset
+                var bottom = h - inset
+                var left = 4
+                var right = w - 4
+                var steps = 32
+
+                // Shadow
+                ctx.save()
+                ctx.shadowColor = Qt.rgba(0, 0, 0, 0.12)
+                ctx.shadowBlur = 4
+                ctx.shadowOffsetY = 1.5
+
+                ctx.beginPath()
+                ctx.moveTo(left, top + tear(0, seed))
+                for (var s = 1; s <= steps; ++s) {
+                    var t = s / steps
+                    ctx.lineTo(left + (right - left) * t, top + tear(t, seed))
+                }
+                ctx.lineTo(right, bottom + tear(1, seed + 5))
+                for (var s = 1; s <= steps; ++s) {
+                    var t = s / steps
+                    ctx.lineTo(right - (right - left) * t, bottom + tear(1 - t, seed + 5))
+                }
+                ctx.closePath()
+
+                // Receipt cream color (physical print paper)
+                ctx.fillStyle = "#F5EEDC"
+                ctx.fill()
+                ctx.restore()
+
+                // Subtle paper border stroke
+                ctx.strokeStyle = Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.18)
+                ctx.lineWidth = 0.8
+                ctx.stroke()
+            }
         }
 
-        // Tape strips
+        // Left Washi Tape
         Rectangle {
-            width: 44
-            height: 12
-            color: Qt.rgba(235 / 255, 225 / 255, 205 / 255, 0.75)
-            border.color: Qt.rgba(210 / 255, 200 / 255, 180 / 255, 0.5)
+            width: 46
+            height: 13
+            radius: 1.5
+            color: Qt.rgba(238 / 255, 212 / 255, 153 / 255, 0.58)
+            border.color: Qt.rgba(217 / 255, 184 / 255, 115 / 255, 0.45)
             border.width: 0.5
-            radius: 1
             rotation: -4
             anchors.top: parent.top
             anchors.topMargin: -6
             anchors.left: parent.left
-            anchors.leftMargin: 14
-            z: 2
+            anchors.leftMargin: 16
+            z: 10
         }
 
+        // Right Washi Tape
         Rectangle {
-            width: 44
-            height: 12
-            color: Qt.rgba(235 / 255, 225 / 255, 205 / 255, 0.75)
-            border.color: Qt.rgba(210 / 255, 200 / 255, 180 / 255, 0.5)
+            width: 46
+            height: 13
+            radius: 1.5
+            color: Qt.rgba(238 / 255, 212 / 255, 153 / 255, 0.58)
+            border.color: Qt.rgba(217 / 255, 184 / 255, 115 / 255, 0.45)
             border.width: 0.5
-            radius: 1
             rotation: 3
             anchors.top: parent.top
             anchors.topMargin: -6
             anchors.right: parent.right
-            anchors.rightMargin: 14
-            z: 2
+            anchors.rightMargin: 16
+            z: 10
         }
 
         ColumnLayout {
@@ -75,8 +123,12 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.margins: 12
-            spacing: 4
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            anchors.topMargin: 10
+            anchors.bottomMargin: 8
+            spacing: 3
+            z: 1
 
             // Header: Symbol + Lane Badge + Date range
             RowLayout {
@@ -92,7 +144,7 @@ Item {
                 }
 
                 Rectangle {
-                    radius: 2
+                    radius: 2.5
                     color: d.isLong ? Qt.rgba(176 / 255, 52 / 255, 30 / 255, 0.12)
                                     : Qt.rgba(62 / 255, 92 / 255, 80 / 255, 0.12)
                     implicitWidth: laneText.implicitWidth + 8
@@ -113,7 +165,7 @@ Item {
 
                 Text {
                     text: d.dateRange || ""
-                    color: Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.65)
+                    color: Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.6)
                     font.family: theme ? theme.fontMono : "JetBrains Mono"
                     font.pixelSize: 9
                 }
@@ -128,8 +180,8 @@ Item {
                 onPaint: {
                     var ctx = getContext("2d")
                     ctx.reset()
-                    ctx.strokeStyle = Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.3)
-                    ctx.lineWidth = 1
+                    ctx.strokeStyle = Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.35)
+                    ctx.lineWidth = 0.8
                     ctx.setLineDash([3, 2.5])
                     ctx.beginPath()
                     ctx.moveTo(0, 0.5)
@@ -143,7 +195,7 @@ Item {
                 Layout.fillWidth: true
                 Text {
                     text: "开仓 → 平仓 VWAP"
-                    color: Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.66)
+                    color: Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.72)
                     font.family: theme ? theme.fontMono : "JetBrains Mono"
                     font.pixelSize: 10
                 }
@@ -161,7 +213,7 @@ Item {
                 Layout.fillWidth: true
                 Text {
                     text: "数量 · 持有"
-                    color: Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.66)
+                    color: Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.72)
                     font.family: theme ? theme.fontMono : "JetBrains Mono"
                     font.pixelSize: 10
                 }
@@ -174,12 +226,12 @@ Item {
                 }
             }
 
-            // Row 3: Fees & Funding
+            // Row 3: Fees & Funding summary or expandable
             RowLayout {
                 Layout.fillWidth: true
                 Text {
                     text: "手续费 · 资金费"
-                    color: Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.66)
+                    color: Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.72)
                     font.family: theme ? theme.fontMono : "JetBrains Mono"
                     font.pixelSize: 10
                 }
@@ -196,13 +248,13 @@ Item {
             Canvas {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 1
-                Layout.topMargin: 3
+                Layout.topMargin: 2
                 Layout.bottomMargin: 2
                 onPaint: {
                     var ctx = getContext("2d")
                     ctx.reset()
                     ctx.strokeStyle = Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.35)
-                    ctx.lineWidth = 1
+                    ctx.lineWidth = 0.8
                     ctx.setLineDash([3, 2.5])
                     ctx.beginPath()
                     ctx.moveTo(0, 0.5)
@@ -211,29 +263,129 @@ Item {
                 }
             }
 
-            // Row 4: Total Realized PnL
+            // Row 4: Total Realized PnL (Clickable to toggle breakdown)
             RowLayout {
                 Layout.fillWidth: true
-                Text {
-                    text: d.isClosed ? "已实现盈亏" : "持仓状态"
-                    color: "#33291A"
-                    font.family: theme ? theme.fontMono : "JetBrains Mono"
-                    font.pixelSize: 11
-                    font.weight: Font.Bold
+
+                Item {
+                    implicitWidth: toggleRow.implicitWidth
+                    implicitHeight: toggleRow.implicitHeight
+
+                    RowLayout {
+                        id: toggleRow
+                        anchors.fill: parent
+                        spacing: 4
+                        Text {
+                            visible: d.isClosed
+                            text: receiptItem.showsBreakdown ? "▾" : "▸"
+                            color: Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.6)
+                            font.family: theme ? theme.fontMono : "JetBrains Mono"
+                            font.pixelSize: 8
+                            font.bold: true
+                        }
+                        Text {
+                            text: d.isClosed ? "净已实现盈亏" : "持仓状态"
+                            color: "#33291A"
+                            font.family: theme ? theme.fontMono : "JetBrains Mono"
+                            font.pixelSize: 11
+                            font.weight: Font.DemiBold
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: d.isClosed ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        enabled: d.isClosed
+                        onClicked: receiptItem.showsBreakdown = !receiptItem.showsBreakdown
+                    }
                 }
+
                 Item { Layout.fillWidth: true }
+
                 Text {
                     text: d.isClosed ? (d.netPnlText || "") : "持仓中"
                     color: {
                         if (!d.isClosed)
                             return Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.75)
-                        if (theme)
-                            return (d.netPnl || 0) >= 0 ? theme.gain : theme.loss
                         return (d.netPnl || 0) >= 0 ? "#3E5C50" : "#B0341E"
                     }
                     font.family: theme ? theme.fontMono : "JetBrains Mono"
                     font.pixelSize: 12
                     font.weight: Font.Bold
+                }
+            }
+
+            // Expanded Breakdown Rows
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+                visible: receiptItem.showsBreakdown && d.isClosed
+
+                Canvas {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 1
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.reset()
+                        ctx.strokeStyle = Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.25)
+                        ctx.lineWidth = 0.8
+                        ctx.setLineDash([2, 2])
+                        ctx.beginPath()
+                        ctx.moveTo(0, 0.5)
+                        ctx.lineTo(width, 0.5)
+                        ctx.stroke()
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: "  已实现盈亏"
+                        color: Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.65)
+                        font.family: theme ? theme.fontMono : "JetBrains Mono"
+                        font.pixelSize: 10
+                    }
+                    Item { Layout.fillWidth: true }
+                    Text {
+                        text: (d.realizedPnl >= 0 ? "+" : "") + (d.realizedPnl || 0).toFixed(2) + " USDT"
+                        color: (d.realizedPnl || 0) >= 0 ? "#3E5C50" : "#B0341E"
+                        font.family: theme ? theme.fontMono : "JetBrains Mono"
+                        font.pixelSize: 10
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: "  手续费"
+                        color: Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.65)
+                        font.family: theme ? theme.fontMono : "JetBrains Mono"
+                        font.pixelSize: 10
+                    }
+                    Item { Layout.fillWidth: true }
+                    Text {
+                        text: ((d.commissionTotal || 0) >= 0 ? "+" : "") + (d.commissionTotal || 0).toFixed(2) + " USDT"
+                        color: (d.commissionTotal || 0) <= 0 ? "#B0341E" : "#3E5C50"
+                        font.family: theme ? theme.fontMono : "JetBrains Mono"
+                        font.pixelSize: 10
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: "  资金费"
+                        color: Qt.rgba(51 / 255, 41 / 255, 26 / 255, 0.65)
+                        font.family: theme ? theme.fontMono : "JetBrains Mono"
+                        font.pixelSize: 10
+                    }
+                    Item { Layout.fillWidth: true }
+                    Text {
+                        text: ((d.fundingPnl || 0) >= 0 ? "+" : "") + (d.fundingPnl || 0).toFixed(2) + " USDT"
+                        color: (d.fundingPnl || 0) >= 0 ? "#3E5C50" : "#B0341E"
+                        font.family: theme ? theme.fontMono : "JetBrains Mono"
+                        font.pixelSize: 10
+                    }
                 }
             }
         }

@@ -9,6 +9,7 @@ Rectangle {
     required property var library
     color: theme.paper
     property string pendingImageItemId: ""
+    property string pendingDeleteItemId: ""
     property bool lightboxVisible: false
     property var lightboxImages: []
     property int lightboxIndex: 0
@@ -107,7 +108,7 @@ Rectangle {
 
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 14
+                        spacing: 12
 
                         Text {
                             text: library.pageDateLabel
@@ -144,6 +145,30 @@ Rectangle {
                             font.pixelSize: 9
                             Layout.bottomMargin: 5
                             visible: library.pageSavedState.length > 0
+                        }
+
+                        // Day delete button on top-right of sheet
+                        Rectangle {
+                            visible: library.hasSelectedDay && !library.isReadOnly
+                            width: 24
+                            height: 24
+                            radius: 3
+                            color: trashBtnHover.containsMouse ? Qt.rgba(224 / 255, 76 / 255, 76 / 255, 0.15) : "transparent"
+                            ToolTip.visible: trashBtnHover.containsMouse
+                            ToolTip.text: "删除本日日记"
+                            WickIcon {
+                                anchors.centerIn: parent
+                                name: "trash"
+                                size: 14
+                                color: trashBtnHover.containsMouse ? theme.cinnabar : theme.ink3
+                            }
+                            MouseArea {
+                                id: trashBtnHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: deleteDayConfirmDialog.open()
+                            }
                         }
                     }
 
@@ -227,7 +252,7 @@ Rectangle {
                                 required property var modelData
                                 required property int index
                                 Layout.fillWidth: true
-                                implicitHeight: itemCol.implicitHeight + 24
+                                implicitHeight: itemCol.implicitHeight + 20
 
                                 property bool reviewOpen: false
 
@@ -258,25 +283,75 @@ Rectangle {
                                     anchors.topMargin: 12
                                     spacing: 8
 
+                                    // Item header: [ #1 ] ... [ +图片 ] [ –删除 ]
                                     RowLayout {
                                         Layout.fillWidth: true
+                                        spacing: 8
+
                                         Text {
-                                            text: modelData.index
+                                            text: modelData.indexLabel || ("条目 " + (index + 1))
                                             color: theme.ink3
-                                            font.family: theme.fontMono
-                                            font.pixelSize: 10
+                                            font.family: theme.fontPrint
+                                            font.pixelSize: 11
                                         }
+
                                         Item { Layout.fillWidth: true }
-                                        Text {
-                                            visible: modelData.isEmpty && !library.isReadOnly
-                                            text: "–"
-                                            color: theme.ink3
-                                            font.pixelSize: 16
+
+                                        // [+] Add image button
+                                        Rectangle {
+                                            visible: !library.isReadOnly
+                                            width: 22
+                                            height: 22
+                                            radius: 3
+                                            color: imgBtnHover.containsMouse ? Qt.rgba(245 / 255, 168 / 255, 60 / 255, 0.15) : "transparent"
+                                            ToolTip.visible: imgBtnHover.containsMouse
+                                            ToolTip.text: "添加图片"
+                                            WickIcon {
+                                                anchors.centerIn: parent
+                                                name: "photo.badge.plus"
+                                                size: 14
+                                                color: imgBtnHover.containsMouse ? theme.ember : theme.ink3
+                                            }
                                             MouseArea {
+                                                id: imgBtnHover
                                                 anchors.fill: parent
-                                                anchors.margins: -6
+                                                hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor
-                                                onClicked: library.deleteEmptyItem(modelData.itemId)
+                                                onClicked: {
+                                                    page.pendingImageItemId = modelData.itemId
+                                                    attachDialog.open()
+                                                }
+                                            }
+                                        }
+
+                                        // [–] Delete item button
+                                        Rectangle {
+                                            visible: !library.isReadOnly
+                                            width: 22
+                                            height: 22
+                                            radius: 3
+                                            color: delItemHover.containsMouse ? Qt.rgba(224 / 255, 76 / 255, 76 / 255, 0.15) : "transparent"
+                                            ToolTip.visible: delItemHover.containsMouse
+                                            ToolTip.text: "删除条目"
+                                            WickIcon {
+                                                anchors.centerIn: parent
+                                                name: "minus.circle"
+                                                size: 14
+                                                color: delItemHover.containsMouse ? theme.cinnabar : theme.ink3
+                                            }
+                                            MouseArea {
+                                                id: delItemHover
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    if (modelData.isEmpty) {
+                                                        library.deleteItem(modelData.itemId)
+                                                    } else {
+                                                        page.pendingDeleteItemId = modelData.itemId
+                                                        deleteItemConfirmDialog.open()
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -299,7 +374,7 @@ Rectangle {
                                     TextArea {
                                         id: bodyArea
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: Math.max(72, implicitHeight)
+                                        Layout.preferredHeight: Math.max(68, implicitHeight)
                                         text: modelData.body
                                         placeholderText: "记下此刻…"
                                         color: theme.ink1
@@ -330,8 +405,10 @@ Rectangle {
                                             delegate: PositionReceipt {
                                                 id: posReceipt
                                                 required property var modelData
+                                                required property int index
                                                 theme: page.theme
                                                 position: posReceipt.modelData
+                                                tilt: (posReceipt.index % 2 === 0) ? -0.4 : 0.5
                                             }
                                         }
                                     }
@@ -339,6 +416,7 @@ Rectangle {
                                     Flow {
                                         Layout.fillWidth: true
                                         spacing: 8
+                                        visible: library.itemImageFilenames(itemBlock.modelData.itemId).length > 0
                                         Repeater {
                                             model: library.itemImageFilenames(itemBlock.modelData.itemId)
                                             delegate: Item {
@@ -375,67 +453,92 @@ Rectangle {
                                                     anchors.top: parent.top
                                                     anchors.right: parent.right
                                                     anchors.margins: 2
-                                                    color: theme.paperHi
-                                                    border.color: theme.ink3
-                                                    Text {
-                                                        anchors.centerIn: parent
-                                                        text: "×"
-                                                        color: theme.ink2
-                                                        font.pixelSize: 10
+                                                    color: "transparent"
+                                                    WickIcon {
+                                                        anchors.fill: parent
+                                                        name: "xmark.circle.fill"
+                                                        size: 15
+                                                        color: thumbDelHover.containsMouse ? theme.cinnabar : Qt.rgba(40 / 255, 30 / 255, 20 / 255, 0.65)
                                                     }
                                                     MouseArea {
+                                                        id: thumbDelHover
                                                         anchors.fill: parent
+                                                        hoverEnabled: true
                                                         cursorShape: Qt.PointingHandCursor
                                                         onClicked: library.removeImage(itemBlock.modelData.itemId, thumb.modelData)
                                                     }
                                                 }
                                             }
                                         }
+                                    }
+
+                                    // Note row if note exists
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        visible: itemBlock.modelData.reviewNote && itemBlock.modelData.reviewNote.length > 0
                                         Rectangle {
-                                            visible: !library.isReadOnly
-                                            width: 72
-                                            height: 72
-                                            radius: 4
-                                            color: "transparent"
-                                            border.color: theme.rule
-                                            border.width: 1
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: "+"
-                                                color: theme.ink3
-                                                font.pixelSize: 20
-                                            }
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    page.pendingImageItemId = itemBlock.modelData.itemId
-                                                    attachDialog.open()
-                                                }
-                                            }
+                                            Layout.preferredWidth: 2
+                                            Layout.preferredHeight: noteTextLab.implicitHeight
+                                            color: itemBlock.modelData.review === "wrong" ? theme.cinnabar : theme.dai
+                                        }
+                                        Text {
+                                            id: noteTextLab
+                                            Layout.fillWidth: true
+                                            text: itemBlock.modelData.reviewNote || ""
+                                            color: theme.ink2
+                                            font.family: theme.fontPrint
+                                            font.pixelSize: 12
+                                            wrapMode: Text.Wrap
                                         }
                                     }
 
+                                    // In-row "复盘" call to action when unreviewed (styled with checkmark.seal icon as in iOS)
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        visible: library.pageReviewEligible && modelData.review.length === 0
+                                        visible: library.pageReviewEligible && itemBlock.modelData.review.length === 0
                                         Item { Layout.fillWidth: true }
-                                        Text {
-                                            text: "复盘"
-                                            color: Qt.rgba(224 / 255, 106 / 255, 76 / 255, 0.8)
-                                            font.family: theme.fontPrint
-                                            font.pixelSize: 12
-                                            font.weight: Font.Bold
-                                            rotation: -3
+
+                                        Rectangle {
+                                            radius: 3
+                                            color: revBtnHover.containsMouse ? Qt.rgba(theme.cinnabar.r, theme.cinnabar.g, theme.cinnabar.b, 0.16)
+                                                                            : Qt.rgba(theme.cinnabar.r, theme.cinnabar.g, theme.cinnabar.b, 0.08)
+                                            implicitWidth: revBtnRow.implicitWidth + 12
+                                            implicitHeight: revBtnRow.implicitHeight + 6
+
+                                            RowLayout {
+                                                id: revBtnRow
+                                                anchors.centerIn: parent
+                                                spacing: 3
+
+                                                WickIcon {
+                                                    name: "checkmark.seal"
+                                                    size: 12
+                                                    Layout.preferredWidth: 12
+                                                    Layout.preferredHeight: 12
+                                                    color: theme.cinnabar
+                                                }
+
+                                                Text {
+                                                    text: "复盘"
+                                                    color: theme.cinnabar
+                                                    font.family: theme.fontPrint
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.Bold
+                                                }
+                                            }
+
                                             MouseArea {
+                                                id: revBtnHover
                                                 anchors.fill: parent
-                                                anchors.margins: -10
+                                                hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor
                                                 onClicked: itemBlock.reviewOpen = !itemBlock.reviewOpen
                                             }
                                         }
                                     }
 
+                                    // Review Popover / Box
                                     Rectangle {
                                         visible: itemBlock.reviewOpen
                                         Layout.fillWidth: true
@@ -471,7 +574,7 @@ Rectangle {
                                                         model: ["correct", "wrong"]
                                                         delegate: Rectangle {
                                                             required property string modelData
-                                                            width: 46
+                                                            width: 48
                                                             height: 24
                                                             radius: 3
                                                             color: itemBlock.modelData.review === modelData
@@ -566,6 +669,7 @@ Rectangle {
                                     }
                                 }
 
+                                // Floating review seal over the bottom-right corner of the whole card (including position receipt)
                                 ReviewSeal {
                                     visible: modelData.review.length > 0
                                     theme: page.theme
@@ -574,9 +678,9 @@ Rectangle {
                                     floating: true
                                     anchors.right: parent.right
                                     anchors.bottom: parent.bottom
-                                    anchors.rightMargin: 2
-                                    anchors.bottomMargin: 6
-                                    z: 2
+                                    anchors.rightMargin: 4
+                                    anchors.bottomMargin: 4
+                                    z: 10
                                     MouseArea {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
@@ -599,12 +703,20 @@ Rectangle {
                         opacity: 0.9
                         visible: !library.isReadOnly
 
-                        Text {
+                        RowLayout {
                             anchors.centerIn: parent
-                            text: "+  添加条目"
-                            color: theme.ink3
-                            font.family: theme.fontPrint
-                            font.pixelSize: 11
+                            spacing: 6
+                            WickIcon {
+                                name: "plus"
+                                size: 10
+                                color: theme.ink3
+                            }
+                            Text {
+                                text: "添加条目"
+                                color: theme.ink3
+                                font.family: theme.fontPrint
+                                font.pixelSize: 11
+                            }
                         }
 
                         MouseArea {
@@ -629,6 +741,154 @@ Rectangle {
             if (page.pendingImageItemId.length > 0)
                 library.addImageFromUrl(page.pendingImageItemId, selectedFile)
             page.pendingImageItemId = ""
+        }
+    }
+
+    Rectangle {
+        id: deleteDayConfirmDialog
+        visible: false
+        anchors.fill: parent
+        z: 90
+        color: Qt.rgba(18 / 255, 13 / 255, 7 / 255, 0.6)
+
+        function open() { visible = true }
+        function close() { visible = false }
+
+        MouseArea { anchors.fill: parent }
+
+        Rectangle {
+            width: 320
+            height: 140
+            anchors.centerIn: parent
+            color: theme.paperHi
+            border.color: theme.rule
+            border.width: 1
+            radius: 6
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 18
+                spacing: 12
+
+                Text {
+                    text: "删除日记"
+                    color: theme.ink1
+                    font.family: theme.fontPrint
+                    font.pixelSize: 14
+                    font.weight: Font.Bold
+                }
+
+                Text {
+                    text: "确定要删除该日期的所有日记与条目吗？此操作无法撤销。"
+                    color: theme.ink2
+                    font.family: theme.fontUi
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
+                }
+
+                Item { Layout.fillHeight: true }
+
+                RowLayout {
+                    Layout.alignment: Qt.AlignRight
+                    spacing: 10
+
+                    Button {
+                        text: "取消"
+                        onClicked: deleteDayConfirmDialog.close()
+                    }
+
+                    Button {
+                        text: "删除"
+                        contentItem: Text {
+                            text: "删除"
+                            color: theme.cinnabar
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            deleteDayConfirmDialog.close()
+                            library.deleteSelectedDay()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        id: deleteItemConfirmDialog
+        visible: false
+        anchors.fill: parent
+        z: 90
+        color: Qt.rgba(18 / 255, 13 / 255, 7 / 255, 0.6)
+
+        function open() { visible = true }
+        function close() { visible = false }
+
+        MouseArea { anchors.fill: parent }
+
+        Rectangle {
+            width: 320
+            height: 130
+            anchors.centerIn: parent
+            color: theme.paperHi
+            border.color: theme.rule
+            border.width: 1
+            radius: 6
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 18
+                spacing: 12
+
+                Text {
+                    text: "删除条目"
+                    color: theme.ink1
+                    font.family: theme.fontPrint
+                    font.pixelSize: 14
+                    font.weight: Font.Bold
+                }
+
+                Text {
+                    text: "确定要删除该条目吗？"
+                    color: theme.ink2
+                    font.family: theme.fontUi
+                    font.pixelSize: 12
+                    Layout.fillWidth: true
+                }
+
+                Item { Layout.fillHeight: true }
+
+                RowLayout {
+                    Layout.alignment: Qt.AlignRight
+                    spacing: 10
+
+                    Button {
+                        text: "取消"
+                        onClicked: deleteItemConfirmDialog.close()
+                    }
+
+                    Button {
+                        text: "删除"
+                        contentItem: Text {
+                            text: "删除"
+                            color: theme.cinnabar
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            deleteItemConfirmDialog.close()
+                            if (page.pendingDeleteItemId.length > 0) {
+                                library.deleteItem(page.pendingDeleteItemId)
+                                page.pendingDeleteItemId = ""
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
