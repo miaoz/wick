@@ -129,7 +129,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Quick Widgets Svg QuickControls2 Network QuickDialogs2)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Quick Widgets Svg QuickControls2 Network QuickDialogs2 DBus)
 
 qt_add_executable(wick
     src/main.cpp
@@ -186,6 +186,7 @@ target_link_libraries(wick PRIVATE
     Qt6::QuickControls2
     Qt6::Network
     Qt6::QuickDialogs2
+    Qt6::DBus
 )
 
 target_compile_definitions(wick PRIVATE

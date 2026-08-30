@@ -118,13 +118,15 @@ public:
     bool hasJournal(const wick::Uuid &id) const;
     std::vector<wick::Uuid> journalIds() const;
     std::optional<wick::JournalInfo> registerRemoteJournal(const wick::Uuid &id, const QString &name);
+    Q_INVOKABLE void selectJournalByIndex(int index);
     Q_INVOKABLE void selectDay(const QString &entryId);
     Q_INVOKABLE void openOrCreateToday();
     Q_INVOKABLE void addItem();
     Q_INVOKABLE void deleteEmptyItem(const QString &itemId);
     Q_INVOKABLE void setItemTag(const QString &itemId, const QString &tag);
     Q_INVOKABLE void setItemBody(const QString &itemId, const QString &body);
-    Q_INVOKABLE void setItemReview(const QString &itemId, const QString &verdict);
+    Q_INVOKABLE void setItemReview(const QString &itemId, const QString &verdict, const QString &note = QString());
+    Q_INVOKABLE void setItemReviewNote(const QString &itemId, const QString &note);
     Q_INVOKABLE void cycleColumns();
     Q_INVOKABLE void toggleInspector();
     Q_INVOKABLE void flushNow();
@@ -135,6 +137,7 @@ public:
     Q_INVOKABLE QUrl imageFileUrl(const QString &filename) const;
     Q_INVOKABLE QStringList itemImageFilenames(const QString &itemId) const;
     Q_INVOKABLE QString addImageFromUrl(const QString &itemId, const QUrl &fileUrl);
+    Q_INVOKABLE bool pasteClipboardImage(const QString &itemId);
     Q_INVOKABLE void removeImage(const QString &itemId, const QString &filename);
     Q_INVOKABLE QString exportArchiveTo(const QUrl &destination);
     Q_INVOKABLE QString importArchiveFrom(const QUrl &source);

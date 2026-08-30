@@ -36,6 +36,7 @@ public:
 
     Q_INVOKABLE void loadIfNeeded();
     Q_INVOKABLE void setSortByImportance(bool on);
+    Q_INVOKABLE QString copyAlmanacCard();
 
 signals:
     void changed();

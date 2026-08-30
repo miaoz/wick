@@ -3,9 +3,13 @@
 #include "AppSettings.h"
 
 #include <QDateTime>
+#include <QDBusConnection>
+#include <QDBusInterface>
+#include <QDBusMessage>
+#include <QDBusReply>
+#include <QSystemTrayIcon>
 
 #include <algorithm>
-#include <QSystemTrayIcon>
 
 ReminderScheduler::ReminderScheduler(AppSettings *settings,
                                      QSystemTrayIcon *tray,
@@ -27,6 +31,16 @@ ReminderScheduler::ReminderScheduler(AppSettings *settings,
         connect(m_tray, &QSystemTrayIcon::messageClicked,
                 this, &ReminderScheduler::openJournalRequested);
     }
+
+    QDBusConnection::sessionBus().connect(
+        QStringLiteral("org.freedesktop.Notifications"),
+        QStringLiteral("/org/freedesktop/Notifications"),
+        QStringLiteral("org.freedesktop.Notifications"),
+        QStringLiteral("ActionInvoked"),
+        this,
+        SLOT(onNotificationAction(uint,QString))
+    );
+
     reschedule();
 }
 
@@ -56,7 +70,42 @@ void ReminderScheduler::fire()
     const QString body = m_settings->t(
         QStringLiteral("记下今天想留住的内容。"),
         QStringLiteral("Write today’s entry."));
-    if (m_tray)
+
+    bool dbusSent = false;
+    QDBusInterface iface(QStringLiteral("org.freedesktop.Notifications"),
+                         QStringLiteral("/org/freedesktop/Notifications"),
+                         QStringLiteral("org.freedesktop.Notifications"),
+                         QDBusConnection::sessionBus());
+    if (iface.isValid()) {
+        QVariantMap hints;
+        hints.insert(QStringLiteral("urgency"), 1);
+        QStringList actions;
+        actions << QStringLiteral("default") << QStringLiteral("")
+                << QStringLiteral("open") << m_settings->t(QStringLiteral("打开日记"), QStringLiteral("Open Journal"));
+        
+        QVariantList args;
+        args << QStringLiteral("Wick")            // app_name
+             << static_cast<quint32>(0)           // replaces_id
+             << QStringLiteral("wick")            // app_icon
+             << title                             // summary
+             << body                              // body
+             << actions                           // actions
+             << hints                             // hints
+             << static_cast<qint32>(8000);        // timeout (ms)
+
+        QDBusReply<uint> reply = iface.callWithArgumentList(QDBus::AutoDetect, QStringLiteral("Notify"), args);
+        if (reply.isValid())
+            dbusSent = true;
+    }
+
+    if (!dbusSent && m_tray)
         m_tray->showMessage(title, body, QSystemTrayIcon::Information, 8000);
+
     reschedule();
+}
+
+void ReminderScheduler::onNotificationAction(uint, const QString &action)
+{
+    if (action == QLatin1String("default") || action == QLatin1String("open"))
+        emit openJournalRequested();
 }

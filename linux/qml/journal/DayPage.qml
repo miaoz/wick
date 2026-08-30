@@ -9,6 +9,29 @@ Rectangle {
     required property var library
     color: theme.paper
     property string pendingImageItemId: ""
+    property bool lightboxVisible: false
+    property var lightboxImages: []
+    property int lightboxIndex: 0
+
+    function openLightbox(images, index) {
+        lightboxImages = images
+        lightboxIndex = index
+        lightboxVisible = true
+    }
+
+    function closeLightbox() {
+        lightboxVisible = false
+    }
+
+    function nextLightbox() {
+        if (lightboxImages.length > 0)
+            lightboxIndex = (lightboxIndex + 1) % lightboxImages.length
+    }
+
+    function prevLightbox() {
+        if (lightboxImages.length > 0)
+            lightboxIndex = (lightboxIndex - 1 + lightboxImages.length) % lightboxImages.length
+    }
 
     Flickable {
         id: flick
@@ -216,6 +239,17 @@ Rectangle {
                                     color: theme.rule
                                 }
 
+                                DropArea {
+                                    anchors.fill: parent
+                                    onDropped: (drop) => {
+                                        if (drop.hasUrls) {
+                                            for (var i = 0; i < drop.urls.length; ++i) {
+                                                library.addImageFromUrl(itemBlock.modelData.itemId, drop.urls[i])
+                                            }
+                                        }
+                                    }
+                                }
+
                                 ColumnLayout {
                                     id: itemCol
                                     anchors.left: parent.left
@@ -279,6 +313,12 @@ Rectangle {
                                             if (activeFocus)
                                                 library.setItemBody(modelData.itemId, text)
                                         }
+                                        Keys.onPressed: (event) => {
+                                            if (event.key === Qt.Key_V && (event.modifiers & Qt.ControlModifier)) {
+                                                if (library.pasteClipboardImage(modelData.itemId))
+                                                    event.accepted = true
+                                            }
+                                        }
                                     }
 
                                     ColumnLayout {
@@ -304,6 +344,7 @@ Rectangle {
                                             delegate: Item {
                                                 id: thumb
                                                 required property string modelData
+                                                required property int index
                                                 width: 72
                                                 height: 72
                                                 Image {
@@ -317,6 +358,14 @@ Rectangle {
                                                     color: "transparent"
                                                     border.color: theme.rule
                                                     border.width: 1
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        const imgs = library.itemImageFilenames(itemBlock.modelData.itemId)
+                                                        page.openLightbox(imgs, thumb.index)
+                                                    }
                                                 }
                                                 Rectangle {
                                                     visible: !library.isReadOnly
@@ -387,44 +436,130 @@ Rectangle {
                                         }
                                     }
 
-                                    Row {
-                                        visible: itemBlock.reviewOpen || (library.pageReviewEligible && modelData.review.length > 0 && itemBlock.reviewOpen)
-                                        Layout.alignment: Qt.AlignRight
-                                        spacing: 12
-                                        Repeater {
-                                            model: ["correct", "wrong"]
-                                            delegate: ReviewSeal {
-                                                required property string modelData
-                                                theme: page.theme
-                                                verdict: modelData
-                                                size: 40
-                                                mini: true
-                                                dimmed: itemBlock.modelData.review.length > 0
-                                                        && itemBlock.modelData.review !== modelData
-                                                MouseArea {
-                                                    anchors.fill: parent
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    onClicked: {
-                                                        library.setItemReview(itemBlock.modelData.itemId, modelData)
-                                                        itemBlock.reviewOpen = false
+                                    Rectangle {
+                                        visible: itemBlock.reviewOpen
+                                        Layout.fillWidth: true
+                                        implicitHeight: reviewCardCol.implicitHeight + 16
+                                        radius: 4
+                                        color: Qt.rgba(theme.ink1.r, theme.ink1.g, theme.ink1.b, 0.04)
+                                        border.color: theme.rule
+                                        border.width: 1
+
+                                        ColumnLayout {
+                                            id: reviewCardCol
+                                            anchors.fill: parent
+                                            anchors.margins: 10
+                                            spacing: 8
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 10
+
+                                                Text {
+                                                    text: "复盘定论"
+                                                    color: theme.ink2
+                                                    font.family: theme.fontPrint
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.Bold
+                                                }
+
+                                                Item { Layout.fillWidth: true }
+
+                                                Row {
+                                                    spacing: 8
+                                                    Repeater {
+                                                        model: ["correct", "wrong"]
+                                                        delegate: Rectangle {
+                                                            required property string modelData
+                                                            width: 46
+                                                            height: 24
+                                                            radius: 3
+                                                            color: itemBlock.modelData.review === modelData
+                                                                   ? (modelData === "correct" ? theme.dai : theme.cinnabar)
+                                                                   : "transparent"
+                                                            border.color: modelData === "correct" ? theme.dai : theme.cinnabar
+                                                            border.width: 1
+                                                            Text {
+                                                                anchors.centerIn: parent
+                                                                text: modelData === "correct" ? "✓ 正确" : "✗ 失误"
+                                                                color: itemBlock.modelData.review === modelData
+                                                                       ? "#FFF"
+                                                                       : (modelData === "correct" ? theme.dai : theme.cinnabar)
+                                                                font.family: theme.fontPrint
+                                                                font.pixelSize: 10
+                                                                font.weight: Font.Bold
+                                                            }
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: {
+                                                                    library.setItemReview(itemBlock.modelData.itemId, modelData, reviewNoteField.text)
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+
+                                                    Rectangle {
+                                                        visible: itemBlock.modelData.review.length > 0
+                                                        width: 38
+                                                        height: 24
+                                                        radius: 3
+                                                        color: "transparent"
+                                                        border.color: theme.rule
+                                                        border.width: 1
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: "清除"
+                                                            color: theme.ink3
+                                                            font.family: theme.fontUi
+                                                            font.pixelSize: 10
+                                                        }
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                library.setItemReview(itemBlock.modelData.itemId, "", "")
+                                                                reviewNoteField.text = ""
+                                                            }
+                                                        }
+                                                    }
+
+                                                    Text {
+                                                        text: "完成"
+                                                        color: theme.ember
+                                                        font.family: theme.fontUi
+                                                        font.pixelSize: 11
+                                                        font.weight: Font.DemiBold
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: itemBlock.reviewOpen = false
+                                                        }
                                                     }
                                                 }
                                             }
-                                        }
-                                        Text {
-                                            visible: itemBlock.modelData.review.length > 0
-                                            text: "清除"
-                                            color: theme.ink3
-                                            font.family: theme.fontUi
-                                            font.pixelSize: 12
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                anchors.margins: -4
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    library.setItemReview(itemBlock.modelData.itemId, "")
-                                                    itemBlock.reviewOpen = false
+
+                                            TextArea {
+                                                id: reviewNoteField
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: Math.max(48, implicitHeight)
+                                                text: itemBlock.modelData.reviewNote || ""
+                                                placeholderText: "写下这笔交易/决策的复盘体会、教训或规则…"
+                                                color: theme.ink1
+                                                placeholderTextColor: theme.ink3
+                                                font.family: theme.fontPrint
+                                                font.pixelSize: 12
+                                                wrapMode: TextEdit.Wrap
+                                                background: Rectangle {
+                                                    color: theme.paperHi
+                                                    border.color: theme.rule
+                                                    border.width: 1
+                                                    radius: 3
+                                                }
+                                                onTextChanged: {
+                                                    if (activeFocus && itemBlock.modelData.review.length > 0)
+                                                        library.setItemReviewNote(itemBlock.modelData.itemId, text)
                                                 }
                                             }
                                         }
@@ -461,7 +596,6 @@ Rectangle {
                         color: "transparent"
                         border.color: theme.rule
                         border.width: 1
-                        // Hairline stand-in for the design's dashed add-item row.
                         opacity: 0.9
                         visible: !library.isReadOnly
 
@@ -495,6 +629,115 @@ Rectangle {
             if (page.pendingImageItemId.length > 0)
                 library.addImageFromUrl(page.pendingImageItemId, selectedFile)
             page.pendingImageItemId = ""
+        }
+    }
+
+    Rectangle {
+        id: lightboxOverlay
+        anchors.fill: parent
+        z: 100
+        visible: page.lightboxVisible
+        color: Qt.rgba(16 / 255, 14 / 255, 13 / 255, 0.94)
+
+        FocusScope {
+            anchors.fill: parent
+            focus: lightboxOverlay.visible
+            Keys.onEscapePressed: page.closeLightbox()
+            Keys.onLeftPressed: page.prevLightbox()
+            Keys.onRightPressed: page.nextLightbox()
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: page.closeLightbox()
+            }
+
+            Image {
+                id: lightboxImg
+                anchors.fill: parent
+                anchors.margins: 56
+                source: (page.lightboxImages.length > page.lightboxIndex && page.lightboxIndex >= 0)
+                        ? library.imageFileUrl(page.lightboxImages[page.lightboxIndex])
+                        : ""
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+            }
+
+            Rectangle {
+                width: 32
+                height: 32
+                radius: 16
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.margins: 16
+                color: Qt.rgba(255, 255, 255, 0.15)
+                Text {
+                    anchors.centerIn: parent
+                    text: "×"
+                    color: "#FFF"
+                    font.pixelSize: 18
+                    font.bold: true
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: page.closeLightbox()
+                }
+            }
+
+            Rectangle {
+                visible: page.lightboxImages.length > 1
+                width: 36
+                height: 36
+                radius: 18
+                anchors.left: parent.left
+                anchors.leftMargin: 16
+                anchors.verticalCenter: parent.verticalCenter
+                color: Qt.rgba(255, 255, 255, 0.15)
+                Text {
+                    anchors.centerIn: parent
+                    text: "‹"
+                    color: "#FFF"
+                    font.pixelSize: 24
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: page.prevLightbox()
+                }
+            }
+
+            Rectangle {
+                visible: page.lightboxImages.length > 1
+                width: 36
+                height: 36
+                radius: 18
+                anchors.right: parent.right
+                anchors.rightMargin: 16
+                anchors.verticalCenter: parent.verticalCenter
+                color: Qt.rgba(255, 255, 255, 0.15)
+                Text {
+                    anchors.centerIn: parent
+                    text: "›"
+                    color: "#FFF"
+                    font.pixelSize: 24
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: page.nextLightbox()
+                }
+            }
+
+            Text {
+                visible: page.lightboxImages.length > 1
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 20
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: (page.lightboxIndex + 1) + " / " + page.lightboxImages.length
+                color: Qt.rgba(255, 255, 255, 0.75)
+                font.family: theme.fontMono
+                font.pixelSize: 12
+            }
         }
     }
 }

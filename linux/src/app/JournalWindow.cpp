@@ -3,10 +3,11 @@
 #include "JournalLibrary.h"
 #include "MacroCalendarStore.h"
 
+#include <QDebug>
 #include <QEvent>
 #include <QQmlContext>
 #include <QQmlError>
-#include <QDebug>
+#include <QQuickItem>
 
 JournalWindow::JournalWindow(JournalLibrary *library, QWindow *parent)
     : QQuickView(parent)
@@ -30,6 +31,8 @@ JournalWindow::JournalWindow(JournalLibrary *library, QWindow *parent)
         const auto errs = errors();
         for (const QQmlError &err : errs)
             qWarning().noquote() << QStringLiteral("JournalWindow.qml:") << err.toString();
+    } else if (rootObject()) {
+        connect(rootObject(), SIGNAL(requestSettings()), this, SIGNAL(openSettingsRequested()));
     }
 }
 

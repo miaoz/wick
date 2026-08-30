@@ -26,6 +26,58 @@ Rectangle {
                                           && journalLibrary.inspectorVisible
                                           && journalLibrary.columnMode === 0
 
+    signal requestSettings()
+
+    Shortcut {
+        sequence: "Ctrl+N"
+        onActivated: journalLibrary.openOrCreateToday()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+F"
+        onActivated: searchField.forceActiveFocus()
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        onActivated: {
+            if (dayPage.lightboxVisible)
+                dayPage.closeLightbox()
+            else if (searchField.activeFocus) {
+                searchField.text = ""
+                searchField.focus = false
+            }
+        }
+    }
+
+    Shortcut {
+        sequence: "Ctrl+0"
+        onActivated: journalLibrary.toggleInspector()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Alt+0"
+        onActivated: journalLibrary.toggleInspector()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+S"
+        onActivated: journalLibrary.cycleColumns()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+,"
+        onActivated: root.requestSettings()
+    }
+
+    Repeater {
+        model: 9
+        Shortcut {
+            sequence: "Ctrl+" + (index + 1)
+            onActivated: journalLibrary.selectJournalByIndex(index)
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -257,6 +309,7 @@ Rectangle {
             }
 
             DayPage {
+                id: dayPage
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 theme: theme

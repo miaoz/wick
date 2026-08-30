@@ -15,6 +15,9 @@ public:
 
     void openOrRaise();
 
+signals:
+    void openSettingsRequested();
+
 protected:
     bool event(QEvent *event) override;
 

@@ -50,6 +50,52 @@ Rectangle {
                         font.pixelSize: 9
                     }
                     Item { Layout.fillWidth: true }
+                    Text {
+                        id: copyToast
+                        visible: opacity > 0
+                        opacity: 0
+                        text: "已复制卡片"
+                        color: theme.ember
+                        font.family: theme.fontUi
+                        font.pixelSize: 10
+                        font.weight: Font.Bold
+                        NumberAnimation on opacity {
+                            id: toastFade
+                            from: 1
+                            to: 0
+                            duration: 1600
+                            easing.type: Easing.InQuad
+                        }
+                    }
+                    Rectangle {
+                        width: 22
+                        height: 22
+                        radius: 3
+                        color: shareMouse.containsMouse ? Qt.rgba(245 / 255, 168 / 255, 60 / 255, 0.12) : "transparent"
+                        border.color: shareMouse.containsMouse ? theme.ember : theme.rule
+                        border.width: 1
+                        ToolTip.visible: shareMouse.containsMouse
+                        ToolTip.text: "复制交易日历分享卡片"
+                        Text {
+                            anchors.centerIn: parent
+                            text: "⎘"
+                            color: shareMouse.containsMouse ? theme.ember : theme.ink2
+                            font.pixelSize: 13
+                        }
+                        MouseArea {
+                            id: shareMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (typeof calendarStore !== "undefined" && calendarStore) {
+                                    calendarStore.copyAlmanacCard()
+                                    copyToast.opacity = 1
+                                    toastFade.restart()
+                                }
+                            }
+                        }
+                    }
                 }
 
                 RowLayout {

@@ -1,15 +1,21 @@
 #include "MacroCalendarStore.h"
+#include "LunarCalendar.h"
 #include "TraderAlmanac.h"
 
+#include <QClipboard>
 #include <QDate>
 #include <QDateTime>
-#include <QTime>
+#include <QFont>
+#include <QGuiApplication>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QPainter>
 #include <QSet>
+#include <QTime>
 #include <QTimeZone>
 #include <QUrlQuery>
 
@@ -290,4 +296,131 @@ void MacroCalendarStore::applyAlmanac()
     m_sha = e.sha;
     const int wd = QDate::currentDate().dayOfWeek();
     m_weekend = (wd == 6 || wd == 7);
+}
+
+QString MacroCalendarStore::copyAlmanacCard()
+{
+    const int width = 560;
+    const int height = 760;
+    QImage image(width, height, QImage::Format_ARGB32);
+    image.fill(QColor(0x18, 0x14, 0x12));
+
+    QPainter p(&image);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setRenderHint(QPainter::TextAntialiasing);
+
+    QRect cardRect(20, 20, width - 40, height - 40);
+    p.setBrush(QColor(0x23, 0x1C, 0x18));
+    p.setPen(QPen(QColor(0x4A, 0x3E, 0x34), 1));
+    p.drawRoundedRect(cardRect, 8, 8);
+
+    QFont headerFont(QStringLiteral("Noto Serif CJK SC, Songti SC, serif"), 11, QFont::Bold);
+    p.setFont(headerFont);
+    p.setPen(QColor(0xE0, 0x9A, 0x3C));
+    p.drawText(cardRect.adjusted(24, 20, -24, 0), Qt::AlignLeft | Qt::AlignTop, QStringLiteral("秉烛 · 交易日历"));
+
+    const QDate today = QDate::currentDate();
+    QFont dateFont(QStringLiteral("Inter, Noto Sans CJK SC, sans-serif"), 26, QFont::Black);
+    p.setFont(dateFont);
+    p.setPen(QColor(0xF0, 0xE6, 0xDA));
+    QString dateStr = QString::number(today.month()) + QStringLiteral("月") + QString::number(today.day()) + QStringLiteral("日");
+    p.drawText(QRect(44, 75, 300, 40), Qt::AlignLeft | Qt::AlignVCenter, dateStr);
+
+    QFont subFont(QStringLiteral("Noto Serif CJK SC, Songti SC, serif"), 11);
+    p.setFont(subFont);
+    p.setPen(QColor(0xB8, 0xAA, 0x98));
+    QString lunarStr = wick::lunarLine(today);
+    p.drawText(QRect(44, 118, 400, 22), Qt::AlignLeft | Qt::AlignVCenter, lunarStr);
+
+    if (!m_seal.isEmpty()) {
+        QRect sealRect(width - 96, 75, 46, 46);
+        p.setBrush(QColor(0xB0, 0x34, 0x1E));
+        p.setPen(Qt::NoPen);
+        p.drawRoundedRect(sealRect, 5, 5);
+        p.setFont(QFont(QStringLiteral("Noto Serif CJK SC, serif"), 13, QFont::Bold));
+        p.setPen(QColor(0xFA, 0xEB, 0xD7));
+        p.drawText(sealRect, Qt::AlignCenter, m_seal);
+    }
+
+    p.setPen(QPen(QColor(0x3E, 0x33, 0x2A), 1));
+    p.drawLine(44, 154, width - 44, 154);
+
+    int y = 172;
+
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(0x3E, 0x5C, 0x50));
+    p.drawRoundedRect(QRect(44, y, 30, 22), 3, 3);
+    p.setFont(QFont(QStringLiteral("Noto Serif CJK SC, serif"), 10, QFont::Bold));
+    p.setPen(QColor(0xFA, 0xEB, 0xD7));
+    p.drawText(QRect(44, y, 30, 22), Qt::AlignCenter, QStringLiteral("宜"));
+    p.setFont(QFont(QStringLiteral("Noto Serif CJK SC, serif"), 11));
+    p.setPen(QColor(0xF0, 0xE6, 0xDA));
+    p.drawText(QRect(84, y, width - 128, 24), Qt::AlignLeft | Qt::AlignVCenter, m_yi);
+    y += 34;
+
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(0xB0, 0x34, 0x1E));
+    p.drawRoundedRect(QRect(44, y, 30, 22), 3, 3);
+    p.setFont(QFont(QStringLiteral("Noto Serif CJK SC, serif"), 10, QFont::Bold));
+    p.setPen(QColor(0xFA, 0xEB, 0xD7));
+    p.drawText(QRect(44, y, 30, 22), Qt::AlignCenter, QStringLiteral("忌"));
+    p.setFont(QFont(QStringLiteral("Noto Serif CJK SC, serif"), 11));
+    p.setPen(QColor(0xF0, 0xE6, 0xDA));
+    p.drawText(QRect(84, y, width - 128, 24), Qt::AlignLeft | Qt::AlignVCenter, m_ji);
+    y += 38;
+
+    p.setFont(QFont(QStringLiteral("Noto Serif CJK SC, serif"), 9));
+    p.setPen(QColor(0x8A, 0x7E, 0x72));
+    QString meta = QStringLiteral("吉神: ") + (m_lucky.isEmpty() ? QStringLiteral("—") : m_lucky)
+                 + QStringLiteral("  |  煞方: ") + (m_sha.isEmpty() ? QStringLiteral("—") : m_sha);
+    p.drawText(QRect(44, y, width - 88, 18), Qt::AlignLeft | Qt::AlignVCenter, meta);
+    y += 28;
+
+    p.setPen(QPen(QColor(0x3E, 0x33, 0x2A), 1));
+    p.drawLine(44, y, width - 44, y);
+    y += 16;
+
+    p.setFont(QFont(QStringLiteral("Noto Serif CJK SC, serif"), 11, QFont::Bold));
+    p.setPen(QColor(0xE0, 0x9A, 0x3C));
+    p.drawText(QRect(44, y, 200, 22), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("今日宏观事件"));
+    y += 30;
+
+    int eventCount = 0;
+    p.setFont(QFont(QStringLiteral("Noto Sans CJK SC, Inter, sans-serif"), 10));
+    for (const auto &row : m_events) {
+        if (++eventCount > 6)
+            break;
+        const auto map = row.toMap();
+        const QString time = map.value(QStringLiteral("time")).toString();
+        const QString title = map.value(QStringLiteral("title")).toString();
+        const QString val = map.value(QStringLiteral("actual")).toString();
+
+        p.setPen(QColor(0x8A, 0x7E, 0x72));
+        p.drawText(QRect(44, y, 46, 20), Qt::AlignLeft | Qt::AlignVCenter, time.isEmpty() ? QStringLiteral("当日") : time);
+
+        p.setPen(QColor(0xF0, 0xE6, 0xDA));
+        p.drawText(QRect(96, y, width - 190, 20), Qt::AlignLeft | Qt::AlignVCenter, p.fontMetrics().elidedText(title, Qt::ElideRight, width - 190));
+
+        if (!val.isEmpty()) {
+            p.setPen(QColor(0xE0, 0x9A, 0x3C));
+            p.drawText(QRect(width - 94, y, 50, 20), Qt::AlignRight | Qt::AlignVCenter, val);
+        }
+        y += 24;
+    }
+    if (eventCount == 0) {
+        p.setPen(QColor(0x8A, 0x7E, 0x72));
+        p.drawText(QRect(44, y, width - 88, 20), Qt::AlignLeft | Qt::AlignVCenter, m_weekend ? QStringLiteral("周末休市") : QStringLiteral("本日无重要事件"));
+    }
+
+    p.setFont(QFont(QStringLiteral("Noto Serif CJK SC, serif"), 9));
+    p.setPen(QColor(0x5A, 0x4E, 0x44));
+    p.drawText(QRect(44, height - 50, width - 88, 18), Qt::AlignCenter, QStringLiteral("Wick · 秉烛日记"));
+
+    p.end();
+
+    QClipboard *cb = QGuiApplication::clipboard();
+    if (cb)
+        cb->setImage(image);
+
+    return QStringLiteral("已复制日历卡片到剪贴板");
 }

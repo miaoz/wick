@@ -164,8 +164,11 @@ void TrayController::onActivated(QSystemTrayIcon::ActivationReason reason)
 
 void TrayController::openJournal()
 {
-    if (!m_journal)
+    if (!m_journal) {
         m_journal = new JournalWindow(m_library);
+        connect(m_journal, &JournalWindow::openSettingsRequested,
+                this, &TrayController::openSettings);
+    }
     m_journal->openOrRaise();
 }
 

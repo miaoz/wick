@@ -6,7 +6,7 @@
 class AppSettings;
 class QSystemTrayIcon;
 
-/// Daily journal reminder via QSystemTrayIcon::showMessage (freedesktop via SNI).
+/// Daily journal reminder via org.freedesktop.Notifications D-Bus and QSystemTrayIcon.
 class ReminderScheduler : public QObject
 {
     Q_OBJECT
@@ -20,6 +20,7 @@ signals:
 private slots:
     void reschedule();
     void fire();
+    void onNotificationAction(uint id, const QString &action);
 
 private:
     AppSettings *m_settings = nullptr;

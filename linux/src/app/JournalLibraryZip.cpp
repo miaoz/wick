@@ -1,5 +1,10 @@
 #include "JournalLibrary.h"
 
+#include <QBuffer>
+#include <QByteArray>
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QImage>
 #include <QStringList>
 #include <QUrl>
 
@@ -100,6 +105,39 @@ QString JournalLibrary::addImageFromUrl(const QString &itemId, const QUrl &fileU
     emit daysChanged();
     emit savedStateChanged();
     return qs(*name);
+}
+
+bool JournalLibrary::pasteClipboardImage(const QString &itemId)
+{
+    if (isReadOnly() || !m_store)
+        return false;
+    auto *entry = selectedEntry();
+    auto *item = findItem(itemId);
+    if (!entry || !item)
+        return false;
+    const QClipboard *clipboard = QGuiApplication::clipboard();
+    if (!clipboard)
+        return false;
+    const QImage img = clipboard->image();
+    if (img.isNull())
+        return false;
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    buffer.open(QIODevice::WriteOnly);
+    if (!img.save(&buffer, "PNG"))
+        return false;
+    const auto name = m_store->addImage(entry->id, item->id,
+                                        std::string_view(bytes.constData(), bytes.size()),
+                                        "png");
+    if (!name)
+        return false;
+    m_dirty = false;
+    m_savedState = QStringLiteral("已自动保存");
+    touchActiveJournalMetadata();
+    emit itemsChanged();
+    emit daysChanged();
+    emit savedStateChanged();
+    return true;
 }
 
 void JournalLibrary::removeImage(const QString &itemId, const QString &filename)

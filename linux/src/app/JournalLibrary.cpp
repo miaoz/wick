@@ -1368,7 +1368,14 @@ void JournalLibrary::setItemBody(const QString &itemId, const QString &body)
     schedulePersist();
 }
 
-void JournalLibrary::setItemReview(const QString &itemId, const QString &verdict)
+void JournalLibrary::selectJournalByIndex(int index)
+{
+    if (index < 0 || index >= static_cast<int>(m_catalog.journals.size()))
+        return;
+    selectJournal(qs(m_catalog.journals[index].id.toString()));
+}
+
+void JournalLibrary::setItemReview(const QString &itemId, const QString &verdict, const QString &note)
 {
     if (isReadOnly())
         return;
@@ -1386,6 +1393,8 @@ void JournalLibrary::setItemReview(const QString &itemId, const QString &verdict
             review.verdict = JournalReviewVerdict::wrong;
         else
             return;
+        if (!note.isNull())
+            review.note = ss(note);
         const TimePoint t = nowTp();
         if (!item->review)
             review.createdAt = t;
@@ -1397,6 +1406,24 @@ void JournalLibrary::setItemReview(const QString &itemId, const QString &verdict
     emit itemsChanged();
     emit daysChanged();
     emit calendarChanged();
+}
+
+void JournalLibrary::setItemReviewNote(const QString &itemId, const QString &note)
+{
+    if (isReadOnly())
+        return;
+    auto *item = findItem(itemId);
+    auto *entry = selectedEntry();
+    if (!item || !entry || !item->review)
+        return;
+    const std::string next = ss(note);
+    if (item->review->note == next)
+        return;
+    item->review->note = next;
+    item->review->updatedAt = nowTp();
+    entry->updatedAt = nowTp();
+    schedulePersist();
+    emit itemsChanged();
 }
 
 void JournalLibrary::selectCalendarDay(const QString &dayKey)
