@@ -63,10 +63,13 @@ final class PhoneSyncCoordinator: ObservableObject {
             stateStore: stateStore
         )
 
+        // Forward engine state to SwiftUI observers of the coordinator.
         engine.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
+
+        selfHealLocalJournals()
 
         // Edit-driven sync; the engine coalesces these (15 s debounce).
         PhoneJournalStore.shared.$entries
@@ -91,7 +94,10 @@ final class PhoneSyncCoordinator: ObservableObject {
         PhoneJournalStore.shared.$activeJournalID
             .dropFirst()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.engine.syncNow() }
+            .sink { [weak self] _ in
+                self?.selfHealLocalJournals()
+                self?.engine.syncNow()
+            }
             .store(in: &cancellables)
 
         // Explicit local deletion: user confirmed delete in UI. Propagate
@@ -111,6 +117,7 @@ final class PhoneSyncCoordinator: ObservableObject {
             .store(in: &cancellables)
 
         if syncEnabled {
+            selfHealLocalJournals()
             engine.start()
         }
     }
@@ -125,6 +132,7 @@ final class PhoneSyncCoordinator: ObservableObject {
             UserDefaults.standard.set(email, forKey: Self.emailKey)
             syncEnabled = true
             UserDefaults.standard.set(true, forKey: Self.enabledKey)
+            selfHealLocalJournals()
             engine.start()
             engine.syncNow()
         } catch SyncBackendError.authorizationCancelled {
@@ -144,15 +152,54 @@ final class PhoneSyncCoordinator: ObservableObject {
     }
 
     func adoptRemoteJournal(_ manifest: JournalSyncManifest) {
-        guard !engine.isJournalTombstoned(manifest.journalID) else { return }
+        engine.clearJournalTombstone(manifest.journalID)
         ignoredRemoteJournalIDs.remove(manifest.journalID)
+        remotelyDeletedJournalIDs.remove(manifest.journalID)
         persistIgnoredJournals()
+        UserDefaults.standard.set(
+            remotelyDeletedJournalIDs.map(\.uuidString),
+            forKey: Self.remotelyDeletedJournalsKey
+        )
         engine.resetSyncState(for: manifest.journalID)
         _ = PhoneJournalStore.shared.registerRemoteJournal(
             id: manifest.journalID,
             name: manifest.journalName
         )
         engine.syncNow()
+    }
+
+    /// Self-healing: if a journal legitimately exists in the local store,
+    /// clear any stale tombstone or ignore markers that may have been recorded
+    /// by legacy reactive deletion tracking.
+    private func selfHealLocalJournals() {
+        let localIDs = Set(PhoneJournalStore.shared.journals.map(\.id))
+        var changed = false
+        for id in localIDs {
+            if ignoredRemoteJournalIDs.contains(id) {
+                ignoredRemoteJournalIDs.remove(id)
+                changed = true
+            }
+            if remotelyDeletedJournalIDs.contains(id) {
+                remotelyDeletedJournalIDs.remove(id)
+                changed = true
+            }
+            if engine.isJournalTombstoned(id) {
+                engine.clearJournalTombstone(id)
+                if backend.isAuthorized {
+                    let tombPath = JournalSyncLayout.journalTombstonePath(for: id)
+                    Task { [backend] in
+                        try? await backend.delete(path: tombPath)
+                    }
+                }
+            }
+        }
+        if changed {
+            persistIgnoredJournals()
+            UserDefaults.standard.set(
+                remotelyDeletedJournalIDs.map(\.uuidString),
+                forKey: Self.remotelyDeletedJournalsKey
+            )
+        }
     }
 
     // MARK: - Auto-import
@@ -162,6 +209,7 @@ final class PhoneSyncCoordinator: ObservableObject {
         let store = PhoneJournalStore.shared
         for manifest in manifests {
             guard !ignoredRemoteJournalIDs.contains(manifest.journalID),
+                  !engine.isJournalTombstoned(manifest.journalID),
                   !store.journals.contains(where: { $0.id == manifest.journalID })
             else { continue }
             engine.resetSyncState(for: manifest.journalID)

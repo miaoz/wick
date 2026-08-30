@@ -64,6 +64,8 @@ final class SyncCoordinator: ObservableObject {
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
 
+        selfHealLocalJournals()
+
         // Auto-import journals discovered on the remote (e.g. created on
         // another device): register them locally under the same id without
         // switching - their content pulls down when the user opens them.
@@ -109,6 +111,7 @@ final class SyncCoordinator: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            self?.selfHealLocalJournals()
             Task { @MainActor in self?.engine.syncNow() }
         }
 
@@ -129,6 +132,7 @@ final class SyncCoordinator: ObservableObject {
 
     func startIfPossible() {
         guard AppSettings.shared.syncEnabled, !isRunning else { return }
+        selfHealLocalJournals()
         engine.start()
         isRunning = true
     }
@@ -146,6 +150,7 @@ final class SyncCoordinator: ObservableObject {
             let email = try await backend.authorize()
             AppSettings.shared.syncAccountEmail = email
             AppSettings.shared.syncEnabled = true
+            selfHealLocalJournals()
             startIfPossible()
             engine.syncNow()
         } catch SyncBackendError.authorizationCancelled {
@@ -174,12 +179,51 @@ final class SyncCoordinator: ObservableObject {
     /// the same id) and immediately pulls its contents. Tombstoned journals
     /// are deleted and must never come back this way.
     func adoptRemoteJournal(_ manifest: JournalSyncManifest) {
-        guard !engine.isJournalTombstoned(manifest.journalID) else { return }
+        engine.clearJournalTombstone(manifest.journalID)
         ignoredRemoteJournalIDs.remove(manifest.journalID)
+        remotelyDeletedJournalIDs.remove(manifest.journalID)
         persistIgnoredJournals()
+        UserDefaults.standard.set(
+            remotelyDeletedJournalIDs.map(\.uuidString),
+            forKey: Self.remotelyDeletedJournalsKey
+        )
         engine.resetSyncState(for: manifest.journalID)
         _ = JournalStore.shared.adoptRemoteJournal(id: manifest.journalID, name: manifest.journalName)
         engine.syncNow()
+    }
+
+    /// Self-healing: if a journal legitimately exists in the local store,
+    /// clear any stale tombstone or ignore markers that may have been recorded
+    /// by legacy reactive deletion tracking.
+    func selfHealLocalJournals() {
+        let localIDs = Set(JournalStore.shared.journals.map(\.id))
+        var changed = false
+        for id in localIDs {
+            if ignoredRemoteJournalIDs.contains(id) {
+                ignoredRemoteJournalIDs.remove(id)
+                changed = true
+            }
+            if remotelyDeletedJournalIDs.contains(id) {
+                remotelyDeletedJournalIDs.remove(id)
+                changed = true
+            }
+            if engine.isJournalTombstoned(id) {
+                engine.clearJournalTombstone(id)
+                if backend.isAuthorized {
+                    let tombPath = JournalSyncLayout.journalTombstonePath(for: id)
+                    Task { [backend] in
+                        try? await backend.delete(path: tombPath)
+                    }
+                }
+            }
+        }
+        if changed {
+            persistIgnoredJournals()
+            UserDefaults.standard.set(
+                remotelyDeletedJournalIDs.map(\.uuidString),
+                forKey: Self.remotelyDeletedJournalsKey
+            )
+        }
     }
 
     // MARK: - Auto-import
@@ -188,6 +232,7 @@ final class SyncCoordinator: ObservableObject {
         guard AppSettings.shared.syncEnabled, backend.isAuthorized else { return }
         for manifest in manifests {
             guard !ignoredRemoteJournalIDs.contains(manifest.journalID),
+                  !engine.isJournalTombstoned(manifest.journalID),
                   !JournalStore.shared.journals.contains(where: { $0.id == manifest.journalID })
             else { continue }
             // Reset the baseline first: a stale state file would make the

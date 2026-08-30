@@ -1826,6 +1826,17 @@ final class JournalSyncEngineTests: XCTestCase {
         XCTAssertTrue(backend.hasFile(JournalSyncLayout.journalTombstonePath(for: deadID)))
     }
 
+    func testClearJournalTombstoneSelfHealsTombstonedJournal() async throws {
+        let aliveID = UUID()
+        let source = makeSource()
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        engine.acknowledgeRemoteJournalDeletion(aliveID)
+        XCTAssertTrue(engine.isJournalTombstoned(aliveID))
+
+        engine.clearJournalTombstone(aliveID)
+        XCTAssertFalse(engine.isJournalTombstoned(aliveID))
+    }
+
     // MARK: optional trading snapshots
 
     func testTradingSnapshotOptOutDoesNotUploadOrDownload() async throws {
