@@ -59,6 +59,9 @@ class JournalLibrary : public QObject, public wick::JournalLocalSource
     Q_PROPERTY(QString todayLunar READ todayLunar NOTIFY calendarChanged)
     Q_PROPERTY(bool todayIsWeekend READ todayIsWeekend NOTIFY calendarChanged)
     Q_PROPERTY(QString calendarMonthLabel READ calendarMonthLabel NOTIFY calendarChanged)
+    Q_PROPERTY(bool hasCalendarMonthPnl READ hasCalendarMonthPnl NOTIFY calendarChanged)
+    Q_PROPERTY(QString calendarMonthPnlText READ calendarMonthPnlText NOTIFY calendarChanged)
+    Q_PROPERTY(double calendarMonthPnl READ calendarMonthPnl NOTIFY calendarChanged)
 
     Q_PROPERTY(int columnMode READ columnMode WRITE setColumnMode NOTIFY layoutChanged)
     Q_PROPERTY(bool inspectorVisible READ inspectorVisible WRITE setInspectorVisible NOTIFY layoutChanged)
@@ -101,6 +104,9 @@ public:
     QString todayLunar() const;
     bool todayIsWeekend() const;
     QString calendarMonthLabel() const;
+    bool hasCalendarMonthPnl() const;
+    QString calendarMonthPnlText() const;
+    double calendarMonthPnl() const;
 
     int columnMode() const { return m_columnMode; }
     void setColumnMode(int mode);

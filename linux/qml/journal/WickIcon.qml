@@ -205,5 +205,77 @@ Item {
                 }
             }
         }
+
+        // 9. CHEVRON.RIGHT
+        Shape {
+            visible: root.name === "chevron.right"
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: root.color
+                strokeWidth: 1.4
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                PathSvg {
+                    path: "M 5.5,3.2 L 10.5,8.0 L 5.5,12.8"
+                }
+            }
+        }
+
+        // 10. CHEVRON.LEFT
+        Shape {
+            visible: root.name === "chevron.left"
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: root.color
+                strokeWidth: 1.4
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                PathSvg {
+                    path: "M 10.5,3.2 L 5.5,8.0 L 10.5,12.8"
+                }
+            }
+        }
+
+        // 11. CHEVRON.DOWN
+        Shape {
+            visible: root.name === "chevron.down"
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: root.color
+                strokeWidth: 1.4
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                PathSvg {
+                    path: "M 3.2,5.5 L 8.0,10.5 L 12.8,5.5"
+                }
+            }
+        }
+
+        // 12. CHEVRON.UP
+        Shape {
+            visible: root.name === "chevron.up"
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: root.color
+                strokeWidth: 1.4
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                PathSvg {
+                    path: "M 3.2,10.5 L 8.0,5.5 L 12.8,10.5"
+                }
+            }
+        }
     }
 }

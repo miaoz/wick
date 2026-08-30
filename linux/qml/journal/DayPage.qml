@@ -359,6 +359,10 @@ Rectangle {
                                     TextField {
                                         id: tagField
                                         Layout.fillWidth: true
+                                        leftPadding: 0
+                                        rightPadding: 0
+                                        topPadding: 0
+                                        bottomPadding: 0
                                         text: modelData.tag
                                         placeholderText: "标签"
                                         color: theme.pnlUp
@@ -374,6 +378,10 @@ Rectangle {
                                     TextArea {
                                         id: bodyArea
                                         Layout.fillWidth: true
+                                        leftPadding: 0
+                                        rightPadding: 0
+                                        topPadding: 0
+                                        bottomPadding: 0
                                         Layout.preferredHeight: Math.max(68, implicitHeight)
                                         text: modelData.body
                                         placeholderText: "记下此刻…"

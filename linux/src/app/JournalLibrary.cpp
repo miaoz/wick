@@ -214,6 +214,8 @@ void JournalLibrary::refreshTradingPositions()
         }
     }
     emit itemsChanged();
+    emit journalsChanged();
+    emit calendarChanged();
 }
 
 bool JournalLibrary::writeCatalog()
@@ -450,6 +452,30 @@ QVariantList JournalLibrary::journals() const
             count = JournalFileStore::entryCountOnDisk(m_paths.journalDirectory(j.id));
         row.insert(QStringLiteral("entryCount"), count);
         row.insert(QStringLiteral("isActive"), j.id == m_catalog.activeJournalID);
+
+        int posCount = 0;
+        if (j.id == m_catalog.activeJournalID) {
+            posCount = static_cast<int>(m_tradingPositions.size());
+        } else {
+            const auto path = m_paths.tradingJSON(j.id);
+            std::error_code ec;
+            if (std::filesystem::exists(path, ec)) {
+                const auto bytes = wick::readFileBytes(path);
+                if (bytes) {
+                    const auto snap = wick::TradingPositionSnapshot::decode(*bytes);
+                    if (snap)
+                        posCount = static_cast<int>(snap->positions.size());
+                }
+            }
+        }
+        row.insert(QStringLiteral("positionsCount"), posCount);
+
+        QString statsText = QStringLiteral("%1 篇").arg(count);
+        if (posCount > 0)
+            statsText += QStringLiteral(" · %1 仓").arg(posCount);
+        row.insert(QStringLiteral("statsText"), statsText);
+        row.insert(QStringLiteral("todayMark"), QStringLiteral("今"));
+
         if (j.exchangeBinding) {
             row.insert(QStringLiteral("exchangeBound"), true);
             row.insert(QStringLiteral("venue"),
@@ -683,10 +709,25 @@ QVariantList JournalLibrary::calendarDays() const
     const int dim = first.daysInMonth();
     const QDate today = QDate::currentDate();
 
-    QHash<QString, QString> stateByKey; // journaled / up / down
+    // 1. Trading positions realized PnL by day key
+    QHash<QString, double> pnlByDay;
+    QSet<QString> hasTradingDay;
+    for (const auto &p : m_tradingPositions) {
+        if (!p.isClosed())
+            continue;
+        const std::string posDayKey = JournalDayKey::make(wick::timeFromUnix(p.openTime / 1000), tzOffsetSeconds());
+        const QString key = QString::fromStdString(posDayKey);
+        hasTradingDay.insert(key);
+        pnlByDay[key] += p.netPnl();
+    }
+
+    // 2. Journal review verdicts and entries by day key
+    QHash<QString, QString> reviewStateByKey;
+    QSet<QString> hasJournalEntryDay;
     if (m_store) {
         for (const auto &e : m_store->entries) {
             const QString key = qs(dayKeyOf(e));
+            hasJournalEntryDay.insert(key);
             bool hasCorrect = false;
             bool hasWrong = false;
             for (const auto &item : e.items) {
@@ -697,13 +738,10 @@ QVariantList JournalLibrary::calendarDays() const
                 else
                     hasWrong = true;
             }
-            QString state = QStringLiteral("journaled");
-            // 绿涨红跌: correct → gain (dai), wrong → loss (cinnabar)
             if (hasWrong)
-                state = QStringLiteral("down");
+                reviewStateByKey.insert(key, QStringLiteral("down"));
             else if (hasCorrect)
-                state = QStringLiteral("up");
-            stateByKey.insert(key, state);
+                reviewStateByKey.insert(key, QStringLiteral("up"));
         }
     }
 
@@ -726,10 +764,25 @@ QVariantList JournalLibrary::calendarDays() const
         cell.insert(QStringLiteral("inMonth"), true);
         cell.insert(QStringLiteral("dayNumber"), QString::number(d.day()));
         cell.insert(QStringLiteral("dayKey"), key);
-        cell.insert(QStringLiteral("state"), stateByKey.value(key, QStringLiteral("empty")));
+
+        // State priority matching macOS JournalPnlCalendarView:
+        // 1) Trading realized PnL: up / down
+        // 2) Review verdict: up / down
+        // 3) Journal entry exists: journaled
+        // 4) Otherwise: empty
+        QString state = QStringLiteral("empty");
+        if (hasTradingDay.contains(key)) {
+            state = (pnlByDay.value(key) >= 0) ? QStringLiteral("up") : QStringLiteral("down");
+        } else if (reviewStateByKey.contains(key)) {
+            state = reviewStateByKey.value(key);
+        } else if (hasJournalEntryDay.contains(key)) {
+            state = QStringLiteral("journaled");
+        }
+
+        cell.insert(QStringLiteral("state"), state);
         cell.insert(QStringLiteral("isToday"), d == today);
         cell.insert(QStringLiteral("isFuture"), d > today);
-        cell.insert(QStringLiteral("hasEntry"), stateByKey.contains(key));
+        cell.insert(QStringLiteral("hasEntry"), hasJournalEntryDay.contains(key));
         out.push_back(cell);
     }
     return out;
@@ -815,6 +868,46 @@ bool JournalLibrary::todayIsWeekend() const
 QString JournalLibrary::calendarMonthLabel() const
 {
     return QStringLiteral("%1年%2月").arg(m_calendarMonth.year()).arg(m_calendarMonth.month());
+}
+
+bool JournalLibrary::hasCalendarMonthPnl() const
+{
+    if (!m_calendarMonth.isValid())
+        return false;
+    for (const auto &p : m_tradingPositions) {
+        if (!p.isClosed())
+            continue;
+        const QDateTime dt = QDateTime::fromMSecsSinceEpoch(p.openTime);
+        if (dt.date().year() == m_calendarMonth.year() && dt.date().month() == m_calendarMonth.month()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+double JournalLibrary::calendarMonthPnl() const
+{
+    if (!m_calendarMonth.isValid())
+        return 0.0;
+    double total = 0.0;
+    for (const auto &p : m_tradingPositions) {
+        if (!p.isClosed())
+            continue;
+        const QDateTime dt = QDateTime::fromMSecsSinceEpoch(p.openTime);
+        if (dt.date().year() == m_calendarMonth.year() && dt.date().month() == m_calendarMonth.month()) {
+            total += p.netPnl();
+        }
+    }
+    return total;
+}
+
+QString JournalLibrary::calendarMonthPnlText() const
+{
+    if (!hasCalendarMonthPnl())
+        return QString();
+    const double val = calendarMonthPnl();
+    const QString sign = (val >= 0) ? QStringLiteral("+") : QStringLiteral("−");
+    return QStringLiteral("%1%2 USDT").arg(sign).arg(QString::number(std::abs(val), 'f', 2));
 }
 
 void JournalLibrary::setColumnMode(int mode)

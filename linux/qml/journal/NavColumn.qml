@@ -132,10 +132,18 @@ Rectangle {
                                 Layout.fillWidth: true
                             }
                             Text {
-                                text: modelData.entryCount + " 篇"
+                                text: modelData.statsText || (modelData.entryCount + " 篇")
                                 color: modelData.isActive ? Qt.rgba(1, 0.95, 0.88, 0.65) : theme.ink3
                                 font.family: theme.fontMono
                                 font.pixelSize: 10
+                            }
+                            Text {
+                                visible: modelData.isActive
+                                text: modelData.todayMark || "今"
+                                color: Qt.rgba(1, 0.95, 0.88, 0.85)
+                                font.family: theme.fontMono
+                                font.pixelSize: 11
+                                font.weight: Font.Medium
                             }
                         }
                     }
@@ -172,10 +180,18 @@ Rectangle {
                                 Layout.fillWidth: true
                             }
                             Text {
-                                text: modelData.entryCount + " 篇"
+                                text: modelData.statsText || (modelData.entryCount + " 篇")
                                 color: modelData.isActive ? Qt.rgba(1, 0.95, 0.88, 0.65) : theme.ink3
                                 font.family: theme.fontMono
                                 font.pixelSize: 10
+                            }
+                            Text {
+                                visible: modelData.isActive
+                                text: modelData.todayMark || "今"
+                                color: Qt.rgba(1, 0.95, 0.88, 0.85)
+                                font.family: theme.fontMono
+                                font.pixelSize: 11
+                                font.weight: Font.Medium
                             }
                         }
                     }
