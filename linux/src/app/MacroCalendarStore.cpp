@@ -1,4 +1,5 @@
 #include "MacroCalendarStore.h"
+#include "AppSettings.h"
 #include "LunarCalendar.h"
 #include "TraderAlmanac.h"
 
@@ -59,6 +60,12 @@ MacroCalendarStore::MacroCalendarStore(QObject *parent)
     : QObject(parent)
 {
     applyAlmanac();
+    if (auto *app = AppSettings::instance()) {
+        connect(app, &AppSettings::languageChanged, this, [this]() {
+            applyAlmanac();
+            emit changed();
+        });
+    }
 }
 
 void MacroCalendarStore::loadIfNeeded()
@@ -289,11 +296,12 @@ void MacroCalendarStore::applyAlmanac()
         }
     }
     const auto e = wick::traderAlmanac(QDate::currentDate(), highVol);
-    m_yi = e.yi;
-    m_ji = e.ji;
-    m_seal = e.seal;
-    m_lucky = e.lucky;
-    m_sha = e.sha;
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
+    m_yi = zh ? e.yi : e.yiEn;
+    m_ji = zh ? e.ji : e.jiEn;
+    m_seal = zh ? e.seal : e.sealEn;
+    m_lucky = zh ? e.lucky : e.luckyEn;
+    m_sha = zh ? e.sha : e.shaEn;
     const int wd = QDate::currentDate().dayOfWeek();
     m_weekend = (wd == 6 || wd == 7);
 }

@@ -1,4 +1,5 @@
 #include "SyncWorker.h"
+#include "AppSettings.h"
 
 #include "DropboxSyncBackend.h"
 #include "FakeSyncBackend.h"
@@ -233,7 +234,8 @@ void SyncWorker::pullAll()
 {
     if (!m_engine || !m_backend || !m_backend->isAuthorized() || !m_library)
         return;
-    emit statusTextChanged(QStringLiteral("正在拉取日记…"));
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
+    emit statusTextChanged(zh ? QStringLiteral("正在拉取日记…") : QStringLiteral("Pulling journals…"));
     std::vector<wick::Uuid> ids;
     QMetaObject::invokeMethod(
         m_library, [this, &ids]() { ids = m_library->journalIds(); }, Qt::BlockingQueuedConnection);
@@ -266,19 +268,20 @@ void SyncWorker::emitStatus()
         return;
     }
     using S = wick::JournalSyncEngine::Status;
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
     QString text;
     switch (m_engine->status()) {
     case S::idle:
-        text = QStringLiteral("已同步");
+        text = zh ? QStringLiteral("已同步") : QStringLiteral("Synced");
         break;
     case S::syncing:
-        text = QStringLiteral("同步中…");
+        text = zh ? QStringLiteral("同步中…") : QStringLiteral("Syncing…");
         break;
     case S::needsAuth:
-        text = QStringLiteral("需要登录");
+        text = zh ? QStringLiteral("需要登录") : QStringLiteral("Login Required");
         break;
     case S::offline:
-        text = QStringLiteral("离线");
+        text = zh ? QStringLiteral("离线") : QStringLiteral("Offline");
         break;
     case S::error:
         text = QString::fromStdString(m_engine->errorDetail());

@@ -74,9 +74,14 @@ AlmanacEntry fromRow(const AlmanacRow &row)
     AlmanacEntry e;
     e.yi = QString::fromUtf8(row.yi);
     e.ji = QString::fromUtf8(row.ji);
+    e.yiEn = QString::fromUtf8(row.yiEn);
+    e.jiEn = QString::fromUtf8(row.jiEn);
     e.seal = row.seal ? QString::fromUtf8(row.seal) : QString();
+    e.sealEn = row.sealEn ? QString::fromUtf8(row.sealEn) : QString();
     e.lucky = row.lucky ? QString::fromUtf8(row.lucky) : QString();
+    e.luckyEn = row.luckyEn ? QString::fromUtf8(row.luckyEn) : QString();
     e.sha = row.sha ? QString::fromUtf8(row.sha) : QString();
+    e.shaEn = row.shaEn ? QString::fromUtf8(row.shaEn) : QString();
     return e;
 }
 

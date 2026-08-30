@@ -177,6 +177,8 @@ private:
     QString m_updateStatusText;
     bool m_checkingUpdates = false;
     QStringList m_fontFamilies;
+    void syncLanguageFile();
+
     bool m_omarchyAvailable = false;
     QString m_omarchyThemeName;
     QVariantMap m_omarchyColors;

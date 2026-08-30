@@ -132,14 +132,14 @@ Rectangle {
                                 Layout.fillWidth: true
                             }
                             Text {
-                                text: modelData.statsText || (modelData.entryCount + " 篇")
+                                text: modelData.statsText || (modelData.entryCount + ((appSettings && appSettings.isChinese) ? " 篇" : (modelData.entryCount === 1 ? " entry" : " entries")))
                                 color: modelData.isActive ? Qt.rgba(1, 0.95, 0.88, 0.65) : theme.ink3
                                 font.family: theme.fontMono
                                 font.pixelSize: 10
                             }
                             Text {
                                 visible: modelData.isActive
-                                text: modelData.todayMark || "今"
+                                text: modelData.todayMark || ((appSettings && appSettings.isChinese) ? "今" : "TODAY")
                                 color: Qt.rgba(1, 0.95, 0.88, 0.85)
                                 font.family: theme.fontMono
                                 font.pixelSize: 11
@@ -180,14 +180,14 @@ Rectangle {
                                 Layout.fillWidth: true
                             }
                             Text {
-                                text: modelData.statsText || (modelData.entryCount + " 篇")
+                                text: modelData.statsText || (modelData.entryCount + ((appSettings && appSettings.isChinese) ? " 篇" : (modelData.entryCount === 1 ? " entry" : " entries")))
                                 color: modelData.isActive ? Qt.rgba(1, 0.95, 0.88, 0.65) : theme.ink3
                                 font.family: theme.fontMono
                                 font.pixelSize: 10
                             }
                             Text {
                                 visible: modelData.isActive
-                                text: modelData.todayMark || "今"
+                                text: modelData.todayMark || ((appSettings && appSettings.isChinese) ? "今" : "TODAY")
                                 color: Qt.rgba(1, 0.95, 0.88, 0.85)
                                 font.family: theme.fontMono
                                 font.pixelSize: 11

@@ -1,4 +1,5 @@
 #include "ExchangeCoordinator.h"
+#include "AppSettings.h"
 
 #include "JournalLibrary.h"
 #include "ExchangeClients.h"
@@ -125,24 +126,29 @@ public slots:
             emit finished(journalId, QString(), QString::fromStdString(snapshotJson),
                           static_cast<int>(positions.size()));
         } catch (const ExchangeHttpError &e) {
+            const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
             QString msg;
             switch (e.kind) {
             case ExchangeHttpError::invalidCredentials:
-                msg = QStringLiteral("凭证无效：%1").arg(QString::fromStdString(e.what()));
+                msg = zh ? QStringLiteral("凭证无效：%1").arg(QString::fromStdString(e.what()))
+                         : QStringLiteral("Invalid credentials: %1").arg(QString::fromStdString(e.what()));
                 break;
             case ExchangeHttpError::timestamp:
-                msg = QStringLiteral("本机时间与交易所相差过大");
+                msg = zh ? QStringLiteral("本机时间与交易所相差过大")
+                         : QStringLiteral("System clock out of sync with exchange");
                 break;
             case ExchangeHttpError::rateLimited:
-                msg = QStringLiteral("请求过于频繁，请稍后再试");
+                msg = zh ? QStringLiteral("请求过于频繁，请稍后再试")
+                         : QStringLiteral("Rate limited, please retry later");
                 break;
             case ExchangeHttpError::network:
-                msg = QStringLiteral("网络错误：%1").arg(QString::fromStdString(e.what()));
+                msg = zh ? QStringLiteral("网络错误：%1").arg(QString::fromStdString(e.what()))
+                         : QStringLiteral("Network error: %1").arg(QString::fromStdString(e.what()));
                 break;
             default:
                 msg = QString::fromStdString(e.what());
                 if (msg.isEmpty())
-                    msg = QStringLiteral("同步失败");
+                    msg = zh ? QStringLiteral("同步失败") : QStringLiteral("Sync failed");
                 break;
             }
             emit finished(journalId, msg, QString(), 0);
@@ -273,8 +279,9 @@ void ExchangeCoordinator::saveOKX(const QString &journalId, const QString &apiKe
 void ExchangeCoordinator::saveHyperliquid(const QString &journalId, const QString &address)
 {
     const auto normalized = HyperliquidInfoClient::normalizedAddress(address.toStdString());
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
     if (!normalized) {
-        m_lastError = QStringLiteral("请输入有效的 0x 钱包地址");
+        m_lastError = zh ? QStringLiteral("请输入有效的 0x 钱包地址") : QStringLiteral("Please enter a valid 0x wallet address");
         m_statusText = m_lastError;
         emit statusChanged();
         return;
@@ -301,7 +308,8 @@ void ExchangeCoordinator::disconnectJournal(const QString &journalId)
     }
     m_library->setExchangeBinding(*parsed, std::nullopt);
     m_lastError.clear();
-    m_statusText = QStringLiteral("已断开");
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
+    m_statusText = zh ? QStringLiteral("已断开") : QStringLiteral("Disconnected");
     emit statusChanged();
     emit targetChanged();
 }
@@ -333,9 +341,10 @@ void ExchangeCoordinator::syncNow(const QString &journalId)
 {
     if (!m_library || journalId.isEmpty() || m_syncing)
         return;
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
     if (!isConfigured(journalId)) {
         m_lastError.clear();
-        m_statusText = QStringLiteral("尚未绑定交易所");
+        m_statusText = zh ? QStringLiteral("尚未绑定交易所") : QStringLiteral("No exchange bound");
         emit statusChanged();
         return;
     }
@@ -373,7 +382,7 @@ void ExchangeCoordinator::syncNow(const QString &journalId)
     } else {
         auto raw = storeFor(journalId).load();
         if (!raw) {
-            m_lastError = QStringLiteral("找不到已保存的凭证");
+            m_lastError = zh ? QStringLiteral("找不到已保存的凭证") : QStringLiteral("Saved credentials not found");
             m_statusText = m_lastError;
             emit statusChanged();
             return;
@@ -383,7 +392,7 @@ void ExchangeCoordinator::syncNow(const QString &journalId)
 
     m_syncing = true;
     m_lastError.clear();
-    m_statusText = QStringLiteral("正在同步仓位…");
+    m_statusText = zh ? QStringLiteral("正在同步仓位…") : QStringLiteral("Syncing positions…");
     emit statusChanged();
     QMetaObject::invokeMethod(m_worker, "run", Qt::QueuedConnection,
                               Q_ARG(QString, journalId),
@@ -404,7 +413,8 @@ void ExchangeCoordinator::onWorkerFinished(const QString &journalId, const QStri
         return;
     }
     if (!m_library) {
-        m_statusText = QStringLiteral("已拉取 %1 个仓位").arg(count);
+        const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
+        m_statusText = zh ? QStringLiteral("已拉取 %1 个仓位").arg(count) : QStringLiteral("Fetched %1 positions").arg(count);
         emit statusChanged();
         return;
     }
@@ -492,12 +502,15 @@ void ExchangeCoordinator::onWorkerFinished(const QString &journalId, const QStri
     }
 
     m_lastError.clear();
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
     if (count == 0)
-        m_statusText = QStringLiteral("窗口内没有成交");
+        m_statusText = zh ? QStringLiteral("窗口内没有成交") : QStringLiteral("No trades in window");
     else if (created > 0)
-        m_statusText = QStringLiteral("已同步 %1 个仓位，补了 %2 个日记日").arg(count).arg(created);
+        m_statusText = zh ? QStringLiteral("已同步 %1 个仓位，补了 %2 个日记日").arg(count).arg(created)
+                          : QStringLiteral("Synced %1 positions, backfilled %2 days").arg(count).arg(created);
     else
-        m_statusText = QStringLiteral("已同步 %1 个仓位，日记条目已覆盖").arg(count);
+        m_statusText = zh ? QStringLiteral("已同步 %1 个仓位，日记条目已覆盖").arg(count)
+                          : QStringLiteral("Synced %1 positions, covered in entries").arg(count);
     emit statusChanged();
 }
 

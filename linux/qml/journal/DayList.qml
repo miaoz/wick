@@ -110,7 +110,7 @@ Rectangle {
                                     }
                                 }
                                 Text {
-                                    text: modelData.statsLine || (modelData.itemCount + " 条")
+                                    text: modelData.statsLine || (modelData.itemCount + ((appSettings && appSettings.isChinese) ? " 条" : (modelData.itemCount === 1 ? " item" : " items")))
                                     color: theme.ink3
                                     font.family: theme.fontMono
                                     font.pixelSize: 10

@@ -9,16 +9,18 @@ Rectangle {
 
     Theme { id: theme }
 
+    property int currentGroup: 0
+
     function t(zh, en) {
         return (appSettings && appSettings.isChinese) ? zh : en
     }
 
     readonly property var groups: [
-        t("外观与语言", "Appearance & language"),
+        t("外观与语言", "Appearance"),
         t("通用", "General"),
-        t("日记与提醒", "Journal & reminder"),
+        t("日记与提醒", "Journal"),
         t("同步", "Sync"),
-        t("交易所", "Exchanges"),
+        t("交易所", "Exchange"),
         t("数据", "Data"),
         t("关于", "About")
     ]
@@ -379,10 +381,10 @@ Rectangle {
                     spacing: 6
                     Repeater {
                         model: [
-                            { value: "dawn", label: "拂晓" },
-                            { value: "day", label: "正午" },
-                            { value: "dusk", label: "黄昏" },
-                            { value: "night", label: "子夜" }
+                            { value: "dawn", label: t("拂晓", "Dawn") },
+                            { value: "day", label: t("正午", "Day") },
+                            { value: "dusk", label: t("黄昏", "Dusk") },
+                            { value: "night", label: t("子夜", "Night") }
                         ]
                         delegate: Rectangle {
                             required property var modelData
@@ -734,7 +736,7 @@ Rectangle {
         ColumnLayout {
             spacing: 0
             SectionLabel { text: t("通用", "GENERAL") }
-            SettingRow { label: "每周从周一开始"
+            SettingRow { label: t("每周从周一开始", "Week starts on Monday")
                 EmberToggle {
                     on: appSettings.weekStartsOnMonday
                     onToggled: (v) => appSettings.weekStartsOnMonday = v

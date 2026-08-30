@@ -512,11 +512,19 @@ QVariantList JournalLibrary::journals() const
         }
         row.insert(QStringLiteral("positionsCount"), posCount);
 
-        QString statsText = QStringLiteral("%1 篇").arg(count);
-        if (posCount > 0)
-            statsText += QStringLiteral(" · %1 仓").arg(posCount);
+        const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
+        QString statsText;
+        if (zh) {
+            statsText = QStringLiteral("%1 篇").arg(count);
+            if (posCount > 0)
+                statsText += QStringLiteral(" · %1 仓").arg(posCount);
+        } else {
+            statsText = (count == 1) ? QStringLiteral("1 entry") : QStringLiteral("%1 entries").arg(count);
+            if (posCount > 0)
+                statsText += QStringLiteral(" · %1 pos").arg(posCount);
+        }
         row.insert(QStringLiteral("statsText"), statsText);
-        row.insert(QStringLiteral("todayMark"), QStringLiteral("今"));
+        row.insert(QStringLiteral("todayMark"), zh ? QStringLiteral("今") : QStringLiteral("TODAY"));
 
         if (j.exchangeBinding) {
             row.insert(QStringLiteral("exchangeBound"), true);
@@ -621,7 +629,7 @@ QVariantList JournalLibrary::days() const
             burn = (d < QDate::currentDate()) ? 1.0 : 0.0;
         }
         row.insert(QStringLiteral("burnElapsed"), burn);
-        row.insert(QStringLiteral("savedState"), isReadOnly() ? QStringLiteral("只读") : m_savedState);
+        row.insert(QStringLiteral("savedState"), pageSavedState());
         row.insert(QStringLiteral("items"), itemsForEntry(*e));
 
         const int itemCount = static_cast<int>(e->items.size());
@@ -724,6 +732,7 @@ QVariantList JournalLibrary::itemsForEntry(const JournalEntry &entry) const
     const std::string tradingDayKey = dayKeyOf(entry);
     const auto &items = entry.items;
 
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
     int index = 0;
     for (const auto &item : items) {
         ++index;
@@ -733,7 +742,7 @@ QVariantList JournalLibrary::itemsForEntry(const JournalEntry &entry) const
         row.insert(QStringLiteral("itemId"), qs(item.id.toString()));
         row.insert(QStringLiteral("entryId"), qs(entry.id.toString()));
         row.insert(QStringLiteral("index"), index);
-        row.insert(QStringLiteral("indexLabel"), QStringLiteral("条目 %1").arg(index));
+        row.insert(QStringLiteral("indexLabel"), zh ? QStringLiteral("条目 %1").arg(index) : QStringLiteral("Item %1").arg(index));
         row.insert(QStringLiteral("tag"), qs(item.tag));
         row.insert(QStringLiteral("body"), qs(item.body));
         QString verdict;
@@ -765,11 +774,13 @@ QVariantList JournalLibrary::itemsForEntry(const JournalEntry &entry) const
             pRow.insert(QStringLiteral("id"), QString::fromStdString(p.id));
             pRow.insert(QStringLiteral("symbol"), QString::fromStdString(p.symbol));
             pRow.insert(QStringLiteral("isLong"), p.side == TradingPositionSide::longSide);
-            pRow.insert(QStringLiteral("laneLabel"), p.side == TradingPositionSide::longSide ? QStringLiteral("多") : QStringLiteral("空"));
+            pRow.insert(QStringLiteral("laneLabel"), p.side == TradingPositionSide::longSide
+                        ? (zh ? QStringLiteral("多") : QStringLiteral("LONG"))
+                        : (zh ? QStringLiteral("空") : QStringLiteral("SHORT")));
 
             QString header = QString::fromStdString(p.symbol);
-            if (!header.endsWith(QStringLiteral("永续")) && !header.contains(QLatin1Char(' ')))
-                header += QStringLiteral(" 永续");
+            if (!header.endsWith(QStringLiteral("永续")) && !header.endsWith(QStringLiteral("PERP")) && !header.contains(QLatin1Char(' ')))
+                header += zh ? QStringLiteral(" 永续") : QStringLiteral(" PERP");
             pRow.insert(QStringLiteral("headerTitle"), header);
 
             const QDateTime openDt = QDateTime::fromMSecsSinceEpoch(p.openTime);

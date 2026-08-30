@@ -355,6 +355,19 @@ void AppSettings::load()
     m_syncTradingSnapshots = m_store.value(QLatin1String(kSnapshots), false).toBool();
     m_exchangeJournalId = m_store.value(QLatin1String(kExJournal), QString()).toString();
     m_exchangeVenue = m_store.value(QLatin1String(kExVenue), QStringLiteral("binance")).toString();
+    syncLanguageFile();
+}
+
+void AppSettings::syncLanguageFile()
+{
+    const QString dirPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
+        + QStringLiteral("/wick");
+    QDir().mkpath(dirPath);
+    QFile file(dirPath + QStringLiteral("/language"));
+    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        QTextStream ts(&file);
+        ts << m_language << "\n";
+    }
 }
 
 bool AppSettings::hasKey(const QString &key) const
@@ -374,6 +387,7 @@ void AppSettings::setLanguage(const QString &value)
         return;
     m_language = next;
     write(QLatin1String(kLanguage), m_language);
+    syncLanguageFile();
     emit languageChanged();
 }
 
