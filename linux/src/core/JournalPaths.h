@@ -22,6 +22,7 @@ struct JournalPaths {
     std::filesystem::path journalDirectory(const Uuid& id) const;
     std::filesystem::path journalJSON(const Uuid& id) const;
     std::filesystem::path journalBackup(const Uuid& id) const;
+    std::filesystem::path tradingJSON(const Uuid& id) const;
     std::filesystem::path backupsDirectory(const Uuid& id) const;
     std::filesystem::path imagesDirectory(const Uuid& id) const;
 

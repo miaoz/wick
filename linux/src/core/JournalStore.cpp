@@ -77,6 +77,22 @@ TimePoint JournalFileStore::nowTime() const {
     return std::chrono::system_clock::now();
 }
 
+int JournalFileStore::entryCountOnDisk(const std::filesystem::path& journalDirectory) {
+    if (auto entries = loadEntriesReadOnly(journalDirectory))
+        return static_cast<int>(entries->size());
+    return 0;
+}
+
+std::optional<std::vector<JournalEntry>> JournalFileStore::loadEntriesReadOnly(
+    const std::filesystem::path& journalDirectory) {
+    JournalFileStore probe(journalDirectory);
+    if (auto snap = probe.loadSnapshot(probe.databaseURL_))
+        return snap->entries;
+    if (auto snap = probe.loadSnapshot(probe.backupURL_))
+        return snap->entries;
+    return std::nullopt;
+}
+
 std::optional<JournalSnapshot> JournalFileStore::loadSnapshot(
     const std::filesystem::path& url) const {
     std::error_code ec;

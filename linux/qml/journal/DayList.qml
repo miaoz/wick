@@ -18,7 +18,9 @@ Rectangle {
             Layout.fillHeight: true
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            text: library.searchText.length > 0 ? "无匹配条目" : "还没有日记\n点 ＋ 写下今天"
+            text: library.searchText.length > 0
+                ? ((appSettings && appSettings.isChinese) ? "无匹配条目" : "No matching entries")
+                : ((appSettings && appSettings.isChinese) ? "还没有日记\n点 ＋ 写下今天" : "No journals yet\nClick + to write today")
             color: theme.ink3
             font.family: theme.fontPrint
             font.pixelSize: 13
@@ -76,9 +78,9 @@ Rectangle {
 
                         Rectangle {
                             visible: modelData.isSelected
-                            width: 3
+                            width: 2
                             height: parent.height
-                            color: theme.cinnabar
+                            color: theme.ember
                         }
 
                         RowLayout {
@@ -108,28 +110,45 @@ Rectangle {
                                     }
                                 }
                                 Text {
-                                    text: modelData.itemCount + " 条"
+                                    text: modelData.statsLine || (modelData.itemCount + ((appSettings && appSettings.isChinese) ? " 条" : (modelData.itemCount === 1 ? " item" : " items")))
                                     color: theme.ink3
                                     font.family: theme.fontMono
                                     font.pixelSize: 10
                                 }
                             }
 
-                            Row {
+                            Column {
                                 spacing: 3
                                 Text {
-                                    visible: modelData.hasCorrect
-                                    text: "✓"
-                                    color: theme.gain
-                                    font.pixelSize: 12
-                                    font.weight: Font.Bold
+                                    anchors.right: parent.right
+                                    text: modelData.pnlText || "—"
+                                    color: {
+                                        if (!modelData.hasPnl)
+                                            return theme.ink3
+                                        return modelData.dayPnl >= 0 ? theme.gain : theme.loss
+                                    }
+                                    font.family: theme.fontMono
+                                    font.pixelSize: 11
+                                    font.weight: modelData.hasPnl ? Font.Bold : Font.Normal
                                 }
-                                Text {
-                                    visible: modelData.hasWrong
-                                    text: "✗"
-                                    color: theme.loss
-                                    font.pixelSize: 12
-                                    font.weight: Font.Bold
+
+                                Row {
+                                    anchors.right: parent.right
+                                    spacing: 3
+                                    ReviewSeal {
+                                        visible: modelData.hasCorrect
+                                        theme: list.theme
+                                        verdict: "correct"
+                                        size: 18
+                                        mini: true
+                                    }
+                                    ReviewSeal {
+                                        visible: modelData.hasWrong
+                                        theme: list.theme
+                                        verdict: "wrong"
+                                        size: 18
+                                        mini: true
+                                    }
                                 }
                             }
                         }

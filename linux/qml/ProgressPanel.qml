@@ -1,10 +1,10 @@
 import QtQuick
 import QtQuick.Layouts
+import "journal"
 
 // Paper slip — layout contract from designs/wick-design-language/linux.html
 // `.wick-pop` (width 352). Stage 0: no Dropbox row, no journal/settings
 // buttons (those live on the tray context menu). Keep the motto.
-// Dark paper = 暗·子夜 tokens from tokens-v2.css.
 
 Rectangle {
     id: paper
@@ -12,19 +12,26 @@ Rectangle {
     implicitWidth: 352
     implicitHeight: Math.max(content.implicitHeight, 200)
     height: implicitHeight
-    color: "#241C10"
-    border.color: Qt.rgba(240 / 255, 227 / 255, 198 / 255, 0.14)
+
+    Theme { id: theme }
+
+    color: theme.paper
+    border.color: theme.rule
     border.width: 1
 
-    readonly property color ink1: "#F0E3C6"
-    readonly property color ink2: Qt.rgba(240 / 255, 227 / 255, 198 / 255, 0.64)
-    readonly property color ink3: Qt.rgba(240 / 255, 227 / 255, 198 / 255, 0.42)
-    readonly property color paperHi: "#2C2214"
-    readonly property color stain1: "#4A3820"
-    readonly property color stain2: "#6B5226"
-    readonly property color ember: "#F5A83C"
-    readonly property color emberHi: "#FFC882"
-    readonly property color glow: Qt.rgba(245 / 255, 168 / 255, 60 / 255, 0.5)
+    readonly property color ink1: theme.ink1
+    readonly property color ink2: theme.ink2
+    readonly property color ink3: theme.ink3
+    readonly property color paperHi: theme.paperHi
+    readonly property color stain1: theme.stain1
+    readonly property color stain2: theme.stain2
+    readonly property color ember: theme.ember
+    readonly property color emberHi: theme.emberHi
+    readonly property color glow: theme.glow
+
+    readonly property string fontUi: theme.fontUi
+    readonly property string fontPrint: theme.fontPrint
+    readonly property string fontMono: theme.fontMono
 
     component BurnStrip: Item {
         id: strip
@@ -101,12 +108,12 @@ Rectangle {
                 spacing: 8
 
                 Text {
-                    text: "今日剩余"
+                    text: (appSettings && appSettings.isChinese) ? "今日剩余" : "Left today"
                     color: paper.ink2
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
                     font.letterSpacing: 1.3
-                    font.family: "Noto Sans SC"
+                    font.family: paper.fontUi
                 }
 
                 Item { Layout.fillWidth: true }
@@ -118,13 +125,14 @@ Rectangle {
                         color: paper.ink1
                         font.pixelSize: 32
                         font.weight: Font.Black
-                        font.family: "Inter"
+                        font.family: paper.fontUi
                     }
                     Text {
                         text: "%"
                         color: paper.ink2
                         font.pixelSize: 15
                         font.weight: Font.DemiBold
+                        font.family: paper.fontUi
                         anchors.baseline: parent.children[0].baseline
                     }
                 }
@@ -144,14 +152,14 @@ Rectangle {
                     text: "00:00"
                     color: paper.ink3
                     font.pixelSize: 10
-                    font.family: "JetBrains Mono"
+                    font.family: paper.fontMono
                 }
                 Item { Layout.fillWidth: true }
                 Text {
-                    text: "24:00 终"
+                    text: (appSettings && appSettings.isChinese) ? "24:00 终" : "24:00 End"
                     color: paper.ink3
                     font.pixelSize: 10
-                    font.family: "JetBrains Mono"
+                    font.family: paper.fontMono
                 }
             }
         }
@@ -168,12 +176,12 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 12
                 Text {
-                    text: "本周"
+                    text: (appSettings && appSettings.isChinese) ? "本周" : "Week"
                     color: paper.ink2
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
-                    font.family: "Noto Sans SC"
-                    Layout.preferredWidth: 30
+                    font.family: paper.fontUi
+                    Layout.preferredWidth: (appSettings && appSettings.isChinese) ? 30 : 40
                 }
                 BurnStrip {
                     Layout.fillWidth: true
@@ -186,7 +194,7 @@ Rectangle {
                     text: timeProgress.weekPercentText
                     color: paper.ink2
                     font.pixelSize: 11
-                    font.family: "JetBrains Mono"
+                    font.family: paper.fontMono
                     horizontalAlignment: Text.AlignRight
                     Layout.preferredWidth: 44
                 }
@@ -196,12 +204,12 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 12
                 Text {
-                    text: "本月"
+                    text: (appSettings && appSettings.isChinese) ? "本月" : "Month"
                     color: paper.ink2
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
-                    font.family: "Noto Sans SC"
-                    Layout.preferredWidth: 30
+                    font.family: paper.fontUi
+                    Layout.preferredWidth: (appSettings && appSettings.isChinese) ? 30 : 40
                 }
                 BurnStrip {
                     Layout.fillWidth: true
@@ -214,7 +222,7 @@ Rectangle {
                     text: timeProgress.monthPercentText
                     color: paper.ink2
                     font.pixelSize: 11
-                    font.family: "JetBrains Mono"
+                    font.family: paper.fontMono
                     horizontalAlignment: Text.AlignRight
                     Layout.preferredWidth: 44
                 }
@@ -224,12 +232,12 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 12
                 Text {
-                    text: "今年"
+                    text: (appSettings && appSettings.isChinese) ? "今年" : "Year"
                     color: paper.ink2
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
-                    font.family: "Noto Sans SC"
-                    Layout.preferredWidth: 30
+                    font.family: paper.fontUi
+                    Layout.preferredWidth: (appSettings && appSettings.isChinese) ? 30 : 40
                 }
                 BurnStrip {
                     Layout.fillWidth: true
@@ -242,7 +250,7 @@ Rectangle {
                     text: timeProgress.yearPercentText
                     color: paper.ink2
                     font.pixelSize: 11
-                    font.family: "JetBrains Mono"
+                    font.family: paper.fontMono
                     horizontalAlignment: Text.AlignRight
                     Layout.preferredWidth: 44
                 }
@@ -257,20 +265,12 @@ Rectangle {
             Layout.bottomMargin: 14
 
             Text {
-                text: "秉烛而记,落子无悔"
+                text: (appSettings && appSettings.isChinese) ? "一寸光阴一寸金。" : "Time is precious."
                 color: paper.ink3
                 font.pixelSize: 11
-                font.family: "Noto Serif SC"
+                font.family: paper.fontPrint
             }
-
-            Item { Layout.fillWidth: true }
-
-            Text {
-                text: "v" + timeProgress.appVersion
-                color: Qt.rgba(240 / 255, 227 / 255, 198 / 255, 0.32)
-                font.pixelSize: 9
-                font.family: "JetBrains Mono"
-            }
+        }
         }
     }
 }

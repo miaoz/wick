@@ -535,6 +535,29 @@ static void testMissingCatalogBootstrapCreatesDefaultDiary() {
     std::filesystem::remove_all(root);
 }
 
+static void testEntryCountOnDiskIsReadOnly() {
+    auto root = makeTempDir("WickEntryCount-");
+    auto dir = root / "journal";
+    CHECK(JournalFileStore::entryCountOnDisk(dir) == 0);
+
+    JournalFileStore store(dir);
+    store.ensureDirectories();
+    JournalEntry second = makeDeterministicEntry();
+    second.id = Uuid::generate();
+    store.entries = {makeDeterministicEntry(), second};
+    store.persist();
+    CHECK(JournalFileStore::entryCountOnDisk(dir) == 2);
+
+    const auto primary = readText(dir / "journal.json");
+    CHECK(!primary.empty());
+    writeText(dir / "journal.json", "{not-json");
+    writeText(dir / "journal.json.bak", primary);
+    CHECK(JournalFileStore::entryCountOnDisk(dir) == 2);
+    CHECK(readText(dir / "journal.json") == "{not-json");
+
+    std::filesystem::remove_all(root);
+}
+
 static void testCorruptCatalogIsNotRewritten() {
     auto root = makeTempDir("WickBootstrapCorrupt-");
     auto paths = JournalPaths::inRoot(root);
@@ -544,6 +567,61 @@ static void testCorruptCatalogIsNotRewritten() {
     CHECK(std::holds_alternative<JournalCatalogLoader::Corrupt>(outcome));
     CHECK(readText(paths.catalogURL()) == junk);
     CHECK(!std::filesystem::exists(paths.catalogBackupURL()));
+    std::filesystem::remove_all(root);
+}
+
+static void testReorderJournalsPersists() {
+    auto root = makeTempDir("WickReorder-");
+    auto paths = JournalPaths::inRoot(root);
+
+    JournalInfo a;
+    a.id = Uuid::generate();
+    a.name = "A";
+    a.createdAt = timeFromUnix(1'700'000'000);
+    a.updatedAt = a.createdAt;
+
+    JournalInfo b;
+    b.id = Uuid::generate();
+    b.name = "B";
+    b.createdAt = timeFromUnix(1'700'000'000);
+    b.updatedAt = b.createdAt;
+
+    JournalInfo c;
+    c.id = Uuid::generate();
+    c.name = "C";
+    c.createdAt = timeFromUnix(1'700'000'000);
+    c.updatedAt = c.createdAt;
+
+    JournalCatalogSnapshot catalog;
+    catalog.version = 1;
+    catalog.activeJournalID = a.id;
+    catalog.journals = {a, b, c};
+    CHECK(persistCatalog(root, catalog));
+
+    // Reorder: move C (index 2) to index 0 -> C, A, B
+    auto moving = catalog.journals[2];
+    catalog.journals.erase(catalog.journals.begin() + 2);
+    catalog.journals.insert(catalog.journals.begin() + 0, moving);
+    CHECK(persistCatalog(root, catalog));
+
+    auto outcome = JournalCatalogLoader::load(paths.catalogURL(), paths.catalogBackupURL(), 1);
+    CHECK(std::holds_alternative<JournalCatalogLoader::Loaded>(outcome));
+    auto loaded = std::get<JournalCatalogLoader::Loaded>(outcome).catalog;
+    CHECK(loaded.journals.size() == 3);
+    CHECK(loaded.journals[0].name == "C");
+    CHECK(loaded.journals[1].name == "A");
+    CHECK(loaded.journals[2].name == "B");
+    CHECK(loaded.activeJournalID == a.id);
+
+    std::filesystem::remove_all(root);
+}
+
+static void testTradingSnapshotPathLayout() {
+    auto root = makeTempDir("WickTrading-");
+    auto paths = JournalPaths::inRoot(root);
+    auto jid = Uuid::generate();
+    auto p = paths.tradingJSON(jid);
+    CHECK(p == root / jid.toString() / "trading.json");
     std::filesystem::remove_all(root);
 }
 
@@ -570,7 +648,10 @@ int main() {
     testPathsLayout();
     testOmitExchangeBinding();
     testMissingCatalogBootstrapCreatesDefaultDiary();
+    testEntryCountOnDiskIsReadOnly();
     testCorruptCatalogIsNotRewritten();
+    testReorderJournalsPersists();
+    testTradingSnapshotPathLayout();
 
     std::cout << g_passes << " passed, " << g_fails << " failed\n";
     return g_fails == 0 ? 0 : 1;

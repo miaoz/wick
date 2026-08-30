@@ -44,6 +44,14 @@ public:
     std::optional<std::string> exportArchive(const std::filesystem::path& destinationURL);
     std::optional<std::string> importArchive(const std::filesystem::path& sourceURL);
 
+    // Read-only day count for a journal that is not open. Decodes journal.json
+    // (then .bak) and never persists, quarantines, or restores.
+    static int entryCountOnDisk(const std::filesystem::path& journalDirectory);
+
+    // Read-only entries. nullopt = missing or unreadable (do not treat as empty).
+    static std::optional<std::vector<JournalEntry>> loadEntriesReadOnly(
+        const std::filesystem::path& journalDirectory);
+
     std::vector<JournalEntry> entries;
     bool isReadOnlyDueToLoadFailure = false;
     bool didRestoreFromBackup = false;

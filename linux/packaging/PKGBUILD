@@ -7,8 +7,8 @@ pkgdesc="秉烛 · Wick for Linux"
 arch=('x86_64' 'aarch64')
 url="https://github.com/miaoz/wick"
 license=('LicenseRef-proprietary')
-depends=('qt6-base' 'qt6-declarative' 'qt6-svg' 'openssl')
-makedepends=('cmake' 'ninja' 'gcc')
+depends=('qt6-base' 'qt6-declarative' 'qt6-svg' 'openssl' 'libsecret')
+makedepends=('cmake' 'ninja' 'gcc' 'pkgconf')
 
 build() {
   local src="${startdir}/.."

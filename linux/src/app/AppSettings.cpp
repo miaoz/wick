@@ -14,9 +14,13 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QFileSystemWatcher>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QStyleHints>
+#include <QTextStream>
+#include <QTimer>
 #include <QUrl>
 #include <QVariant>
 #include <QtGlobal>
@@ -121,9 +125,9 @@ AppSettings::AppSettings(QObject *parent)
     , m_store(QStringLiteral("wick"), QStringLiteral("秉烛"))
 {
     load();
-    m_fontFamilies = QFontDatabase::families();
-    std::sort(m_fontFamilies.begin(), m_fontFamilies.end(),
-              [](const QString &a, const QString &b) { return a.localeAwareCompare(b) < 0; });
+    loadApplicationFonts();
+    refreshFontFamilies();
+    initOmarchyWatcher();
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     if (auto *hints = QGuiApplication::styleHints()) {
@@ -133,6 +137,171 @@ AppSettings::AppSettings(QObject *parent)
         });
     }
 #endif
+}
+
+void AppSettings::initOmarchyWatcher()
+{
+    const QString stateDir = QStandardPaths::writableLocation(QStandardPaths::HomeLocation)
+        + QStringLiteral("/.local/state/omarchy");
+    const QString currentDir = stateDir + QStringLiteral("/current");
+    const QString themeDir = currentDir + QStringLiteral("/theme");
+    const QString colorsFile = themeDir + QStringLiteral("/colors.toml");
+    const QString nameFile = currentDir + QStringLiteral("/theme.name");
+
+    m_omarchyDebounceTimer = new QTimer(this);
+    m_omarchyDebounceTimer->setSingleShot(true);
+    m_omarchyDebounceTimer->setInterval(80);
+    connect(m_omarchyDebounceTimer, &QTimer::timeout, this, &AppSettings::reloadOmarchyTheme);
+
+    m_omarchyWatcher = new QFileSystemWatcher(this);
+    if (QDir(stateDir).exists())
+        m_omarchyWatcher->addPath(stateDir);
+    if (QDir(currentDir).exists())
+        m_omarchyWatcher->addPath(currentDir);
+    if (QDir(themeDir).exists())
+        m_omarchyWatcher->addPath(themeDir);
+    if (QFile::exists(colorsFile))
+        m_omarchyWatcher->addPath(colorsFile);
+    if (QFile::exists(nameFile))
+        m_omarchyWatcher->addPath(nameFile);
+
+    auto scheduleReload = [this](const QString &) {
+        if (m_omarchyDebounceTimer)
+            m_omarchyDebounceTimer->start();
+    };
+
+    connect(m_omarchyWatcher, &QFileSystemWatcher::directoryChanged, this, scheduleReload);
+    connect(m_omarchyWatcher, &QFileSystemWatcher::fileChanged, this, scheduleReload);
+
+    reloadOmarchyTheme();
+}
+
+void AppSettings::reloadOmarchyTheme()
+{
+    const QString stateDir = QStandardPaths::writableLocation(QStandardPaths::HomeLocation)
+        + QStringLiteral("/.local/state/omarchy");
+    const QString currentDir = stateDir + QStringLiteral("/current");
+    const QString themeDir = currentDir + QStringLiteral("/theme");
+    const QString colorsFile = themeDir + QStringLiteral("/colors.toml");
+    const QString nameFile = currentDir + QStringLiteral("/theme.name");
+
+    if (m_omarchyWatcher) {
+        if (QDir(stateDir).exists() && !m_omarchyWatcher->directories().contains(stateDir))
+            m_omarchyWatcher->addPath(stateDir);
+        if (QDir(currentDir).exists() && !m_omarchyWatcher->directories().contains(currentDir))
+            m_omarchyWatcher->addPath(currentDir);
+        if (QDir(themeDir).exists() && !m_omarchyWatcher->directories().contains(themeDir))
+            m_omarchyWatcher->addPath(themeDir);
+        if (QFile::exists(colorsFile) && !m_omarchyWatcher->files().contains(colorsFile))
+            m_omarchyWatcher->addPath(colorsFile);
+        if (QFile::exists(nameFile) && !m_omarchyWatcher->files().contains(nameFile))
+            m_omarchyWatcher->addPath(nameFile);
+    }
+
+    if (!QFile::exists(colorsFile)) {
+        if (m_omarchyAvailable) {
+            m_omarchyAvailable = false;
+            m_omarchyThemeName.clear();
+            m_omarchyColors.clear();
+            emit omarchyChanged();
+            emit appearanceChanged();
+        }
+        return;
+    }
+
+    QString themeName;
+    if (QFile nf(nameFile); nf.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        themeName = QString::fromUtf8(nf.readAll()).trimmed();
+    }
+
+    QVariantMap colors;
+    if (QFile cf(colorsFile); cf.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&cf);
+        static const QRegularExpression kvRegex(QStringLiteral(R"(^\s*([a-zA-Z0-9_]+)\s*=\s*["']([^"']+)["'])"));
+        while (!in.atEnd()) {
+            const QString line = in.readLine().trimmed();
+            if (line.isEmpty() || line.startsWith(QLatin1Char('#')))
+                continue;
+            const auto match = kvRegex.match(line);
+            if (match.hasMatch()) {
+                colors.insert(match.captured(1), match.captured(2));
+            }
+        }
+    }
+
+    if (!colors.isEmpty()) {
+        const bool changed = (!m_omarchyAvailable)
+            || (m_omarchyThemeName != themeName)
+            || (m_omarchyColors != colors);
+        m_omarchyAvailable = true;
+        m_omarchyThemeName = themeName;
+        m_omarchyColors = colors;
+        if (changed) {
+            emit omarchyChanged();
+            emit appearanceChanged();
+        }
+    }
+}
+
+void AppSettings::loadApplicationFonts()
+{
+    const QString fontsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+        + QStringLiteral("/wick/fonts");
+    QDir dir(fontsDir);
+    if (!dir.exists())
+        dir.mkpath(QStringLiteral("."));
+
+    const auto entries = dir.entryInfoList(
+        {QStringLiteral("*.otf"), QStringLiteral("*.ttf"), QStringLiteral("*.woff2"), QStringLiteral("*.ttc")},
+        QDir::Files);
+    for (const auto &fi : entries) {
+        QFontDatabase::addApplicationFont(fi.absoluteFilePath());
+    }
+}
+
+void AppSettings::refreshFontFamilies()
+{
+    m_fontFamilies = QFontDatabase::families();
+    std::sort(m_fontFamilies.begin(), m_fontFamilies.end(),
+              [](const QString &a, const QString &b) { return a.localeAwareCompare(b) < 0; });
+    emit fontFamiliesChanged();
+}
+
+QString AppSettings::importFontFile(const QUrl &fileUrl)
+{
+    const QString src = fileUrl.isLocalFile() ? fileUrl.toLocalFile() : fileUrl.toString();
+    if (src.isEmpty())
+        return {};
+    QFileInfo fi(src);
+    if (!fi.exists())
+        return {};
+
+    const QString fontsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+        + QStringLiteral("/wick/fonts");
+    QDir dir(fontsDir);
+    if (!dir.exists())
+        dir.mkpath(QStringLiteral("."));
+
+    const QString dest = dir.absoluteFilePath(fi.fileName());
+    if (dest != fi.absoluteFilePath()) {
+        if (QFile::exists(dest))
+            QFile::remove(dest);
+        if (!QFile::copy(src, dest))
+            return {};
+    }
+
+    const int id = QFontDatabase::addApplicationFont(dest);
+    if (id < 0)
+        return {};
+
+    const QStringList families = QFontDatabase::applicationFontFamilies(id);
+    refreshFontFamilies();
+
+    if (!families.isEmpty()) {
+        setJournalFontName(families.first());
+        return families.first();
+    }
+    return {};
 }
 
 void AppSettings::load()
@@ -186,6 +355,19 @@ void AppSettings::load()
     m_syncTradingSnapshots = m_store.value(QLatin1String(kSnapshots), false).toBool();
     m_exchangeJournalId = m_store.value(QLatin1String(kExJournal), QString()).toString();
     m_exchangeVenue = m_store.value(QLatin1String(kExVenue), QStringLiteral("binance")).toString();
+    syncLanguageFile();
+}
+
+void AppSettings::syncLanguageFile()
+{
+    const QString dirPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
+        + QStringLiteral("/wick");
+    QDir().mkpath(dirPath);
+    QFile file(dirPath + QStringLiteral("/language"));
+    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        QTextStream ts(&file);
+        ts << m_language << "\n";
+    }
 }
 
 bool AppSettings::hasKey(const QString &key) const
@@ -205,6 +387,7 @@ void AppSettings::setLanguage(const QString &value)
         return;
     m_language = next;
     write(QLatin1String(kLanguage), m_language);
+    syncLanguageFile();
     emit languageChanged();
 }
 
@@ -364,6 +547,12 @@ QString AppSettings::resolvedScheme() const
         return QStringLiteral("light");
     if (m_appearance == QLatin1String("dark"))
         return QStringLiteral("dark");
+    if (m_omarchyAvailable && m_omarchyColors.contains(QStringLiteral("mode"))) {
+        const QString mode = m_omarchyColors.value(QStringLiteral("mode")).toString();
+        if (mode == QLatin1String("light"))
+            return QStringLiteral("light");
+        return QStringLiteral("dark");
+    }
     const auto hint = QGuiApplication::styleHints()
         ? QGuiApplication::styleHints()->colorScheme()
         : Qt::ColorScheme::Unknown;

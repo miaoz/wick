@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Effects
 import Quickshell
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
@@ -12,12 +13,39 @@ Panel {
   ipcTarget: "wick.progress"
 
   property date now: new Date()
+  property string language: "zh-Hans"
+  readonly property bool isChinese: language !== "en" && !language.startsWith("en")
+
+  function t(zh, en) {
+    return isChinese ? zh : en
+  }
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color stain: Qt.darker(foreground, 2.4)
   readonly property color stainHot: Color.accent
+
+  property FileView langFile: FileView {
+    id: langFile
+    path: Quickshell.env("HOME") + "/.config/wick/language"
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      var str = String(text() || "").trim()
+      if (str.length > 0) root.language = str
+    }
+    onFileChanged: reload()
+    onLoadFailed: {}
+  }
+
+  onOpenedChanged: {
+    if (opened) langFile.reload()
+  }
+
+  Component.onCompleted: {
+    langFile.reload()
+  }
 
   function clamp01(x) {
     return Math.max(0, Math.min(1, x))
@@ -71,7 +99,10 @@ Panel {
   SystemClock {
     id: clock
     precision: SystemClock.Minutes
-    onDateChanged: root.now = date
+    onDateChanged: {
+      root.now = date
+      langProcess.running = true
+    }
   }
 
   Component {
@@ -100,7 +131,7 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    tooltipText: "今日剩余 " + root.dayPercentNumber + "%"
+    tooltipText: root.t("今日剩余 ", "Left today ") + root.dayPercentNumber + "%"
     iconComponent: candleIcon
     onPressed: function (buttonCode) {
       root.toggle()
@@ -183,7 +214,7 @@ Panel {
           spacing: Style.space(8)
 
           Text {
-            text: "今日剩余"
+            text: root.t("今日剩余", "Left today")
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -238,7 +269,7 @@ Panel {
             height: 1
           }
           Text {
-            text: "24:00 终"
+            text: root.t("24:00 终", "24:00 End")
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -253,8 +284,8 @@ Panel {
             width: parent.width
             spacing: Style.space(12)
             Text {
-              text: "本周"
-              width: Style.space(30)
+              text: root.t("本周", "Week")
+              width: root.isChinese ? Style.space(30) : Style.space(42)
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -262,7 +293,7 @@ Panel {
               anchors.verticalCenter: parent.verticalCenter
             }
             BurnStrip {
-              width: parent.width - Style.space(30) - Style.space(44) - parent.spacing * 2
+              width: parent.width - (root.isChinese ? Style.space(30) : Style.space(42)) - Style.space(44) - parent.spacing * 2
               elapsed: root.weekElapsed
               ticks: 7
               anchors.verticalCenter: parent.verticalCenter
@@ -282,8 +313,8 @@ Panel {
             width: parent.width
             spacing: Style.space(12)
             Text {
-              text: "本月"
-              width: Style.space(30)
+              text: root.t("本月", "Month")
+              width: root.isChinese ? Style.space(30) : Style.space(42)
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -291,7 +322,7 @@ Panel {
               anchors.verticalCenter: parent.verticalCenter
             }
             BurnStrip {
-              width: parent.width - Style.space(30) - Style.space(44) - parent.spacing * 2
+              width: parent.width - (root.isChinese ? Style.space(30) : Style.space(42)) - Style.space(44) - parent.spacing * 2
               elapsed: root.monthElapsed
               ticks: root.monthTicks
               anchors.verticalCenter: parent.verticalCenter
@@ -311,8 +342,8 @@ Panel {
             width: parent.width
             spacing: Style.space(12)
             Text {
-              text: "今年"
-              width: Style.space(30)
+              text: root.t("今年", "Year")
+              width: root.isChinese ? Style.space(30) : Style.space(42)
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -320,7 +351,7 @@ Panel {
               anchors.verticalCenter: parent.verticalCenter
             }
             BurnStrip {
-              width: parent.width - Style.space(30) - Style.space(44) - parent.spacing * 2
+              width: parent.width - (root.isChinese ? Style.space(30) : Style.space(42)) - Style.space(44) - parent.spacing * 2
               elapsed: root.yearElapsed
               ticks: 12
               anchors.verticalCenter: parent.verticalCenter
@@ -340,23 +371,68 @@ Panel {
         Row {
           width: parent.width
           Text {
-            text: "秉烛而记,落子无悔"
+            text: root.t("一寸光阴一寸金。", "Time is precious.")
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
           }
-          Item {
-            width: Math.max(0, parent.width - parent.children[0].width - parent.children[2].width)
-            height: 1
+        }
+
+        Rectangle {
+          width: parent.width
+          height: 1
+          color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+        }
+
+        // Design contract: linux.html `.pp-actions` — 打开日记 / 设置 / 退出.
+        Row {
+          id: actionRow
+          width: parent.width
+          spacing: Style.space(8)
+          readonly property real cellWidth: (width - spacing * 2) / 3
+
+          Button {
+            width: actionRow.cellWidth
+            text: root.t("打开日记", "Open Journal")
+            bordered: true
+            active: true
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            fontSize: Style.font.caption
+            onClicked: root.launchWick("journal")
           }
-          Text {
-            text: "v0.1.0"
-            color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.32)
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
+          Button {
+            width: actionRow.cellWidth
+            text: root.t("设置", "Settings")
+            bordered: true
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            fontSize: Style.font.caption
+            onClicked: root.launchWick("settings")
+          }
+          Button {
+            width: actionRow.cellWidth
+            text: root.t("退出", "Quit")
+            bordered: true
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            fontSize: Style.font.caption
+            onClicked: root.launchWick("quit")
           }
         }
       }
     }
+  }
+
+  function launchWick(mode) {
+    root.close()
+    Quickshell.execDetached([
+      "bash",
+      "-lc",
+      'bin=$(cat "$HOME/.local/share/wick/current-executable" 2>/dev/null); ' +
+      'if [ ! -x "$bin" ]; then bin=$(command -v wick); fi; ' +
+      'if [ ! -x "$bin" ]; then exit 1; fi; ' +
+      'exec "$bin" --' + mode
+    ])
   }
 }

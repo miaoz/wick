@@ -4,15 +4,18 @@
 #include <QSystemTrayIcon>
 
 class AppSettings;
+class ExchangeCoordinator;
 class JournalLibrary;
+class JournalSyncCoordinator;
 class JournalWindow;
 class ProgressWindow;
 class SettingsWindow;
 class TimeProgress;
 class QMenu;
 
-/// StatusNotifierItem tray candle: left click toggles the paper slip,
-/// right click shows 日记 / 设置 / 退出.
+/// Owns journal/settings windows and (on non-Omarchy hosts) the SNI candle.
+/// When the Omarchy `wick.progress` bar widget is installed, the Qt tray icon
+/// and paper slip stay hidden — the Quickshell KeyboardPanel is the UI.
 class TrayController : public QObject
 {
     Q_OBJECT
@@ -21,6 +24,8 @@ public:
     explicit TrayController(TimeProgress *progress,
                             JournalLibrary *library,
                             AppSettings *settings,
+                            JournalSyncCoordinator *sync = nullptr,
+                            ExchangeCoordinator *exchange = nullptr,
                             QObject *parent = nullptr);
     ~TrayController() override;
 
@@ -42,6 +47,8 @@ private:
     TimeProgress *m_progress = nullptr;
     JournalLibrary *m_library = nullptr;
     AppSettings *m_settings = nullptr;
+    JournalSyncCoordinator *m_sync = nullptr;
+    ExchangeCoordinator *m_exchange = nullptr;
     QSystemTrayIcon *m_tray = nullptr;
     QMenu *m_menu = nullptr;
     ProgressWindow *m_panel = nullptr;

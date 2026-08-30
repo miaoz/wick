@@ -10,17 +10,20 @@ Rectangle {
     Theme { id: theme }
 
     property int currentGroup: 0
-    readonly property var groups: [
-        appSettings.t("外观与语言", "Appearance & language"),
-        appSettings.t("通用", "General"),
-        appSettings.t("日记与提醒", "Journal & reminder"),
-        appSettings.t("同步", "Sync"),
-        appSettings.t("交易所", "Exchanges"),
-        appSettings.t("数据", "Data"),
-        appSettings.t("关于", "About")
-    ]
 
-    function t(zh, en) { return appSettings.t(zh, en) }
+    function t(zh, en) {
+        return (appSettings && appSettings.isChinese) ? zh : en
+    }
+
+    readonly property var groups: [
+        t("外观与语言", "Appearance"),
+        t("通用", "General"),
+        t("日记与提醒", "Journal"),
+        t("同步", "Sync"),
+        t("交易所", "Exchange"),
+        t("数据", "Data"),
+        t("关于", "About")
+    ]
 
     RowLayout {
         anchors.fill: parent
@@ -281,6 +284,37 @@ Rectangle {
         }
     }
 
+    component EmberButton: Button {
+        id: ebtn
+        font.family: theme.fontUi
+        font.pixelSize: 12
+        font.weight: Font.Medium
+        implicitHeight: 28
+        leftPadding: 14
+        rightPadding: 14
+        topPadding: 4
+        bottomPadding: 4
+        contentItem: Text {
+            text: ebtn.text
+            font: ebtn.font
+            color: ebtn.enabled ? theme.ink1 : theme.ink3
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+        }
+        background: Rectangle {
+            implicitWidth: 72
+            implicitHeight: 28
+            radius: 4
+            color: !ebtn.enabled ? Qt.rgba(0, 0, 0, 0.02)
+                 : ebtn.down ? Qt.rgba(0, 0, 0, 0.12)
+                 : ebtn.hovered ? Qt.rgba(0, 0, 0, 0.06)
+                 : Qt.rgba(0, 0, 0, 0.03)
+            border.color: ebtn.visualFocus ? theme.ember : theme.rule
+            border.width: 1
+        }
+    }
+
     Component {
         id: appearancePage
         ColumnLayout {
@@ -302,16 +336,39 @@ Rectangle {
                 label: t("外观", "Appearance")
                 Seg {
                     options: [
-                        { value: "light", label: t("亮", "Light") },
-                        { value: "dark", label: t("暗", "Dark") },
-                        { value: "system", label: t("跟随", "System") }
+                        { value: "light", label: t("亮色", "Light") },
+                        { value: "dark", label: t("暗色", "Dark") },
+                        { value: "system", label: t("跟随系统", "System") }
                     ]
                     current: appSettings.appearance
                     onPicked: (v) => appSettings.appearance = v
                 }
             }
-            Item { Layout.preferredHeight: 8 }
             RowLayout {
+                visible: appSettings.appearance === "system" && appSettings.omarchyAvailable
+                Layout.fillWidth: true
+                Layout.topMargin: 2
+                Layout.bottomMargin: 2
+                spacing: 6
+                WickIcon {
+                    name: "sparkles"
+                    size: 11
+                    color: theme.ember
+                }
+                Text {
+                    text: t("已连接 Omarchy 主题：" + (appSettings.omarchyThemeName || "当前主题"),
+                            "Connected to Omarchy theme: " + (appSettings.omarchyThemeName || "Current theme"))
+                    color: theme.ink3
+                    font.family: theme.fontUi
+                    font.pixelSize: 11
+                }
+            }
+            Item {
+                visible: appSettings.appearance !== "system"
+                Layout.preferredHeight: 8
+            }
+            RowLayout {
+                visible: appSettings.appearance !== "system"
                 Layout.fillWidth: true
                 Text {
                     text: t("相位", "Phase")
@@ -324,10 +381,10 @@ Rectangle {
                     spacing: 6
                     Repeater {
                         model: [
-                            { value: "dawn", label: "拂晓" },
-                            { value: "day", label: "正午" },
-                            { value: "dusk", label: "黄昏" },
-                            { value: "night", label: "子夜" }
+                            { value: "dawn", label: t("拂晓", "Dawn") },
+                            { value: "day", label: t("正午", "Day") },
+                            { value: "dusk", label: t("黄昏", "Dusk") },
+                            { value: "night", label: t("子夜", "Night") }
                         ]
                         delegate: Rectangle {
                             required property var modelData
@@ -370,42 +427,307 @@ Rectangle {
             Hairline {}
             SettingRow {
                 label: t("字体风格", "Typeface")
-                ComboBox {
-                    id: fontBox
+                Item {
+                    id: fontPicker
                     Layout.preferredWidth: 220
-                    model: [t("默认（系统字体）", "Default (system)")].concat(appSettings.fontFamilies)
-                    font.family: theme.fontUi
-                    font.pixelSize: 12
-                    onActivated: {
-                        if (currentIndex === 0)
-                            appSettings.journalFontName = ""
-                        else
-                            appSettings.journalFontName = appSettings.fontFamilies[currentIndex - 1]
+                    Layout.preferredHeight: 30
+                    property bool popupOpen: false
+                    property string searchQuery: ""
+
+                    readonly property var allFonts: [t("默认（系统字体）", "Default (system)")].concat(appSettings.fontFamilies)
+
+                    readonly property var filteredFonts: {
+                        const q = searchQuery.trim().toLowerCase()
+                        if (q.length === 0)
+                            return allFonts
+                        return allFonts.filter(f => f.toLowerCase().indexOf(q) !== -1)
                     }
-                    Component.onCompleted: {
+
+                    readonly property string currentDisplayText: {
                         if (appSettings.journalFontName.length === 0)
-                            currentIndex = 0
-                        else {
-                            const i = appSettings.fontFamilies.indexOf(appSettings.journalFontName)
-                            currentIndex = i >= 0 ? i + 1 : 0
-                        }
+                            return t("默认（系统字体）", "Default (system)")
+                        return appSettings.journalFontName
                     }
-                    background: Rectangle {
-                        color: "transparent"
-                        border.color: theme.rule
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: fontPickerHover.containsMouse ? Qt.rgba(0, 0, 0, 0.04) : "transparent"
+                        border.color: fontPicker.popupOpen ? theme.ember : theme.rule
                         border.width: 1
                         radius: 4
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 6
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: fontPicker.currentDisplayText
+                                color: appSettings.journalFontName.length > 0 ? theme.cinnabar : theme.ink1
+                                font.family: appSettings.journalFontName.length > 0 ? appSettings.journalFontName : theme.fontUi
+                                font.pixelSize: 12
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                            }
+
+                            WickIcon {
+                                name: fontPicker.popupOpen ? "chevron.up" : "chevron.down"
+                                size: 12
+                                color: theme.ink3
+                            }
+                        }
+
+                        MouseArea {
+                            id: fontPickerHover
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                fontPicker.popupOpen = !fontPicker.popupOpen
+                                if (fontPicker.popupOpen) {
+                                    fontPicker.searchQuery = ""
+                                    fontSearchField.forceActiveFocus()
+                                }
+                            }
+                        }
                     }
-                    contentItem: Text {
-                        text: fontBox.displayText
-                        color: theme.cinnabar
-                        font: fontBox.font
-                        verticalAlignment: Text.AlignVCenter
-                        leftPadding: 8
-                        elide: Text.ElideRight
+
+                    Popup {
+                        id: fontPopup
+                        visible: fontPicker.popupOpen
+                        onClosed: fontPicker.popupOpen = false
+                        x: fontPicker.width - width
+                        y: fontPicker.height + 4
+                        width: 260
+                        height: 300
+                        padding: 0
+                        modal: true
+                        focus: true
+                        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+                        background: Rectangle {
+                            color: theme.paperHi
+                            border.color: theme.rule
+                            border.width: 1
+                            radius: 6
+
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.topMargin: 2
+                                anchors.bottomMargin: -2
+                                radius: 6
+                                color: Qt.rgba(0, 0, 0, 0.08)
+                                z: -1
+                            }
+                        }
+
+                        contentItem: ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 0
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 38
+                                color: "transparent"
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    anchors.margins: 4
+                                    color: theme.paper
+                                    border.color: fontSearchField.activeFocus ? theme.ember : theme.rule
+                                    border.width: 1
+                                    radius: 4
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 6
+                                        anchors.rightMargin: 6
+                                        spacing: 4
+
+                                        WickIcon {
+                                            name: "magnifyingglass"
+                                            size: 13
+                                            color: theme.ink3
+                                        }
+
+                                        TextField {
+                                            id: fontSearchField
+                                            Layout.fillWidth: true
+                                            Layout.fillHeight: true
+                                            placeholderText: t("搜索字体...", "Search fonts...")
+                                            placeholderTextColor: theme.ink3
+                                            text: fontPicker.searchQuery
+                                            color: theme.ink1
+                                            font.family: theme.fontUi
+                                            font.pixelSize: 12
+                                            background: null
+                                            padding: 0
+                                            onTextChanged: fontPicker.searchQuery = text
+                                            Keys.onEscapePressed: fontPopup.close()
+                                        }
+
+                                        Item {
+                                            visible: fontSearchField.text.length > 0
+                                            width: 16
+                                            height: 16
+                                            WickIcon {
+                                                anchors.centerIn: parent
+                                                name: "xmark.circle.fill"
+                                                size: 13
+                                                color: theme.ink3
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    fontSearchField.text = ""
+                                                    fontSearchField.forceActiveFocus()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 1
+                                color: theme.rule
+                            }
+
+                            ListView {
+                                id: fontListView
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                clip: true
+                                boundsBehavior: Flickable.StopAtBounds
+                                model: fontPicker.filteredFonts
+                                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                                delegate: Item {
+                                    required property string modelData
+                                    required property int index
+                                    width: fontListView.width
+                                    height: 30
+
+                                    readonly property bool isDefault: modelData === t("默认（系统字体）", "Default (system)")
+                                    readonly property bool isSelected: {
+                                        if (isDefault)
+                                            return appSettings.journalFontName.length === 0
+                                        return modelData === appSettings.journalFontName
+                                    }
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 4
+                                        anchors.rightMargin: 4
+                                        radius: 4
+                                        color: rowMouse.containsMouse ? Qt.rgba(0, 0, 0, 0.06) : (isSelected ? Qt.rgba(0, 0, 0, 0.03) : "transparent")
+                                    }
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 6
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData
+                                            color: isSelected ? theme.ember : theme.ink1
+                                            font.family: isDefault ? theme.fontUi : modelData
+                                            font.pixelSize: 12
+                                            font.weight: isSelected ? Font.DemiBold : Font.Normal
+                                            elide: Text.ElideRight
+                                        }
+
+                                        WickIcon {
+                                            visible: isSelected
+                                            name: "checkmark"
+                                            size: 12
+                                            color: theme.ember
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: rowMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (isDefault)
+                                                appSettings.journalFontName = ""
+                                            else
+                                                appSettings.journalFontName = modelData
+                                            fontPopup.close()
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    visible: fontPicker.filteredFonts.length === 0
+                                    anchors.centerIn: parent
+                                    text: t("无匹配字体", "No matching fonts")
+                                    color: theme.ink3
+                                    font.family: theme.fontUi
+                                    font.pixelSize: 12
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 1
+                                color: theme.rule
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 32
+                                color: importFontHover.containsMouse ? Qt.rgba(0, 0, 0, 0.04) : "transparent"
+
+                                RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    WickIcon {
+                                        name: "plus"
+                                        size: 11
+                                        color: theme.ember
+                                    }
+                                    Text {
+                                        text: t("导入字体文件 (.otf / .ttf)...", "Import font file (.otf / .ttf)...")
+                                        color: theme.ember
+                                        font.family: theme.fontUi
+                                        font.pixelSize: 11
+                                        font.weight: Font.Medium
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: importFontHover
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        fontPopup.close()
+                                        fontImportDialog.open()
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
+        }
+    }
+
+    FileDialog {
+        id: fontImportDialog
+        fileMode: FileDialog.OpenFile
+        nameFilters: [t("字体文件 (*.otf *.ttf *.woff2 *.ttc)", "Font files (*.otf *.ttf *.woff2 *.ttc)")]
+        onAccepted: {
+            appSettings.importFontFile(selectedFile)
         }
     }
 
@@ -414,7 +736,7 @@ Rectangle {
         ColumnLayout {
             spacing: 0
             SectionLabel { text: t("通用", "GENERAL") }
-            SettingRow { label: "每周从周一开始"
+            SettingRow { label: t("每周从周一开始", "Week starts on Monday")
                 EmberToggle {
                     on: appSettings.weekStartsOnMonday
                     onToggled: (v) => appSettings.weekStartsOnMonday = v
@@ -468,10 +790,24 @@ Rectangle {
                         id: hourBox
                         width: 72
                         model: 24
+                        font.family: theme.fontMono
+                        font.pixelSize: 12
                         delegate: ItemDelegate {
                             required property int index
                             text: index.toString().padStart(2, "0")
                             width: hourBox.width
+                            font.family: theme.fontMono
+                            font.pixelSize: 12
+                            contentItem: Text {
+                                text: parent.text
+                                font: parent.font
+                                color: theme.ink1
+                                verticalAlignment: Text.AlignVCenter
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                            background: Rectangle {
+                                color: parent.highlighted || parent.hovered ? Qt.rgba(0, 0, 0, 0.06) : "transparent"
+                            }
                             onClicked: {
                                 appSettings.reminderHour = index
                                 hourBox.currentIndex = index
@@ -480,10 +816,43 @@ Rectangle {
                         displayText: appSettings.reminderHour.toString().padStart(2, "0")
                         currentIndex: appSettings.reminderHour
                         onActivated: appSettings.reminderHour = currentIndex
+                        contentItem: Text {
+                            text: hourBox.displayText
+                            font: hourBox.font
+                            color: theme.ink1
+                            verticalAlignment: Text.AlignVCenter
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                        background: Rectangle {
+                            color: "transparent"
+                            border.color: theme.rule
+                            border.width: 1
+                            radius: 4
+                        }
+                        popup: Popup {
+                            y: hourBox.height + 2
+                            width: hourBox.width
+                            height: Math.min(200, contentItem.implicitHeight)
+                            padding: 1
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: hourBox.popup.visible ? hourBox.delegateModel : null
+                                currentIndex: hourBox.highlightedIndex
+                                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                            }
+                            background: Rectangle {
+                                color: theme.paperHi
+                                border.color: theme.rule
+                                border.width: 1
+                                radius: 4
+                            }
+                        }
                     }
                     Text {
                         text: ":"
                         color: theme.ink1
+                        font.family: theme.fontMono
                         font.pixelSize: 16
                         anchors.verticalCenter: parent.verticalCenter
                     }
@@ -491,10 +860,24 @@ Rectangle {
                         id: minBox
                         width: 72
                         model: 60
+                        font.family: theme.fontMono
+                        font.pixelSize: 12
                         delegate: ItemDelegate {
                             required property int index
                             text: index.toString().padStart(2, "0")
                             width: minBox.width
+                            font.family: theme.fontMono
+                            font.pixelSize: 12
+                            contentItem: Text {
+                                text: parent.text
+                                font: parent.font
+                                color: theme.ink1
+                                verticalAlignment: Text.AlignVCenter
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                            background: Rectangle {
+                                color: parent.highlighted || parent.hovered ? Qt.rgba(0, 0, 0, 0.06) : "transparent"
+                            }
                             onClicked: {
                                 appSettings.reminderMinute = index
                                 minBox.currentIndex = index
@@ -503,6 +886,38 @@ Rectangle {
                         displayText: appSettings.reminderMinute.toString().padStart(2, "0")
                         currentIndex: appSettings.reminderMinute
                         onActivated: appSettings.reminderMinute = currentIndex
+                        contentItem: Text {
+                            text: minBox.displayText
+                            font: minBox.font
+                            color: theme.ink1
+                            verticalAlignment: Text.AlignVCenter
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                        background: Rectangle {
+                            color: "transparent"
+                            border.color: theme.rule
+                            border.width: 1
+                            radius: 4
+                        }
+                        popup: Popup {
+                            y: minBox.height + 2
+                            width: minBox.width
+                            height: Math.min(200, contentItem.implicitHeight)
+                            padding: 1
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: minBox.popup.visible ? minBox.delegateModel : null
+                                currentIndex: minBox.highlightedIndex
+                                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                            }
+                            background: Rectangle {
+                                color: theme.paperHi
+                                border.color: theme.rule
+                                border.width: 1
+                                radius: 4
+                            }
+                        }
                     }
                 }
             }
@@ -525,9 +940,48 @@ Rectangle {
                 wrapMode: Text.Wrap
             }
             ActionRow {
-                text: t("连接 Dropbox", "Connect Dropbox")
-                coming: true
-                enabled: false
+                text: (syncCoordinator && syncCoordinator.connected)
+                      ? t("断开 Dropbox", "Disconnect Dropbox")
+                      : t("连接 Dropbox", "Connect Dropbox")
+                coming: false
+                enabled: !!syncCoordinator
+                onClicked: {
+                    if (!syncCoordinator)
+                        return
+                    if (syncCoordinator.connected)
+                        syncCoordinator.signOut()
+                    else
+                        syncCoordinator.connectDropbox()
+                }
+            }
+            Text {
+                visible: !!(syncCoordinator && (syncCoordinator.connected
+                           || syncCoordinator.statusText.length > 0
+                           || syncCoordinator.fakeSyncAvailable))
+                Layout.fillWidth: true
+                Layout.topMargin: 6
+                text: {
+                    if (!syncCoordinator)
+                        return ""
+                    if (syncCoordinator.connected) {
+                        const prefix = syncCoordinator.fakeSyncAvailable
+                            ? t("已连接（调试假后端）", "Connected (debug fake backend)")
+                            : t("已连接", "Connected")
+                        return prefix
+                            + (syncCoordinator.accountEmail ? " · " + syncCoordinator.accountEmail : "")
+                            + (syncCoordinator.statusText ? " · " + syncCoordinator.statusText : "")
+                    }
+                    if (syncCoordinator.statusText.length > 0)
+                        return syncCoordinator.statusText
+                    if (syncCoordinator.fakeSyncAvailable)
+                        return t("WICK_FAKE_SYNC=1：用内存假后端跑同步循环，不访问真实 Dropbox。",
+                                 "WICK_FAKE_SYNC=1: run the engine against an in-memory fake, no real Dropbox.")
+                    return ""
+                }
+                color: theme.ink3
+                font.family: theme.fontUi
+                font.pixelSize: 11
+                wrapMode: Text.Wrap
             }
         }
     }
@@ -540,8 +994,8 @@ Rectangle {
             Text {
                 Layout.fillWidth: true
                 Layout.bottomMargin: 10
-                text: t("先选择日记本与交易所。仓位同步将在后续版本接入，此处只保存偏好。",
-                        "Pick a journal and venue. Live exchange sync arrives later — this stores preferences only.")
+                text: t("每本日记绑定一个交易所账号。凭证只读，保存在系统密钥环（或 WICK_DEV_SECRETS=1 的本地文件），不会上传。",
+                        "One exchange account per journal. Credentials stay in the system keyring (or WICK_DEV_SECRETS=1 file) and never upload.")
                 color: theme.ink2
                 font.family: theme.fontUi
                 font.pixelSize: 12
@@ -558,22 +1012,28 @@ Rectangle {
                     font.pixelSize: 12
                     onActivated: {
                         const row = journalLibrary.journals[currentIndex]
-                        if (row)
+                        if (row) {
                             appSettings.exchangeJournalId = row.id
+                            exchangeCoordinator.targetJournalId = row.id
+                        }
                     }
                     Component.onCompleted: selectCurrent()
                     function selectCurrent() {
-                        const id = appSettings.exchangeJournalId
+                        let id = exchangeCoordinator.targetJournalId
+                        if (id.length === 0)
+                            id = appSettings.exchangeJournalId
                         const list = journalLibrary.journals
                         for (let i = 0; i < list.length; ++i) {
                             if (list[i].id === id) {
                                 currentIndex = i
+                                exchangeCoordinator.targetJournalId = list[i].id
                                 return
                             }
                         }
                         if (list.length > 0) {
                             currentIndex = 0
-                            if (id.length === 0)
+                            exchangeCoordinator.targetJournalId = list[0].id
+                            if (appSettings.exchangeJournalId.length === 0)
                                 appSettings.exchangeJournalId = list[0].id
                         }
                     }
@@ -595,22 +1055,202 @@ Rectangle {
                         leftPadding: 8
                         elide: Text.ElideRight
                     }
+                    delegate: ItemDelegate {
+                        required property var modelData
+                        required property int index
+                        width: journalBox.width
+                        font.family: theme.fontUi
+                        font.pixelSize: 12
+                        contentItem: Text {
+                            text: modelData.name || ""
+                            font: parent.font
+                            color: theme.ink1
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 8
+                            elide: Text.ElideRight
+                        }
+                        background: Rectangle {
+                            color: parent.highlighted || parent.hovered ? Qt.rgba(0, 0, 0, 0.06) : "transparent"
+                        }
+                    }
                 }
             }
             Hairline {}
-            SettingRow {
-                label: t("交易所", "Venue")
-                Seg {
-                    options: [
-                        { value: "binance", label: "Binance" },
-                        { value: "okx", label: "OKX" },
-                        { value: "hyperliquid", label: "Hyperliquid" }
-                    ]
-                    current: appSettings.exchangeVenue
-                    onPicked: (v) => appSettings.exchangeVenue = v
+
+            ColumnLayout {
+                visible: exchangeCoordinator.configured
+                Layout.fillWidth: true
+                spacing: 8
+                SettingRow {
+                    label: t("已连接", "Connected")
+                    Text {
+                        text: (exchangeCoordinator.venue === "okx" ? "OKX"
+                              : exchangeCoordinator.venue === "hyperliquid" ? "Hyperliquid"
+                              : "Binance") + " · " + exchangeCoordinator.accountLabel
+                        color: theme.ink1
+                        font.family: theme.fontMono
+                        font.pixelSize: 12
+                        elide: Text.ElideMiddle
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: exchangeCoordinator.statusText
+                    color: exchangeCoordinator.lastError.length > 0 ? theme.cinnabar : theme.ink2
+                    font.family: theme.fontUi
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    EmberButton {
+                        text: exchangeCoordinator.syncing ? t("同步中…", "Syncing…") : t("立即同步", "Sync now")
+                        enabled: !exchangeCoordinator.syncing
+                        onClicked: exchangeCoordinator.syncNow(exchangeCoordinator.targetJournalId)
+                    }
+                    EmberButton {
+                        text: t("断开", "Disconnect")
+                        enabled: !exchangeCoordinator.syncing
+                        onClicked: exchangeCoordinator.disconnectJournal(exchangeCoordinator.targetJournalId)
+                    }
                 }
             }
-            Hairline {}
+
+            ColumnLayout {
+                visible: !exchangeCoordinator.configured
+                Layout.fillWidth: true
+                spacing: 8
+                SettingRow {
+                    label: t("交易所", "Venue")
+                    Seg {
+                        options: [
+                            { value: "binance", label: "Binance" },
+                            { value: "okx", label: "OKX" },
+                            { value: "hyperliquid", label: "Hyperliquid" }
+                        ]
+                        current: appSettings.exchangeVenue
+                        onPicked: (v) => appSettings.exchangeVenue = v
+                    }
+                }
+                Hairline {}
+                SettingRow {
+                    visible: appSettings.exchangeVenue !== "hyperliquid"
+                    label: t("API Key", "API Key")
+                    TextField {
+                        id: apiKeyField
+                        Layout.preferredWidth: 240
+                        echoMode: TextInput.Normal
+                        font.family: theme.fontMono
+                        font.pixelSize: 12
+                        color: theme.ink1
+                        background: Rectangle {
+                            color: "transparent"
+                            border.color: theme.rule
+                            border.width: 1
+                            radius: 3
+                        }
+                    }
+                }
+                SettingRow {
+                    visible: appSettings.exchangeVenue !== "hyperliquid"
+                    label: t("Secret", "Secret")
+                    TextField {
+                        id: secretField
+                        Layout.preferredWidth: 240
+                        echoMode: TextInput.Password
+                        font.family: theme.fontMono
+                        font.pixelSize: 12
+                        color: theme.ink1
+                        background: Rectangle {
+                            color: "transparent"
+                            border.color: theme.rule
+                            border.width: 1
+                            radius: 3
+                        }
+                    }
+                }
+                SettingRow {
+                    visible: appSettings.exchangeVenue === "okx"
+                    label: t("Passphrase", "Passphrase")
+                    TextField {
+                        id: passphraseField
+                        Layout.preferredWidth: 240
+                        echoMode: TextInput.Password
+                        font.family: theme.fontMono
+                        font.pixelSize: 12
+                        color: theme.ink1
+                        background: Rectangle {
+                            color: "transparent"
+                            border.color: theme.rule
+                            border.width: 1
+                            radius: 3
+                        }
+                    }
+                }
+                SettingRow {
+                    visible: appSettings.exchangeVenue === "hyperliquid"
+                    label: t("钱包地址", "Wallet")
+                    TextField {
+                        id: addressField
+                        Layout.preferredWidth: 240
+                        placeholderText: "0x…"
+                        font.family: theme.fontMono
+                        font.pixelSize: 12
+                        color: theme.ink1
+                        placeholderTextColor: theme.ink3
+                        background: Rectangle {
+                            color: "transparent"
+                            border.color: theme.rule
+                            border.width: 1
+                            radius: 3
+                        }
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: appSettings.exchangeVenue === "okx"
+                          ? t("OKX 永续。fillSz 单位是张，未换算 ctVal。", "OKX SWAP. fillSz is contracts, not coin.")
+                          : appSettings.exchangeVenue === "hyperliquid"
+                            ? t("只需只读地址，无需 API Key。公开 info 接口。", "Read-only address; public info endpoint.")
+                            : t("Binance USDⓈ-M。请用只读 API Key。", "Binance USDⓈ-M. Use a read-only API key.")
+                    color: theme.ink3
+                    font.family: theme.fontUi
+                    font.pixelSize: 11
+                    wrapMode: Text.Wrap
+                }
+                EmberButton {
+                    text: exchangeCoordinator.syncing ? t("连接中…", "Connecting…") : t("连接并同步", "Save and sync")
+                    enabled: !exchangeCoordinator.syncing && (
+                        appSettings.exchangeVenue === "hyperliquid"
+                            ? addressField.text.length > 0
+                            : apiKeyField.text.length > 0 && secretField.text.length > 0
+                              && (appSettings.exchangeVenue !== "okx" || passphraseField.text.length > 0)
+                    )
+                    onClicked: {
+                        const id = exchangeCoordinator.targetJournalId
+                        if (appSettings.exchangeVenue === "okx")
+                            exchangeCoordinator.saveOKX(id, apiKeyField.text, secretField.text, passphraseField.text)
+                        else if (appSettings.exchangeVenue === "hyperliquid")
+                            exchangeCoordinator.saveHyperliquid(id, addressField.text)
+                        else
+                            exchangeCoordinator.saveBinance(id, apiKeyField.text, secretField.text)
+                        apiKeyField.text = ""
+                        secretField.text = ""
+                        passphraseField.text = ""
+                    }
+                }
+                Text {
+                    visible: exchangeCoordinator.lastError.length > 0
+                    Layout.fillWidth: true
+                    text: exchangeCoordinator.lastError
+                    color: theme.cinnabar
+                    font.family: theme.fontUi
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                }
+            }
+
+            Hairline { Layout.topMargin: 12 }
             SettingRow {
                 label: t("同步仓位快照", "Sync trading snapshots")
                 showHint: true

@@ -16,11 +16,13 @@ namespace wick {
 namespace JournalSyncEncoding {
 
 std::string encode(const JournalEntry& entry);
+std::string encode(const JournalItem& item);
 std::string encode(const JournalSnapshot& snapshot);
 std::string encode(const JournalCatalogSnapshot& catalog);
 std::string encode(const JournalInfo& info);
 
 JournalEntry decodeEntry(std::string_view json);
+JournalItem decodeItem(std::string_view json);
 JournalSnapshot decodeSnapshot(std::string_view json);
 JournalCatalogSnapshot decodeCatalogObject(std::string_view json);
 

@@ -1,12 +1,19 @@
 #include "AppSettings.h"
+#include "DropboxAuthSession.h"
+#include "ExchangeCoordinator.h"
 #include "JournalLibrary.h"
+#include "JournalSyncCoordinator.h"
 #include "ReminderScheduler.h"
 #include "TimeProgress.h"
 #include "TrayController.h"
+#include "WickIpc.h"
 
 #include <QApplication>
 #include <QIcon>
 #include <QQuickStyle>
+#include <QCoreApplication>
+
+#include <chrono>
 
 int main(int argc, char *argv[])
 {
@@ -22,12 +29,21 @@ int main(int argc, char *argv[])
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
+    if (const int cb = WickIpc::maybeForwardAndExit(app.arguments()); cb >= 0)
+        return cb;
+
     AppSettings *settings = AppSettings::instance();
 
     JournalLibrary library;
     library.bootstrap();
 
-    QObject::connect(&app, &QCoreApplication::aboutToQuit, &library, &JournalLibrary::flushNow);
+    JournalSyncCoordinator sync(&library, settings);
+    ExchangeCoordinator exchange(&library);
+
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &library, [&library, &sync]() {
+        library.flushNow();
+        sync.syncOnceBeforeQuit(std::chrono::milliseconds(8000));
+    });
 
     TimeProgress progress;
     progress.setWeekStartsOnMonday(settings->weekStartsOnMonday());
@@ -35,7 +51,14 @@ int main(int argc, char *argv[])
         progress.setWeekStartsOnMonday(settings->weekStartsOnMonday());
     });
 
-    TrayController tray(&progress, &library, settings);
+    TrayController tray(&progress, &library, settings, &sync, &exchange);
+
+    WickIpc ipc;
+    ipc.listen();
+    DropboxAuthSession::ensureMimeDefault();
+    QObject::connect(&ipc, &WickIpc::openJournalRequested, &tray, &TrayController::openJournal);
+    QObject::connect(&ipc, &WickIpc::openSettingsRequested, &tray, &TrayController::openSettings);
+    QObject::connect(&ipc, &WickIpc::quitRequested, &tray, &TrayController::quitApp);
 
     ReminderScheduler reminder(settings, tray.trayIcon());
     QObject::connect(&reminder, &ReminderScheduler::openJournalRequested,

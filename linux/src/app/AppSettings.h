@@ -51,7 +51,10 @@ class AppSettings : public QObject
     Q_PROPERTY(QString dataStatusText READ dataStatusText NOTIFY dataStatusChanged)
     Q_PROPERTY(QString updateStatusText READ updateStatusText NOTIFY updateStatusChanged)
     Q_PROPERTY(bool isCheckingUpdates READ isCheckingUpdates NOTIFY updateStatusChanged)
-    Q_PROPERTY(QStringList fontFamilies READ fontFamilies CONSTANT)
+    Q_PROPERTY(QStringList fontFamilies READ fontFamilies NOTIFY fontFamiliesChanged)
+    Q_PROPERTY(bool omarchyAvailable READ omarchyAvailable NOTIFY omarchyChanged)
+    Q_PROPERTY(QString omarchyThemeName READ omarchyThemeName NOTIFY omarchyChanged)
+    Q_PROPERTY(QVariantMap omarchyColors READ omarchyColors NOTIFY omarchyChanged)
 
 public:
     static AppSettings *instance();
@@ -110,6 +113,9 @@ public:
     QString updateStatusText() const { return m_updateStatusText; }
     bool isCheckingUpdates() const { return m_checkingUpdates; }
     QStringList fontFamilies() const { return m_fontFamilies; }
+    bool omarchyAvailable() const { return m_omarchyAvailable; }
+    QString omarchyThemeName() const { return m_omarchyThemeName; }
+    QVariantMap omarchyColors() const { return m_omarchyColors; }
 
     Q_INVOKABLE void checkForUpdates();
     Q_INVOKABLE void openReleasesPage();
@@ -118,6 +124,7 @@ public:
     Q_INVOKABLE void stubImport();
     Q_INVOKABLE void setDataStatus(const QString &text);
     Q_INVOKABLE QString t(const QString &zh, const QString &en) const;
+    Q_INVOKABLE QString importFontFile(const QUrl &fileUrl);
 
 signals:
     void languageChanged();
@@ -134,9 +141,15 @@ signals:
     void exchangeChanged();
     void dataStatusChanged();
     void updateStatusChanged();
+    void fontFamiliesChanged();
+    void omarchyChanged();
 
 private:
     void load();
+    void loadApplicationFonts();
+    void refreshFontFamilies();
+    void initOmarchyWatcher();
+    void reloadOmarchyTheme();
     void write(const QString &key, const QVariant &value);
     bool hasKey(const QString &key) const;
     void applyLaunchAtLogin();
@@ -164,6 +177,13 @@ private:
     QString m_updateStatusText;
     bool m_checkingUpdates = false;
     QStringList m_fontFamilies;
+    void syncLanguageFile();
+
+    bool m_omarchyAvailable = false;
+    QString m_omarchyThemeName;
+    QVariantMap m_omarchyColors;
+    class QFileSystemWatcher *m_omarchyWatcher = nullptr;
+    class QTimer *m_omarchyDebounceTimer = nullptr;
     QNetworkAccessManager *m_nam = nullptr;
 };
 

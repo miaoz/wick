@@ -8,38 +8,103 @@
 #include "TimeProgress.h"
 
 #include <QApplication>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QIcon>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMenu>
 #include <QPainter>
 #include <QPalette>
 #include <QPixmap>
 #include <QSvgRenderer>
 
+namespace {
+
+bool layoutHasWickProgress(const QJsonValue &section)
+{
+    if (!section.isArray())
+        return false;
+    for (const auto &item : section.toArray()) {
+        if (item.isObject()
+            && item.toObject().value(QStringLiteral("id")).toString()
+                   == QLatin1String("wick.progress"))
+            return true;
+    }
+    return false;
+}
+
+/// Omarchy bar widget owns the candle. Qt SNI slip is the non-Omarchy fallback.
+bool omarchyPluginOwnsCandle()
+{
+    if (qEnvironmentVariableIsSet("WICK_FORCE_TRAY"))
+        return false;
+    if (qEnvironmentVariableIsSet("WICK_HEADLESS_TRAY"))
+        return true;
+
+    const QString home = QDir::homePath();
+    const QString plugin = home + QStringLiteral("/.config/omarchy/plugins/wick.progress/Panel.qml");
+    if (!QFileInfo::exists(plugin))
+        return false;
+
+    QFile f(home + QStringLiteral("/.config/omarchy/shell.json"));
+    if (!f.open(QIODevice::ReadOnly))
+        return false;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+    const QJsonObject layout = doc.object()
+                                   .value(QStringLiteral("bar"))
+                                   .toObject()
+                                   .value(QStringLiteral("layout"))
+                                   .toObject();
+    return layoutHasWickProgress(layout.value(QStringLiteral("left")))
+        || layoutHasWickProgress(layout.value(QStringLiteral("center")))
+        || layoutHasWickProgress(layout.value(QStringLiteral("right")));
+}
+
+} // namespace
+
 TrayController::TrayController(TimeProgress *progress,
                                JournalLibrary *library,
                                AppSettings *settings,
+                               JournalSyncCoordinator *sync,
+                               ExchangeCoordinator *exchange,
                                QObject *parent)
     : QObject(parent)
     , m_progress(progress)
     , m_library(library)
     , m_settings(settings)
+    , m_sync(sync)
+    , m_exchange(exchange)
 {
-    m_panel = new ProgressWindow(progress);
+    const bool pluginUi = omarchyPluginOwnsCandle();
+    if (!pluginUi)
+        m_panel = new ProgressWindow(progress);
 
     m_menu = new QMenu();
-    m_menu->addAction(QStringLiteral("日记"), this, &TrayController::openJournal);
-    m_menu->addAction(QStringLiteral("设置"), this, &TrayController::openSettings);
-    m_menu->addSeparator();
-    m_menu->addAction(QStringLiteral("退出"), this, &TrayController::quitApp);
+    auto rebuildMenu = [this]() {
+        if (!m_menu)
+            return;
+        m_menu->clear();
+        const bool zh = m_settings ? m_settings->isChinese() : true;
+        m_menu->addAction(zh ? QStringLiteral("日记") : QStringLiteral("Journal"), this, &TrayController::openJournal);
+        m_menu->addAction(zh ? QStringLiteral("设置") : QStringLiteral("Settings"), this, &TrayController::openSettings);
+        m_menu->addSeparator();
+        m_menu->addAction(zh ? QStringLiteral("退出") : QStringLiteral("Quit"), this, &TrayController::quitApp);
+    };
+    rebuildMenu();
 
     m_tray = new QSystemTrayIcon(this);
     m_tray->setIcon(makeCandleIcon());
     m_tray->setContextMenu(m_menu);
-    m_tray->setVisible(true);
+    m_tray->setVisible(!pluginUi);
     refreshTrayIcon();
 
-    connect(m_tray, &QSystemTrayIcon::activated,
-            this, &TrayController::onActivated);
+    if (!pluginUi) {
+        connect(m_tray, &QSystemTrayIcon::activated,
+                this, &TrayController::onActivated);
+    }
 
     if (m_progress) {
         connect(m_progress, &TimeProgress::updated,
@@ -48,6 +113,8 @@ TrayController::TrayController(TimeProgress *progress,
     if (m_settings) {
         connect(m_settings, &AppSettings::showMenuBarPercentageChanged,
                 this, &TrayController::refreshTrayIcon);
+        connect(m_settings, &AppSettings::languageChanged,
+                this, rebuildMenu);
     }
 
     connect(qApp, &QCoreApplication::aboutToQuit, this, [this]() {
@@ -63,9 +130,9 @@ TrayController::TrayController(TimeProgress *progress,
             m_tray->hide();
     });
 
-    if (!QSystemTrayIcon::isSystemTrayAvailable()) {
-        qWarning("秉烛: no StatusNotifierItem host. Run inside an Omarchy "
-                 "(Hyprland + Quickshell) session so the tray candle can appear.");
+    if (!pluginUi && !QSystemTrayIcon::isSystemTrayAvailable()) {
+        qWarning("秉烛: no StatusNotifierItem host. On Omarchy, install the "
+                 "wick.progress bar widget; elsewhere, a tray host is required.");
     }
 }
 
@@ -106,15 +173,18 @@ void TrayController::onActivated(QSystemTrayIcon::ActivationReason reason)
 
 void TrayController::openJournal()
 {
-    if (!m_journal)
+    if (!m_journal) {
         m_journal = new JournalWindow(m_library);
+        connect(m_journal, &JournalWindow::openSettingsRequested,
+                this, &TrayController::openSettings);
+    }
     m_journal->openOrRaise();
 }
 
 void TrayController::openSettings()
 {
     if (!m_settingsWindow)
-        m_settingsWindow = new SettingsWindow(m_settings, m_library);
+        m_settingsWindow = new SettingsWindow(m_settings, m_library, m_sync, m_exchange);
     m_settingsWindow->openOrRaise();
 }
 
@@ -135,7 +205,7 @@ void TrayController::quitApp()
 
 void TrayController::refreshTrayIcon()
 {
-    if (!m_tray)
+    if (!m_tray || !m_tray->isVisible())
         return;
     m_tray->setIcon(makeCandleIcon());
     QString tip = QStringLiteral("秉烛");
@@ -158,36 +228,14 @@ QIcon TrayController::makeCandleIcon() const
     const int textW = showPct ? static_cast<int>(px * 1.7) : 0;
     const int canvasW = px + textW;
 
-    QPixmap stencil(px, px);
-    stencil.fill(Qt::transparent);
-    {
-        QPainter p(&stencil);
-        p.setRenderHint(QPainter::Antialiasing, true);
-        renderer.render(&p);
-    }
-
-    QColor tint = QColor(0xF0, 0xE3, 0xC6);
-    if (qApp) {
-        const QColor windowText = qApp->palette().color(QPalette::WindowText);
-        if (windowText.isValid())
-            tint = windowText;
-        const QColor window = qApp->palette().color(QPalette::Window);
-        if (window.lightness() < 128 && tint.lightness() < 128)
-            tint = QColor(0xF0, 0xE3, 0xC6);
-        else if (window.lightness() >= 128 && tint.lightness() >= 128)
-            tint = QColor(0x2B, 0x20, 0x14);
-    }
-
     QPixmap colored(canvasW, px);
     colored.fill(Qt::transparent);
     {
         QPainter p(&colored);
-        p.fillRect(QRect(0, 0, px, px), tint);
-        p.setCompositionMode(QPainter::CompositionMode_DestinationIn);
-        p.drawPixmap(0, 0, stencil);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        renderer.render(&p, QRectF(0, 0, px, px));
         if (showPct) {
-            p.setCompositionMode(QPainter::CompositionMode_SourceOver);
-            p.setPen(tint);
+            p.setPen(QColor(0xFF, 0xFF, 0xFF));
             QFont f = p.font();
             f.setPixelSize(qMax(8, px * 9 / 22));
             f.setBold(true);
