@@ -138,27 +138,39 @@ Rectangle {
                 anchors.rightMargin: 14
                 spacing: 10
 
-                ToolButton {
+                Rectangle {
                     visible: root.isFullLayout
-                    text: journalLibrary.columnMode === 0 ? "▣" : (journalLibrary.columnMode === 1 ? "▤" : "□")
-                    font.pixelSize: 14
                     implicitWidth: 28
                     implicitHeight: 28
-                    onClicked: journalLibrary.cycleColumns()
-                    ToolTip.visible: hovered
-                    ToolTip.text: "栏位：全导航 → 仅列表 → 专注"
-                    background: Rectangle {
-                        radius: 4
-                        color: parent.hovered ? Qt.rgba(245 / 255, 168 / 255, 60 / 255, 0.12) : "transparent"
-                        border.color: parent.hovered ? theme.ember : theme.ink3
-                        border.width: 1
+                    radius: 4
+                    color: colBtnHover.containsMouse ? Qt.rgba(theme.ink1.r, theme.ink1.g, theme.ink1.b, 0.06) : "transparent"
+                    border.color: colBtnHover.containsMouse ? theme.rule : "transparent"
+                    border.width: 1
+
+                    readonly property string iconName: {
+                        if (journalLibrary.columnMode === 1) return "rectangle.split.2x1"
+                        if (journalLibrary.columnMode === 2) return "rectangle"
+                        return "sidebar.left"
                     }
-                    contentItem: Text {
-                        text: parent.text
-                        color: parent.hovered ? theme.ember : theme.ink2
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
+
+                    WickIcon {
+                        anchors.centerIn: parent
+                        name: parent.iconName
+                        size: 15
+                        color: colBtnHover.containsMouse ? theme.ember : theme.ink2
                     }
+
+                    MouseArea {
+                        id: colBtnHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: journalLibrary.cycleColumns()
+                    }
+
+                    ToolTip.visible: colBtnHover.containsMouse
+                    ToolTip.text: "切换栏位模式 (Ctrl+Shift+S)"
+                    ToolTip.delay: 400
                 }
 
                 Text {
@@ -209,48 +221,63 @@ Rectangle {
                     }
                 }
 
-                ToolButton {
-                    text: "＋"
+                Rectangle {
                     implicitWidth: 28
                     implicitHeight: 28
-                    onClicked: journalLibrary.openOrCreateToday()
-                    enabled: !journalLibrary.isReadOnly
-                    ToolTip.visible: hovered
-                    ToolTip.text: "今日日记"
-                    background: Rectangle {
-                        radius: 4
-                        color: "transparent"
-                        border.color: parent.hovered ? theme.ember : theme.ink3
-                        border.width: 1
+                    radius: 4
+                    color: todayBtnHover.containsMouse ? Qt.rgba(theme.ink1.r, theme.ink1.g, theme.ink1.b, 0.06) : "transparent"
+                    border.color: todayBtnHover.containsMouse ? theme.rule : "transparent"
+                    border.width: 1
+                    opacity: journalLibrary.isReadOnly ? 0.4 : 1.0
+
+                    WickIcon {
+                        anchors.centerIn: parent
+                        name: "square.and.pencil"
+                        size: 15
+                        color: todayBtnHover.containsMouse ? theme.ember : theme.ink2
                     }
-                    contentItem: Text {
-                        text: parent.text
-                        color: parent.hovered ? theme.ember : theme.ink2
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
+
+                    MouseArea {
+                        id: todayBtnHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: journalLibrary.isReadOnly ? Qt.ArrowCursor : Qt.PointingHandCursor
+                        enabled: !journalLibrary.isReadOnly
+                        onClicked: journalLibrary.openOrCreateToday()
                     }
+
+                    ToolTip.visible: todayBtnHover.containsMouse
+                    ToolTip.text: "今日日记 (Ctrl+N)"
+                    ToolTip.delay: 400
                 }
 
-                ToolButton {
+                Rectangle {
                     visible: root.isFullLayout
-                    text: "☰"
                     implicitWidth: 28
                     implicitHeight: 28
-                    onClicked: journalLibrary.toggleInspector()
-                    ToolTip.visible: hovered
-                    ToolTip.text: "检查器"
-                    background: Rectangle {
-                        radius: 4
-                        color: journalLibrary.inspectorVisible ? Qt.rgba(245 / 255, 168 / 255, 60 / 255, 0.12) : "transparent"
-                        border.color: parent.hovered || journalLibrary.inspectorVisible ? theme.ember : theme.ink3
-                        border.width: 1
+                    radius: 4
+                    color: (inspBtnHover.containsMouse || journalLibrary.inspectorVisible) ? Qt.rgba(theme.ember.r, theme.ember.g, theme.ember.b, 0.12) : "transparent"
+                    border.color: (inspBtnHover.containsMouse || journalLibrary.inspectorVisible) ? theme.ember : "transparent"
+                    border.width: 1
+
+                    WickIcon {
+                        anchors.centerIn: parent
+                        name: "sidebar.right"
+                        size: 15
+                        color: (inspBtnHover.containsMouse || journalLibrary.inspectorVisible) ? theme.ember : theme.ink2
                     }
-                    contentItem: Text {
-                        text: parent.text
-                        color: parent.hovered || journalLibrary.inspectorVisible ? theme.ember : theme.ink2
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
+
+                    MouseArea {
+                        id: inspBtnHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: journalLibrary.toggleInspector()
                     }
+
+                    ToolTip.visible: inspBtnHover.containsMouse
+                    ToolTip.text: "检查器 (Ctrl+I)"
+                    ToolTip.delay: 400
                 }
             }
         }

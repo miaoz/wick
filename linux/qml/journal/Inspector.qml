@@ -260,13 +260,27 @@ Rectangle {
                         spacing: 2
                         Row {
                             spacing: 7
-                            Text {
+                            Column {
                                 width: 34
-                                text: modelData.time
-                                color: theme.pnlUp
-                                font.family: theme.fontMono
-                                font.pixelSize: 10
-                                font.weight: Font.Bold
+                                spacing: 2
+                                Text {
+                                    text: modelData.time
+                                    color: theme.pnlUp
+                                    font.family: theme.fontMono
+                                    font.pixelSize: 10
+                                    font.weight: Font.Bold
+                                }
+                                Row {
+                                    spacing: 1
+                                    Repeater {
+                                        model: Math.max(1, Math.min(3, modelData.importance || 1))
+                                        delegate: WickIcon {
+                                            name: "star.fill"
+                                            size: 6.5
+                                            color: theme.ember
+                                        }
+                                    }
+                                }
                             }
                             Text {
                                 width: 32

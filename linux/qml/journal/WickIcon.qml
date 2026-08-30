@@ -313,5 +313,111 @@ Item {
                 }
             }
         }
+
+        // 15. SIDEBAR.LEFT
+        Shape {
+            visible: root.name === "sidebar.left"
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: root.color
+                strokeWidth: 1.2
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                PathSvg {
+                    path: "M 3.8,2.6 L 12.2,2.6 C 13.2,2.6 14.0,3.4 14.0,4.4 L 14.0,11.6 C 14.0,12.6 13.2,13.4 12.2,13.4 L 3.8,13.4 C 2.8,13.4 2.0,12.6 2.0,11.6 L 2.0,4.4 C 2.0,3.4 2.8,2.6 3.8,2.6 Z M 5.8,2.6 L 5.8,13.4"
+                }
+            }
+        }
+
+        // 16. RECTANGLE.SPLIT.2X1
+        Shape {
+            visible: root.name === "rectangle.split.2x1"
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: root.color
+                strokeWidth: 1.2
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                PathSvg {
+                    path: "M 3.8,2.6 L 12.2,2.6 C 13.2,2.6 14.0,3.4 14.0,4.4 L 14.0,11.6 C 14.0,12.6 13.2,13.4 12.2,13.4 L 3.8,13.4 C 2.8,13.4 2.0,12.6 2.0,11.6 L 2.0,4.4 C 2.0,3.4 2.8,2.6 3.8,2.6 Z M 8.0,2.6 L 8.0,13.4"
+                }
+            }
+        }
+
+        // 17. RECTANGLE
+        Shape {
+            visible: root.name === "rectangle"
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: root.color
+                strokeWidth: 1.2
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                PathSvg {
+                    path: "M 3.8,2.6 L 12.2,2.6 C 13.2,2.6 14.0,3.4 14.0,4.4 L 14.0,11.6 C 14.0,12.6 13.2,13.4 12.2,13.4 L 3.8,13.4 C 2.8,13.4 2.0,12.6 2.0,11.6 L 2.0,4.4 C 2.0,3.4 2.8,2.6 3.8,2.6 Z"
+                }
+            }
+        }
+
+        // 18. SIDEBAR.RIGHT
+        Shape {
+            visible: root.name === "sidebar.right"
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: root.color
+                strokeWidth: 1.2
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                PathSvg {
+                    path: "M 3.8,2.6 L 12.2,2.6 C 13.2,2.6 14.0,3.4 14.0,4.4 L 14.0,11.6 C 14.0,12.6 13.2,13.4 12.2,13.4 L 3.8,13.4 C 2.8,13.4 2.0,12.6 2.0,11.6 L 2.0,4.4 C 2.0,3.4 2.8,2.6 3.8,2.6 Z M 10.2,2.6 L 10.2,13.4"
+                }
+            }
+        }
+
+        // 19. SQUARE.AND.PENCIL
+        Shape {
+            visible: root.name === "square.and.pencil"
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: root.color
+                strokeWidth: 1.2
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                PathSvg {
+                    path: "M 7.2,2.6 L 3.8,2.6 C 2.8,2.6 2.0,3.4 2.0,4.4 L 2.0,12.2 C 2.0,13.2 2.8,14.0 3.8,14.0 L 11.6,14.0 C 12.6,14.0 13.4,13.2 13.4,12.2 L 13.4,8.8 M 13.8,2.2 L 12.8,1.2 C 12.4,0.8 11.8,0.8 11.4,1.2 L 5.8,6.8 L 5.2,9.2 L 7.6,8.6 L 13.2,3.0 C 13.6,2.6 13.6,2.0 13.8,2.2 Z"
+                }
+            }
+        }
+
+        // 20. STAR.FILL
+        Shape {
+            visible: root.name === "star.fill" || root.name === "star"
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: "transparent"
+                strokeWidth: 0
+                fillColor: root.color
+                PathSvg {
+                    path: "M 8.0,1.2 L 10.2,5.8 L 15.2,6.5 L 11.5,9.8 L 12.5,14.8 L 8.0,12.2 L 3.5,14.8 L 4.5,9.8 L 0.8,6.5 L 5.8,5.8 Z"
+                }
+            }
+        }
     }
 }
