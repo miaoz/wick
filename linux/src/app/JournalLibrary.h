@@ -136,6 +136,7 @@ public:
     Q_INVOKABLE void selectDay(const QString &entryId);
     Q_INVOKABLE void openOrCreateToday();
     Q_INVOKABLE void addItem();
+    Q_INVOKABLE void addItemTo(const QString &entryId = QString());
     Q_INVOKABLE void deleteItem(const QString &itemId);
     Q_INVOKABLE void deleteEmptyItem(const QString &itemId);
     Q_INVOKABLE void deleteSelectedDay();
@@ -224,8 +225,10 @@ private:
 
     wick::JournalEntry *selectedEntry();
     const wick::JournalEntry *selectedEntry() const;
+    std::pair<wick::JournalEntry *, wick::JournalItem *> findItemAndEntry(const QString &itemId);
     wick::JournalItem *findItem(const QString &itemId);
     const wick::JournalItem *findItem(const QString &itemId) const;
+    QVariantList itemsForEntry(const wick::JournalEntry &entry) const;
     bool itemMatchesSearch(const wick::JournalEntry &entry, const wick::JournalItem &item) const;
     bool entryMatchesSearch(const wick::JournalEntry &entry) const;
     bool itemIsEmpty(const wick::JournalItem &item) const;

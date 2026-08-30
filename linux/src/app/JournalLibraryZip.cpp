@@ -88,8 +88,7 @@ QString JournalLibrary::addImageFromUrl(const QString &itemId, const QUrl &fileU
 {
     if (isReadOnly() || !m_store)
         return {};
-    auto *entry = selectedEntry();
-    auto *item = findItem(itemId);
+    auto [entry, item] = findItemAndEntry(itemId);
     if (!entry || !item)
         return {};
     const QString local = fileUrl.isLocalFile() ? fileUrl.toLocalFile() : fileUrl.toString();
@@ -111,8 +110,7 @@ bool JournalLibrary::pasteClipboardImage(const QString &itemId)
 {
     if (isReadOnly() || !m_store)
         return false;
-    auto *entry = selectedEntry();
-    auto *item = findItem(itemId);
+    auto [entry, item] = findItemAndEntry(itemId);
     if (!entry || !item)
         return false;
     const QClipboard *clipboard = QGuiApplication::clipboard();
@@ -144,8 +142,7 @@ void JournalLibrary::removeImage(const QString &itemId, const QString &filename)
 {
     if (isReadOnly() || !m_store)
         return;
-    auto *entry = selectedEntry();
-    auto *item = findItem(itemId);
+    auto [entry, item] = findItemAndEntry(itemId);
     if (!entry || !item)
         return;
     m_store->removeImage(ss(filename), entry->id, item->id);

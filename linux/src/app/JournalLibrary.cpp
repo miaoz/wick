@@ -343,19 +343,32 @@ const JournalEntry *JournalLibrary::selectedEntry() const
     return const_cast<JournalLibrary *>(this)->selectedEntry();
 }
 
-JournalItem *JournalLibrary::findItem(const QString &itemId)
+std::pair<JournalEntry *, JournalItem *> JournalLibrary::findItemAndEntry(const QString &itemId)
 {
-    auto *entry = selectedEntry();
-    if (!entry)
-        return nullptr;
+    if (!m_store)
+        return {nullptr, nullptr};
     const auto id = parseUuid(itemId);
     if (!id)
-        return nullptr;
-    for (auto &item : entry->items) {
-        if (item.id == *id)
-            return &item;
+        return {nullptr, nullptr};
+    auto *sel = selectedEntry();
+    if (sel) {
+        for (auto &item : sel->items) {
+            if (item.id == *id)
+                return {sel, &item};
+        }
     }
-    return nullptr;
+    for (auto &entry : m_store->entries) {
+        for (auto &item : entry.items) {
+            if (item.id == *id)
+                return {&entry, &item};
+        }
+    }
+    return {nullptr, nullptr};
+}
+
+JournalItem *JournalLibrary::findItem(const QString &itemId)
+{
+    return findItemAndEntry(itemId).second;
 }
 
 const JournalItem *JournalLibrary::findItem(const QString &itemId) const
@@ -564,6 +577,24 @@ QVariantList JournalLibrary::days() const
         row.insert(QStringLiteral("dayKey"), qs(dayKey));
         row.insert(QStringLiteral("dateLabel"), bigDateLabel(d));
         row.insert(QStringLiteral("weekday"), weekdayName(d));
+        row.insert(QStringLiteral("lunar"), wick::lunarLine(d));
+        const bool isToday = (d == QDate::currentDate());
+        row.insert(QStringLiteral("isToday"), isToday);
+        row.insert(QStringLiteral("reviewEligible"), d < QDate::currentDate());
+        double burn = 0.0;
+        if (isToday) {
+            const QDateTime start = d.startOfDay();
+            const QDateTime end = d.addDays(1).startOfDay();
+            const QDateTime now = QDateTime::currentDateTime();
+            const qint64 dur = start.msecsTo(end);
+            burn = (dur > 0) ? std::clamp(static_cast<double>(start.msecsTo(now)) / static_cast<double>(dur), 0.0, 1.0) : 0.0;
+        } else {
+            burn = (d < QDate::currentDate()) ? 1.0 : 0.0;
+        }
+        row.insert(QStringLiteral("burnElapsed"), burn);
+        row.insert(QStringLiteral("savedState"), isReadOnly() ? QStringLiteral("只读") : m_savedState);
+        row.insert(QStringLiteral("items"), itemsForEntry(*e));
+
         const int itemCount = static_cast<int>(e->items.size());
         row.insert(QStringLiteral("itemCount"), itemCount);
         row.insert(QStringLiteral("year"), d.year());
@@ -599,11 +630,11 @@ QVariantList JournalLibrary::days() const
             const double pnl = pnlByDay[dayKey];
             row.insert(QStringLiteral("dayPnl"), pnl);
             const QString sign = (pnl >= 0) ? QStringLiteral("+") : QStringLiteral("-");
-            row.insert(QStringLiteral("pnlText"), sign + QString::number(std::abs(pnl), 'f', 2));
+            row.insert(QStringLiteral("pnlText"), sign + QString::number(std::abs(pnl), 'f', 2) + QStringLiteral(" USDT"));
         } else {
             row.insert(QStringLiteral("hasPnl"), false);
             row.insert(QStringLiteral("dayPnl"), 0.0);
-            row.insert(QStringLiteral("pnlText"), QStringLiteral("—"));
+            row.insert(QStringLiteral("pnlText"), QString());
         }
 
         bool hasCorrect = false;
@@ -652,23 +683,20 @@ static QString formatCurrency(double val)
     return QString::number(val, 'f', 2);
 }
 
-QVariantList JournalLibrary::items() const
+QVariantList JournalLibrary::itemsForEntry(const JournalEntry &entry) const
 {
     QVariantList out;
-    const auto *entry = selectedEntry();
-    if (!entry)
-        return out;
-
-    const std::string tradingDayKey = dayKeyOf(*entry);
-    const auto &items = entry->items;
+    const std::string tradingDayKey = dayKeyOf(entry);
+    const auto &items = entry.items;
 
     int index = 0;
     for (const auto &item : items) {
         ++index;
-        if (!itemMatchesSearch(*entry, item))
+        if (!itemMatchesSearch(entry, item))
             continue;
         QVariantMap row;
         row.insert(QStringLiteral("itemId"), qs(item.id.toString()));
+        row.insert(QStringLiteral("entryId"), qs(entry.id.toString()));
         row.insert(QStringLiteral("index"), index);
         row.insert(QStringLiteral("indexLabel"), QStringLiteral("条目 %1").arg(index));
         row.insert(QStringLiteral("tag"), qs(item.tag));
@@ -750,6 +778,14 @@ QVariantList JournalLibrary::items() const
         out.push_back(row);
     }
     return out;
+}
+
+QVariantList JournalLibrary::items() const
+{
+    const auto *entry = selectedEntry();
+    if (!entry)
+        return {};
+    return itemsForEntry(*entry);
 }
 
 QVariantList JournalLibrary::calendarDays() const
@@ -1484,68 +1520,77 @@ void JournalLibrary::openOrCreateToday()
 
 void JournalLibrary::addItem()
 {
-    if (isReadOnly())
+    addItemTo(m_selectedEntryId);
+}
+
+void JournalLibrary::addItemTo(const QString &entryId)
+{
+    if (isReadOnly() || !m_store)
         return;
-    auto *entry = selectedEntry();
-    if (!entry)
+    JournalEntry *target = nullptr;
+    if (entryId.isEmpty()) {
+        target = selectedEntry();
+    } else {
+        const auto id = parseUuid(entryId);
+        if (id) {
+            for (auto &entry : m_store->entries) {
+                if (entry.id == *id) {
+                    target = &entry;
+                    break;
+                }
+            }
+        }
+    }
+    if (!target)
         return;
     JournalItem item;
     item.id = Uuid::generate();
-    entry->items.push_back(item);
-    entry->updatedAt = nowTp();
+    target->items.push_back(item);
+    target->updatedAt = nowTp();
     persistActive();
     rebuildAfterStructuralChange();
 }
 
 void JournalLibrary::deleteItem(const QString &itemId)
 {
-    if (isReadOnly())
-        return;
-    auto *entry = selectedEntry();
-    if (!entry)
+    if (isReadOnly() || !m_store)
         return;
     const auto id = parseUuid(itemId);
     if (!id)
         return;
-    auto it = std::find_if(entry->items.begin(), entry->items.end(),
-                           [&](const JournalItem &item) { return item.id == *id; });
-    if (it == entry->items.end())
-        return;
-    for (const auto &fn : it->imageFilenames) {
-        if (m_store)
-            m_store->removeImage(fn, entry->id, *id);
+    for (auto eIt = m_store->entries.begin(); eIt != m_store->entries.end(); ++eIt) {
+        auto it = std::find_if(eIt->items.begin(), eIt->items.end(),
+                               [&](const JournalItem &item) { return item.id == *id; });
+        if (it != eIt->items.end()) {
+            for (const auto &fn : it->imageFilenames) {
+                m_store->removeImage(fn, eIt->id, *id);
+            }
+            eIt->items.erase(it);
+            if (eIt->items.empty()) {
+                const Uuid entryId = eIt->id;
+                m_store->entries.erase(eIt);
+                if (m_selectedEntryId == qs(entryId.toString())) {
+                    m_selectedEntryId.clear();
+                    ensureSelection();
+                }
+            } else {
+                eIt->updatedAt = nowTp();
+            }
+            persistActive();
+            rebuildAfterStructuralChange();
+            return;
+        }
     }
-    entry->items.erase(it);
-    if (entry->items.empty()) {
-        const Uuid entryId = entry->id;
-        m_store->entries.erase(
-            std::remove_if(m_store->entries.begin(), m_store->entries.end(),
-                           [&](const JournalEntry &e) { return e.id == entryId; }),
-            m_store->entries.end());
-        m_selectedEntryId.clear();
-        ensureSelection();
-    } else {
-        entry->updatedAt = nowTp();
-    }
-    persistActive();
-    rebuildAfterStructuralChange();
 }
 
 void JournalLibrary::deleteEmptyItem(const QString &itemId)
 {
-    if (isReadOnly())
+    if (isReadOnly() || !m_store)
         return;
-    auto *entry = selectedEntry();
-    if (!entry)
+    const auto [entry, item] = findItemAndEntry(itemId);
+    if (!entry || !item)
         return;
-    const auto id = parseUuid(itemId);
-    if (!id)
-        return;
-    auto it = std::find_if(entry->items.begin(), entry->items.end(),
-                           [&](const JournalItem &item) { return item.id == *id; });
-    if (it == entry->items.end())
-        return;
-    if (!itemIsEmpty(*it))
+    if (!itemIsEmpty(*item))
         return;
     deleteItem(itemId);
 }
@@ -1591,8 +1636,7 @@ void JournalLibrary::setItemTag(const QString &itemId, const QString &tag)
 {
     if (isReadOnly())
         return;
-    auto *item = findItem(itemId);
-    auto *entry = selectedEntry();
+    auto [entry, item] = findItemAndEntry(itemId);
     if (!item || !entry)
         return;
     const std::string next = ss(tag);
@@ -1609,8 +1653,7 @@ void JournalLibrary::setItemBody(const QString &itemId, const QString &body)
 {
     if (isReadOnly())
         return;
-    auto *item = findItem(itemId);
-    auto *entry = selectedEntry();
+    auto [entry, item] = findItemAndEntry(itemId);
     if (!item || !entry)
         return;
     const std::string next = ss(body);
@@ -1632,8 +1675,7 @@ void JournalLibrary::setItemReview(const QString &itemId, const QString &verdict
 {
     if (isReadOnly())
         return;
-    auto *item = findItem(itemId);
-    auto *entry = selectedEntry();
+    auto [entry, item] = findItemAndEntry(itemId);
     if (!item || !entry)
         return;
     if (verdict.isEmpty()) {
@@ -1665,8 +1707,7 @@ void JournalLibrary::setItemReviewNote(const QString &itemId, const QString &not
 {
     if (isReadOnly())
         return;
-    auto *item = findItem(itemId);
-    auto *entry = selectedEntry();
+    auto [entry, item] = findItemAndEntry(itemId);
     if (!item || !entry || !item->review)
         return;
     const std::string next = ss(note);
