@@ -38,6 +38,9 @@ std::filesystem::path JournalPaths::journalJSON(const Uuid& id) const {
 std::filesystem::path JournalPaths::journalBackup(const Uuid& id) const {
     return journalDirectory(id) / "journal.json.bak";
 }
+std::filesystem::path JournalPaths::tradingJSON(const Uuid& id) const {
+    return journalDirectory(id) / "trading.json";
+}
 std::filesystem::path JournalPaths::backupsDirectory(const Uuid& id) const {
     return journalDirectory(id) / "backups";
 }

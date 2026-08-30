@@ -15,6 +15,7 @@
 #include <QJsonObject>
 #include <QMetaObject>
 #include <nlohmann/json.hpp>
+#include <fstream>
 #include <set>
 
 using wick::BinanceFuturesClient;
@@ -32,6 +33,7 @@ using wick::SecretTokenStore;
 using wick::SymbolTagMatcher;
 using wick::TradingFill;
 using wick::TradingPosition;
+using wick::TradingPositionSnapshot;
 using wick::Uuid;
 using wick::parseExchangeVenue;
 using wick::timeFromUnix;
@@ -91,14 +93,14 @@ public slots:
                 }
             }
             const auto positions = PositionAggregator::aggregate(fills);
-            QJsonArray arr;
-            for (const auto &p : positions) {
-                QJsonObject o;
-                o.insert(QStringLiteral("symbol"), QString::fromStdString(p.symbol));
-                o.insert(QStringLiteral("openTime"), static_cast<double>(p.openTime));
-                arr.append(o);
-            }
-            emit finished(journalId, QString(), QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)),
+            TradingPositionSnapshot snap;
+            snap.fetchedAt = toMs;
+            snap.windowStart = fromMs;
+            snap.positions = positions;
+            snap.fills = fills;
+            snap.sourceVenue = venue.toStdString();
+            const std::string snapshotJson = snap.encode();
+            emit finished(journalId, QString(), QString::fromStdString(snapshotJson),
                           static_cast<int>(positions.size()));
         } catch (const ExchangeHttpError &e) {
             QString msg;
@@ -370,7 +372,7 @@ void ExchangeCoordinator::syncNow(const QString &journalId)
 }
 
 void ExchangeCoordinator::onWorkerFinished(const QString &journalId, const QString &error,
-                                           const QString &positionsJson, int count)
+                                           const QString &snapshotJson, int count)
 {
     m_syncing = false;
     if (!error.isEmpty()) {
@@ -390,6 +392,21 @@ void ExchangeCoordinator::onWorkerFinished(const QString &journalId, const QStri
         return;
     }
 
+    if (!snapshotJson.isEmpty()) {
+        const auto tradingFile = m_library->paths().tradingJSON(*parsed);
+        std::error_code ec;
+        std::filesystem::create_directories(tradingFile.parent_path(), ec);
+        std::ofstream out(tradingFile, std::ios::binary | std::ios::trunc);
+        if (out) {
+            out.write(snapshotJson.toUtf8().constData(), snapshotJson.toUtf8().size());
+        }
+    }
+
+    const auto snapOpt = TradingPositionSnapshot::decode(snapshotJson.toStdString());
+    std::vector<TradingPosition> positions;
+    if (snapOpt)
+        positions = snapOpt->positions;
+
     const auto snaps = m_library->entrySnapshotsFor(*parsed);
     std::map<std::string, std::vector<std::string>> tagsByDay;
     std::map<std::string, int> tagCounts;
@@ -401,16 +418,6 @@ void ExchangeCoordinator::onWorkerFinished(const QString &journalId, const QStri
             if (!tag.empty())
                 tagCounts[tag] += 1;
         }
-    }
-
-    std::vector<TradingPosition> positions;
-    const auto doc = QJsonDocument::fromJson(positionsJson.toUtf8());
-    for (const auto &v : doc.array()) {
-        const auto o = v.toObject();
-        TradingPosition p;
-        p.symbol = o.value(QStringLiteral("symbol")).toString().toStdString();
-        p.openTime = static_cast<std::int64_t>(o.value(QStringLiteral("openTime")).toDouble());
-        positions.push_back(p);
     }
 
     const int tz = QDateTime::currentDateTime().offsetFromUtc();
@@ -458,6 +465,10 @@ void ExchangeCoordinator::onWorkerFinished(const QString &journalId, const QStri
     }
 
     const int created = m_library->ensurePositionEntries(*parsed, skeletons);
+    if (*parsed == parseId(m_library->activeJournalId()).value_or(Uuid{})) {
+        m_library->refreshTradingPositions();
+    }
+
     m_lastError.clear();
     if (count == 0)
         m_statusText = QStringLiteral("窗口内没有成交");

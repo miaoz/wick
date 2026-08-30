@@ -20,7 +20,8 @@ public:
         unsupportedRemoteFormat,
         journalSwitched,
         unsupportedTradingSnapshotFormat,
-        invalidRemoteEntryIdentity
+        invalidRemoteEntryIdentity,
+        corruptData
     };
     Kind kind;
     int formatVersion = 0;
@@ -160,8 +161,13 @@ private:
     void saveDeviceStateAndPublish();
     void queueConflictArchiveCleanup(const SyncConflictRecord& record);
     void flushConflictArchiveCleanups();
-    void flushPendingTradingSnapshotDeletions() {}
-    void reconcileTradingSnapshot(const Uuid&) {}
+    void flushPendingTradingSnapshotDeletions();
+    void reconcileTradingSnapshot(const Uuid& journalID);
+    void validateTradingSnapshot(const JournalTradingSnapshotDocument& doc, const Uuid& journalID);
+    void recordTradingSnapshotUpload(const std::string& data,
+                                     const std::string& rev,
+                                     const JournalTradingSnapshotDocument& doc,
+                                     const std::string& path);
 
     JournalSyncBackend& backend_;
     JournalLocalSource& localSource_;

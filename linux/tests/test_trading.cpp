@@ -65,6 +65,25 @@ int main()
     const auto again = PositionEntryPlanner::stableItemID(*id, "2026-01-01", "BTCUSDT");
     CHECK(stable == again);
 
+    CHECK(SymbolTagMatcher::quoteAsset("BTCUSDT") == "USDT");
+    CHECK(positions[0].quoteAsset() == "USDT");
+    CHECK(positions[0].isClosed());
+    CHECK(positions[0].netPnl() == 10);
+    CHECK(!positions[0].durationText().empty());
+
+    TradingPositionSnapshot snap;
+    snap.fetchedAt = 5000;
+    snap.windowStart = 1000;
+    snap.positions = positions;
+    snap.sourceVenue = "binance";
+    const std::string encoded = snap.encode();
+    const auto decoded = TradingPositionSnapshot::decode(encoded);
+    CHECK(decoded.has_value());
+    CHECK(decoded->positions.size() == 1);
+    CHECK(decoded->positions[0].symbol == "BTCUSDT");
+    CHECK(decoded->positions[0].realizedPnl == 10);
+    CHECK(decoded->sourceVenue == "binance");
+
     std::cout << g_passes << " passed, " << g_fails << " failed\n";
     return g_fails == 0 ? 0 : 1;
 }

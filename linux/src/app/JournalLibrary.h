@@ -4,6 +4,7 @@
 #include "JournalPaths.h"
 #include "JournalLocalSource.h"
 #include "JournalStore.h"
+#include "TradingModels.h"
 
 #include <QDate>
 #include <QObject>
@@ -138,6 +139,9 @@ public:
     Q_INVOKABLE QString exportArchiveTo(const QUrl &destination);
     Q_INVOKABLE QString importArchiveFrom(const QUrl &source);
 
+    const wick::JournalPaths &paths() const { return m_paths; }
+    void refreshTradingPositions();
+
     // JournalLocalSource (engine; Qt-free tests use FakeLocalSource)
     std::optional<wick::Uuid> syncJournalID() const override;
     std::string syncJournalName() const override;
@@ -162,6 +166,11 @@ public:
     bool hasSyncedImage(const std::string &filename) override;
     void storeSyncedImage(const std::string &filename, std::string_view data,
                           const wick::Uuid &journalID) override;
+
+    bool syncTradingSnapshotEnabled() const override { return true; }
+    std::optional<wick::JournalTradingSnapshotDocument> syncedTradingSnapshot(const wick::Uuid &journalID) override;
+    void applySyncedTradingSnapshot(const wick::JournalTradingSnapshotDocument &document, const wick::Uuid &journalID) override;
+    void removeSyncedTradingSnapshot(const wick::Uuid &journalID) override;
 
 public slots:
     void persistSoon();
@@ -231,4 +240,5 @@ private:
     bool m_inspectorVisible = true;
     QDate m_calendarMonth;
     QTimer m_saveTimer;
+    std::vector<wick::TradingPosition> m_tradingPositions;
 };

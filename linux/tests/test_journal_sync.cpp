@@ -179,6 +179,20 @@ public:
         images[filename] = std::string(data);
     }
 
+    std::optional<JournalTradingSnapshotDocument> tradingSnapshot;
+    std::optional<JournalTradingSnapshotDocument> syncedTradingSnapshot(const Uuid& jid) override {
+        if (!(jid == journalID)) return std::nullopt;
+        return tradingSnapshot;
+    }
+    void applySyncedTradingSnapshot(const JournalTradingSnapshotDocument& doc, const Uuid& jid) override {
+        if (!(jid == journalID)) return;
+        tradingSnapshot = doc;
+    }
+    void removeSyncedTradingSnapshot(const Uuid& jid) override {
+        if (!(jid == journalID)) return;
+        tradingSnapshot = std::nullopt;
+    }
+
 private:
     bool localStillMatches(const Uuid& entryID, const std::optional<std::string>& expectedHash) {
         std::optional<JournalEntry> current;
@@ -751,6 +765,33 @@ static void testPathLayoutCopiedFromMac() {
     CHECK(id.toString() == "01234567-89AB-CDEF-0123-456789ABCDEF");
 }
 
+static void testTradingSnapshotUploadsAndDownloadsBetweenPeers() {
+    Harness h;
+    auto a = h.makeSource();
+    JournalTradingSnapshotDocument doc;
+    doc.journalID = h.journalID;
+    doc.venue = "binance";
+    doc.accountLabel = "MockAccount";
+    doc.fetchedAtMilliseconds = 1725000000000;
+    doc.payload = "{\"positions\":[{\"symbol\":\"BTCUSDT\",\"side\":\"long\"}]}";
+    a.tradingSnapshot = doc;
+
+    auto engineA = h.makeEngine(a, "a", "A");
+    engineA.performSyncCycle();
+
+    const auto snapPath = JournalSyncLayout::tradingSnapshotPath(h.journalID);
+    CHECK(h.backend.hasFile(snapPath));
+
+    auto b = h.makeSource();
+    auto engineB = h.makeEngine(b, "b", "B");
+    engineB.performSyncCycle();
+
+    CHECK(b.tradingSnapshot.has_value());
+    CHECK(b.tradingSnapshot->journalID == h.journalID);
+    CHECK(b.tradingSnapshot->venue == "binance");
+    CHECK(b.tradingSnapshot->payload == doc.payload);
+}
+
 int main() {
     testMerge();
     testFakeBackend();
@@ -775,6 +816,7 @@ int main() {
     testFreshImportAdoptsRemoteJournalName();
     testStatePersistsAcrossEngineInstances();
     testExpiredCursorResetsAndRecovers();
+    testTradingSnapshotUploadsAndDownloadsBetweenPeers();
 
     std::cerr << "passed " << g_passes << "  failed " << g_fails << "\n";
     return g_fails ? 1 : 0;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "JournalLocalSource.h"
 #include "JournalModels.h"
 
 #include <filesystem>
@@ -131,12 +132,10 @@ struct JournalSyncState {
     std::optional<std::string> manifestName;
     std::optional<TimePoint> lastSyncAt;
     std::map<std::string, DiscoveredJournalRecord> discoveredJournals;
-};
-
-struct JournalTradingSnapshotTombstone {
-    Uuid journalID{};
-    TimePoint deletedAt{};
-    std::string deviceID;
+    std::optional<std::string> tradingSnapshotRev;
+    std::optional<std::int64_t> tradingSnapshotFetchedAtMilliseconds;
+    std::optional<std::string> tradingSnapshotTombstoneRev;
+    std::optional<std::int64_t> tradingSnapshotDeletedAtMilliseconds;
 };
 
 struct JournalDeviceSyncState {

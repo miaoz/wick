@@ -281,6 +281,21 @@ Rectangle {
                                         }
                                     }
 
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 10
+                                        visible: itemBlock.modelData.positions && itemBlock.modelData.positions.length > 0
+                                        Repeater {
+                                            model: itemBlock.modelData.positions || []
+                                            delegate: PositionReceipt {
+                                                id: posReceipt
+                                                required property var modelData
+                                                theme: page.theme
+                                                position: posReceipt.modelData
+                                            }
+                                        }
+                                    }
+
                                     Flow {
                                         Layout.fillWidth: true
                                         spacing: 8

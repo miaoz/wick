@@ -390,6 +390,10 @@ json encodeState(const JournalSyncState& s) {
     if (s.manifestFormatVersion) j["manifestFormatVersion"] = *s.manifestFormatVersion;
     if (s.manifestName) j["manifestName"] = *s.manifestName;
     if (s.lastSyncAt) j["lastSyncAt"] = formatIso8601(*s.lastSyncAt);
+    if (s.tradingSnapshotRev) j["tradingSnapshotRev"] = *s.tradingSnapshotRev;
+    if (s.tradingSnapshotFetchedAtMilliseconds) j["tradingSnapshotFetchedAtMilliseconds"] = *s.tradingSnapshotFetchedAtMilliseconds;
+    if (s.tradingSnapshotTombstoneRev) j["tradingSnapshotTombstoneRev"] = *s.tradingSnapshotTombstoneRev;
+    if (s.tradingSnapshotDeletedAtMilliseconds) j["tradingSnapshotDeletedAtMilliseconds"] = *s.tradingSnapshotDeletedAtMilliseconds;
     return j;
 }
 
@@ -428,6 +432,14 @@ JournalSyncState decodeState(const json& j) {
         s.manifestName = j["manifestName"].get<std::string>();
     if (j.contains("lastSyncAt") && j["lastSyncAt"].is_string())
         s.lastSyncAt = parseIso8601(j["lastSyncAt"].get<std::string>());
+    if (j.contains("tradingSnapshotRev") && j["tradingSnapshotRev"].is_string())
+        s.tradingSnapshotRev = j["tradingSnapshotRev"].get<std::string>();
+    if (j.contains("tradingSnapshotFetchedAtMilliseconds") && j["tradingSnapshotFetchedAtMilliseconds"].is_number_integer())
+        s.tradingSnapshotFetchedAtMilliseconds = j["tradingSnapshotFetchedAtMilliseconds"].get<std::int64_t>();
+    if (j.contains("tradingSnapshotTombstoneRev") && j["tradingSnapshotTombstoneRev"].is_string())
+        s.tradingSnapshotTombstoneRev = j["tradingSnapshotTombstoneRev"].get<std::string>();
+    if (j.contains("tradingSnapshotDeletedAtMilliseconds") && j["tradingSnapshotDeletedAtMilliseconds"].is_number_integer())
+        s.tradingSnapshotDeletedAtMilliseconds = j["tradingSnapshotDeletedAtMilliseconds"].get<std::int64_t>();
     if (j.contains("discoveredJournals") && j["discoveredJournals"].is_object()) {
         for (auto it = j["discoveredJournals"].begin(); it != j["discoveredJournals"].end(); ++it) {
             DiscoveredJournalRecord rec;

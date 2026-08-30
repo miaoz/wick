@@ -52,6 +52,35 @@ struct TradingPosition {
     double realizedPnl = 0;
     std::map<std::string, double> commissions;
     double fundingPnl = 0;
+
+    bool isClosed() const { return closeTime.has_value(); }
+    double commissionTotal() const
+    {
+        double total = 0;
+        for (const auto &[_, c] : commissions)
+            total += c;
+        return total;
+    }
+    double netPnl() const
+    {
+        return realizedPnl + commissionTotal() + fundingPnl;
+    }
+    std::string durationText() const;
+    std::string quoteAsset() const;
+};
+
+struct TradingPositionSnapshot {
+    std::int64_t fetchedAt = 0;
+    std::int64_t windowStart = 0;
+    std::vector<TradingPosition> positions;
+    std::vector<TradingFill> fills;
+    std::vector<FundingEvent> funding;
+    bool fundingBackfilled = false;
+    std::optional<std::string> sourceVenue;
+    std::optional<std::string> sourceAccountLabel;
+
+    std::string encode() const;
+    static std::optional<TradingPositionSnapshot> decode(std::string_view jsonStr);
 };
 
 } // namespace wick

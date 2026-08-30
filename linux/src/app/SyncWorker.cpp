@@ -131,6 +131,31 @@ public:
         });
     }
 
+    bool syncTradingSnapshotEnabled() const override
+    {
+        return blocking([this] { return m_library->syncTradingSnapshotEnabled(); });
+    }
+
+    std::optional<wick::JournalTradingSnapshotDocument> syncedTradingSnapshot(const wick::Uuid &journalID) override
+    {
+        return blocking([this, journalID] { return m_library->syncedTradingSnapshot(journalID); });
+    }
+
+    void applySyncedTradingSnapshot(const wick::JournalTradingSnapshotDocument &document,
+                                    const wick::Uuid &journalID) override
+    {
+        blocking([this, document, journalID] {
+            m_library->applySyncedTradingSnapshot(document, journalID);
+        });
+    }
+
+    void removeSyncedTradingSnapshot(const wick::Uuid &journalID) override
+    {
+        blocking([this, journalID] {
+            m_library->removeSyncedTradingSnapshot(journalID);
+        });
+    }
+
 private:
     template <typename Fn>
     auto blocking(Fn &&fn) const -> decltype(fn())

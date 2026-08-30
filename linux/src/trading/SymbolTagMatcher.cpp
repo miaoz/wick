@@ -92,6 +92,19 @@ std::string SymbolTagMatcher::baseAsset(std::string_view symbol)
     return base.empty() ? std::string(symbol) : base;
 }
 
+std::optional<std::string> SymbolTagMatcher::quoteAsset(std::string_view symbol)
+{
+    std::string base(symbol);
+    for (char &c : base)
+        c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    for (const auto &quote : kQuoteAssets) {
+        if (base.size() > quote.size() && base.compare(base.size() - quote.size(), quote.size(), quote) == 0) {
+            return quote;
+        }
+    }
+    return std::nullopt;
+}
+
 std::optional<std::string> SymbolTagMatcher::preferredTag(
     std::string_view symbol, const std::map<std::string, int> &tagCounts)
 {

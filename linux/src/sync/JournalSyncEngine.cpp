@@ -1,12 +1,57 @@
 #include "JournalSyncEngine.h"
 
+#include "Crypto.h"
 #include "JournalDayMerge.h"
 #include "JournalSyncEncoding.h"
+
+#include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <cstdio>
 
 namespace wick {
+
+namespace {
+
+std::string encodeTradingSnapshotDocument(const JournalTradingSnapshotDocument &doc) {
+    nlohmann::json j;
+    j["formatVersion"] = doc.formatVersion;
+    j["journalID"] = doc.journalID.toString();
+    j["venue"] = doc.venue;
+    j["accountLabel"] = doc.accountLabel;
+    j["fetchedAtMilliseconds"] = doc.fetchedAtMilliseconds;
+    j["payload"] = base64Encode(reinterpret_cast<const unsigned char*>(doc.payload.data()), doc.payload.size());
+    return j.dump();
+}
+
+std::optional<JournalTradingSnapshotDocument> decodeTradingSnapshotDocument(std::string_view jsonStr) {
+    try {
+        const auto j = nlohmann::json::parse(jsonStr);
+        JournalTradingSnapshotDocument doc;
+        doc.formatVersion = j.value("formatVersion", 1);
+        if (const auto id = Uuid::parse(j.value("journalID", "")))
+            doc.journalID = *id;
+        doc.venue = j.value("venue", "");
+        doc.accountLabel = j.value("accountLabel", "");
+        doc.fetchedAtMilliseconds = j.value("fetchedAtMilliseconds", static_cast<std::int64_t>(0));
+        if (j.contains("payload")) {
+            if (j["payload"].is_string()) {
+                const std::string rawPayload = j["payload"].get<std::string>();
+                doc.payload = base64Decode(rawPayload);
+                if (doc.payload.empty() && !rawPayload.empty()) {
+                    doc.payload = rawPayload;
+                }
+            } else if (j["payload"].is_object() || j["payload"].is_array()) {
+                doc.payload = j["payload"].dump();
+            }
+        }
+        return doc;
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+} // namespace
 
 JournalSyncEngine::JournalSyncEngine(JournalSyncBackend& backend,
                                      JournalLocalSource& localSource,
@@ -1125,6 +1170,168 @@ void JournalSyncEngine::resolveConflict(const Uuid& id, SyncConflictResolution r
     queueConflictArchiveCleanup(*it);
     state_.pendingConflicts.erase(it);
     saveAndPublish();
+}
+
+void JournalSyncEngine::validateTradingSnapshot(const JournalTradingSnapshotDocument& doc, const Uuid& journalID) {
+    if (doc.formatVersion > JournalTradingSnapshotDocument::currentFormatVersion)
+        throw JournalSyncError(JournalSyncError::Kind::unsupportedTradingSnapshotFormat, "Unsupported trading snapshot format");
+    if (doc.journalID != journalID)
+        throw JournalSyncError(JournalSyncError::Kind::corruptData, "Trading snapshot journal ID mismatch");
+}
+
+void JournalSyncEngine::recordTradingSnapshotUpload(const std::string& data,
+                                                    const std::string& rev,
+                                                    const JournalTradingSnapshotDocument& doc,
+                                                    const std::string& path) {
+    state_.remoteFiles[path] = RemoteFileRecord{
+        rev,
+        JournalSyncEncoding::contentHash(data)
+    };
+    state_.tradingSnapshotRev = rev;
+    state_.tradingSnapshotFetchedAtMilliseconds = doc.fetchedAtMilliseconds;
+}
+
+void JournalSyncEngine::flushPendingTradingSnapshotDeletions() {
+    if (deviceState_.pendingTradingSnapshotDeletions.empty())
+        return;
+    std::vector<JournalTradingSnapshotTombstone> failed;
+    for (const auto& marker : deviceState_.pendingTradingSnapshotDeletions) {
+        const auto journalID = marker.journalID;
+        const std::string path = JournalSyncLayout::tradingSnapshotPath(journalID);
+        const std::string entryTombstonePath = JournalSyncLayout::tradingSnapshotTombstonePath(journalID);
+        try {
+            nlohmann::json j;
+            j["journalID"] = marker.journalID.toString();
+            j["deletedAtMilliseconds"] = marker.deletedAtMilliseconds;
+            j["deviceID"] = marker.deviceID;
+            const std::string data = j.dump();
+            std::optional<std::string> knownRev;
+            auto it = state_.remoteFiles.find(entryTombstonePath);
+            if (it != state_.remoteFiles.end())
+                knownRev = it->second.rev;
+            const std::string tombstoneRev = backend_.upload(entryTombstonePath, data, knownRev);
+            try { backend_.deletePath(path); } catch (...) {}
+            state_.remoteFiles.erase(path);
+            state_.remoteFiles[entryTombstonePath] = RemoteFileRecord{
+                tombstoneRev,
+                JournalSyncEncoding::contentHash(data)
+            };
+            if (stateJournalID_ && *stateJournalID_ == journalID) {
+                state_.tradingSnapshotRev = std::nullopt;
+                state_.tradingSnapshotFetchedAtMilliseconds = std::nullopt;
+                state_.tradingSnapshotTombstoneRev = tombstoneRev;
+                state_.tradingSnapshotDeletedAtMilliseconds = marker.deletedAtMilliseconds;
+            }
+        } catch (...) {
+            failed.push_back(marker);
+        }
+    }
+    deviceState_.pendingTradingSnapshotDeletions = failed;
+    saveDeviceStateAndPublish();
+}
+
+void JournalSyncEngine::reconcileTradingSnapshot(const Uuid& journalID) {
+    if (!localSource_.syncTradingSnapshotEnabled())
+        return;
+    for (const auto& marker : deviceState_.pendingTradingSnapshotDeletions) {
+        if (marker.journalID == journalID)
+            return;
+    }
+    requireJournal(journalID);
+
+    const std::string path = JournalSyncLayout::tradingSnapshotPath(journalID);
+    const auto local = localSource_.syncedTradingSnapshot(journalID);
+    const std::string entryTombstonePath = JournalSyncLayout::tradingSnapshotTombstonePath(journalID);
+
+    auto tit = state_.remoteFiles.find(entryTombstonePath);
+    if (tit != state_.remoteFiles.end()) {
+        std::optional<std::int64_t> deletedAt = state_.tradingSnapshotDeletedAtMilliseconds;
+        if (tit->second.rev != state_.tradingSnapshotTombstoneRev.value_or("") || !deletedAt.has_value()) {
+            auto [data, rev] = backend_.download(entryTombstonePath);
+            const auto j = nlohmann::json::parse(data);
+            const auto markerJid = Uuid::parse(j.value("journalID", ""));
+            if (!markerJid || *markerJid != journalID)
+                throw JournalSyncError(JournalSyncError::Kind::corruptData, "Trading snapshot tombstone journalID mismatch");
+            state_.tradingSnapshotTombstoneRev = rev;
+            state_.tradingSnapshotDeletedAtMilliseconds = j.value("deletedAtMilliseconds", static_cast<std::int64_t>(0));
+            deletedAt = state_.tradingSnapshotDeletedAtMilliseconds;
+        }
+
+        if (local && deletedAt && local->fetchedAtMilliseconds > *deletedAt) {
+            backend_.deletePath(entryTombstonePath);
+            state_.remoteFiles.erase(entryTombstonePath);
+            state_.tradingSnapshotTombstoneRev = std::nullopt;
+            state_.tradingSnapshotDeletedAtMilliseconds = std::nullopt;
+        } else {
+            localSource_.removeSyncedTradingSnapshot(journalID);
+            if (state_.remoteFiles.count(path)) {
+                try { backend_.deletePath(path); } catch (...) {}
+                state_.remoteFiles.erase(path);
+            }
+            state_.tradingSnapshotRev = std::nullopt;
+            state_.tradingSnapshotFetchedAtMilliseconds = std::nullopt;
+            return;
+        }
+    }
+
+    auto rit = state_.remoteFiles.find(path);
+    if (rit == state_.remoteFiles.end()) {
+        state_.tradingSnapshotRev = std::nullopt;
+        state_.tradingSnapshotFetchedAtMilliseconds = std::nullopt;
+        if (!local)
+            return;
+        validateTradingSnapshot(*local, journalID);
+        const std::string data = encodeTradingSnapshotDocument(*local);
+        const std::string rev = backend_.upload(path, data, std::nullopt);
+        requireJournal(journalID);
+        recordTradingSnapshotUpload(data, rev, *local, path);
+        return;
+    }
+
+    const auto& remoteRecord = rit->second;
+    if (state_.tradingSnapshotRev.value_or("") != remoteRecord.rev) {
+        auto [data, downloadedRev] = backend_.download(path);
+        auto remote = decodeTradingSnapshotDocument(data);
+        if (!remote)
+            throw JournalSyncError(JournalSyncError::Kind::corruptData, "Failed to decode trading snapshot document");
+        validateTradingSnapshot(*remote, journalID);
+        requireJournal(journalID);
+
+        if (local && local->fetchedAtMilliseconds > remote->fetchedAtMilliseconds) {
+            validateTradingSnapshot(*local, journalID);
+            const std::string localData = encodeTradingSnapshotDocument(*local);
+            const std::string rev = backend_.upload(path, localData, downloadedRev);
+            requireJournal(journalID);
+            recordTradingSnapshotUpload(localData, rev, *local, path);
+        } else {
+            localSource_.applySyncedTradingSnapshot(*remote, journalID);
+            state_.tradingSnapshotRev = downloadedRev;
+            state_.tradingSnapshotFetchedAtMilliseconds = remote->fetchedAtMilliseconds;
+        }
+        return;
+    }
+
+    const auto baseline = state_.tradingSnapshotFetchedAtMilliseconds;
+    const bool localIsMissingOrOlder = local
+        ? (baseline ? (local->fetchedAtMilliseconds < *baseline) : false)
+        : true;
+    if (local && (baseline ? (local->fetchedAtMilliseconds > *baseline) : true)) {
+        validateTradingSnapshot(*local, journalID);
+        const std::string data = encodeTradingSnapshotDocument(*local);
+        const std::string rev = backend_.upload(path, data, remoteRecord.rev);
+        requireJournal(journalID);
+        recordTradingSnapshotUpload(data, rev, *local, path);
+    } else if (localIsMissingOrOlder) {
+        auto [data, downloadedRev] = backend_.download(path);
+        auto remote = decodeTradingSnapshotDocument(data);
+        if (!remote)
+            throw JournalSyncError(JournalSyncError::Kind::corruptData, "Failed to decode trading snapshot document");
+        validateTradingSnapshot(*remote, journalID);
+        requireJournal(journalID);
+        localSource_.applySyncedTradingSnapshot(*remote, journalID);
+        state_.tradingSnapshotRev = downloadedRev;
+        state_.tradingSnapshotFetchedAtMilliseconds = remote->fetchedAtMilliseconds;
+    }
 }
 
 } // namespace wick

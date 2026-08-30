@@ -616,6 +616,15 @@ static void testReorderJournalsPersists() {
     std::filesystem::remove_all(root);
 }
 
+static void testTradingSnapshotPathLayout() {
+    auto root = makeTempDir("WickTrading-");
+    auto paths = JournalPaths::inRoot(root);
+    auto jid = Uuid::generate();
+    auto p = paths.tradingJSON(jid);
+    CHECK(p == root / jid.toString() / "trading.json");
+    std::filesystem::remove_all(root);
+}
+
 int main() {
     testImageFilenameAcceptsSafeNames();
     testImageFilenameRejectsUnsafeNames();
@@ -642,6 +651,7 @@ int main() {
     testEntryCountOnDiskIsReadOnly();
     testCorruptCatalogIsNotRewritten();
     testReorderJournalsPersists();
+    testTradingSnapshotPathLayout();
 
     std::cout << g_passes << " passed, " << g_fails << " failed\n";
     return g_fails == 0 ? 0 : 1;

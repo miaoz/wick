@@ -35,6 +35,22 @@ struct JournalSyncMutation {
     }
 };
 
+struct JournalTradingSnapshotDocument {
+    static constexpr int currentFormatVersion = 1;
+    int formatVersion = currentFormatVersion;
+    Uuid journalID{};
+    std::string venue;
+    std::string accountLabel;
+    std::int64_t fetchedAtMilliseconds = 0;
+    std::string payload; // decoded JSON bytes
+};
+
+struct JournalTradingSnapshotTombstone {
+    Uuid journalID{};
+    std::int64_t deletedAtMilliseconds = 0;
+    std::string deviceID;
+};
+
 class JournalLocalSource {
 public:
     virtual ~JournalLocalSource() = default;
@@ -60,6 +76,11 @@ public:
     virtual void storeSyncedImage(const std::string& filename,
                                   std::string_view data,
                                   const Uuid& journalID) = 0;
+
+    virtual bool syncTradingSnapshotEnabled() const { return true; }
+    virtual std::optional<JournalTradingSnapshotDocument> syncedTradingSnapshot(const Uuid& journalID) { (void)journalID; return std::nullopt; }
+    virtual void applySyncedTradingSnapshot(const JournalTradingSnapshotDocument& document, const Uuid& journalID) { (void)document; (void)journalID; }
+    virtual void removeSyncedTradingSnapshot(const Uuid& journalID) { (void)journalID; }
 };
 
 } // namespace wick

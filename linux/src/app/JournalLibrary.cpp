@@ -1,6 +1,7 @@
 #include "JournalLibrary.h"
 #include "JournalSyncEncoding.h"
 #include "LunarCalendar.h"
+#include "SymbolTagMatcher.h"
 
 #include <QDateTime>
 #include <QHash>
@@ -8,6 +9,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <set>
 #include <variant>
@@ -23,7 +25,11 @@ using wick::JournalInfo;
 using wick::JournalItem;
 using wick::JournalReview;
 using wick::JournalReviewVerdict;
+using wick::SymbolTagMatcher;
 using wick::TimePoint;
+using wick::TradingPosition;
+using wick::TradingPositionSide;
+using wick::TradingPositionSnapshot;
 using wick::Uuid;
 
 namespace {
@@ -188,7 +194,26 @@ void JournalLibrary::bindActive(const Uuid &id)
             m_errorBanner.clear();
         m_savedState.clear();
     }
+    refreshTradingPositions();
     ensureSelection();
+}
+
+void JournalLibrary::refreshTradingPositions()
+{
+    m_tradingPositions.clear();
+    if (!m_catalog.journals.empty()) {
+        const auto path = m_paths.tradingJSON(m_catalog.activeJournalID);
+        std::error_code ec;
+        if (std::filesystem::exists(path, ec)) {
+            const auto bytes = wick::readFileBytes(path);
+            if (bytes) {
+                const auto snap = wick::TradingPositionSnapshot::decode(*bytes);
+                if (snap)
+                    m_tradingPositions = snap->positions;
+            }
+        }
+    }
+    emit itemsChanged();
 }
 
 bool JournalLibrary::writeCatalog()
@@ -520,14 +545,45 @@ QVariantList JournalLibrary::days() const
     return out;
 }
 
+static QString formatPrice(double price)
+{
+    if (std::abs(price) >= 1000)
+        return QString::number(price, 'f', 1);
+    if (std::abs(price) >= 1)
+        return QString::number(price, 'f', 2);
+    if (std::abs(price) >= 0.01)
+        return QString::number(price, 'f', 4);
+    return QString::number(price, 'g', 6);
+}
+
+static QString formatQty(double qty)
+{
+    if (std::abs(qty - std::round(qty)) < 1e-5)
+        return QString::number(static_cast<qint64>(std::round(qty)));
+    if (std::abs(qty) >= 100)
+        return QString::number(qty, 'f', 1);
+    if (std::abs(qty) >= 1)
+        return QString::number(qty, 'f', 3);
+    return QString::number(qty, 'g', 4);
+}
+
+static QString formatCurrency(double val)
+{
+    return QString::number(val, 'f', 2);
+}
+
 QVariantList JournalLibrary::items() const
 {
     QVariantList out;
     const auto *entry = selectedEntry();
     if (!entry)
         return out;
+
+    const std::string tradingDayKey = dayKeyOf(*entry);
+    const auto &items = entry->items;
+
     int index = 0;
-    for (const auto &item : entry->items) {
+    for (const auto &item : items) {
         ++index;
         if (!itemMatchesSearch(*entry, item))
             continue;
@@ -547,6 +603,69 @@ QVariantList JournalLibrary::items() const
         row.insert(QStringLiteral("review"), verdict);
         row.insert(QStringLiteral("reviewNote"), note);
         row.insert(QStringLiteral("isEmpty"), itemIsEmpty(item));
+
+        QVariantList posList;
+        int posIdx = 0;
+        for (const auto &p : m_tradingPositions) {
+            const std::string posDayKey = JournalDayKey::make(wick::timeFromUnix(p.openTime / 1000), tzOffsetSeconds());
+            if (posDayKey != tradingDayKey)
+                continue;
+
+            const auto itFirst = std::find_if(items.begin(), items.end(), [&](const JournalItem &cand) {
+                return SymbolTagMatcher::matches(cand.tag, p.symbol);
+            });
+            if (itFirst == items.end() || itFirst->id != item.id)
+                continue;
+
+            QVariantMap pRow;
+            pRow.insert(QStringLiteral("id"), QString::fromStdString(p.id));
+            pRow.insert(QStringLiteral("symbol"), QString::fromStdString(p.symbol));
+            pRow.insert(QStringLiteral("isLong"), p.side == TradingPositionSide::longSide);
+            pRow.insert(QStringLiteral("laneLabel"), p.side == TradingPositionSide::longSide ? QStringLiteral("多") : QStringLiteral("空"));
+
+            QString header = QString::fromStdString(p.symbol);
+            if (!header.endsWith(QStringLiteral("永续")) && !header.contains(QLatin1Char(' ')))
+                header += QStringLiteral(" 永续");
+            pRow.insert(QStringLiteral("headerTitle"), header);
+
+            const QDateTime openDt = QDateTime::fromMSecsSinceEpoch(p.openTime);
+            QString dateRange = openDt.toString(QStringLiteral("MM-dd HH:mm"));
+            if (p.closeTime.has_value()) {
+                const QDateTime closeDt = QDateTime::fromMSecsSinceEpoch(*p.closeTime);
+                dateRange += QStringLiteral(" → ") + closeDt.toString(QStringLiteral("MM-dd HH:mm"));
+            }
+            pRow.insert(QStringLiteral("dateRange"), dateRange);
+
+            QString priceText = formatPrice(p.entryPrice);
+            if (p.exitPrice.has_value())
+                priceText += QStringLiteral(" → ") + formatPrice(*p.exitPrice);
+            pRow.insert(QStringLiteral("priceText"), priceText);
+
+            const QString quote = QString::fromStdString(p.quoteAsset());
+            const QString base = QString::fromStdString(SymbolTagMatcher::baseAsset(p.symbol));
+            QString sizeText = formatQty(p.peakSize) + QStringLiteral(" ") + base;
+            sizeText += QStringLiteral(" · ") + QString::fromStdString(p.durationText());
+            pRow.insert(QStringLiteral("sizeText"), sizeText);
+
+            const double comm = p.commissionTotal();
+            QString commText = (comm >= 0 ? QStringLiteral("+") : QStringLiteral("−")) + formatCurrency(std::abs(comm));
+            QString fundText = (p.fundingPnl >= 0 ? QStringLiteral("+") : QStringLiteral("−")) + formatCurrency(std::abs(p.fundingPnl));
+            pRow.insert(QStringLiteral("feesText"), commText + QStringLiteral(" · ") + fundText);
+            pRow.insert(QStringLiteral("commissionTotal"), comm);
+            pRow.insert(QStringLiteral("fundingPnl"), p.fundingPnl);
+
+            const double net = p.netPnl();
+            pRow.insert(QStringLiteral("realizedPnl"), p.realizedPnl);
+            pRow.insert(QStringLiteral("netPnl"), net);
+            QString netText = (net >= 0 ? QStringLiteral("+") : QStringLiteral("−")) + formatCurrency(std::abs(net)) + QStringLiteral(" ") + quote;
+            pRow.insert(QStringLiteral("netPnlText"), netText);
+            pRow.insert(QStringLiteral("isClosed"), p.isClosed());
+            pRow.insert(QStringLiteral("tilt"), (posIdx % 2 == 0) ? -0.4 : 0.5);
+
+            posList.push_back(pRow);
+            ++posIdx;
+        }
+        row.insert(QStringLiteral("positions"), posList);
         out.push_back(row);
     }
     return out;
@@ -1635,4 +1754,50 @@ void JournalLibrary::storeSyncedImage(const std::string &filename, std::string_v
     if (!JournalImageFilename::isValid(filename))
         return;
     wick::atomicWriteFile(m_paths.imagesDirectory(journalID) / filename, data);
+}
+
+std::optional<wick::JournalTradingSnapshotDocument> JournalLibrary::syncedTradingSnapshot(const Uuid &journalID)
+{
+    const auto path = m_paths.tradingJSON(journalID);
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec))
+        return std::nullopt;
+    const auto bytes = wick::readFileBytes(path);
+    if (!bytes)
+        return std::nullopt;
+    const auto snap = wick::TradingPositionSnapshot::decode(*bytes);
+    if (!snap)
+        return std::nullopt;
+
+    wick::JournalTradingSnapshotDocument doc;
+    doc.journalID = journalID;
+    doc.venue = snap->sourceVenue.value_or("unknown");
+    doc.accountLabel = snap->sourceAccountLabel.value_or("");
+    doc.fetchedAtMilliseconds = snap->fetchedAt;
+    doc.payload = *bytes;
+    return doc;
+}
+
+void JournalLibrary::applySyncedTradingSnapshot(const wick::JournalTradingSnapshotDocument &document, const Uuid &journalID)
+{
+    if (m_catalogReadOnly || document.payload.empty())
+        return;
+    const auto path = m_paths.tradingJSON(journalID);
+    m_paths.ensureJournalDirectories(journalID);
+    wick::atomicWriteFile(path, document.payload);
+    if (journalID == m_catalog.activeJournalID) {
+        refreshTradingPositions();
+    }
+}
+
+void JournalLibrary::removeSyncedTradingSnapshot(const Uuid &journalID)
+{
+    if (m_catalogReadOnly)
+        return;
+    const auto path = m_paths.tradingJSON(journalID);
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+    if (journalID == m_catalog.activeJournalID) {
+        refreshTradingPositions();
+    }
 }
