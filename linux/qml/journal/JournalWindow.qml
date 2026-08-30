@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 
 Rectangle {
     id: root
@@ -11,16 +12,19 @@ Rectangle {
     readonly property int navWidth: 200
     readonly property int listWidth: 240
     readonly property int inspectorWidth: 268
-    readonly property int foldInspectorBelow: 1180
-    readonly property int foldNavBelow: 900
 
-    readonly property bool autoHideInspector: width < foldInspectorBelow
-    readonly property bool autoHideNav: width < foldNavBelow
-    readonly property bool showNav: journalLibrary.columnMode === 0 && !autoHideNav
-    readonly property bool showList: journalLibrary.columnMode <= 1
-    readonly property bool showInspector: journalLibrary.inspectorVisible
+    // Four columns follow width only: a full-width tile (including two
+    // stacked Hyprland windows) keeps nav / list / editor / inspector.
+    // A side-by-side split is narrower and drops to the editor pane.
+    readonly property var hostWindow: Window.window
+    readonly property real screenWidth: (hostWindow && hostWindow.screen) ? hostWindow.screen.width : Screen.width
+    readonly property bool isFullLayout: width >= screenWidth * 0.9
+
+    readonly property bool showNav: isFullLayout && journalLibrary.columnMode === 0
+    readonly property bool showList: isFullLayout && journalLibrary.columnMode <= 1
+    readonly property bool showInspector: isFullLayout
+                                          && journalLibrary.inspectorVisible
                                           && journalLibrary.columnMode === 0
-                                          && !autoHideInspector
 
     ColumnLayout {
         anchors.fill: parent
@@ -81,6 +85,7 @@ Rectangle {
                 spacing: 10
 
                 ToolButton {
+                    visible: root.isFullLayout
                     text: journalLibrary.columnMode === 0 ? "▣" : (journalLibrary.columnMode === 1 ? "▤" : "□")
                     font.pixelSize: 14
                     implicitWidth: 28
@@ -190,6 +195,7 @@ Rectangle {
                 }
 
                 ToolButton {
+                    visible: root.isFullLayout
                     text: "☰"
                     implicitWidth: 28
                     implicitHeight: 28
