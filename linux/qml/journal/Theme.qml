@@ -12,9 +12,13 @@ QtObject {
     readonly property string fontOverride: settings ? settings.journalFontName : ""
 
     readonly property var pal: {
-        // Force re-evaluation when scheme/phase change.
+        // Force re-evaluation when scheme/phase/appearance/omarchy changes.
         var s = scheme
         var p = phase
+        var app = settings ? settings.appearance : "system"
+        if (app === "system" && settings && settings.omarchyAvailable && Object.keys(settings.omarchyColors).length > 0) {
+            return theme._omarchyPalette(settings.omarchyColors)
+        }
         return theme._palette(s, p)
     }
 
@@ -38,7 +42,12 @@ QtObject {
     readonly property color stain2: pal.stain2
     readonly property color char1: pal.char1
     readonly property color sealInk: pal.sealInk
-    readonly property color accentTextOnEmber: "#FFF3E0"
+    readonly property color receipt: pal.receipt !== undefined ? pal.receipt : _hex(0xF5EEDC)
+    readonly property color receiptInk: pal.receiptInk !== undefined ? pal.receiptInk : _hex(0x33291A)
+    readonly property color receiptRule: pal.receiptRule !== undefined ? pal.receiptRule : _rgba(rule, 0.35)
+    readonly property color tape: pal.tape !== undefined ? pal.tape : _rgba(0xEED499, 0.58)
+    readonly property color tapeBorder: pal.tapeBorder !== undefined ? pal.tapeBorder : _rgba(0xD9B873, 0.45)
+    readonly property color accentTextOnEmber: _contrastTextColor(ember)
 
     // Token names (A-share pigments). Default 绿涨红跌 swaps the *binding*.
     readonly property color pnlUp: cinnabar
@@ -55,11 +64,100 @@ QtObject {
 
     function _hex(n) { return "#" + n.toString(16).padStart(6, "0") }
 
-    function _rgba(hex, a) {
-        var r = (hex >> 16) & 0xff
-        var g = (hex >> 8) & 0xff
-        var b = hex & 0xff
-        return Qt.rgba(r / 255, g / 255, b / 255, a)
+    function _contrastTextColor(cVal) {
+        var c = Qt.color(cVal)
+        var lum = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b
+        return lum > 0.58 ? "#120D07" : "#FFF3E0"
+    }
+
+    function _rgba(val, a) {
+        if (typeof val === "number") {
+            var r = (val >> 16) & 0xff
+            var g = (val >> 8) & 0xff
+            var b = val & 0xff
+            return Qt.rgba(r / 255, g / 255, b / 255, a)
+        }
+        var c = Qt.color(val)
+        return Qt.rgba(c.r, c.g, c.b, a)
+    }
+
+    function _omarchyPalette(oc) {
+        var mode = oc.mode || "dark"
+        var isDark = mode !== "light"
+
+        var bg = oc.background || (isDark ? "#1a1b26" : "#FFFCF0")
+        var darkBg = oc.dark_background || (isDark ? "#13141c" : "#f2efe4")
+        var darkerBg = oc.darker_background || (isDark ? "#0e0e14" : "#e5e2d8")
+        var lighterBg = oc.lighter_background || (isDark ? "#24283b" : "#E6E4D9")
+
+        var fg = oc.foreground || (isDark ? "#a9b1d6" : "#100F0F")
+        var darkFg = oc.dark_foreground || (isDark ? "#565f89" : "#878580")
+        var lightFg = oc.light_foreground || (isDark ? "#b4bee6" : "#403E3C")
+        var brightFg = oc.bright_foreground || (isDark ? "#c0caf5" : "#100F0F")
+
+        var accent = oc.accent || (isDark ? "#F5A83C" : "#D96E14")
+        var muted = oc.muted || (isDark ? "#414868" : "#B7B5AC")
+        var red = oc.red || "#f7768e"
+        var green = oc.green || "#9ece6a"
+        var emberHiColor = oc.bright_yellow || oc.bright_cyan || oc.bright_blue || accent
+
+        if (isDark) {
+            return {
+                desk: darkerBg,
+                paper: bg,
+                paperHi: lighterBg,
+                paperEdge: _rgba(muted, 0.4),
+                sidebar: darkBg,
+                ink1: brightFg,
+                ink2: lightFg,
+                ink3: darkFg,
+                rule: muted,
+                ember: accent,
+                emberHi: emberHiColor,
+                glow: _rgba(accent, 0.42),
+                cinnabar: red,
+                cinnabarSoft: _rgba(red, 0.14),
+                dai: green,
+                daiSoft: _rgba(green, 0.14),
+                stain1: darkBg,
+                stain2: darkerBg,
+                char1: "#0C0703",
+                sealInk: "#F7E7D2",
+                receipt: lighterBg,
+                receiptInk: brightFg,
+                receiptRule: _rgba(muted, 0.6),
+                tape: _rgba(accent, 0.32),
+                tapeBorder: _rgba(accent, 0.55)
+            }
+        } else {
+            return {
+                desk: darkerBg,
+                paper: bg,
+                paperHi: lighterBg,
+                paperEdge: _rgba(muted, 0.4),
+                sidebar: darkBg,
+                ink1: fg,
+                ink2: lightFg,
+                ink3: darkFg,
+                rule: muted,
+                ember: accent,
+                emberHi: emberHiColor,
+                glow: _rgba(accent, 0.35),
+                cinnabar: red,
+                cinnabarSoft: _rgba(red, 0.14),
+                dai: green,
+                daiSoft: _rgba(green, 0.14),
+                stain1: darkBg,
+                stain2: darkerBg,
+                char1: "#191008",
+                sealInk: "#F7E7D2",
+                receipt: lighterBg,
+                receiptInk: fg,
+                receiptRule: _rgba(muted, 0.5),
+                tape: _rgba(accent, 0.25),
+                tapeBorder: _rgba(accent, 0.45)
+            }
+        }
     }
 
     function _palette(scheme, phase) {

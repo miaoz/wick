@@ -1,10 +1,10 @@
 import QtQuick
 import QtQuick.Layouts
+import "journal"
 
 // Paper slip — layout contract from designs/wick-design-language/linux.html
 // `.wick-pop` (width 352). Stage 0: no Dropbox row, no journal/settings
 // buttons (those live on the tray context menu). Keep the motto.
-// Dark paper = 暗·子夜 tokens from tokens-v2.css.
 
 Rectangle {
     id: paper
@@ -12,25 +12,26 @@ Rectangle {
     implicitWidth: 352
     implicitHeight: Math.max(content.implicitHeight, 200)
     height: implicitHeight
-    color: "#241C10"
-    border.color: Qt.rgba(240 / 255, 227 / 255, 198 / 255, 0.14)
+
+    Theme { id: theme }
+
+    color: theme.paper
+    border.color: theme.rule
     border.width: 1
 
-    readonly property color ink1: "#F0E3C6"
-    readonly property color ink2: Qt.rgba(240 / 255, 227 / 255, 198 / 255, 0.64)
-    readonly property color ink3: Qt.rgba(240 / 255, 227 / 255, 198 / 255, 0.42)
-    readonly property color paperHi: "#2C2214"
-    readonly property color stain1: "#4A3820"
-    readonly property color stain2: "#6B5226"
-    readonly property color ember: "#F5A83C"
-    readonly property color emberHi: "#FFC882"
-    readonly property color glow: Qt.rgba(245 / 255, 168 / 255, 60 / 255, 0.5)
+    readonly property color ink1: theme.ink1
+    readonly property color ink2: theme.ink2
+    readonly property color ink3: theme.ink3
+    readonly property color paperHi: theme.paperHi
+    readonly property color stain1: theme.stain1
+    readonly property color stain2: theme.stain2
+    readonly property color ember: theme.ember
+    readonly property color emberHi: theme.emberHi
+    readonly property color glow: theme.glow
 
-    readonly property var settings: typeof appSettings !== "undefined" ? appSettings : null
-    readonly property string fontOverride: settings ? settings.journalFontName : ""
-    readonly property string fontUi: fontOverride.length > 0 ? fontOverride : "Noto Sans SC"
-    readonly property string fontPrint: fontOverride.length > 0 ? fontOverride : "Noto Serif SC"
-    readonly property string fontMono: fontOverride.length > 0 ? fontOverride : "JetBrains Mono"
+    readonly property string fontUi: theme.fontUi
+    readonly property string fontPrint: theme.fontPrint
+    readonly property string fontMono: theme.fontMono
 
     component BurnStrip: Item {
         id: strip

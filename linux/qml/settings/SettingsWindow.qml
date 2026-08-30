@@ -333,16 +333,39 @@ Rectangle {
                 label: t("外观", "Appearance")
                 Seg {
                     options: [
-                        { value: "light", label: t("亮", "Light") },
-                        { value: "dark", label: t("暗", "Dark") },
-                        { value: "system", label: t("跟随", "System") }
+                        { value: "light", label: t("亮色", "Light") },
+                        { value: "dark", label: t("暗色", "Dark") },
+                        { value: "system", label: t("跟随系统", "System") }
                     ]
                     current: appSettings.appearance
                     onPicked: (v) => appSettings.appearance = v
                 }
             }
-            Item { Layout.preferredHeight: 8 }
             RowLayout {
+                visible: appSettings.appearance === "system" && appSettings.omarchyAvailable
+                Layout.fillWidth: true
+                Layout.topMargin: 2
+                Layout.bottomMargin: 2
+                spacing: 6
+                WickIcon {
+                    name: "sparkles"
+                    size: 11
+                    color: theme.ember
+                }
+                Text {
+                    text: t("已连接 Omarchy 主题：" + (appSettings.omarchyThemeName || "当前主题"),
+                            "Connected to Omarchy theme: " + (appSettings.omarchyThemeName || "Current theme"))
+                    color: theme.ink3
+                    font.family: theme.fontUi
+                    font.pixelSize: 11
+                }
+            }
+            Item {
+                visible: appSettings.appearance !== "system"
+                Layout.preferredHeight: 8
+            }
+            RowLayout {
+                visible: appSettings.appearance !== "system"
                 Layout.fillWidth: true
                 Text {
                     text: t("相位", "Phase")
