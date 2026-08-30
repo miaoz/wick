@@ -1088,8 +1088,19 @@ void JournalSyncEngine::detectPeerJournalTombstones() {
             if (path.find(root + "/") == 0) { lingering = true; break; }
         }
         if (!lingering) continue;
-        try { backend_.deletePath(root); } catch (...) {}
-        pruneRemoteFiles(root);
+        const std::string tombPath = JournalSyncLayout::journalTombstonePath(id);
+        const bool tombstoneExists = state_.remoteFiles.count(tombPath) > 0;
+        if (tombstoneExists) {
+            try { backend_.deletePath(root); } catch (...) {}
+            pruneRemoteFiles(root);
+        } else if (state_.remoteFiles.count(JournalSyncLayout::manifestPath(id)) > 0) {
+            deviceState_.unackedRemoteDeletions.erase(
+                std::remove(deviceState_.unackedRemoteDeletions.begin(), deviceState_.unackedRemoteDeletions.end(), id),
+                deviceState_.unackedRemoteDeletions.end());
+            deviceState_.processedJournalTombstones.erase(
+                std::remove(deviceState_.processedJournalTombstones.begin(), deviceState_.processedJournalTombstones.end(), id),
+                deviceState_.processedJournalTombstones.end());
+        }
     }
     saveDeviceStateAndPublish();
 }

@@ -1837,6 +1837,26 @@ final class JournalSyncEngineTests: XCTestCase {
         XCTAssertFalse(engine.isJournalTombstoned(aliveID))
     }
 
+    func testPeerDiscoversResurrectedJournalWhenTombstoneRemovedAndManifestPresent() async throws {
+        let deadID = UUID()
+        let source = makeSource()
+        let engine = makeEngine(source: source, stateDir: "a", device: "A")
+        engine.acknowledgeRemoteJournalDeletion(deadID)
+        XCTAssertTrue(engine.isJournalTombstoned(deadID))
+
+        // Peer self-healed: remote tombstone is removed, remote manifest is present.
+        backend.seedFile(
+            JournalSyncLayout.manifestPath(for: deadID),
+            data: try JournalSyncEncoding.encoder.encode(
+                JournalSyncManifest(formatVersion: 2, journalID: deadID, journalName: "Resurrected", createdAt: Date(), deviceID: "B")
+            )
+        )
+
+        await engine.performSyncCycle()
+        XCTAssertFalse(engine.isJournalTombstoned(deadID))
+        XCTAssertEqual(engine.discoveredJournals.first?.journalID, deadID)
+    }
+
     // MARK: optional trading snapshots
 
     func testTradingSnapshotOptOutDoesNotUploadOrDownload() async throws {

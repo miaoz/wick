@@ -93,12 +93,21 @@ extension JournalSyncEngine {
         }
 
         // Anti-resurrection: a tombstoned journal's folder must not linger
-        // (a racing push could have recreated files after the delete).
+        // only while its tombstone marker is actively present on the remote.
+        // If the marker is gone and a valid manifest exists, the journal was
+        // resurrected/self-healed on another device: un-tombstone locally.
         for id in deviceState.processedJournalTombstones + deviceState.unackedRemoteDeletions {
             let root = JournalSyncLayout.journalRoot(for: id)
             guard state.remoteFiles.keys.contains(where: { $0.hasPrefix(root + "/") }) else { continue }
-            try? await backend.delete(path: root)
-            pruneRemoteFiles(under: root)
+            let tombPath = JournalSyncLayout.journalTombstonePath(for: id)
+            let tombstoneExists = state.remoteFiles[tombPath] != nil
+            if tombstoneExists {
+                try? await backend.delete(path: root)
+                pruneRemoteFiles(under: root)
+            } else if state.remoteFiles[JournalSyncLayout.manifestPath(for: id)] != nil {
+                deviceState.unackedRemoteDeletions.removeAll { $0 == id }
+                deviceState.processedJournalTombstones.removeAll { $0 == id }
+            }
         }
 
         saveDeviceStateAndPublish()
