@@ -21,22 +21,43 @@ else
     NEW_BUILD=$((CURRENT_BUILD + 1))
 fi
 
+# Portable in-place sed
+sedi() {
+    if [[ "${OSTYPE:-}" == "darwin"* ]]; then
+        sed -i '' "$@"
+    else
+        sed -i "$@"
+    fi
+}
+
 echo "Synchronizing version to ${NEW_VERSION} (${NEW_BUILD})..."
 
-# 1. Update scripts/package_app.sh. Line-anchored whole-line replacement:
-# the previous inline `\$\{VERSION:-...\}` pattern never matched under BSD
-# sed -E (the version silently stayed stale while this script printed OK),
-# which made `make package` rebuild the OLD version.
-sed -i '' -E "s/^VERSION=.*/VERSION=\"\${VERSION:-${NEW_VERSION}}\"/" "$PACKAGE_SCRIPT"
-sed -i '' -E "s/^BUILD=.*/BUILD=\"\${BUILD:-${NEW_BUILD}}\"/" "$PACKAGE_SCRIPT"
-# Fail loudly if either line is now malformed (missing closing brace).
+# 1. Update scripts/package_app.sh
+sedi -E "s/^VERSION=.*/VERSION=\"\${VERSION:-${NEW_VERSION}}\"/" "$PACKAGE_SCRIPT"
+sedi -E "s/^BUILD=.*/BUILD=\"\${BUILD:-${NEW_BUILD}}\"/" "$PACKAGE_SCRIPT"
 grep -q "^VERSION=\"\${VERSION:-${NEW_VERSION}}\"$" "$PACKAGE_SCRIPT"
 grep -q "^BUILD=\"\${BUILD:-${NEW_BUILD}}\"$" "$PACKAGE_SCRIPT"
 echo "✓ Updated $PACKAGE_SCRIPT"
 
 # 2. Update ios/WickPhone.xcodeproj/project.pbxproj
-sed -i '' -E "s/MARKETING_VERSION = [0-9.]+;/MARKETING_VERSION = ${NEW_VERSION};/g" "$PBXPROJ"
-sed -i '' -E "s/CURRENT_PROJECT_VERSION = [0-9]+;/CURRENT_PROJECT_VERSION = ${NEW_BUILD};/g" "$PBXPROJ"
-echo "✓ Updated $PBXPROJ"
+if [[ -f "$PBXPROJ" ]]; then
+    sedi -E "s/MARKETING_VERSION = [0-9.]+;/MARKETING_VERSION = ${NEW_VERSION};/g" "$PBXPROJ"
+    sedi -E "s/CURRENT_PROJECT_VERSION = [0-9]+;/CURRENT_PROJECT_VERSION = ${NEW_BUILD};/g" "$PBXPROJ"
+    echo "✓ Updated $PBXPROJ"
+fi
 
-echo "Done! Both macOS and iOS versions are now ${NEW_VERSION} (${NEW_BUILD})."
+# 3. Update linux/CMakeLists.txt
+CMAKE_FILE="$ROOT_DIR/linux/CMakeLists.txt"
+if [[ -f "$CMAKE_FILE" ]]; then
+    sedi -E "s/project\(wick VERSION [0-9.]+/project\(wick VERSION ${NEW_VERSION}/" "$CMAKE_FILE"
+    echo "✓ Updated $CMAKE_FILE"
+fi
+
+# 4. Update linux/packaging/PKGBUILD
+PKGBUILD_FILE="$ROOT_DIR/linux/packaging/PKGBUILD"
+if [[ -f "$PKGBUILD_FILE" ]]; then
+    sedi -E "s/^pkgver=.*/pkgver=${NEW_VERSION}/" "$PKGBUILD_FILE"
+    echo "✓ Updated $PKGBUILD_FILE"
+fi
+
+echo "Done! macOS, iOS, and Linux versions are now ${NEW_VERSION} (${NEW_BUILD})."

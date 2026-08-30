@@ -29,11 +29,13 @@ swift build && swift run   # 开发（仅宿主架构；非 .app 形态下本地
 swift test                 # 单元测试
 xcodebuild test -project ios/WickPhone.xcodeproj -scheme WickPhone -destination 'platform=iOS Simulator,id=<device-id>' CODE_SIGNING_ALLOWED=NO  # iOS 回归
 make && make package       # Universal 打包 / 分发 zip
+make package-linux         # Linux 打包（生成 .tar.gz / .pkg.tar.zst）
 node --test                # 落地页中间件回归
 ```
 
 - iOS 编译校验走 **scheme**（`xcodebuild -project ios/WickPhone.xcodeproj -scheme WickPhone ... build`），**勿用 `-target`**（App target 无法解析本地包）；`WickCalendarKit` 另有 SwiftPM 直接编译校验：`swift build --target WickCalendarKit --triple arm64-apple-ios16.0 --sdk <iphoneos-sdk>`。
-- CI（`.github/workflows/release.yml`）：`swift test` → iOS 模拟器 `WickPhoneTests` → 打包 → tag `v*` 建 Release + 上传 R2（直链 `https://dl.bitfroth.com/wick/Wick.zip`）。`landing.yml`：`landing/**`/`functions/**` 变更推 main，先 `node --test` 再部署 Cloudflare Pages。
+- Linux 编译与测试：`cmake -G Ninja -B linux/build -S linux && cmake --build linux/build --target wick`，测试 `ctest --test-dir linux/build --output-on-failure`。
+- CI（`.github/workflows/release.yml`）：macOS + iOS 编译测试打包，并行 Linux（Ubuntu/Arch）编译测试打包（`.tar.gz`、`.zip`、`.pkg.tar.zst`）→ tag `v*` 建 GitHub Release + 上传 R2（`Wick.zip` / `Wick-Linux.tar.gz`）。`landing.yml`：`landing/**`/`functions/**` 变更推 main，先 `node --test` 再部署 Cloudflare Pages。
 - 测试约定：纯计算进可注入 `Date`/`Calendar` 的静态方法；同步分支用 `WickSyncTests` 的假后端（忠实模拟 Dropbox，**不碰网络**）；交易所客户端走注入 transport；存储行为进 `JournalStoreTests`。
 
 ## 代码约定

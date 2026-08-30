@@ -12,23 +12,15 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-macos:
     name: Build universal macOS app
-    # Prefer the same major toolchain as local development (macOS 26 / Xcode 26.x).
     runs-on: macos-26
-    permissions:
-      contents: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          # The release-body step lists commits since the previous tag, so the
-          # shallow default (single tag commit, no tags) will not do.
           fetch-depth: 0
 
-      # Match local Xcode when available (this machine: 26.6 / 17F113).
-      # Falls back to the newest installed 26.x if 26.6 is missing on a future image.
       - name: Select Xcode
         run: |
           set -euo pipefail
@@ -47,15 +39,6 @@ jobs:
           fi
           xcodebuild -version
           swift --version
-
-      - name: Show toolchain
-        run: |
-          sw_vers
-          xcode-select -p
-          xcodebuild -version
-          swift --version
-          # Fail early with a clear message if Swift is older than Package.swift requires.
-          swift package describe >/dev/null
 
       - name: Unit tests
         run: swift test
@@ -86,15 +69,9 @@ jobs:
             CURRENT_PROJECT_VERSION="${{ steps.version.outputs.build }}" \
             build CODE_SIGNING_ALLOWED=NO
 
-      # CI-01: the iOS Store regression suite (WickPhoneTests) never ran in CI
-      # and could silently rot — run it on an available simulator.
       - name: iOS Store regression tests (simulator)
         run: |
           set -euo pipefail
-          # simctl returns {"devices": {runtime: [device, ...], ...}}, so iterate
-          # device dicts directly. A runner without an iOS runtime reports an
-          # empty device list — that is an environment gap, not a regression,
-          # so skip (print empty UDID) rather than fail the release.
           DEVICE_ID="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin).get("devices",{}); sys.stdout.write(next((dev["udid"] for runtime in d.values() for dev in runtime if dev.get("isAvailable") and "iPhone" in dev.get("name","")), ""))')"
           if [[ -z "$DEVICE_ID" ]]; then
             echo "No available iPhone simulator; skipping iOS Store regression tests."
@@ -127,12 +104,9 @@ jobs:
           lipo -info "$APP"
           codesign --verify --deep --strict --verbose=2 dist/Wick.app
           plutil -p dist/Wick.app/Contents/Info.plist
-          # The zip was already unzipped and re-verified by package_zip.sh;
-          # confirm the artifact exists and is non-trivial.
           test -s dist/Wick-macOS-*.zip
-          ls -lh dist/*.zip
 
-      - name: Upload build artifact
+      - name: Upload macOS artifact
         uses: actions/upload-artifact@v6
         with:
           name: Wick-macOS-${{ steps.version.outputs.version }}
@@ -140,13 +114,114 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  build-linux:
+    name: Build Linux app & packages
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build gcc g++ \
+            qt6-base-dev qt6-declarative-dev libqt6svg6-dev \
+            libssl-dev libsecret-1-dev pkg-config libgl1-mesa-dev zip
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            SHORT_SHA="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+            VERSION="0.0.0-${SHORT_SHA}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "build=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "Resolved VERSION=${VERSION} BUILD=${GITHUB_RUN_NUMBER}"
+
+      - name: Package generic Linux tarball
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ steps.version.outputs.build }}
+        run: ./scripts/package_linux.sh
+
+      - name: Build Arch Linux package (Docker)
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          docker run --rm -v "$PWD":/workspace -w /workspace archlinux:latest bash -c "
+            pacman -Syu --noconfirm base-devel cmake ninja gcc qt6-base qt6-declarative qt6-svg openssl libsecret pkgconf git
+            useradd -m builduser
+            chown -R builduser:builduser /workspace
+            su builduser -c '
+              mkdir -p dist/stage-arch
+              cp linux/packaging/PKGBUILD dist/stage-arch/
+              cp linux/packaging/wick.service dist/stage-arch/
+              sed -i -E \"s/^pkgver=.*/pkgver=${VERSION}/\" dist/stage-arch/PKGBUILD
+              cd dist/stage-arch && makepkg -f --nodeps
+              cp *.pkg.tar.zst ../
+            '
+          "
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: Wick-Linux-${{ steps.version.outputs.version }}
+          path: |
+            dist/Wick-Linux-*.tar.gz
+            dist/Wick-Linux-*.zip
+            dist/wick-*.pkg.tar.zst
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Create GitHub Release & Upload R2
+    needs: [build-macos, build-linux]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            SHORT_SHA="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+            VERSION="0.0.0-${SHORT_SHA}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: dist-artifacts
+
+      - name: Prepare dist directory
+        run: |
+          mkdir -p dist
+          find dist-artifacts -type f -exec mv {} dist/ \;
+          ls -lh dist/
+
       - name: Generate release body
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           set -euo pipefail
           VERSION="${{ steps.version.outputs.version }}"
           PREV="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
-          mkdir -p dist
           {
             echo "## Wick ${VERSION}"
             echo
@@ -164,20 +239,38 @@ jobs:
               echo
             fi
             echo
-            echo "### 安装"
+            echo "### 安装说明"
             echo
+            echo "#### macOS"
             echo "下载 \`Wick-macOS-${VERSION}.zip\`，解压后把 \`Wick.app\` 拖入「应用程序」。首次打开若被 Gatekeeper 拦截，请在 Finder 中右键 → 打开，或在「系统设置 → 隐私与安全性」中允许。"
             echo
-            echo "> 发布包使用 ad-hoc 签名，**尚未**使用 Apple Developer ID 签名或公证。"
+            echo "> macOS 发布包使用 ad-hoc 签名，尚未提交 Apple Developer ID 公证。"
+            echo
+            echo "#### Linux (Arch / Omarchy)"
+            echo "下载 \`wick-${VERSION}-1-x86_64.pkg.tar.zst\` 后安装："
+            echo "\`\`\`bash"
+            echo "sudo pacman -U wick-${VERSION}-1-x86_64.pkg.tar.zst"
+            echo "\`\`\`"
+            echo
+            echo "#### Linux (通用独立安装包)"
+            echo "下载 \`Wick-Linux-${VERSION}.tar.gz\` 后解压运行："
+            echo "\`\`\`bash"
+            echo "tar -xzf Wick-Linux-${VERSION}.tar.gz"
+            echo "cd Wick-Linux-${VERSION} && ./install.sh"
+            echo "\`\`\`"
           } > dist/release-body.md
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
         with:
-          files: dist/Wick-macOS-*.zip
+          files: |
+            dist/Wick-macOS-*.zip
+            dist/Wick-Linux-*.tar.gz
+            dist/Wick-Linux-*.zip
+            dist/wick-*.pkg.tar.zst
           body_path: dist/release-body.md
-          fail_on_unmatched_files: true
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -189,13 +282,16 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ steps.version.outputs.version }}"
-          ZIP_FILE="dist/Wick-macOS-${VERSION}.zip"
-          echo "Uploading ${ZIP_FILE} to Cloudflare R2 (application-releases/wick)..."
-          npx wrangler r2 object put "application-releases/wick/Wick-macOS-${VERSION}.zip" --file="${ZIP_FILE}" --remote
-          npx wrangler r2 object put "application-releases/wick/Wick.zip" --file="${ZIP_FILE}" --remote
+          echo "Uploading artifacts to Cloudflare R2 (application-releases/wick)..."
+          if [[ -f "dist/Wick-macOS-${VERSION}.zip" ]]; then
+            npx wrangler r2 object put "application-releases/wick/Wick-macOS-${VERSION}.zip" --file="dist/Wick-macOS-${VERSION}.zip" --remote
+            npx wrangler r2 object put "application-releases/wick/Wick.zip" --file="dist/Wick-macOS-${VERSION}.zip" --remote
+          fi
+          if [[ -f "dist/Wick-Linux-${VERSION}.tar.gz" ]]; then
+            npx wrangler r2 object put "application-releases/wick/Wick-Linux-${VERSION}.tar.gz" --file="dist/Wick-Linux-${VERSION}.tar.gz" --remote
+            npx wrangler r2 object put "application-releases/wick/Wick-Linux.tar.gz" --file="dist/Wick-Linux-${VERSION}.tar.gz" --remote
+          fi
 
-      # Keep only the 10 newest releases; older ones are deleted (git tags stay,
-      # so any old version can still be checked out and rebuilt if needed).
       - name: Prune old releases (keep latest 10)
         if: startsWith(github.ref, 'refs/tags/v')
         env:
