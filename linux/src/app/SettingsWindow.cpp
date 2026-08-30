@@ -1,6 +1,7 @@
 #include "SettingsWindow.h"
 
 #include "AppSettings.h"
+#include "ExchangeCoordinator.h"
 #include "JournalLibrary.h"
 #include "JournalSyncCoordinator.h"
 
@@ -10,7 +11,8 @@
 #include <QDebug>
 
 SettingsWindow::SettingsWindow(AppSettings *settings, JournalLibrary *library,
-                               JournalSyncCoordinator *sync, QWindow *parent)
+                               JournalSyncCoordinator *sync, ExchangeCoordinator *exchange,
+                               QWindow *parent)
     : QQuickView(parent)
     , m_settings(settings)
 {
@@ -25,6 +27,7 @@ SettingsWindow::SettingsWindow(AppSettings *settings, JournalLibrary *library,
     rootContext()->setContextProperty(QStringLiteral("appSettings"), m_settings);
     rootContext()->setContextProperty(QStringLiteral("journalLibrary"), library);
     rootContext()->setContextProperty(QStringLiteral("syncCoordinator"), sync);
+    rootContext()->setContextProperty(QStringLiteral("exchangeCoordinator"), exchange);
     setSource(QUrl(QStringLiteral("qrc:/qml/settings/SettingsWindow.qml")));
 
     if (status() == QQuickView::Error) {

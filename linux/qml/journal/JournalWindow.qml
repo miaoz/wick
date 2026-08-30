@@ -224,6 +224,8 @@ Rectangle {
                 theme: theme
                 library: journalLibrary
                 onNewJournalRequested: root.requestNewJournal()
+                onRenameJournalRequested: function (id, name) { root.requestRenameJournal(id, name) }
+                onDeleteJournalRequested: function (id, name) { root.requestDeleteJournal(id, name) }
             }
 
             Rectangle {
@@ -273,14 +275,17 @@ Rectangle {
     }
 
     Rectangle {
-        id: newJournalDialog
+        id: journalDialog
         visible: false
         anchors.fill: parent
         color: Qt.rgba(18 / 255, 13 / 255, 7 / 255, 0.55)
+        property string mode: "new" // new | rename | delete
+        property string targetId: ""
+        property string targetName: ""
 
         Rectangle {
             width: 320
-            height: 140
+            height: journalDialog.mode === "delete" ? 150 : 140
             radius: 6
             color: theme.paperHi
             border.color: theme.rule
@@ -291,14 +296,26 @@ Rectangle {
                 anchors.margins: 18
                 spacing: 10
                 Text {
-                    text: "新建日记本"
+                    text: journalDialog.mode === "rename" ? "重命名日记本"
+                          : journalDialog.mode === "delete" ? "删除日记本"
+                          : "新建日记本"
                     color: theme.ink1
                     font.family: theme.fontPrint
                     font.pixelSize: 16
                     font.weight: Font.Bold
                 }
+                Text {
+                    visible: journalDialog.mode === "delete"
+                    Layout.fillWidth: true
+                    text: "删除「" + journalDialog.targetName + "」？此操作不可撤销，且会从所有已同步设备移除。"
+                    color: theme.ink2
+                    font.family: theme.fontUi
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                }
                 TextField {
-                    id: newJournalName
+                    id: journalNameField
+                    visible: journalDialog.mode !== "delete"
                     Layout.fillWidth: true
                     placeholderText: "日记"
                     color: theme.ink1
@@ -311,20 +328,20 @@ Rectangle {
                         border.width: 1
                         radius: 3
                     }
+                    Keys.onReturnPressed: root.commitJournalDialog()
                 }
                 RowLayout {
                     Layout.fillWidth: true
                     Item { Layout.fillWidth: true }
                     Button {
                         text: "取消"
-                        onClicked: newJournalDialog.visible = false
+                        onClicked: journalDialog.visible = false
                     }
                     Button {
-                        text: "创建"
-                        onClicked: {
-                            journalLibrary.addJournal(newJournalName.text)
-                            newJournalDialog.visible = false
-                        }
+                        text: journalDialog.mode === "rename" ? "保存"
+                              : journalDialog.mode === "delete" ? "删除"
+                              : "创建"
+                        onClicked: root.commitJournalDialog()
                     }
                 }
             }
@@ -332,8 +349,38 @@ Rectangle {
     }
 
     function requestNewJournal() {
-        newJournalName.text = ""
-        newJournalDialog.visible = true
-        newJournalName.forceActiveFocus()
+        journalDialog.mode = "new"
+        journalDialog.targetId = ""
+        journalDialog.targetName = ""
+        journalNameField.text = ""
+        journalDialog.visible = true
+        journalNameField.forceActiveFocus()
+    }
+
+    function requestRenameJournal(id, name) {
+        journalDialog.mode = "rename"
+        journalDialog.targetId = id
+        journalDialog.targetName = name
+        journalNameField.text = name
+        journalDialog.visible = true
+        journalNameField.forceActiveFocus()
+        journalNameField.selectAll()
+    }
+
+    function requestDeleteJournal(id, name) {
+        journalDialog.mode = "delete"
+        journalDialog.targetId = id
+        journalDialog.targetName = name
+        journalDialog.visible = true
+    }
+
+    function commitJournalDialog() {
+        if (journalDialog.mode === "new")
+            journalLibrary.addJournal(journalNameField.text)
+        else if (journalDialog.mode === "rename")
+            journalLibrary.renameJournal(journalDialog.targetId, journalNameField.text)
+        else if (journalDialog.mode === "delete")
+            journalLibrary.deleteJournal(journalDialog.targetId)
+        journalDialog.visible = false
     }
 }

@@ -9,12 +9,14 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <set>
 #include <variant>
 
 using wick::JournalCatalogLoader;
 using wick::JournalCatalogSnapshot;
 using wick::JournalDayKey;
 using wick::JournalEntry;
+using wick::JournalExchangeBinding;
 using wick::JournalFileStore;
 using wick::JournalImageFilename;
 using wick::JournalInfo;
@@ -419,8 +421,20 @@ QVariantList JournalLibrary::journals() const
         int count = 0;
         if (m_store && j.id == m_catalog.activeJournalID)
             count = static_cast<int>(m_store->entries.size());
+        else
+            count = JournalFileStore::entryCountOnDisk(m_paths.journalDirectory(j.id));
         row.insert(QStringLiteral("entryCount"), count);
         row.insert(QStringLiteral("isActive"), j.id == m_catalog.activeJournalID);
+        if (j.exchangeBinding) {
+            row.insert(QStringLiteral("exchangeBound"), true);
+            row.insert(QStringLiteral("venue"),
+                       qs(std::string(wick::toString(j.exchangeBinding->venue))));
+            row.insert(QStringLiteral("accountLabel"), qs(j.exchangeBinding->accountLabel));
+        } else {
+            row.insert(QStringLiteral("exchangeBound"), false);
+            row.insert(QStringLiteral("venue"), QString());
+            row.insert(QStringLiteral("accountLabel"), QString());
+        }
         out.push_back(row);
     }
     return out;
@@ -883,6 +897,207 @@ void JournalLibrary::addJournal(const QString &name)
     emit activeJournalChanged();
 }
 
+bool JournalLibrary::renameJournal(const QString &id, const QString &name)
+{
+    if (m_catalogReadOnly)
+        return false;
+    const auto parsed = parseUuid(id);
+    if (!parsed)
+        return false;
+    const QString trimmed = name.trimmed();
+    if (trimmed.isEmpty())
+        return false;
+    const QString resolved = uniquifyName(trimmed, *parsed);
+    for (auto &j : m_catalog.journals) {
+        if (j.id != *parsed)
+            continue;
+        if (j.name == ss(resolved))
+            return true;
+        j.name = ss(resolved);
+        j.updatedAt = nowTp();
+        if (!writeCatalog())
+            return false;
+        emit journalsChanged();
+        return true;
+    }
+    return false;
+}
+
+bool JournalLibrary::deleteJournal(const QString &id)
+{
+    if (m_catalogReadOnly)
+        return false;
+    const auto parsed = parseUuid(id);
+    if (!parsed)
+        return false;
+    if (m_catalog.journals.size() <= 1)
+        return false;
+    bool found = false;
+    for (const auto &j : m_catalog.journals) {
+        if (j.id == *parsed) {
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+        return false;
+
+    flushNow();
+    const auto original = m_catalog;
+    const bool wasActive = m_catalog.activeJournalID == *parsed;
+    const auto dir = m_paths.journalDirectory(*parsed);
+    const auto quarantine =
+        m_paths.librariesRoot / (".WickJournalQuarantine-" + Uuid::generate().toString());
+
+    std::error_code ec;
+    bool moved = false;
+    if (std::filesystem::exists(dir, ec)) {
+        std::filesystem::rename(dir, quarantine, ec);
+        if (ec)
+            return false;
+        moved = true;
+    }
+
+    m_catalog.journals.erase(std::remove_if(m_catalog.journals.begin(), m_catalog.journals.end(),
+                                            [&](const JournalInfo &j) { return j.id == *parsed; }),
+                             m_catalog.journals.end());
+    if (wasActive && !m_catalog.journals.empty()) {
+        auto best = m_catalog.journals.begin();
+        for (auto it = m_catalog.journals.begin(); it != m_catalog.journals.end(); ++it) {
+            if (it->updatedAt > best->updatedAt)
+                best = it;
+        }
+        m_catalog.activeJournalID = best->id;
+    }
+
+    if (!writeCatalog()) {
+        m_catalog = original;
+        if (moved)
+            std::filesystem::rename(quarantine, dir, ec);
+        return false;
+    }
+    if (moved)
+        std::filesystem::remove_all(quarantine, ec);
+
+    if (wasActive) {
+        bindActive(m_catalog.activeJournalID);
+        emit activeJournalChanged();
+        emit readOnlyChanged();
+        emit bannersChanged();
+    }
+    rebuildAfterStructuralChange();
+    return true;
+}
+
+void JournalLibrary::setExchangeBinding(const Uuid &id, std::optional<JournalExchangeBinding> binding)
+{
+    if (m_catalogReadOnly)
+        return;
+    for (auto &j : m_catalog.journals) {
+        if (j.id != id)
+            continue;
+        j.exchangeBinding = std::move(binding);
+        j.updatedAt = nowTp();
+        writeCatalog();
+        emit journalsChanged();
+        return;
+    }
+}
+
+int JournalLibrary::ensurePositionEntries(
+    const Uuid &journalID,
+    const std::vector<std::pair<QDate, std::vector<JournalItem>>> &skeletons)
+{
+    if (m_catalogReadOnly || skeletons.empty())
+        return 0;
+    bool inCatalog = false;
+    for (const auto &j : m_catalog.journals) {
+        if (j.id == journalID) {
+            inCatalog = true;
+            break;
+        }
+    }
+    if (!inCatalog)
+        return 0;
+
+    const bool active = m_store && journalID == m_catalog.activeJournalID;
+    if (active && isReadOnly())
+        return 0;
+
+    std::vector<JournalEntry> *entries = nullptr;
+    std::unique_ptr<JournalFileStore> owned;
+    if (active) {
+        entries = &m_store->entries;
+    } else {
+        const auto dir = m_paths.journalDirectory(journalID);
+        std::error_code ec;
+        const bool hasPrimary = std::filesystem::exists(dir / "journal.json", ec);
+        const bool hasBak = std::filesystem::exists(dir / "journal.json.bak", ec);
+        std::vector<JournalEntry> loaded;
+        if (hasPrimary || hasBak) {
+            auto fromDisk = JournalFileStore::loadEntriesReadOnly(dir);
+            if (!fromDisk)
+                return 0;
+            loaded = std::move(*fromDisk);
+        }
+        owned = std::make_unique<JournalFileStore>(dir);
+        owned->ensureDirectories();
+        owned->entries = std::move(loaded);
+        entries = &owned->entries;
+    }
+
+    auto dateOfEntry = [this](const JournalEntry &e) { return dateOf(e); };
+    const TimePoint now = nowTp();
+    int added = 0;
+    for (const auto &skeleton : skeletons) {
+        if (skeleton.second.empty())
+            continue;
+        const QDate day = skeleton.first;
+        auto it = std::find_if(entries->begin(), entries->end(),
+                               [&](const JournalEntry &e) { return dateOfEntry(e) == day; });
+        if (it != entries->end()) {
+            std::set<Uuid> existing;
+            for (const auto &item : it->items)
+                existing.insert(item.id);
+            std::vector<JournalItem> additions;
+            for (const auto &item : skeleton.second) {
+                if (!existing.count(item.id))
+                    additions.push_back(item);
+            }
+            if (additions.empty())
+                continue;
+            const bool allEmpty = std::all_of(it->items.begin(), it->items.end(),
+                                              [](const JournalItem &item) { return item.isEmpty(); });
+            if (allEmpty)
+                it->items.clear();
+            it->items.insert(it->items.end(), additions.begin(), additions.end());
+            it->updatedAt = now;
+            ++added;
+        } else {
+            JournalEntry entry;
+            entry.id = Uuid::generate();
+            entry.date = startOfDay(day);
+            entry.items = skeleton.second;
+            entry.createdAt = now;
+            entry.updatedAt = now;
+            entries->insert(entries->begin(), std::move(entry));
+            ++added;
+        }
+    }
+    if (added == 0)
+        return 0;
+
+    if (active) {
+        persistActive();
+        rebuildAfterStructuralChange();
+    } else {
+        owned->persist();
+        emit journalsChanged();
+        emit journalContentChanged();
+    }
+    return added;
+}
+
 void JournalLibrary::selectDay(const QString &entryId)
 {
     m_selectedEntryId = entryId;
@@ -1234,6 +1449,8 @@ std::set<Uuid> JournalLibrary::applySyncedChanges(const std::vector<JournalSyncM
         if (!m_store->isReadOnlyDueToLoadFailure)
             m_savedState = QStringLiteral("已自动保存");
         rebuildAfterStructuralChange();
+    } else {
+        emit journalsChanged();
     }
     return applied;
 }
@@ -1274,6 +1491,8 @@ void JournalLibrary::applySyncedEntry(const JournalEntry &entry, const Uuid &jou
     if (active) {
         m_dirty = false;
         rebuildAfterStructuralChange();
+    } else {
+        emit journalsChanged();
     }
 }
 
@@ -1301,6 +1520,8 @@ void JournalLibrary::removeSyncedEntry(const Uuid &entryID, const Uuid &journalI
             store->persist();
             if (active)
                 rebuildAfterStructuralChange();
+            else
+                emit journalsChanged();
             return;
         }
     }

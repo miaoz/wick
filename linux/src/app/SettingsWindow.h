@@ -3,6 +3,7 @@
 #include <QQuickView>
 
 class AppSettings;
+class ExchangeCoordinator;
 class JournalLibrary;
 class JournalSyncCoordinator;
 
@@ -12,7 +13,8 @@ class SettingsWindow : public QQuickView
 
 public:
     SettingsWindow(AppSettings *settings, JournalLibrary *library,
-                   JournalSyncCoordinator *sync = nullptr, QWindow *parent = nullptr);
+                   JournalSyncCoordinator *sync = nullptr,
+                   ExchangeCoordinator *exchange = nullptr, QWindow *parent = nullptr);
 
     void openOrRaise();
 

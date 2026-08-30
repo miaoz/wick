@@ -1,5 +1,6 @@
 #include "AppSettings.h"
 #include "DropboxAuthSession.h"
+#include "ExchangeCoordinator.h"
 #include "JournalLibrary.h"
 #include "JournalSyncCoordinator.h"
 #include "ReminderScheduler.h"
@@ -37,6 +38,7 @@ int main(int argc, char *argv[])
     library.bootstrap();
 
     JournalSyncCoordinator sync(&library, settings);
+    ExchangeCoordinator exchange(&library);
 
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &library, [&library, &sync]() {
         library.flushNow();
@@ -49,13 +51,14 @@ int main(int argc, char *argv[])
         progress.setWeekStartsOnMonday(settings->weekStartsOnMonday());
     });
 
-    TrayController tray(&progress, &library, settings, &sync);
+    TrayController tray(&progress, &library, settings, &sync, &exchange);
 
     WickIpc ipc;
     ipc.listen();
     DropboxAuthSession::ensureMimeDefault();
     QObject::connect(&ipc, &WickIpc::openJournalRequested, &tray, &TrayController::openJournal);
     QObject::connect(&ipc, &WickIpc::openSettingsRequested, &tray, &TrayController::openSettings);
+    QObject::connect(&ipc, &WickIpc::quitRequested, &tray, &TrayController::quitApp);
 
     ReminderScheduler reminder(settings, tray.trayIcon());
     QObject::connect(&reminder, &ReminderScheduler::openJournalRequested,

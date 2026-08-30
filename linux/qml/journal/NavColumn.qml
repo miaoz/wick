@@ -9,6 +9,8 @@ Rectangle {
     color: theme.sidebar
 
     signal newJournalRequested()
+    signal renameJournalRequested(string id, string name)
+    signal deleteJournalRequested(string id, string name)
 
     ColumnLayout {
         anchors.fill: parent
@@ -82,8 +84,27 @@ Rectangle {
 
                     MouseArea {
                         anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: library.selectJournal(modelData.id)
+                        onClicked: function (mouse) {
+                            if (mouse.button === Qt.RightButton)
+                                rowMenu.popup()
+                            else
+                                library.selectJournal(modelData.id)
+                        }
+                        Menu {
+                            id: rowMenu
+                            MenuItem {
+                                text: "重命名"
+                                enabled: !library.isCatalogReadOnly
+                                onTriggered: nav.renameJournalRequested(modelData.id, modelData.name)
+                            }
+                            MenuItem {
+                                text: "删除"
+                                enabled: !library.isCatalogReadOnly && library.journals.length > 1
+                                onTriggered: nav.deleteJournalRequested(modelData.id, modelData.name)
+                            }
+                        }
                     }
                 }
             }

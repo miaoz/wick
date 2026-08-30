@@ -535,6 +535,29 @@ static void testMissingCatalogBootstrapCreatesDefaultDiary() {
     std::filesystem::remove_all(root);
 }
 
+static void testEntryCountOnDiskIsReadOnly() {
+    auto root = makeTempDir("WickEntryCount-");
+    auto dir = root / "journal";
+    CHECK(JournalFileStore::entryCountOnDisk(dir) == 0);
+
+    JournalFileStore store(dir);
+    store.ensureDirectories();
+    JournalEntry second = makeDeterministicEntry();
+    second.id = Uuid::generate();
+    store.entries = {makeDeterministicEntry(), second};
+    store.persist();
+    CHECK(JournalFileStore::entryCountOnDisk(dir) == 2);
+
+    const auto primary = readText(dir / "journal.json");
+    CHECK(!primary.empty());
+    writeText(dir / "journal.json", "{not-json");
+    writeText(dir / "journal.json.bak", primary);
+    CHECK(JournalFileStore::entryCountOnDisk(dir) == 2);
+    CHECK(readText(dir / "journal.json") == "{not-json");
+
+    std::filesystem::remove_all(root);
+}
+
 static void testCorruptCatalogIsNotRewritten() {
     auto root = makeTempDir("WickBootstrapCorrupt-");
     auto paths = JournalPaths::inRoot(root);
@@ -570,6 +593,7 @@ int main() {
     testPathsLayout();
     testOmitExchangeBinding();
     testMissingCatalogBootstrapCreatesDefaultDiary();
+    testEntryCountOnDiskIsReadOnly();
     testCorruptCatalogIsNotRewritten();
 
     std::cout << g_passes << " passed, " << g_fails << " failed\n";

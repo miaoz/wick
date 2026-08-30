@@ -579,8 +579,8 @@ Rectangle {
             Text {
                 Layout.fillWidth: true
                 Layout.bottomMargin: 10
-                text: t("先选择日记本与交易所。仓位同步将在后续版本接入，此处只保存偏好。",
-                        "Pick a journal and venue. Live exchange sync arrives later — this stores preferences only.")
+                text: t("每本日记绑定一个交易所账号。凭证只读，保存在系统密钥环（或 WICK_DEV_SECRETS=1 的本地文件），不会上传。",
+                        "One exchange account per journal. Credentials stay in the system keyring (or WICK_DEV_SECRETS=1 file) and never upload.")
                 color: theme.ink2
                 font.family: theme.fontUi
                 font.pixelSize: 12
@@ -597,22 +597,28 @@ Rectangle {
                     font.pixelSize: 12
                     onActivated: {
                         const row = journalLibrary.journals[currentIndex]
-                        if (row)
+                        if (row) {
                             appSettings.exchangeJournalId = row.id
+                            exchangeCoordinator.targetJournalId = row.id
+                        }
                     }
                     Component.onCompleted: selectCurrent()
                     function selectCurrent() {
-                        const id = appSettings.exchangeJournalId
+                        let id = exchangeCoordinator.targetJournalId
+                        if (id.length === 0)
+                            id = appSettings.exchangeJournalId
                         const list = journalLibrary.journals
                         for (let i = 0; i < list.length; ++i) {
                             if (list[i].id === id) {
                                 currentIndex = i
+                                exchangeCoordinator.targetJournalId = list[i].id
                                 return
                             }
                         }
                         if (list.length > 0) {
                             currentIndex = 0
-                            if (id.length === 0)
+                            exchangeCoordinator.targetJournalId = list[0].id
+                            if (appSettings.exchangeJournalId.length === 0)
                                 appSettings.exchangeJournalId = list[0].id
                         }
                     }
@@ -637,19 +643,181 @@ Rectangle {
                 }
             }
             Hairline {}
-            SettingRow {
-                label: t("交易所", "Venue")
-                Seg {
-                    options: [
-                        { value: "binance", label: "Binance" },
-                        { value: "okx", label: "OKX" },
-                        { value: "hyperliquid", label: "Hyperliquid" }
-                    ]
-                    current: appSettings.exchangeVenue
-                    onPicked: (v) => appSettings.exchangeVenue = v
+
+            ColumnLayout {
+                visible: exchangeCoordinator.configured
+                Layout.fillWidth: true
+                spacing: 8
+                SettingRow {
+                    label: t("已连接", "Connected")
+                    Text {
+                        text: (exchangeCoordinator.venue === "okx" ? "OKX"
+                              : exchangeCoordinator.venue === "hyperliquid" ? "Hyperliquid"
+                              : "Binance") + " · " + exchangeCoordinator.accountLabel
+                        color: theme.ink1
+                        font.family: theme.fontMono
+                        font.pixelSize: 12
+                        elide: Text.ElideMiddle
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: exchangeCoordinator.statusText
+                    color: exchangeCoordinator.lastError.length > 0 ? theme.cinnabar : theme.ink2
+                    font.family: theme.fontUi
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Button {
+                        text: exchangeCoordinator.syncing ? t("同步中…", "Syncing…") : t("立即同步", "Sync now")
+                        enabled: !exchangeCoordinator.syncing
+                        onClicked: exchangeCoordinator.syncNow(exchangeCoordinator.targetJournalId)
+                    }
+                    Button {
+                        text: t("断开", "Disconnect")
+                        enabled: !exchangeCoordinator.syncing
+                        onClicked: exchangeCoordinator.disconnectJournal(exchangeCoordinator.targetJournalId)
+                    }
                 }
             }
-            Hairline {}
+
+            ColumnLayout {
+                visible: !exchangeCoordinator.configured
+                Layout.fillWidth: true
+                spacing: 8
+                SettingRow {
+                    label: t("交易所", "Venue")
+                    Seg {
+                        options: [
+                            { value: "binance", label: "Binance" },
+                            { value: "okx", label: "OKX" },
+                            { value: "hyperliquid", label: "Hyperliquid" }
+                        ]
+                        current: appSettings.exchangeVenue
+                        onPicked: (v) => appSettings.exchangeVenue = v
+                    }
+                }
+                Hairline {}
+                SettingRow {
+                    visible: appSettings.exchangeVenue !== "hyperliquid"
+                    label: t("API Key", "API Key")
+                    TextField {
+                        id: apiKeyField
+                        Layout.preferredWidth: 240
+                        echoMode: TextInput.Normal
+                        font.family: theme.fontMono
+                        font.pixelSize: 12
+                        color: theme.ink1
+                        background: Rectangle {
+                            color: "transparent"
+                            border.color: theme.rule
+                            border.width: 1
+                            radius: 3
+                        }
+                    }
+                }
+                SettingRow {
+                    visible: appSettings.exchangeVenue !== "hyperliquid"
+                    label: t("Secret", "Secret")
+                    TextField {
+                        id: secretField
+                        Layout.preferredWidth: 240
+                        echoMode: TextInput.Password
+                        font.family: theme.fontMono
+                        font.pixelSize: 12
+                        color: theme.ink1
+                        background: Rectangle {
+                            color: "transparent"
+                            border.color: theme.rule
+                            border.width: 1
+                            radius: 3
+                        }
+                    }
+                }
+                SettingRow {
+                    visible: appSettings.exchangeVenue === "okx"
+                    label: t("Passphrase", "Passphrase")
+                    TextField {
+                        id: passphraseField
+                        Layout.preferredWidth: 240
+                        echoMode: TextInput.Password
+                        font.family: theme.fontMono
+                        font.pixelSize: 12
+                        color: theme.ink1
+                        background: Rectangle {
+                            color: "transparent"
+                            border.color: theme.rule
+                            border.width: 1
+                            radius: 3
+                        }
+                    }
+                }
+                SettingRow {
+                    visible: appSettings.exchangeVenue === "hyperliquid"
+                    label: t("钱包地址", "Wallet")
+                    TextField {
+                        id: addressField
+                        Layout.preferredWidth: 240
+                        placeholderText: "0x…"
+                        font.family: theme.fontMono
+                        font.pixelSize: 12
+                        color: theme.ink1
+                        placeholderTextColor: theme.ink3
+                        background: Rectangle {
+                            color: "transparent"
+                            border.color: theme.rule
+                            border.width: 1
+                            radius: 3
+                        }
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: appSettings.exchangeVenue === "okx"
+                          ? t("OKX 永续。fillSz 单位是张，未换算 ctVal。", "OKX SWAP. fillSz is contracts, not coin.")
+                          : appSettings.exchangeVenue === "hyperliquid"
+                            ? t("只需只读地址，无需 API Key。公开 info 接口。", "Read-only address; public info endpoint.")
+                            : t("Binance USDⓈ-M。请用只读 API Key。", "Binance USDⓈ-M. Use a read-only API key.")
+                    color: theme.ink3
+                    font.family: theme.fontUi
+                    font.pixelSize: 11
+                    wrapMode: Text.Wrap
+                }
+                Button {
+                    text: exchangeCoordinator.syncing ? t("连接中…", "Connecting…") : t("连接并同步", "Save and sync")
+                    enabled: !exchangeCoordinator.syncing && (
+                        appSettings.exchangeVenue === "hyperliquid"
+                            ? addressField.text.length > 0
+                            : apiKeyField.text.length > 0 && secretField.text.length > 0
+                              && (appSettings.exchangeVenue !== "okx" || passphraseField.text.length > 0)
+                    )
+                    onClicked: {
+                        const id = exchangeCoordinator.targetJournalId
+                        if (appSettings.exchangeVenue === "okx")
+                            exchangeCoordinator.saveOKX(id, apiKeyField.text, secretField.text, passphraseField.text)
+                        else if (appSettings.exchangeVenue === "hyperliquid")
+                            exchangeCoordinator.saveHyperliquid(id, addressField.text)
+                        else
+                            exchangeCoordinator.saveBinance(id, apiKeyField.text, secretField.text)
+                        apiKeyField.text = ""
+                        secretField.text = ""
+                        passphraseField.text = ""
+                    }
+                }
+                Text {
+                    visible: exchangeCoordinator.lastError.length > 0
+                    Layout.fillWidth: true
+                    text: exchangeCoordinator.lastError
+                    color: theme.cinnabar
+                    font.family: theme.fontUi
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                }
+            }
+
+            Hairline { Layout.topMargin: 12 }
             SettingRow {
                 label: t("同步仓位快照", "Sync trading snapshots")
                 showHint: true

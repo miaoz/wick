@@ -363,41 +363,40 @@ Panel {
           color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
         }
 
+        // Design contract: linux.html `.pp-actions` — 打开日记 / 设置 / 退出.
         Row {
+          id: actionRow
           width: parent.width
           spacing: Style.space(8)
+          readonly property real cellWidth: (width - spacing * 2) / 3
 
-          Repeater {
-            model: [
-              { label: "日记", flag: "journal" },
-              { label: "设置", flag: "settings" }
-            ]
-            delegate: Rectangle {
-              required property var modelData
-              width: (parent.width - parent.spacing) / 2
-              height: Style.space(28)
-              radius: Style.space(4)
-              color: tap.containsMouse ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.10) : "transparent"
-              border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.16)
-              border.width: 1
-
-              Text {
-                anchors.centerIn: parent
-                text: modelData.label
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-              }
-
-              MouseArea {
-                id: tap
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.launchWick(modelData.flag)
-              }
-            }
+          Button {
+            width: actionRow.cellWidth
+            text: "打开日记"
+            bordered: true
+            active: true
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            fontSize: Style.font.caption
+            onClicked: root.launchWick("journal")
+          }
+          Button {
+            width: actionRow.cellWidth
+            text: "设置"
+            bordered: true
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            fontSize: Style.font.caption
+            onClicked: root.launchWick("settings")
+          }
+          Button {
+            width: actionRow.cellWidth
+            text: "退出"
+            bordered: true
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            fontSize: Style.font.caption
+            onClicked: root.launchWick("quit")
           }
         }
       }

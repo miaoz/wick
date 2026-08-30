@@ -61,6 +61,11 @@ add_library(wick_core STATIC
     src/core/JournalPaths.cpp
     src/core/JournalStore.cpp
     src/core/JournalArchive.cpp
+    src/trading/Crypto.cpp
+    src/trading/TradingModels.cpp
+    src/trading/SymbolTagMatcher.cpp
+    src/trading/PositionAggregator.cpp
+    src/trading/PositionEntryPlanner.cpp
     src/sync/FakeSyncBackend.cpp
     src/sync/JournalDayMerge.cpp
     src/sync/JournalSyncState.cpp
@@ -73,6 +78,7 @@ target_include_directories(wick_core
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core
         ${CMAKE_CURRENT_SOURCE_DIR}/src/sync
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/trading
 )
 
 target_link_libraries(wick_core PUBLIC OpenSSL::Crypto nlohmann_json::nlohmann_json wick_miniz)
@@ -113,6 +119,12 @@ add_executable(test_pkce
 target_link_libraries(test_pkce PRIVATE wick_core)
 add_test(NAME test_pkce COMMAND test_pkce)
 
+add_executable(test_trading
+    tests/test_trading.cpp
+)
+target_link_libraries(test_trading PRIVATE wick_core)
+add_test(NAME test_trading COMMAND test_trading)
+
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
@@ -148,6 +160,10 @@ qt_add_executable(wick
     src/app/DropboxAuthSession.h
     src/app/WickIpc.cpp
     src/app/WickIpc.h
+    src/app/ExchangeCoordinator.cpp
+    src/app/ExchangeCoordinator.h
+    src/trading/ExchangeClients.cpp
+    src/trading/ExchangeClients.h
     src/sync/DropboxSyncBackend.cpp
     src/sync/DropboxSyncBackend.h
     resources/resources.qrc

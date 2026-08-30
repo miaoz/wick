@@ -29,6 +29,8 @@ QString commandFromArgs(const QStringList &args)
         return QStringLiteral("journal");
     if (args.contains(QStringLiteral("--settings")))
         return QStringLiteral("settings");
+    if (args.contains(QStringLiteral("--quit")))
+        return QStringLiteral("quit");
     return {};
 }
 
@@ -79,6 +81,8 @@ int WickIpc::maybeForwardAndExit(const QStringList &args)
         return -1;
     const int rc = send(command.toUtf8());
     if (rc == 0)
+        return 0;
+    if (command == QLatin1String("quit"))
         return 0;
     if (isCallbackUrl(command) || command.startsWith(QLatin1String("callback "))) {
         qWarning("秉烛: no running instance to receive Dropbox callback");
@@ -153,6 +157,10 @@ void WickIpc::handlePayload(const QByteArray &raw)
     }
     if (text == QLatin1String("settings")) {
         emit openSettingsRequested();
+        return;
+    }
+    if (text == QLatin1String("quit")) {
+        emit quitRequested();
         return;
     }
     if (text.startsWith(QLatin1String("callback "))) {

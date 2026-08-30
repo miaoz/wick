@@ -41,7 +41,8 @@ public:
     static constexpr const char* kDefaultAccount = "refresh-token";
 
     explicit SecretTokenStore(std::string service = kDefaultService,
-                              std::string account = kDefaultAccount);
+                              std::string account = kDefaultAccount,
+                              std::string displayName = "Wick secret");
 
     std::optional<std::string> load() const override;
     void save(const std::string& token) override;
@@ -53,6 +54,7 @@ public:
 private:
     std::string service_;
     std::string account_;
+    std::string displayName_;
 };
 
 } // namespace wick

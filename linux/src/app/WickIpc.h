@@ -10,8 +10,8 @@ class QLocalServer;
 /// Single-instance commands for the running Wick process.
 ///
 /// The primary instance listens on `$XDG_RUNTIME_DIR/wick.sock`. A second
-/// process (`wick --journal`, `wick --settings`, or a Dropbox callback URL)
-/// forwards the command and exits.
+/// process (`wick --journal`, `wick --settings`, `wick --quit`, or a Dropbox
+/// callback URL) forwards the command and exits.
 class WickIpc : public QObject
 {
     Q_OBJECT
@@ -33,6 +33,7 @@ public:
 signals:
     void openJournalRequested();
     void openSettingsRequested();
+    void quitRequested();
     void dropboxCallback(const QUrl &url);
 
 private:

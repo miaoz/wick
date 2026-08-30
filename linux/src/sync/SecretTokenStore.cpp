@@ -107,9 +107,10 @@ const SecretSchema& schema() {
 
 } // namespace
 
-SecretTokenStore::SecretTokenStore(std::string service, std::string account)
+SecretTokenStore::SecretTokenStore(std::string service, std::string account, std::string displayName)
     : service_(std::move(service))
-    , account_(std::move(account)) {}
+    , account_(std::move(account))
+    , displayName_(std::move(displayName)) {}
 
 bool SecretTokenStore::devSecretsEnabled() {
     const char* e = std::getenv("WICK_DEV_SECRETS");
@@ -157,7 +158,7 @@ void SecretTokenStore::save(const std::string& token) {
 #ifdef WICK_HAVE_LIBSECRET
     GError* error = nullptr;
     const gboolean ok = secret_password_store_sync(&schema(), SECRET_COLLECTION_DEFAULT,
-                                                   "Wick Dropbox refresh token", token.c_str(),
+                                                   displayName_.c_str(), token.c_str(),
                                                    nullptr, &error,
                                                    "service", service_.c_str(),
                                                    "account", account_.c_str(),

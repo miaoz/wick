@@ -15,4 +15,4 @@ cp -a linux/omarchy/wick.progress ~/.config/omarchy/plugins/
 omarchy-restart-shell
 ```
 
-Qt 6 托盘程序（`linux/` 下的 CMake 工程）是非 Omarchy / 纯 SNI 环境的后备，不是这台机器上的 UI。
+Qt 6 托盘程序（`linux/` 下的 CMake 工程）是非 Omarchy / 纯 SNI 环境的后备。Omarchy 上 `wick` 仍作为守护进程运行（日记 / 设置 / Dropbox），但托盘蜡烛会自动隐藏，只留栏里这支。

@@ -38,7 +38,7 @@ ctest --test-dir build --output-on-failure
 
 ## Stage 0：Omarchy 蜡烛
 
-Omarchy 上的蜡烛是 Quickshell `bar-widget`（[`omarchy/wick.progress`](omarchy/wick.progress)），点击打开系统 `KeyboardPanel` 下拉，和时钟 / 网络同一套。不要跑 Qt 托盘当 Omarchy UI。
+Omarchy 上的蜡烛是 Quickshell `bar-widget`（[`omarchy/wick.progress`](omarchy/wick.progress)），点击打开系统 `KeyboardPanel` 下拉，和时钟 / 网络同一套。`wick` 进程仍要跑（日记窗 / 设置 / 同步），但检测到栏里已有 `wick.progress` 时会藏起 Qt 托盘蜡烛，避免两套面板。`WICK_FORCE_TRAY=1` 可强制显示旧托盘。
 
 安装：把 `omarchy/wick.progress` 拷到 `~/.config/omarchy/plugins/`，在 `shell.json` 的 `bar.layout.right` 加上 `{"id": "wick.progress"}`，然后 `omarchy-restart-shell`。
 
