@@ -155,18 +155,21 @@ jobs:
       - name: Build Arch Linux package (Docker)
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          docker run --rm -v "$PWD":/workspace -w /workspace archlinux:latest bash -c "
+          ARCH_VERSION="${VERSION//-/_}"
+          docker run --rm -v "$PWD":/workspace archlinux:latest bash -c "
             pacman -Syu --noconfirm base-devel cmake ninja gcc qt6-base qt6-declarative qt6-svg openssl libsecret pkgconf git
             useradd -m builduser
-            chown -R builduser:builduser /workspace
+            cp -a /workspace /home/builduser/wick
+            chown -R builduser:builduser /home/builduser/wick
             su builduser -c '
+              cd /home/builduser/wick
               mkdir -p dist/stage-arch
               cp linux/packaging/PKGBUILD dist/stage-arch/
               cp linux/packaging/wick.service dist/stage-arch/
-              sed -i -E \"s/^pkgver=.*/pkgver=${VERSION}/\" dist/stage-arch/PKGBUILD
+              sed -i -E \"s/^pkgver=.*/pkgver=${ARCH_VERSION}/\" dist/stage-arch/PKGBUILD
               cd dist/stage-arch && makepkg -f --nodeps
-              cp *.pkg.tar.zst ../
             '
+            cp /home/builduser/wick/dist/stage-arch/*.pkg.tar.zst /workspace/dist/
           "
 
       - name: Upload Linux artifacts
