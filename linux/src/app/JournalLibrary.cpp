@@ -14,6 +14,7 @@
 #include <cmath>
 #include <filesystem>
 #include <set>
+#include <unordered_set>
 #include <variant>
 
 using wick::JournalCatalogLoader;
@@ -282,7 +283,7 @@ int JournalLibrary::tzOffsetSeconds() const
 
 QDate JournalLibrary::dateOf(TimePoint tp) const
 {
-    const QDateTime utc = QDateTime::fromSecsSinceEpoch(wick::unixFromTime(tp), QTimeZone::UTC);
+    const QDateTime utc = QDateTime::fromSecsSinceEpoch(wick::unixFromTime(tp), QTimeZone::utc());
     return utc.toLocalTime().date();
 }
 
