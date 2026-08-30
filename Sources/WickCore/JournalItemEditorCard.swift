@@ -266,11 +266,15 @@ struct JournalItemEditorCard: View, Equatable {
         Button {
             showReviewPopover = true
         } label: {
-            Text(L10n.string(.journalReview, language: settings.language))
-                .font(AppFont.paper(12, weight: .bold))
-                .foregroundStyle(palette.reviewCorrect.color.opacity(0.8))
-                .frame(width: 44, height: 44)
-                .rotationEffect(.degrees(-3))
+            HStack(spacing: 3) {
+                Image(systemName: "checkmark.seal")
+                    .font(AppFont.ui(9.5, weight: .bold))
+                Text(L10n.string(.journalReview, language: settings.language))
+                    .font(AppFont.paper(12, weight: .bold))
+            }
+            .foregroundStyle(palette.reviewCorrect.color.opacity(0.8))
+            .frame(width: 44, height: 44)
+            .rotationEffect(.degrees(-3))
         }
         .buttonStyle(.plain)
         .help(L10n.string(.journalReviewHelp, language: settings.language))

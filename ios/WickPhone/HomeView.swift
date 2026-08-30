@@ -545,10 +545,14 @@ private struct TodayJournalCard: View {
                                 Button {
                                     onReviewTap(item)
                                 } label: {
-                                    Text(L10n.string(.journalReview, language: language))
-                                        .font(PhoneFont.paper(10, weight: .bold))
-                                        .foregroundColor(PhoneTheme.cinnabar.opacity(0.85))
-                                        .rotationEffect(.degrees(-3))
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "checkmark.seal")
+                                            .font(PhoneFont.ui(9.5, weight: .bold))
+                                        Text(L10n.string(.journalReview, language: language))
+                                            .font(PhoneFont.paper(10, weight: .bold))
+                                    }
+                                    .foregroundColor(PhoneTheme.cinnabar.opacity(0.85))
+                                    .rotationEffect(.degrees(-3))
                                 }
                                 .buttonStyle(.plain)
                             }
