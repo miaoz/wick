@@ -419,5 +419,41 @@ Item {
                 }
             }
         }
+
+        // 21. SEAL.CHECKMARK
+        Shape {
+            visible: root.name === "seal.checkmark" || root.name === "checkmark.brush"
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: "transparent"
+                strokeWidth: 0
+                fillColor: root.color
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                PathSvg {
+                    path: "M 3.8,7.2 C 4.1,6.8 4.8,6.5 5.4,7.1 L 6.4,9.1 C 7.8,6.8 9.6,4.3 12.2,2.5 C 12.9,2.0 13.4,2.4 13.3,2.9 C 13.1,3.5 12.5,4.4 11.7,5.5 C 9.5,8.2 7.6,11.5 6.8,13.1 C 6.4,13.8 5.7,13.8 5.2,12.8 C 4.4,11.2 3.7,9.3 2.8,8.1 C 2.5,7.7 3.1,7.1 3.8,7.2 Z"
+                }
+            }
+        }
+
+        // 22. SEAL.XMARK
+        Shape {
+            visible: root.name === "seal.xmark" || root.name === "xmark.brush"
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: "transparent"
+                strokeWidth: 0
+                fillColor: root.color
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                PathSvg {
+                    path: "M 3.6,4.2 C 3.9,3.5 4.6,3.2 5.3,3.8 L 8.0,6.8 L 10.7,3.8 C 11.4,3.2 12.1,3.5 12.4,4.2 C 12.7,4.9 12.3,5.6 11.6,6.3 L 9.1,8.0 L 11.8,10.7 C 12.5,11.4 12.7,12.1 12.3,12.7 C 11.9,13.2 11.1,13.1 10.4,12.4 L 8.0,9.2 L 5.6,12.4 C 4.9,13.1 4.1,13.2 3.7,12.7 C 3.3,12.1 3.5,11.4 4.2,10.7 L 6.9,8.0 L 4.3,6.3 C 3.6,5.6 3.3,4.9 3.6,4.2 Z"
+                }
+            }
+        }
     }
 }

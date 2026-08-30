@@ -1,7 +1,8 @@
 import QtQuick
+import QtQuick.Shapes
 
 // White-character square seal (白文方章). Ports WickCalendarKit/JournalReviewBadge:
-// chipped silhouette, pooled ink, crisp ✓/✗. Ink follows the PnL convention.
+// chipped silhouette, pooled ink, calligraphic brush ✓/✗. Ink follows the PnL convention.
 Item {
     id: seal
     property var theme
@@ -118,13 +119,29 @@ Item {
         }
     }
 
-    Text {
+    Item {
         anchors.centerIn: parent
-        text: seal.verdict === "correct" ? "✓" : "✗"
-        color: seal.glyphColor
-        font.family: theme.fontPrint
-        font.pixelSize: Math.round(seal.size * 0.44)
-        font.weight: Font.Black
+        width: 32
+        height: 32
+        scale: (seal.size * 0.54) / 32.0
         z: 1
+
+        Shape {
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+                ShapePath {
+                    strokeColor: "transparent"
+                    strokeWidth: 0
+                    fillColor: seal.glyphColor
+                    capStyle: ShapePath.RoundCap
+                    joinStyle: ShapePath.RoundJoin
+                    PathSvg {
+                        path: seal.verdict === "correct"
+                            ? "M 7.5,14.5 C 8.2,13.5 9.6,13.0 10.8,14.2 L 12.8,18.2 C 15.5,13.5 19.2,8.6 24.5,5.0 C 25.8,4.1 26.8,4.8 26.6,5.8 C 26.2,7.0 25.0,8.8 23.4,11.0 C 19.0,16.5 15.2,23.0 13.6,26.2 C 12.8,27.5 11.4,27.5 10.4,25.6 C 8.8,22.4 7.4,18.6 5.6,16.2 C 5.0,15.4 6.2,14.2 7.5,14.5 Z"
+                            : "M 7.2,8.4 C 7.8,7.0 9.2,6.5 10.6,7.6 L 16.0,13.6 L 21.4,7.6 C 22.8,6.5 24.2,7.0 24.8,8.4 C 25.4,9.8 24.6,11.2 23.2,12.6 L 18.2,16.0 L 23.6,21.4 C 25.0,22.8 25.4,24.2 24.6,25.4 C 23.8,26.4 22.2,26.2 20.8,24.8 L 16.0,18.4 L 11.2,24.8 C 9.8,26.2 8.2,26.4 7.4,25.4 C 6.6,24.2 7.0,22.8 8.4,21.4 L 13.8,16.0 L 8.6,12.6 C 7.2,11.2 6.6,9.8 7.2,8.4 Z"
+                    }
+            }
+        }
     }
 }
