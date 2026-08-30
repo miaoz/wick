@@ -553,11 +553,13 @@ QString AppSettings::resolvedScheme() const
             return QStringLiteral("light");
         return QStringLiteral("dark");
     }
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     const auto hint = QGuiApplication::styleHints()
         ? QGuiApplication::styleHints()->colorScheme()
         : Qt::ColorScheme::Unknown;
     if (hint == Qt::ColorScheme::Light)
         return QStringLiteral("light");
+#endif
     return QStringLiteral("dark");
 }
 

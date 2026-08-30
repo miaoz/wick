@@ -28,7 +28,7 @@ namespace {
 QTimeZone shanghai()
 {
     const auto tz = QTimeZone(QByteArrayLiteral("Asia/Shanghai"));
-    return tz.isValid() ? tz : QTimeZone::fromSecondsAheadOfUtc(8 * 3600);
+    return tz.isValid() ? tz : QTimeZone(8 * 3600);
 }
 
 QPair<qint64, qint64> chinaDayRange(const QDate &day)
