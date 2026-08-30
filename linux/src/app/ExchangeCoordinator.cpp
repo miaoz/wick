@@ -2,6 +2,7 @@
 
 #include "JournalLibrary.h"
 #include "ExchangeClients.h"
+#include "FundingAttributor.h"
 #include "JournalModels.h"
 #include "PositionAggregator.h"
 #include "PositionEntryPlanner.h"
@@ -21,6 +22,8 @@
 using wick::BinanceFuturesClient;
 using wick::ExchangeHttpError;
 using wick::ExchangeVenue;
+using wick::FundingAttributor;
+using wick::FundingEvent;
 using wick::HyperliquidInfoClient;
 using wick::JournalDayKey;
 using wick::JournalExchangeBinding;
@@ -73,10 +76,16 @@ public slots:
     {
         try {
             std::vector<TradingFill> fills;
+            std::vector<FundingEvent> funding;
             if (venue == QLatin1String("hyperliquid")) {
                 HyperliquidInfoClient c;
                 c.user = blob.toStdString();
                 fills = c.fetchFills(fromMs, toMs);
+                try {
+                    funding = c.fetchFunding(fromMs, toMs);
+                } catch (...) {
+                    funding.clear();
+                }
             } else {
                 const auto json = nlohmann::json::parse(blob.toStdString());
                 if (venue == QLatin1String("okx")) {
@@ -85,19 +94,32 @@ public slots:
                     c.secret = json.value("secret", "");
                     c.passphrase = json.value("passphrase", "");
                     fills = c.fetchFills(fromMs, toMs);
+                    try {
+                        funding = c.fetchFunding(fromMs, toMs);
+                    } catch (...) {
+                        funding.clear();
+                    }
                 } else {
                     BinanceFuturesClient c;
                     c.apiKey = json.value("apiKey", "");
                     c.secret = json.value("secret", "");
                     fills = c.fetchFills(fromMs, toMs);
+                    try {
+                        funding = c.fetchFunding(fromMs, toMs);
+                    } catch (...) {
+                        funding.clear();
+                    }
                 }
             }
-            const auto positions = PositionAggregator::aggregate(fills);
+            auto positions = PositionAggregator::aggregate(fills);
+            positions = FundingAttributor::attach(positions, funding);
             TradingPositionSnapshot snap;
             snap.fetchedAt = toMs;
             snap.windowStart = fromMs;
             snap.positions = positions;
             snap.fills = fills;
+            snap.funding = funding;
+            snap.fundingBackfilled = true;
             snap.sourceVenue = venue.toStdString();
             const std::string snapshotJson = snap.encode();
             emit finished(journalId, QString(), QString::fromStdString(snapshotJson),

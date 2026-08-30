@@ -189,6 +189,66 @@ std::vector<TradingFill> BinanceFuturesClient::fetchFills(std::int64_t fromMs, s
     return result;
 }
 
+std::vector<FundingEvent> BinanceFuturesClient::fetchFunding(std::int64_t fromMs, std::int64_t toMs) const
+{
+    if (fromMs >= toMs)
+        return {};
+    ExchangeHttpRequest timeReq;
+    timeReq.url = QUrl(QString::fromStdString(baseURL + "/fapi/v1/time"));
+    const auto timeResp = transport(timeReq);
+    if (!timeResp.error.isEmpty())
+        throw ExchangeHttpError(ExchangeHttpError::network, timeResp.error.toStdString());
+    throwIfHttpFailed(timeResp.status, timeResp.body);
+    const auto timeDoc = parseJson(timeResp.body);
+    const std::int64_t serverTime = asInt64(timeDoc.object().value(QStringLiteral("serverTime")));
+    const std::int64_t offset = serverTime - nowMs();
+
+    std::vector<FundingEvent> result;
+    std::int64_t chunkStart = fromMs;
+    while (chunkStart < toMs) {
+        const std::int64_t chunkEnd = std::min(toMs, chunkStart + chunkMs);
+        std::int64_t cursor = chunkStart;
+        int pages = 0;
+        while (cursor < chunkEnd && pages < 200) {
+            ++pages;
+            const std::string query =
+                "incomeType=FUNDING_FEE&startTime=" + std::to_string(cursor)
+                + "&endTime=" + std::to_string(chunkEnd)
+                + "&limit=" + std::to_string(pageLimit)
+                + "&recvWindow=5000"
+                + "&timestamp=" + std::to_string(nowMs() + offset);
+            const std::string signature = sign(query, secret);
+            ExchangeHttpRequest req;
+            req.url = QUrl(QString::fromStdString(baseURL + "/fapi/v1/income?" + query
+                                                  + "&signature=" + signature));
+            req.headers.append({QByteArray("X-MBX-APIKEY"), QByteArray::fromStdString(apiKey)});
+            const auto resp = transport(req);
+            if (!resp.error.isEmpty())
+                throw ExchangeHttpError(ExchangeHttpError::network, resp.error.toStdString());
+            throwIfHttpFailed(resp.status, resp.body);
+            const auto doc = parseJson(resp.body);
+            if (!doc.isArray())
+                throw ExchangeHttpError(ExchangeHttpError::malformed, "binance income not array");
+            const auto arr = doc.array();
+            std::int64_t lastTime = cursor;
+            for (const auto &v : arr) {
+                const auto o = v.toObject();
+                FundingEvent fe;
+                fe.symbol = o.value(QStringLiteral("symbol")).toString().toStdString();
+                fe.amount = asNumber(o.value(QStringLiteral("income")));
+                fe.time = asInt64(o.value(QStringLiteral("time")));
+                result.push_back(fe);
+                lastTime = std::max(lastTime, fe.time);
+            }
+            if (arr.size() < pageLimit)
+                break;
+            cursor = std::max(lastTime + 1, cursor + 1);
+        }
+        chunkStart = chunkEnd + 1;
+    }
+    return result;
+}
+
 std::string OKXSwapClient::symbolFromInstID(std::string instID)
 {
     std::vector<std::string> parts;
@@ -316,6 +376,64 @@ std::vector<TradingFill> OKXSwapClient::fetchFills(std::int64_t fromMs, std::int
     return results;
 }
 
+std::vector<FundingEvent> OKXSwapClient::fetchFunding(std::int64_t fromMs, std::int64_t toMs) const
+{
+    if (fromMs >= toMs)
+        return {};
+    std::vector<FundingEvent> results;
+    std::string after;
+    int pages = 0;
+    while (pages < 200) {
+        ++pages;
+        std::string query = "instType=SWAP&type=8&begin=" + std::to_string(fromMs)
+            + "&end=" + std::to_string(toMs) + "&limit=" + std::to_string(pageLimit);
+        if (!after.empty())
+            query += "&after=" + after;
+        const std::string path = "/api/v5/account/bills-history?" + query;
+        const std::string ts = timestampString(nowMs());
+        const std::string prehash = ts + "GET" + path;
+        ExchangeHttpRequest req;
+        req.url = QUrl(QString::fromStdString(baseURL + path));
+        req.headers.append({QByteArray("OK-ACCESS-KEY"), QByteArray::fromStdString(apiKey)});
+        req.headers.append({QByteArray("OK-ACCESS-SIGN"), QByteArray::fromStdString(sign(prehash, secret))});
+        req.headers.append({QByteArray("OK-ACCESS-TIMESTAMP"), QByteArray::fromStdString(ts)});
+        req.headers.append({QByteArray("OK-ACCESS-PASSPHRASE"), QByteArray::fromStdString(passphrase)});
+        const auto resp = transport(req);
+        if (!resp.error.isEmpty())
+            throw ExchangeHttpError(ExchangeHttpError::network, resp.error.toStdString());
+        throwIfHttpFailed(resp.status, resp.body);
+        const auto doc = parseJson(resp.body);
+        const auto obj = doc.object();
+        if (obj.value(QStringLiteral("code")).toString() != QLatin1String("0")) {
+            const QString msg = obj.value(QStringLiteral("msg")).toString();
+            throw ExchangeHttpError(ExchangeHttpError::invalidCredentials, msg.toStdString());
+        }
+        const auto arr = obj.value(QStringLiteral("data")).toArray();
+        QString lastBill;
+        bool crossedFloor = false;
+        for (const auto &v : arr) {
+            const auto o = v.toObject();
+            FundingEvent fe;
+            const QString billId = o.value(QStringLiteral("billId")).toString();
+            fe.symbol = symbolFromInstID(o.value(QStringLiteral("instId")).toString().toStdString());
+            const double pnl = asNumber(o.value(QStringLiteral("pnl")));
+            fe.amount = (pnl != 0.0) ? pnl : asNumber(o.value(QStringLiteral("fee")));
+            fe.time = asInt64(o.value(QStringLiteral("ts")));
+            if (fe.time >= fromMs && fe.time < toMs)
+                results.push_back(fe);
+            if (fe.time < fromMs)
+                crossedFloor = true;
+            lastBill = billId;
+        }
+        if (crossedFloor || arr.size() < pageLimit || lastBill.isEmpty())
+            break;
+        after = lastBill.toStdString();
+        if (minPageIntervalMs > 0)
+            QThread::msleep(static_cast<unsigned long>(minPageIntervalMs));
+    }
+    return results;
+}
+
 std::optional<std::string> HyperliquidInfoClient::normalizedAddress(const std::string &raw)
 {
     static const std::regex re("^0x[0-9a-fA-F]{40}$");
@@ -398,6 +516,64 @@ std::vector<TradingFill> HyperliquidInfoClient::fetchFills(std::int64_t fromMs, 
         cursor = next;
     }
     return TradingFill::clipped(results, fromMs, toMs);
+}
+
+std::vector<FundingEvent> HyperliquidInfoClient::fetchFunding(std::int64_t fromMs, std::int64_t toMs) const
+{
+    if (fromMs >= toMs)
+        return {};
+    std::vector<FundingEvent> results;
+    std::int64_t cursor = fromMs;
+    int pages = 0;
+    while (cursor < toMs && pages < 50) {
+        ++pages;
+        QJsonObject body;
+        body.insert(QStringLiteral("type"), QStringLiteral("userFunding"));
+        body.insert(QStringLiteral("user"), QString::fromStdString(user));
+        body.insert(QStringLiteral("startTime"), static_cast<double>(cursor));
+        body.insert(QStringLiteral("endTime"), static_cast<double>(toMs));
+        ExchangeHttpRequest req;
+        req.method = QStringLiteral("POST");
+        req.url = QUrl(QString::fromStdString(baseURL + "/info"));
+        req.headers.append({QByteArray("Content-Type"), QByteArray("application/json")});
+        req.body = QJsonDocument(body).toJson(QJsonDocument::Compact);
+        const auto resp = transport(req);
+        if (!resp.error.isEmpty())
+            throw ExchangeHttpError(ExchangeHttpError::network, resp.error.toStdString());
+        if (resp.status == 429)
+            throw ExchangeHttpError(ExchangeHttpError::rateLimited, "rate limited", 429);
+        throwIfHttpFailed(resp.status, resp.body);
+        const auto doc = parseJson(resp.body);
+        if (!doc.isArray())
+            throw ExchangeHttpError(ExchangeHttpError::malformed, "hl funding not array");
+        const auto arr = doc.array();
+        std::int64_t lastTime = cursor;
+        for (const auto &v : arr) {
+            const auto o = v.toObject();
+            const auto delta = o.value(QStringLiteral("delta")).toObject();
+            const QString coin = delta.value(QStringLiteral("coin")).toString().trimmed();
+            if (coin.isEmpty())
+                continue;
+            FundingEvent fe;
+            fe.symbol = coin.toStdString();
+            fe.amount = delta.value(QStringLiteral("usdc")).toString().trimmed().toDouble();
+            fe.time = asInt64(o.value(QStringLiteral("time")));
+            results.push_back(fe);
+            lastTime = std::max(lastTime, fe.time);
+        }
+        if (arr.size() < 500 || arr.isEmpty())
+            break;
+        const std::int64_t next = lastTime + 1;
+        if (next <= cursor)
+            break;
+        cursor = next;
+    }
+    std::vector<FundingEvent> filtered;
+    for (const auto &f : results) {
+        if (f.time >= fromMs && f.time < toMs)
+            filtered.push_back(f);
+    }
+    return filtered;
 }
 
 } // namespace wick

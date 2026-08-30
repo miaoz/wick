@@ -1,4 +1,5 @@
 #include "Crypto.h"
+#include "FundingAttributor.h"
 #include "PositionAggregator.h"
 #include "PositionEntryPlanner.h"
 #include "SymbolTagMatcher.h"
@@ -83,6 +84,24 @@ int main()
     CHECK(decoded->positions[0].symbol == "BTCUSDT");
     CHECK(decoded->positions[0].realizedPnl == 10);
     CHECK(decoded->sourceVenue == "binance");
+
+    // FundingAttributor tests
+    TradingPosition posA;
+    posA.id = "A";
+    posA.symbol = "BTCUSDT";
+    posA.openTime = 1000;
+    posA.closeTime = 5000;
+
+    std::vector<FundingEvent> fundingEvents = {
+        {"BTCUSDT", -1.0, 2000},
+        {"BTCUSDT", -0.5, 4000},
+        {"BTCUSDT", -9.0, 9000} // after close — dropped
+    };
+
+    auto attached = FundingAttributor::attach({posA}, fundingEvents);
+    CHECK(attached.size() == 1);
+    CHECK(std::abs(attached[0].fundingPnl - (-1.5)) < 1e-9);
+    CHECK(std::abs(attached[0].netPnl() - (-1.5)) < 1e-9);
 
     std::cout << g_passes << " passed, " << g_fails << " failed\n";
     return g_fails == 0 ? 0 : 1;

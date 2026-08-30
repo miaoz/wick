@@ -51,7 +51,7 @@ QtObject {
 
     readonly property string fontUi: fontOverride.length > 0 ? fontOverride : "Inter, Noto Sans SC"
     readonly property string fontPrint: fontOverride.length > 0 ? fontOverride : "Noto Serif SC"
-    readonly property string fontMono: "JetBrains Mono"
+    readonly property string fontMono: fontOverride.length > 0 ? fontOverride : "JetBrains Mono"
 
     function _hex(n) { return "#" + n.toString(16).padStart(6, "0") }
 

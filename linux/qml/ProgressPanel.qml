@@ -26,6 +26,12 @@ Rectangle {
     readonly property color emberHi: "#FFC882"
     readonly property color glow: Qt.rgba(245 / 255, 168 / 255, 60 / 255, 0.5)
 
+    readonly property var settings: typeof appSettings !== "undefined" ? appSettings : null
+    readonly property string fontOverride: settings ? settings.journalFontName : ""
+    readonly property string fontUi: fontOverride.length > 0 ? fontOverride : "Noto Sans SC"
+    readonly property string fontPrint: fontOverride.length > 0 ? fontOverride : "Noto Serif SC"
+    readonly property string fontMono: fontOverride.length > 0 ? fontOverride : "JetBrains Mono"
+
     component BurnStrip: Item {
         id: strip
         property real elapsed: 0
@@ -106,7 +112,7 @@ Rectangle {
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
                     font.letterSpacing: 1.3
-                    font.family: "Noto Sans SC"
+                    font.family: paper.fontUi
                 }
 
                 Item { Layout.fillWidth: true }
@@ -118,13 +124,14 @@ Rectangle {
                         color: paper.ink1
                         font.pixelSize: 32
                         font.weight: Font.Black
-                        font.family: "Inter"
+                        font.family: paper.fontUi
                     }
                     Text {
                         text: "%"
                         color: paper.ink2
                         font.pixelSize: 15
                         font.weight: Font.DemiBold
+                        font.family: paper.fontUi
                         anchors.baseline: parent.children[0].baseline
                     }
                 }
@@ -144,14 +151,14 @@ Rectangle {
                     text: "00:00"
                     color: paper.ink3
                     font.pixelSize: 10
-                    font.family: "JetBrains Mono"
+                    font.family: paper.fontMono
                 }
                 Item { Layout.fillWidth: true }
                 Text {
                     text: "24:00 终"
                     color: paper.ink3
                     font.pixelSize: 10
-                    font.family: "JetBrains Mono"
+                    font.family: paper.fontMono
                 }
             }
         }
@@ -172,7 +179,7 @@ Rectangle {
                     color: paper.ink2
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
-                    font.family: "Noto Sans SC"
+                    font.family: paper.fontUi
                     Layout.preferredWidth: 30
                 }
                 BurnStrip {
@@ -186,7 +193,7 @@ Rectangle {
                     text: timeProgress.weekPercentText
                     color: paper.ink2
                     font.pixelSize: 11
-                    font.family: "JetBrains Mono"
+                    font.family: paper.fontMono
                     horizontalAlignment: Text.AlignRight
                     Layout.preferredWidth: 44
                 }
@@ -200,7 +207,7 @@ Rectangle {
                     color: paper.ink2
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
-                    font.family: "Noto Sans SC"
+                    font.family: paper.fontUi
                     Layout.preferredWidth: 30
                 }
                 BurnStrip {
@@ -214,7 +221,7 @@ Rectangle {
                     text: timeProgress.monthPercentText
                     color: paper.ink2
                     font.pixelSize: 11
-                    font.family: "JetBrains Mono"
+                    font.family: paper.fontMono
                     horizontalAlignment: Text.AlignRight
                     Layout.preferredWidth: 44
                 }
@@ -228,7 +235,7 @@ Rectangle {
                     color: paper.ink2
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
-                    font.family: "Noto Sans SC"
+                    font.family: paper.fontUi
                     Layout.preferredWidth: 30
                 }
                 BurnStrip {
@@ -242,7 +249,7 @@ Rectangle {
                     text: timeProgress.yearPercentText
                     color: paper.ink2
                     font.pixelSize: 11
-                    font.family: "JetBrains Mono"
+                    font.family: paper.fontMono
                     horizontalAlignment: Text.AlignRight
                     Layout.preferredWidth: 44
                 }
@@ -260,8 +267,9 @@ Rectangle {
                 text: "一寸光阴一寸金"
                 color: paper.ink3
                 font.pixelSize: 11
-                font.family: "Noto Serif SC"
+                font.family: paper.fontPrint
             }
+        }
         }
     }
 }

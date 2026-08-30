@@ -54,6 +54,7 @@ struct BinanceFuturesClient {
     int pageLimit = 1000;
 
     std::vector<TradingFill> fetchFills(std::int64_t fromMs, std::int64_t toMs) const;
+    std::vector<FundingEvent> fetchFunding(std::int64_t fromMs, std::int64_t toMs) const;
     static std::string sign(const std::string &query, const std::string &secret);
 };
 
@@ -67,6 +68,7 @@ struct OKXSwapClient {
     int minPageIntervalMs = 220;
 
     std::vector<TradingFill> fetchFills(std::int64_t fromMs, std::int64_t toMs) const;
+    std::vector<FundingEvent> fetchFunding(std::int64_t fromMs, std::int64_t toMs) const;
     static std::string symbolFromInstID(std::string instID);
     static std::string timestampString(std::int64_t epochMs);
     static std::string sign(const std::string &prehash, const std::string &secret);
@@ -80,6 +82,7 @@ struct HyperliquidInfoClient {
 
     static std::optional<std::string> normalizedAddress(const std::string &raw);
     std::vector<TradingFill> fetchFills(std::int64_t fromMs, std::int64_t toMs) const;
+    std::vector<FundingEvent> fetchFunding(std::int64_t fromMs, std::int64_t toMs) const;
 };
 
 } // namespace wick

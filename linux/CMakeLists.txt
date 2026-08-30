@@ -65,6 +65,7 @@ add_library(wick_core STATIC
     src/trading/TradingModels.cpp
     src/trading/SymbolTagMatcher.cpp
     src/trading/PositionAggregator.cpp
+    src/trading/FundingAttributor.cpp
     src/trading/PositionEntryPlanner.cpp
     src/sync/FakeSyncBackend.cpp
     src/sync/JournalDayMerge.cpp

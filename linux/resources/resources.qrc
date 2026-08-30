@@ -11,6 +11,7 @@
     <file alias="qml/journal/WickIcon.qml">../qml/journal/WickIcon.qml</file>
     <file alias="qml/journal/Inspector.qml">../qml/journal/Inspector.qml</file>
     <file alias="qml/settings/Theme.qml">../qml/journal/Theme.qml</file>
+    <file alias="qml/settings/WickIcon.qml">../qml/journal/WickIcon.qml</file>
     <file alias="qml/settings/SettingsWindow.qml">../qml/settings/SettingsWindow.qml</file>
     <file>candle.svg</file>
   </qresource>

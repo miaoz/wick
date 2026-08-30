@@ -826,14 +826,20 @@ Rectangle {
 
                     Button {
                         text: "取消"
+                        font.family: theme.fontUi
+                        font.pixelSize: 12
                         onClicked: deleteDayConfirmDialog.close()
                     }
 
                     Button {
                         text: "删除"
+                        font.family: theme.fontUi
+                        font.pixelSize: 12
                         contentItem: Text {
                             text: "删除"
                             color: theme.cinnabar
+                            font.family: theme.fontUi
+                            font.pixelSize: 12
                             font.bold: true
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -898,14 +904,20 @@ Rectangle {
 
                     Button {
                         text: "取消"
+                        font.family: theme.fontUi
+                        font.pixelSize: 12
                         onClicked: deleteItemConfirmDialog.close()
                     }
 
                     Button {
                         text: "删除"
+                        font.family: theme.fontUi
+                        font.pixelSize: 12
                         contentItem: Text {
                             text: "删除"
                             color: theme.cinnabar
+                            font.family: theme.fontUi
+                            font.pixelSize: 12
                             font.bold: true
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter

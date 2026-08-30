@@ -379,12 +379,16 @@ Rectangle {
                     Item { Layout.fillWidth: true }
                     Button {
                         text: "取消"
+                        font.family: theme.fontUi
+                        font.pixelSize: 12
                         onClicked: journalDialog.visible = false
                     }
                     Button {
                         text: journalDialog.mode === "rename" ? "保存"
                               : journalDialog.mode === "delete" ? "删除"
                               : "创建"
+                        font.family: theme.fontUi
+                        font.pixelSize: 12
                         onClicked: root.commitJournalDialog()
                     }
                 }

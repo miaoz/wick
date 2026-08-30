@@ -277,5 +277,41 @@ Item {
                 }
             }
         }
+
+        // 13. MAGNIFYINGGLASS
+        Shape {
+            visible: root.name === "magnifyingglass"
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: root.color
+                strokeWidth: 1.3
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                PathSvg {
+                    path: "M 10.5,6.5 A 4.0,4.0 0 1,1 2.5,6.5 A 4.0,4.0 0 1,1 10.5,6.5 Z M 9.5,9.5 L 13.8,13.8"
+                }
+            }
+        }
+
+        // 14. CHECKMARK
+        Shape {
+            visible: root.name === "checkmark"
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: root.color
+                strokeWidth: 1.4
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                PathSvg {
+                    path: "M 3.2,8.0 L 6.5,11.3 L 12.8,4.7"
+                }
+            }
+        }
     }
 }
