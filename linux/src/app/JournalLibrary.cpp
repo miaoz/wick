@@ -117,7 +117,6 @@ void JournalLibrary::bootstrap()
     emit readOnlyChanged();
     emit bannersChanged();
     emit savedStateChanged();
-    emit journalContentChanged();
 }
 
 void JournalLibrary::seedDefaultJournal()
@@ -1388,6 +1387,7 @@ bool JournalLibrary::deleteJournal(const QString &id)
         emit bannersChanged();
     }
     rebuildAfterStructuralChange();
+    emit journalDeletedLocally(*parsed);
     return true;
 }
 
@@ -2065,7 +2065,6 @@ std::string JournalLibrary::applySyncedJournalName(const std::string &name, cons
     info.updatedAt = nowTp();
     writeCatalog();
     emit journalsChanged();
-    emit journalContentChanged();
     return info.name;
 }
 

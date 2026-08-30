@@ -67,6 +67,8 @@ final class JournalStore: ObservableObject {
     /// Fires after a remote day entry is successfully applied. Editors rebase
     /// their clean drafts onto the fresh store value when the day matches.
     let remoteEntryDidApply = PassthroughSubject<JournalRemoteApply, Never>()
+    /// Fires after a journal is explicitly deleted by the user on this device.
+    let journalDidDeleteLocally = PassthroughSubject<UUID, Never>()
     @Published var selection: JournalSelection?
     @Published var selectedTagFilter: String?
     @Published var searchText: String = ""

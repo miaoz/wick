@@ -20,6 +20,7 @@ class JournalSyncCoordinator : public QObject
     Q_OBJECT
     Q_PROPERTY(bool fakeSyncAvailable READ fakeSyncAvailable CONSTANT)
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
+    Q_PROPERTY(bool syncing READ isSyncing NOTIFY syncingChanged)
     Q_PROPERTY(QString accountEmail READ accountEmail NOTIFY connectedChanged)
     Q_PROPERTY(QString statusText READ statusText NOTIFY statusChanged)
 
@@ -29,6 +30,7 @@ public:
 
     bool fakeSyncAvailable() const { return m_fakeAvailable; }
     bool connected() const { return m_connected; }
+    bool isSyncing() const { return m_syncing || m_authorizing; }
     QString accountEmail() const { return m_accountEmail; }
     QString statusText() const { return m_statusText; }
 
@@ -41,6 +43,7 @@ public:
 
 signals:
     void connectedChanged();
+    void syncingChanged();
     void statusChanged();
 
 private:
@@ -53,6 +56,7 @@ private:
     AppSettings *m_settings = nullptr;
     bool m_fakeAvailable = false;
     bool m_authorizing = false;
+    bool m_syncing = false;
     bool m_connected = false;
     QString m_accountEmail;
     QString m_statusText;

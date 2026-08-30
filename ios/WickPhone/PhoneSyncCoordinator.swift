@@ -29,7 +29,6 @@ final class PhoneSyncCoordinator: ObservableObject {
     /// Journals whose remote deletion (peer tombstone) this device applied -
     /// keeps remote deletions from being re-queued as local ones.
     private var remotelyDeletedJournalIDs: Set<UUID>
-    private var knownLocalJournalIDs: Set<UUID>
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
@@ -49,7 +48,6 @@ final class PhoneSyncCoordinator: ObservableObject {
         remotelyDeletedJournalIDs = Set(
             (defaults.stringArray(forKey: Self.remotelyDeletedJournalsKey) ?? []).compactMap(UUID.init)
         )
-        knownLocalJournalIDs = Set(PhoneJournalStore.shared.journals.map(\.id))
 
         let backend = DropboxSyncBackend()
         backend.authSession = { url, scheme in
@@ -96,17 +94,21 @@ final class PhoneSyncCoordinator: ObservableObject {
             .sink { [weak self] _ in self?.engine.syncNow() }
             .store(in: &cancellables)
 
+        // Explicit local deletion: user confirmed delete in UI. Propagate
+        // to remote (tombstone + folder cleanup) and prevent auto-import.
+        PhoneJournalStore.shared.journalDidDeleteLocally
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] id in self?.handleLocalJournalDeletion(id) }
+            .store(in: &cancellables)
+
         PhoneJournalStore.shared.$journals
             .dropFirst()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in
-                self?.trackLocalJournalDeletions($0)
+            .sink { [weak self] _ in
                 // Renames ride the next sync cycle (debounced; no-op otherwise).
                 self?.engine.requestSync()
             }
             .store(in: &cancellables)
-
-        queueLegacyLocalDeletions()
 
         if syncEnabled {
             engine.start()
@@ -167,21 +169,14 @@ final class PhoneSyncCoordinator: ObservableObject {
         }
     }
 
-    private func trackLocalJournalDeletions(_ infos: [JournalInfo]) {
-        let current = Set(infos.map(\.id))
-        let removed = knownLocalJournalIDs.subtracting(current)
-        if !removed.isEmpty {
-            ignoredRemoteJournalIDs.formUnion(removed)
-            persistIgnoredJournals()
-            // Local deletions propagate to the remote - except journals
-            // removed BECAUSE a peer tombstoned them.
-            if syncEnabled, backend.isAuthorized {
-                for id in removed where !remotelyDeletedJournalIDs.contains(id) {
-                    engine.queueJournalDeletion(id)
-                }
+    private func handleLocalJournalDeletion(_ id: UUID) {
+        ignoredRemoteJournalIDs.insert(id)
+        persistIgnoredJournals()
+        if syncEnabled, backend.isAuthorized {
+            if !remotelyDeletedJournalIDs.contains(id) {
+                engine.queueJournalDeletion(id)
             }
         }
-        knownLocalJournalIDs = current
     }
 
     /// Applies journal deletions made on another device: record the UUID,
@@ -196,8 +191,8 @@ final class PhoneSyncCoordinator: ObservableObject {
                 acknowledged.append(id)
                 continue
             }
-            // Mark BEFORE the catalog mutation so `$journals` tracking cannot
-            // re-queue this peer deletion as a local one.
+            // Mark BEFORE the catalog mutation so deletion cannot re-trigger
+            // as a local one.
             remotelyDeletedJournalIDs.insert(id)
             ignoredRemoteJournalIDs.insert(id)
             switch PhoneJournalStore.shared.deleteJournalFromRemote(id: id) {
@@ -215,16 +210,6 @@ final class PhoneSyncCoordinator: ObservableObject {
                 forKey: Self.remotelyDeletedJournalsKey
             )
             for id in acknowledged { engine.acknowledgeRemoteJournalDeletion(id) }
-        }
-    }
-
-    /// Journals deleted locally before deletion propagation existed keep
-    /// resurfacing as "discovered"; queue the ones with sync-state remnants.
-    private func queueLegacyLocalDeletions() {
-        guard syncEnabled, backend.isAuthorized else { return }
-        for id in ignoredRemoteJournalIDs
-        where !remotelyDeletedJournalIDs.contains(id) && stateStore.stateExists(for: id) {
-            engine.queueJournalDeletion(id)
         }
     }
 

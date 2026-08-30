@@ -32,8 +32,6 @@ final class SyncCoordinator: ObservableObject {
     /// applied - distinguishes "a remote deletion arrived" from "the user
     /// deleted a journal locally, propagate it to the remote".
     private var remotelyDeletedJournalIDs: Set<UUID>
-    /// Previous local catalog, used to detect deletions.
-    private var knownLocalJournalIDs: Set<UUID>
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -60,7 +58,6 @@ final class SyncCoordinator: ObservableObject {
             (UserDefaults.standard.stringArray(forKey: Self.remotelyDeletedJournalsKey) ?? [])
                 .compactMap(UUID.init)
         )
-        knownLocalJournalIDs = Set(JournalStore.shared.journals.map(\.id))
 
         // Forward engine state to SwiftUI observers of the coordinator.
         engine.objectWillChange
@@ -80,10 +77,10 @@ final class SyncCoordinator: ObservableObject {
             .sink { [weak self] in self?.applyRemoteJournalDeletions($0) }
             .store(in: &cancellables)
 
-        // Locally deleting a journal must not bring it back via auto-import;
-        // it must also propagate to the remote (tombstone + folder cleanup).
-        JournalStore.shared.$journals
-            .sink { [weak self] in self?.trackLocalJournalDeletions($0) }
+        // Explicit local deletion: user confirmed delete in UI. Propagate
+        // to remote (tombstone + folder cleanup) and prevent auto-import.
+        JournalStore.shared.journalDidDeleteLocally
+            .sink { [weak self] id in self?.handleLocalJournalDeletion(id) }
             .store(in: &cancellables)
 
         // Edit-driven sync: engine coalesces these into one cycle 15 s after
@@ -123,13 +120,6 @@ final class SyncCoordinator: ObservableObject {
             Task { @MainActor in self?.engine.requestSync() }
         }
 
-        // Remediation for journals deleted before deletion propagation
-        // existed: their folders still sit on Dropbox and every device keeps
-        // prompting "discovered journal". Queue the ones this device deleted
-        // (they have sync-state remnants); the tombstone then clears the
-        // prompt everywhere. Idempotent - cleared entries never re-queue.
-        queueLegacyLocalDeletions()
-
         if AppSettings.shared.syncEnabled {
             startIfPossible()
         }
@@ -140,7 +130,6 @@ final class SyncCoordinator: ObservableObject {
     func startIfPossible() {
         guard AppSettings.shared.syncEnabled, !isRunning else { return }
         engine.start()
-        queueLegacyLocalDeletions()
         isRunning = true
     }
 
@@ -212,22 +201,14 @@ final class SyncCoordinator: ObservableObject {
         }
     }
 
-    private func trackLocalJournalDeletions(_ infos: [JournalInfo]) {
-        let current = Set(infos.map(\.id))
-        let removed = knownLocalJournalIDs.subtracting(current)
-        if !removed.isEmpty {
-            ignoredRemoteJournalIDs.formUnion(removed)
-            persistIgnoredJournals()
-            // The deletion propagates to the remote (tombstone + folder
-            // cleanup) - except journals removed BECAUSE a peer tombstoned
-            // them; those are already gone remotely.
-            if AppSettings.shared.syncEnabled, backend.isAuthorized {
-                for id in removed where !remotelyDeletedJournalIDs.contains(id) {
-                    engine.queueJournalDeletion(id)
-                }
+    private func handleLocalJournalDeletion(_ id: UUID) {
+        ignoredRemoteJournalIDs.insert(id)
+        persistIgnoredJournals()
+        if AppSettings.shared.syncEnabled, backend.isAuthorized {
+            if !remotelyDeletedJournalIDs.contains(id) {
+                engine.queueJournalDeletion(id)
             }
         }
-        knownLocalJournalIDs = current
     }
 
     /// Applies journal deletions made on another device: record the UUID,
@@ -246,8 +227,8 @@ final class SyncCoordinator: ObservableObject {
                 acknowledged.append(id)
                 continue
             }
-            // Mark BEFORE the catalog mutation so `$journals` tracking cannot
-            // re-queue this peer deletion as a local one.
+            // Mark BEFORE the catalog mutation so deletion cannot re-trigger
+            // as a local one.
             remotelyDeletedJournalIDs.insert(id)
             ignoredRemoteJournalIDs.insert(id)
             switch JournalStore.shared.deleteJournalFromRemote(id: id) {
@@ -271,18 +252,6 @@ final class SyncCoordinator: ObservableObject {
         }
         if !pendingRetry.isEmpty {
             NSLog("Wick sync: remote journal deletions pending retry: %@", pendingRetry.map(\.uuidString))
-        }
-    }
-
-    /// Journals deleted locally before deletion propagation existed have no
-    /// tombstone on the remote, so they resurface as "discovered" forever.
-    /// Queue the ones this device has sync-state remnants of; the engine
-    /// ignores journals that never had remote presence.
-    private func queueLegacyLocalDeletions() {
-        guard AppSettings.shared.syncEnabled, backend.isAuthorized else { return }
-        for id in ignoredRemoteJournalIDs
-        where !remotelyDeletedJournalIDs.contains(id) && stateStore.stateExists(for: id) {
-            engine.queueJournalDeletion(id)
         }
     }
 

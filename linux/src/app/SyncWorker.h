@@ -33,18 +33,22 @@ public slots:
     void startEngine();
     void syncActive();
     void pullAll();
+    void queueJournalDeletion(const QString &id);
     void signOut();
 
 signals:
     void statusTextChanged(const QString &text);
     void authorizedChanged(bool connected, const QString &email);
+    void syncingChanged(bool syncing);
 
 private:
     void emitStatus();
+    void pullAllInternal();
     int autoImport();
 
     JournalLibrary *m_library = nullptr;
     bool m_fake = false;
+    bool m_isSyncing = false;
     std::string m_deviceId;
     std::filesystem::path m_stateDir;
     std::unique_ptr<LocalSourceProxy> m_proxy;

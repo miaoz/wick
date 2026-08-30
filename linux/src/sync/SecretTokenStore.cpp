@@ -137,15 +137,15 @@ std::optional<std::string> SecretTokenStore::load() const {
                                                   nullptr);
     if (error) {
         g_error_free(error);
-        return std::nullopt;
+        return loadDev(service_, account_);
     }
     if (!password)
-        return std::nullopt;
+        return loadDev(service_, account_);
     std::string out(password);
     secret_password_free(password);
     return out;
 #else
-    return std::nullopt;
+    return loadDev(service_, account_);
 #endif
 }
 
@@ -164,23 +164,21 @@ void SecretTokenStore::save(const std::string& token) {
                                                    "account", account_.c_str(),
                                                    nullptr);
     if (error) {
-        std::string msg = error->message ? error->message : "libsecret error";
         g_error_free(error);
-        throwCannotStore(msg);
+        saveDev(service_, account_, token);
+        return;
     }
-    if (!ok)
-        throwCannotStore("libsecret store returned false");
+    if (!ok) {
+        saveDev(service_, account_, token);
+        return;
+    }
 #else
-    throwCannotStore("libsecret-1 was not found at compile time");
+    saveDev(service_, account_, token);
 #endif
 }
 
 void SecretTokenStore::clear() {
-    if (devSecretsEnabled()) {
-        clearDev(service_, account_);
-        return;
-    }
-
+    clearDev(service_, account_);
 #ifdef WICK_HAVE_LIBSECRET
     GError* error = nullptr;
     secret_password_clear_sync(&schema(), nullptr, &error,

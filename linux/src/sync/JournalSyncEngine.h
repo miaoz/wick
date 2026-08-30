@@ -73,6 +73,7 @@ public:
 
     void queueJournalDeletion(const Uuid& journalID);
     void acknowledgeRemoteJournalDeletion(const Uuid& journalID);
+    void clearJournalTombstone(const Uuid& journalID);
     bool isJournalTombstoned(const Uuid& journalID) const;
     void resetSyncState(const Uuid& journalID);
     void dismissConflict(const Uuid& id);

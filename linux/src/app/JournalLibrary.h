@@ -210,6 +210,7 @@ signals:
     void bannersChanged();
     void savedStateChanged();
     void layoutChanged();
+    void journalDeletedLocally(const wick::Uuid &id);
 
 private:
     wick::TimePoint nowTp() const;

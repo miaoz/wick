@@ -482,7 +482,8 @@ DropboxSyncBackend::HttpResult DropboxSyncBackend::perform(
     }
 
     out.status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    out.body = reply->readAll().toStdString();
+    if (reply->isOpen())
+        out.body = reply->readAll().toStdString();
     out.dropboxApiResult = headerValue(reply, "Dropbox-API-Result");
     const QByteArray retry = reply->rawHeader("Retry-After");
     if (!retry.isEmpty()) {

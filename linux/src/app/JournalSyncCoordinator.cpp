@@ -45,6 +45,13 @@ JournalSyncCoordinator::JournalSyncCoordinator(JournalLibrary *library,
             if (connected())
                 requestSync();
         });
+        connect(m_library, &JournalLibrary::journalDeletedLocally, this, [this](const wick::Uuid &id) {
+            if (m_worker && connected()) {
+                const QString str = QString::fromStdString(id.toString());
+                QMetaObject::invokeMethod(m_worker, "queueJournalDeletion", Qt::QueuedConnection,
+                                          Q_ARG(QString, str));
+            }
+        });
     }
     if (m_settings) {
         connect(m_settings, &AppSettings::syncChanged, this, [this]() {
@@ -65,6 +72,12 @@ JournalSyncCoordinator::JournalSyncCoordinator(JournalLibrary *library,
     connect(m_worker, &SyncWorker::statusTextChanged, this, [this](const QString &text) {
         m_statusText = text;
         emit statusChanged();
+    });
+    connect(m_worker, &SyncWorker::syncingChanged, this, [this](bool s) {
+        if (m_syncing != s) {
+            m_syncing = s;
+            emit syncingChanged();
+        }
     });
     connect(m_worker, &SyncWorker::authorizedChanged, this, [this](bool ok, const QString &email) {
         m_connected = ok;
@@ -128,6 +141,7 @@ void JournalSyncCoordinator::connectDropbox()
     if (m_authorizing)
         return;
     m_authorizing = true;
+    emit syncingChanged();
     m_statusText = m_settings && m_settings->isChinese()
         ? QStringLiteral("正在登录…")
         : QStringLiteral("Signing in…");
@@ -144,13 +158,13 @@ void JournalSyncCoordinator::connectDropbox()
             m_settings->setSyncEnabled(true);
         m_periodic.start();
         emit connectedChanged();
+        m_authorizing = false;
+        emit syncingChanged();
         if (m_worker)
             QMetaObject::invokeMethod(m_worker, "syncActive", Qt::QueuedConnection);
-        m_statusText = m_settings && m_settings->isChinese()
-            ? QStringLiteral("同步中…")
-            : QStringLiteral("Syncing…");
-        emit statusChanged();
     } catch (const wick::SyncBackendError &e) {
+        m_authorizing = false;
+        emit syncingChanged();
         if (e.kind == wick::SyncBackendError::Kind::authorizationCancelled) {
             m_statusText = m_settings && m_settings->isChinese()
                 ? QStringLiteral("已取消登录")
@@ -161,11 +175,12 @@ void JournalSyncCoordinator::connectDropbox()
         emit statusChanged();
         qWarning("秉烛: Dropbox connect failed: %s", e.what());
     } catch (const std::exception &e) {
+        m_authorizing = false;
+        emit syncingChanged();
         m_statusText = QString::fromStdString(e.what());
         emit statusChanged();
         qWarning("秉烛: Dropbox connect failed: %s", e.what());
     }
-    m_authorizing = false;
 }
 
 void JournalSyncCoordinator::signOut()

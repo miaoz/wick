@@ -35,6 +35,14 @@ extension JournalSyncEngine {
         saveDeviceStateAndPublish()
     }
 
+    /// Clears any tombstone record for a journal known to be valid locally.
+    public func clearJournalTombstone(_ journalID: UUID) {
+        deviceState.unackedRemoteDeletions.removeAll { $0 == journalID }
+        deviceState.processedJournalTombstones.removeAll { $0 == journalID }
+        deviceState.pendingJournalDeletions.removeAll { $0.journalID == journalID }
+        saveDeviceStateAndPublish()
+    }
+
     /// Flushes locally-queued journal deletions: tombstone first, then the
     /// folder - the same ordering as day deletions. Runs before any other
     /// cycle work so a deleted journal cannot be resurrected by this cycle.

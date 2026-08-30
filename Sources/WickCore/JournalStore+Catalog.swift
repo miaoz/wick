@@ -130,7 +130,11 @@ extension JournalStore {
     /// Deletes a journal and its on-disk folder. Refuses to delete the last journal.
     @discardableResult
     func deleteJournal(id: UUID) -> Bool {
-        libraryCore.deleteJournal(id: id)
+        let ok = libraryCore.deleteJournal(id: id)
+        if ok {
+            journalDidDeleteLocally.send(id)
+        }
+        return ok
     }
 
     /// Applies a deletion that originated on ANOTHER device: deletes even the

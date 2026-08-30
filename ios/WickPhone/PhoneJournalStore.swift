@@ -31,6 +31,8 @@ final class PhoneJournalStore: ObservableObject {
     /// Fires after a remote day entry is successfully applied; editors rebase
     /// their clean drafts onto the fresh store value.
     let remoteEntryDidApply = PassthroughSubject<JournalRemoteApply, Never>()
+    /// Fires after a journal is explicitly deleted by the user on this device.
+    let journalDidDeleteLocally = PassthroughSubject<UUID, Never>()
 
     var activeJournal: JournalInfo? {
         guard let activeJournalID else { return nil }
@@ -378,7 +380,11 @@ final class PhoneJournalStore: ObservableObject {
     /// Deletes a journal and its on-disk folder. Refuses to delete the last one.
     @discardableResult
     func deleteJournal(id: UUID) -> Bool {
-        libraryCore.deleteJournal(id: id)
+        let ok = libraryCore.deleteJournal(id: id)
+        if ok {
+            journalDidDeleteLocally.send(id)
+        }
+        return ok
     }
 
 

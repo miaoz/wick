@@ -7,6 +7,7 @@
 #include "JournalLocalSource.h"
 #include "JournalSyncEngine.h"
 
+#include <QDateTime>
 #include <QDebug>
 #include <QMetaObject>
 #include <QThread>
@@ -207,35 +208,76 @@ void SyncWorker::startEngine()
     emit authorizedChanged(m_backend->isAuthorized(),
                            m_backend->accountEmail() ? QString::fromStdString(*m_backend->accountEmail())
                                                      : QString());
+    emitStatus();
+}
+
+void SyncWorker::queueJournalDeletion(const QString &idStr)
+{
+    if (!m_engine || !m_backend || !m_backend->isAuthorized())
+        return;
+    const auto id = wick::Uuid::parse(idStr.toStdString());
+    if (!id)
+        return;
+    m_engine->queueJournalDeletion(*id);
+    try {
+        m_engine->syncOnce();
+    } catch (...) {
+    }
 }
 
 void SyncWorker::syncActive()
 {
-    if (!m_engine || !m_backend)
+    if (!m_engine || !m_backend || m_isSyncing)
         return;
     if (auto *dropbox = dynamic_cast<wick::DropboxSyncBackend *>(m_backend.get()))
         dropbox->reloadFromStore();
     if (!m_backend->isAuthorized())
         return;
+
+    m_isSyncing = true;
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
+    emit syncingChanged(true);
+    emit statusTextChanged(zh ? QStringLiteral("同步中…") : QStringLiteral("Syncing…"));
+
+    // Self-healing: if a journal legitimately exists locally, clear any stale/erroneous tombstone
+    if (m_library) {
+        std::vector<wick::Uuid> localIds;
+        QMetaObject::invokeMethod(
+            m_library, [this, &localIds]() { localIds = m_library->journalIds(); }, Qt::BlockingQueuedConnection);
+        for (const auto &id : localIds) {
+            if (m_engine->isJournalTombstoned(id)) {
+                m_engine->clearJournalTombstone(id);
+                try {
+                    m_backend->deletePath(wick::JournalSyncLayout::journalTombstonePath(id));
+                } catch (...) {
+                }
+            }
+        }
+    }
+
     m_proxy->setForcedJournal(std::nullopt);
     try {
         m_engine->syncOnce();
-        if (autoImport() > 0)
-            pullAll();
-        else
-            emitStatus();
+        pullAllInternal();
+        autoImport();
     } catch (const std::exception &e) {
         qWarning("秉烛: sync failed: %s", e.what());
-        emitStatus();
     }
+
+    m_isSyncing = false;
+    emit syncingChanged(false);
+    emitStatus();
 }
 
 void SyncWorker::pullAll()
 {
+    syncActive();
+}
+
+void SyncWorker::pullAllInternal()
+{
     if (!m_engine || !m_backend || !m_backend->isAuthorized() || !m_library)
         return;
-    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
-    emit statusTextChanged(zh ? QStringLiteral("正在拉取日记…") : QStringLiteral("Pulling journals…"));
     std::vector<wick::Uuid> ids;
     QMetaObject::invokeMethod(
         m_library, [this, &ids]() { ids = m_library->journalIds(); }, Qt::BlockingQueuedConnection);
@@ -246,11 +288,10 @@ void SyncWorker::pullAll()
         try {
             m_engine->syncOnce();
         } catch (const std::exception &e) {
-            qWarning("秉烛: pull %s failed: %s", id.toString().c_str(), e.what());
+            qWarning("秉烛: sync %s failed: %s", id.toString().c_str(), e.what());
         }
     }
     m_proxy->setForcedJournal(std::nullopt);
-    emitStatus();
 }
 
 void SyncWorker::signOut()
@@ -264,6 +305,7 @@ void SyncWorker::signOut()
 void SyncWorker::emitStatus()
 {
     if (!m_engine || !m_backend || !m_backend->isAuthorized()) {
+        emit syncingChanged(false);
         emit statusTextChanged({});
         return;
     }
@@ -271,9 +313,28 @@ void SyncWorker::emitStatus()
     const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
     QString text;
     switch (m_engine->status()) {
-    case S::idle:
-        text = zh ? QStringLiteral("已同步") : QStringLiteral("Synced");
+    case S::idle: {
+        const auto last = m_engine->lastSyncAt();
+        if (last) {
+            const auto now = std::chrono::system_clock::now();
+            const auto diffSec = std::chrono::duration_cast<std::chrono::seconds>(now - *last).count();
+            if (diffSec < 60) {
+                text = zh ? QStringLiteral("刚刚已同步") : QStringLiteral("Synced just now");
+            } else if (diffSec < 3600) {
+                const int mins = static_cast<int>(diffSec / 60);
+                text = zh ? QStringLiteral("已同步 · %1 分钟前").arg(mins)
+                          : QStringLiteral("Synced %1m ago").arg(mins);
+            } else {
+                const auto time_t_val = std::chrono::system_clock::to_time_t(*last);
+                const QDateTime dt = QDateTime::fromSecsSinceEpoch(time_t_val).toLocalTime();
+                text = zh ? QStringLiteral("已同步 · %1").arg(dt.toString(QStringLiteral("HH:mm")))
+                          : QStringLiteral("Synced at %1").arg(dt.toString(QStringLiteral("HH:mm")));
+            }
+        } else {
+            text = zh ? QStringLiteral("已同步") : QStringLiteral("Synced");
+        }
         break;
+    }
     case S::syncing:
         text = zh ? QStringLiteral("同步中…") : QStringLiteral("Syncing…");
         break;
@@ -287,6 +348,7 @@ void SyncWorker::emitStatus()
         text = QString::fromStdString(m_engine->errorDetail());
         break;
     }
+    emit syncingChanged(m_engine->status() == S::syncing);
     emit statusTextChanged(text);
     emit authorizedChanged(true,
                            m_backend->accountEmail() ? QString::fromStdString(*m_backend->accountEmail())

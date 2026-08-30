@@ -940,11 +940,24 @@ Rectangle {
                 wrapMode: Text.Wrap
             }
             ActionRow {
+                visible: !!(syncCoordinator && syncCoordinator.connected)
+                text: (syncCoordinator && syncCoordinator.syncing)
+                      ? t("同步中…", "Syncing…")
+                      : t("立即同步", "Sync Now")
+                coming: false
+                enabled: !!(syncCoordinator && syncCoordinator.connected && !syncCoordinator.syncing)
+                onClicked: {
+                    if (syncCoordinator)
+                        syncCoordinator.syncNow()
+                }
+            }
+            ActionRow {
                 text: (syncCoordinator && syncCoordinator.connected)
                       ? t("断开 Dropbox", "Disconnect Dropbox")
                       : t("连接 Dropbox", "Connect Dropbox")
+                destructive: !!(syncCoordinator && syncCoordinator.connected)
                 coming: false
-                enabled: !!syncCoordinator
+                enabled: !!syncCoordinator && !syncCoordinator.syncing
                 onClicked: {
                     if (!syncCoordinator)
                         return

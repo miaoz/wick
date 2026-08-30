@@ -1019,6 +1019,20 @@ void JournalSyncEngine::acknowledgeRemoteJournalDeletion(const Uuid& journalID) 
     saveDeviceStateAndPublish();
 }
 
+void JournalSyncEngine::clearJournalTombstone(const Uuid& journalID) {
+    deviceState_.unackedRemoteDeletions.erase(
+        std::remove(deviceState_.unackedRemoteDeletions.begin(), deviceState_.unackedRemoteDeletions.end(), journalID),
+        deviceState_.unackedRemoteDeletions.end());
+    deviceState_.processedJournalTombstones.erase(
+        std::remove(deviceState_.processedJournalTombstones.begin(), deviceState_.processedJournalTombstones.end(), journalID),
+        deviceState_.processedJournalTombstones.end());
+    deviceState_.pendingJournalDeletions.erase(
+        std::remove_if(deviceState_.pendingJournalDeletions.begin(), deviceState_.pendingJournalDeletions.end(),
+                       [&](const JournalDeletionTombstone& t) { return t.journalID == journalID; }),
+        deviceState_.pendingJournalDeletions.end());
+    saveDeviceStateAndPublish();
+}
+
 bool JournalSyncEngine::isJournalTombstoned(const Uuid& journalID) const {
     return deviceState_.isTombstoned(journalID);
 }
