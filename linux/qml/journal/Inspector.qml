@@ -48,19 +48,23 @@ Rectangle {
             Item { Layout.fillWidth: true }
             Rectangle {
                 visible: calendarStore && calendarStore.seal.length > 0
-                width: sealLab.implicitWidth + 10
-                height: 22
-                radius: 2
+                width: sealLab.implicitWidth + 8
+                height: 18
+                radius: 3
                 rotation: -3
-                color: theme.pnlUp
+                color: "transparent"
+                border.color: theme.pnlUp
+                border.width: 1.2
+                opacity: 0.9
+
                 Text {
                     id: sealLab
                     anchors.centerIn: parent
                     text: calendarStore ? calendarStore.seal : ""
-                    color: "#FAEBD7"
+                    color: theme.pnlUp
                     font.family: theme.fontPrint
-                    font.pixelSize: 10
-                    font.weight: Font.Bold
+                    font.pixelSize: 9
+                    font.weight: Font.Black
                     font.letterSpacing: 1
                 }
             }

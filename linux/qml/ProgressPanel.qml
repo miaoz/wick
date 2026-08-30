@@ -257,19 +257,10 @@ Rectangle {
             Layout.bottomMargin: 14
 
             Text {
-                text: "秉烛而记,落子无悔"
+                text: "一寸光阴一寸金"
                 color: paper.ink3
                 font.pixelSize: 11
                 font.family: "Noto Serif SC"
-            }
-
-            Item { Layout.fillWidth: true }
-
-            Text {
-                text: "v" + timeProgress.appVersion
-                color: Qt.rgba(240 / 255, 227 / 255, 198 / 255, 0.32)
-                font.pixelSize: 9
-                font.family: "JetBrains Mono"
             }
         }
     }

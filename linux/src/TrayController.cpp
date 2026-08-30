@@ -219,36 +219,14 @@ QIcon TrayController::makeCandleIcon() const
     const int textW = showPct ? static_cast<int>(px * 1.7) : 0;
     const int canvasW = px + textW;
 
-    QPixmap stencil(px, px);
-    stencil.fill(Qt::transparent);
-    {
-        QPainter p(&stencil);
-        p.setRenderHint(QPainter::Antialiasing, true);
-        renderer.render(&p);
-    }
-
-    QColor tint = QColor(0xF0, 0xE3, 0xC6);
-    if (qApp) {
-        const QColor windowText = qApp->palette().color(QPalette::WindowText);
-        if (windowText.isValid())
-            tint = windowText;
-        const QColor window = qApp->palette().color(QPalette::Window);
-        if (window.lightness() < 128 && tint.lightness() < 128)
-            tint = QColor(0xF0, 0xE3, 0xC6);
-        else if (window.lightness() >= 128 && tint.lightness() >= 128)
-            tint = QColor(0x2B, 0x20, 0x14);
-    }
-
     QPixmap colored(canvasW, px);
     colored.fill(Qt::transparent);
     {
         QPainter p(&colored);
-        p.fillRect(QRect(0, 0, px, px), tint);
-        p.setCompositionMode(QPainter::CompositionMode_DestinationIn);
-        p.drawPixmap(0, 0, stencil);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        renderer.render(&p, QRectF(0, 0, px, px));
         if (showPct) {
-            p.setCompositionMode(QPainter::CompositionMode_SourceOver);
-            p.setPen(tint);
+            p.setPen(QColor(0xFF, 0xFF, 0xFF));
             QFont f = p.font();
             f.setPixelSize(qMax(8, px * 9 / 22));
             f.setBold(true);

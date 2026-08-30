@@ -340,18 +340,8 @@ Panel {
         Row {
           width: parent.width
           Text {
-            text: "秉烛而记,落子无悔"
+            text: "一寸光阴一寸金"
             color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-          }
-          Item {
-            width: Math.max(0, parent.width - parent.children[0].width - parent.children[2].width)
-            height: 1
-          }
-          Text {
-            text: "v0.1.0"
-            color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.32)
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
           }
