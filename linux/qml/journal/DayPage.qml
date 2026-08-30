@@ -272,8 +272,6 @@ Rectangle {
                                         placeholderTextColor: theme.ink3
                                         font.family: theme.fontPrint
                                         font.pixelSize: 14
-                                        lineHeight: 2.0
-                                        lineHeightMode: Text.ProportionalHeight
                                         wrapMode: TextEdit.Wrap
                                         readOnly: library.isReadOnly
                                         background: Item {}

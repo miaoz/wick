@@ -70,7 +70,8 @@ int WickIpc::send(const QByteArray &payload)
     sock.flush();
     sock.waitForBytesWritten(2000);
     sock.disconnectFromServer();
-    sock.waitForDisconnected(2000);
+    if (sock.state() != QLocalSocket::UnconnectedState)
+        sock.waitForDisconnected(2000);
     return 0;
 }
 
