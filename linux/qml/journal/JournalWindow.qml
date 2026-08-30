@@ -161,36 +161,19 @@ Rectangle {
                     }
                 }
 
-                Rectangle {
-                    width: 24
-                    height: 24
-                    radius: 5
-                    color: theme.char1
-                    Text {
-                        anchors.centerIn: parent
-                        text: "烛"
-                        color: theme.emberHi
-                        font.family: theme.fontPrint
-                        font.pixelSize: 11
-                        font.weight: Font.Bold
-                    }
-                }
-
                 Text {
-                    text: "秉烛日记"
+                    text: journalLibrary.activeJournalName.length > 0 ? journalLibrary.activeJournalName : "主日记本"
                     color: theme.ink1
-                    font.family: theme.fontPrint
-                    font.pixelSize: 15
-                    font.weight: Font.Black
+                    font.family: theme.fontUi
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
                 }
 
                 Text {
-                    text: journalLibrary.activeJournalName
-                    color: theme.ink2
+                    text: journalLibrary.selectedDayStamp
+                    color: theme.ink3
                     font.family: theme.fontUi
-                    font.pixelSize: 12
-                    font.weight: Font.DemiBold
-                    visible: journalLibrary.activeJournalName.length > 0
+                    font.pixelSize: 11
                 }
 
                 Item { Layout.fillWidth: true }

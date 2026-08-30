@@ -536,22 +536,75 @@ QVariantList JournalLibrary::days() const
         return a->date > b->date;
     });
 
+    const bool hasTrading = !m_tradingPositions.empty();
+    std::unordered_map<std::string, int> closedByDay;
+    std::unordered_map<std::string, int> openByDay;
+    std::unordered_map<std::string, double> pnlByDay;
+    std::unordered_set<std::string> daysWithPnl;
+
+    for (const auto &p : m_tradingPositions) {
+        const std::string posDayKey = JournalDayKey::make(wick::timeFromUnix(p.openTime / 1000), tzOffsetSeconds());
+        if (p.isClosed()) {
+            closedByDay[posDayKey]++;
+            const double net = p.netPnl();
+            pnlByDay[posDayKey] += net;
+            daysWithPnl.insert(posDayKey);
+        } else {
+            openByDay[posDayKey]++;
+        }
+    }
+
     int lastYear = 0;
     int lastMonth = 0;
     for (const auto *e : rows) {
         const QDate d = dateOf(*e);
+        const std::string dayKey = dayKeyOf(*e);
         QVariantMap row;
         row.insert(QStringLiteral("entryId"), qs(e->id.toString()));
-        row.insert(QStringLiteral("dayKey"), qs(dayKeyOf(*e)));
+        row.insert(QStringLiteral("dayKey"), qs(dayKey));
         row.insert(QStringLiteral("dateLabel"), bigDateLabel(d));
         row.insert(QStringLiteral("weekday"), weekdayName(d));
-        row.insert(QStringLiteral("itemCount"), static_cast<int>(e->items.size()));
+        const int itemCount = static_cast<int>(e->items.size());
+        row.insert(QStringLiteral("itemCount"), itemCount);
         row.insert(QStringLiteral("year"), d.year());
         row.insert(QStringLiteral("monthLabel"), monthLabel(d.month()));
         const bool header = (d.year() != lastYear || d.month() != lastMonth);
         row.insert(QStringLiteral("showMonthHeader"), header);
         lastYear = d.year();
         lastMonth = d.month();
+
+        const int closed = closedByDay[dayKey];
+        const int opened = openByDay[dayKey];
+        row.insert(QStringLiteral("closedPositions"), closed);
+        row.insert(QStringLiteral("openPositions"), opened);
+
+        QString statsLine;
+        if (hasTrading) {
+            if (closed > 0 && opened > 0) {
+                statsLine = QStringLiteral("%1 条 · %2 笔已平仓 · %3 笔持仓中").arg(itemCount).arg(closed).arg(opened);
+            } else if (closed > 0) {
+                statsLine = QStringLiteral("%1 条 · %2 笔已平仓").arg(itemCount).arg(closed);
+            } else if (opened > 0) {
+                statsLine = QStringLiteral("%1 条 · %2 笔持仓中").arg(itemCount).arg(opened);
+            } else {
+                statsLine = QStringLiteral("%1 条 · 无持仓").arg(itemCount);
+            }
+        } else {
+            statsLine = QStringLiteral("%1 条").arg(itemCount);
+        }
+        row.insert(QStringLiteral("statsLine"), statsLine);
+
+        if (daysWithPnl.find(dayKey) != daysWithPnl.end()) {
+            row.insert(QStringLiteral("hasPnl"), true);
+            const double pnl = pnlByDay[dayKey];
+            row.insert(QStringLiteral("dayPnl"), pnl);
+            const QString sign = (pnl >= 0) ? QStringLiteral("+") : QStringLiteral("-");
+            row.insert(QStringLiteral("pnlText"), sign + QString::number(std::abs(pnl), 'f', 2));
+        } else {
+            row.insert(QStringLiteral("hasPnl"), false);
+            row.insert(QStringLiteral("dayPnl"), 0.0);
+            row.insert(QStringLiteral("pnlText"), QStringLiteral("—"));
+        }
 
         bool hasCorrect = false;
         bool hasWrong = false;
@@ -565,6 +618,7 @@ QVariantList JournalLibrary::days() const
         }
         row.insert(QStringLiteral("hasCorrect"), hasCorrect);
         row.insert(QStringLiteral("hasWrong"), hasWrong);
+        row.insert(QStringLiteral("hasVerdicts"), hasCorrect || hasWrong);
         row.insert(QStringLiteral("isSelected"), qs(e->id.toString()) == m_selectedEntryId);
         out.push_back(row);
     }
@@ -804,6 +858,53 @@ QString JournalLibrary::pageLunar() const
 {
     const auto *e = selectedEntry();
     return e ? wick::lunarLine(dateOf(*e)) : QString();
+}
+
+bool JournalLibrary::pageHasPnl() const
+{
+    const auto *e = selectedEntry();
+    if (!e)
+        return false;
+    const std::string dayKey = dayKeyOf(*e);
+    for (const auto &p : m_tradingPositions) {
+        const std::string posDayKey = JournalDayKey::make(wick::timeFromUnix(p.openTime / 1000), tzOffsetSeconds());
+        if (posDayKey == dayKey && p.isClosed())
+            return true;
+    }
+    return false;
+}
+
+double JournalLibrary::pagePnl() const
+{
+    const auto *e = selectedEntry();
+    if (!e)
+        return 0.0;
+    const std::string dayKey = dayKeyOf(*e);
+    double sum = 0.0;
+    for (const auto &p : m_tradingPositions) {
+        const std::string posDayKey = JournalDayKey::make(wick::timeFromUnix(p.openTime / 1000), tzOffsetSeconds());
+        if (posDayKey == dayKey && p.isClosed())
+            sum += p.netPnl();
+    }
+    return sum;
+}
+
+QString JournalLibrary::pagePnlText() const
+{
+    if (!pageHasPnl())
+        return QString();
+    const double val = pagePnl();
+    const QString sign = (val >= 0) ? QStringLiteral("+") : QStringLiteral("-");
+    return sign + QString::number(std::abs(val), 'f', 2) + QStringLiteral(" USDT");
+}
+
+QString JournalLibrary::selectedDayStamp() const
+{
+    const auto *e = selectedEntry();
+    const QDate d = e ? dateOf(*e) : QDate::currentDate();
+    const QString day = QString::number(d.month()) + QStringLiteral("月") + QString::number(d.day()) + QStringLiteral("日");
+    const QString weekday = weekdayName(d);
+    return day + QStringLiteral(" · ") + weekday;
 }
 
 QString JournalLibrary::pageSavedState() const

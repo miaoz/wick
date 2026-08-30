@@ -48,6 +48,10 @@ class JournalLibrary : public QObject, public wick::JournalLocalSource
     Q_PROPERTY(QString pageDateLabel READ pageDateLabel NOTIFY selectionChanged)
     Q_PROPERTY(QString pageWeekday READ pageWeekday NOTIFY selectionChanged)
     Q_PROPERTY(QString pageLunar READ pageLunar NOTIFY selectionChanged)
+    Q_PROPERTY(bool pageHasPnl READ pageHasPnl NOTIFY selectionChanged)
+    Q_PROPERTY(QString pagePnlText READ pagePnlText NOTIFY selectionChanged)
+    Q_PROPERTY(double pagePnl READ pagePnl NOTIFY selectionChanged)
+    Q_PROPERTY(QString selectedDayStamp READ selectedDayStamp NOTIFY selectionChanged)
     Q_PROPERTY(QString pageSavedState READ pageSavedState NOTIFY savedStateChanged)
     Q_PROPERTY(double pageBurnElapsed READ pageBurnElapsed NOTIFY selectionChanged)
     Q_PROPERTY(bool pageIsToday READ pageIsToday NOTIFY selectionChanged)
@@ -93,6 +97,10 @@ public:
     QString pageDateLabel() const;
     QString pageWeekday() const;
     QString pageLunar() const;
+    bool pageHasPnl() const;
+    QString pagePnlText() const;
+    double pagePnl() const;
+    QString selectedDayStamp() const;
     QString pageSavedState() const;
     double pageBurnElapsed() const;
     bool pageIsToday() const;

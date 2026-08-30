@@ -138,6 +138,29 @@ Rectangle {
 
                         Item { Layout.fillWidth: true }
 
+                        // 当日净盈亏 (对齐 macOS JournalDaySection.swift)
+                        Column {
+                            visible: library.pageHasPnl
+                            spacing: 2
+                            Layout.bottomMargin: 2
+                            Text {
+                                anchors.right: parent.right
+                                text: "净盈亏"
+                                color: theme.ink3
+                                font.family: theme.fontMono
+                                font.pixelSize: 9
+                                font.weight: Font.Medium
+                            }
+                            Text {
+                                anchors.right: parent.right
+                                text: library.pagePnlText
+                                color: library.pagePnl >= 0 ? theme.gain : theme.loss
+                                font.family: theme.fontMono
+                                font.pixelSize: 14
+                                font.weight: Font.Bold
+                            }
+                        }
+
                         Text {
                             text: library.pageSavedState
                             color: library.isReadOnly ? theme.cinnabar : theme.ink3

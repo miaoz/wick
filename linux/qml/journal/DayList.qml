@@ -108,28 +108,45 @@ Rectangle {
                                     }
                                 }
                                 Text {
-                                    text: modelData.itemCount + " 条"
+                                    text: modelData.statsLine || (modelData.itemCount + " 条")
                                     color: theme.ink3
                                     font.family: theme.fontMono
                                     font.pixelSize: 10
                                 }
                             }
 
-                            Row {
-                                spacing: 4
-                                ReviewSeal {
-                                    visible: modelData.hasCorrect
-                                    theme: list.theme
-                                    verdict: "correct"
-                                    size: 18
-                                    mini: true
+                            Column {
+                                spacing: 3
+                                Text {
+                                    anchors.right: parent.right
+                                    text: modelData.pnlText || "—"
+                                    color: {
+                                        if (!modelData.hasPnl)
+                                            return theme.ink3
+                                        return modelData.dayPnl >= 0 ? theme.gain : theme.loss
+                                    }
+                                    font.family: theme.fontMono
+                                    font.pixelSize: 11
+                                    font.weight: modelData.hasPnl ? Font.Bold : Font.Normal
                                 }
-                                ReviewSeal {
-                                    visible: modelData.hasWrong
-                                    theme: list.theme
-                                    verdict: "wrong"
-                                    size: 18
-                                    mini: true
+
+                                Row {
+                                    anchors.right: parent.right
+                                    spacing: 3
+                                    ReviewSeal {
+                                        visible: modelData.hasCorrect
+                                        theme: list.theme
+                                        verdict: "correct"
+                                        size: 18
+                                        mini: true
+                                    }
+                                    ReviewSeal {
+                                        visible: modelData.hasWrong
+                                        theme: list.theme
+                                        verdict: "wrong"
+                                        size: 18
+                                        mini: true
+                                    }
                                 }
                             }
                         }
