@@ -20,7 +20,8 @@ Panel {
     return isChinese ? zh : en
   }
 
-  readonly property color foreground: (bar && bar.barForeground !== undefined) ? bar.barForeground : ((bar && bar.foreground !== undefined) ? bar.foreground : Color.foreground)
+  readonly property color barIconColor: (bar && bar.barForeground !== undefined) ? bar.barForeground : ((bar && bar.foreground !== undefined) ? bar.foreground : Color.foreground)
+  readonly property color foreground: Color.foreground
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color stain: Qt.darker(foreground, 2.4)
@@ -122,7 +123,7 @@ Panel {
         anchors.fill: candleImage
         source: candleImage
         colorization: 1.0
-        colorizationColor: root.foreground
+        colorizationColor: root.barIconColor
       }
     }
   }
