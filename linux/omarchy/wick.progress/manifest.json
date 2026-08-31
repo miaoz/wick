@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "wick.progress",
-  "name": "秉烛",
+  "name": "Wick",
   "version": "0.1.0",
   "author": "miaoz",
   "license": "MIT",
@@ -11,7 +11,7 @@
     "barWidget": "Panel.qml"
   },
   "barWidget": {
-    "displayName": "秉烛",
+    "displayName": "Wick",
     "description": "Remaining time of day, week, month, and year.",
     "category": "Time",
     "allowMultiple": false,

@@ -1,9 +1,10 @@
 [Desktop Entry]
 Type=Application
-Name=秉烛
-Name[en]=Wick
-Comment=秉烛而记,落子无悔
-Comment[en]=By candlelight — a trading journal
+Name=Wick
+GenericName=Trading Journal
+GenericName[zh_CN]=交易日记
+Comment=By candlelight — a trading journal
+Comment[zh_CN]=秉烛而记,落子无悔
 Exec=wick --dropbox-callback %u
 Icon=wick
 Terminal=false
