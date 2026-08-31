@@ -120,10 +120,26 @@ AppSettings *AppSettings::instance()
     return s;
 }
 
+void AppSettings::migrateLegacySettings()
+{
+    // Settings used to live under the Chinese app name; adopt that file once
+    // so existing users keep their prefs (device ID, sync opt-in, fonts...).
+    const QSettings legacy(QStringLiteral("wick"), QStringLiteral("秉烛"));
+    const QSettings current(QStringLiteral("wick"), QStringLiteral("wick"));
+    const QString legacyPath = legacy.fileName();
+    const QString currentPath = current.fileName();
+    if (legacyPath == currentPath || !QFile::exists(legacyPath) || QFile::exists(currentPath))
+        return;
+    QDir().mkpath(QFileInfo(currentPath).absolutePath());
+    if (QFile::copy(legacyPath, currentPath))
+        qInfo("wick: migrated settings from %s", qPrintable(legacyPath));
+}
+
 AppSettings::AppSettings(QObject *parent)
     : QObject(parent)
-    , m_store(QStringLiteral("wick"), QStringLiteral("秉烛"))
+    , m_store(QStringLiteral("wick"), QStringLiteral("wick"))
 {
+    migrateLegacySettings();
     load();
     loadApplicationFonts();
     refreshFontFamilies();
@@ -685,7 +701,7 @@ QString LaunchAtLogin::unitContents(const QString &execPath)
 {
     return QStringLiteral(
                "[Unit]\n"
-               "Description=秉烛 (Wick)\n"
+               "Description=Wick\n"
                "PartOf=graphical-session.target\n"
                "After=graphical-session.target\n"
                "\n"

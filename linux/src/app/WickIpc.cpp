@@ -86,7 +86,7 @@ int WickIpc::maybeForwardAndExit(const QStringList &args)
     if (command == QLatin1String("quit"))
         return 0;
     if (isCallbackUrl(command) || command.startsWith(QLatin1String("callback "))) {
-        qWarning("秉烛: no running instance to receive Dropbox callback");
+        qWarning("wick: no running instance to receive Dropbox callback");
         return 1;
     }
     // --journal / --settings with no instance: this process should start.
@@ -100,7 +100,7 @@ void WickIpc::listen()
     m_server = new QLocalServer(this);
     m_server->setSocketOptions(QLocalServer::UserAccessOption);
     if (!m_server->listen(path)) {
-        qWarning("秉烛: cannot listen on %s (%s)", qPrintable(path),
+        qWarning("wick: cannot listen on %s (%s)", qPrintable(path),
                  qPrintable(m_server->errorString()));
         return;
     }

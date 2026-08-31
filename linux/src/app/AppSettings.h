@@ -9,7 +9,7 @@
 class QNetworkAccessManager;
 class QNetworkReply;
 
-/// UserDefaults-compatible prefs (org wick / app 秉烛). Keys match Mac AppSettings.
+/// UserDefaults-compatible prefs (org wick / app wick). Keys match Mac AppSettings.
 class AppSettings : public QObject
 {
     Q_OBJECT
@@ -58,6 +58,9 @@ class AppSettings : public QObject
 
 public:
     static AppSettings *instance();
+
+    /// One-time adoption of the pre-rename `秉烛.conf` settings file.
+    static void migrateLegacySettings();
 
     explicit AppSettings(QObject *parent = nullptr);
 

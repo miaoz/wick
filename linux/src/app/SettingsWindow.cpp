@@ -20,7 +20,7 @@ SettingsWindow::SettingsWindow(AppSettings *settings, JournalLibrary *library,
 {
     setFlags(Qt::Dialog | Qt::WindowCloseButtonHint | Qt::WindowTitleHint | Qt::CustomizeWindowHint);
     setResizeMode(QQuickView::SizeRootObjectToView);
-    setTitle(QStringLiteral("设置 — 秉烛"));
+    setTitle(QStringLiteral("设置 — 秉烛日记"));
     setObjectName(QStringLiteral("wick-settings"));
     setColor(QColor(0x24, 0x1C, 0x10));
     setMinimumWidth(640);

@@ -121,7 +121,8 @@ void JournalSyncCoordinator::requestSync()
 
 std::string JournalSyncCoordinator::deviceID() const
 {
-    QSettings s(QStringLiteral("wick"), QStringLiteral("秉烛"));
+    AppSettings::migrateLegacySettings();
+    QSettings s(QStringLiteral("wick"), QStringLiteral("wick"));
     QString id = s.value(QStringLiteral("sync.deviceID")).toString();
     if (id.isEmpty()) {
         id = QString::fromStdString(wick::Uuid::generate().toString());
@@ -173,13 +174,13 @@ void JournalSyncCoordinator::connectDropbox()
             m_statusText = QString::fromStdString(e.what());
         }
         emit statusChanged();
-        qWarning("秉烛: Dropbox connect failed: %s", e.what());
+        qWarning("wick: Dropbox connect failed: %s", e.what());
     } catch (const std::exception &e) {
         m_authorizing = false;
         emit syncingChanged();
         m_statusText = QString::fromStdString(e.what());
         emit statusChanged();
-        qWarning("秉烛: Dropbox connect failed: %s", e.what());
+        qWarning("wick: Dropbox connect failed: %s", e.what());
     }
 }
 

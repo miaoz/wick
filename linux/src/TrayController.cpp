@@ -131,7 +131,7 @@ TrayController::TrayController(TimeProgress *progress,
     });
 
     if (!pluginUi && !QSystemTrayIcon::isSystemTrayAvailable()) {
-        qWarning("秉烛: no StatusNotifierItem host. On Omarchy, install the "
+        qWarning("wick: no StatusNotifierItem host. On Omarchy, install the "
                  "wick.progress bar widget; elsewhere, a tray host is required.");
     }
 }
@@ -208,7 +208,7 @@ void TrayController::refreshTrayIcon()
     if (!m_tray || !m_tray->isVisible())
         return;
     m_tray->setIcon(makeCandleIcon());
-    QString tip = QStringLiteral("秉烛");
+    QString tip = QStringLiteral("秉烛日记");
     if (m_progress) {
         tip += QStringLiteral(" · ") + m_progress->dayPercentText();
         if (m_settings && m_settings->isChinese())

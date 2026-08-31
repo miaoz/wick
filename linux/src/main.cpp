@@ -22,8 +22,8 @@
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-    app.setApplicationName(QStringLiteral("秉烛"));
-    app.setApplicationDisplayName(QStringLiteral("秉烛"));
+    app.setApplicationName(QStringLiteral("wick"));
+    app.setApplicationDisplayName(QStringLiteral("Wick"));
     app.setApplicationVersion(QStringLiteral(WICK_VERSION));
     app.setOrganizationName(QStringLiteral("wick"));
     app.setOrganizationDomain(QStringLiteral("wick"));

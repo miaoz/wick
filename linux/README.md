@@ -11,7 +11,7 @@ Refresh token: libsecret schema `com.miaoz.wick` (service `com.miaoz.wick.dropbo
 
 ## Stage 3：设置 + 托盘壳
 
-托盘「设置」打开可磁贴的设置窗（左栏七组：外观与语言 / 通用 / 日记与提醒 / 同步 / 交易所 / 数据 / 关于）。Linux 1.0 **不出现「交易日历」**。关窗只隐藏，不退出。QSettings：`~/.config/wick/秉烛.conf`，键名对齐 Mac `wick.*`。登录启动写用户 systemd 单元 `~/.config/systemd/user/wick.service`。每日提醒走托盘 `showMessage`。
+托盘「设置」打开可磁贴的设置窗（左栏七组：外观与语言 / 通用 / 日记与提醒 / 同步 / 交易所 / 数据 / 关于）。Linux 1.0 **不出现「交易日历」**。关窗只隐藏，不退出。QSettings：`~/.config/wick/wick.conf`（旧版 `秉烛.conf` 首次启动自动迁移），键名对齐 Mac `wick.*`。登录启动写用户 systemd 单元 `~/.config/systemd/user/wick.service`。每日提醒走托盘 `showMessage`。
 
 # 秉烛 · Linux
 

@@ -22,9 +22,9 @@ void DropboxAuthSession::ensureMimeDefault() {
     const QString contents = QStringLiteral(
                                  "[Desktop Entry]\n"
                                  "Type=Application\n"
-                                 "Name=秉烛\n"
-                                 "Name[en]=Wick\n"
-                                 "Comment=秉烛而记,落子无悔\n"
+                                 "Name=Wick\n"
+                                 "Comment=By candlelight — a trading journal\n"
+                                 "Comment[zh_CN]=秉烛而记,落子无悔\n"
                                  "Exec=%1 %u\n"
                                  "Icon=wick\n"
                                  "Terminal=false\n"

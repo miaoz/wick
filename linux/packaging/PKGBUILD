@@ -3,7 +3,7 @@
 pkgname=wick
 pkgver=1.10.33
 pkgrel=1
-pkgdesc="秉烛 · Wick for Linux"
+pkgdesc="Wick for Linux"
 arch=('x86_64' 'aarch64')
 url="https://github.com/miaoz/wick"
 license=('LicenseRef-proprietary')

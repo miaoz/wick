@@ -17,7 +17,7 @@ ProgressWindow::ProgressWindow(TimeProgress *progress, QWindow *parent)
     setResizeMode(QQuickView::SizeViewToRootObject);
     setFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
     setColor(QColor(0x24, 0x1C, 0x10)); // 暗·子夜 paper
-    setTitle(QStringLiteral("秉烛"));
+    setTitle(QStringLiteral("秉烛日记"));
     setObjectName(QStringLiteral("wick-pop"));
 
     rootContext()->setContextProperty(QStringLiteral("timeProgress"), progress);
