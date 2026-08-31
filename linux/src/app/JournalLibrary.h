@@ -163,7 +163,6 @@ public:
     Q_INVOKABLE QString lunarLineFor(const QDate &date) const;
 
     Q_INVOKABLE QUrl imageFileUrl(const QString &filename) const;
-    Q_INVOKABLE QStringList itemImageFilenames(const QString &itemId) const;
     Q_INVOKABLE QString addImageFromUrl(const QString &itemId, const QUrl &fileUrl);
     Q_INVOKABLE bool pasteClipboardImage(const QString &itemId);
     Q_INVOKABLE void removeImage(const QString &itemId, const QString &filename);

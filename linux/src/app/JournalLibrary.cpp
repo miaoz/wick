@@ -76,6 +76,7 @@ JournalLibrary::JournalLibrary(wick::JournalPaths paths, QObject *parent)
 
     if (auto *app = AppSettings::instance()) {
         connect(app, &AppSettings::languageChanged, this, [this]() {
+            invalidateDaysCache();
             emit selectionChanged();
             emit daysChanged();
             emit calendarChanged();
@@ -109,6 +110,7 @@ void JournalLibrary::bootstrap()
     }
 
     m_calendarMonth = QDate(QDate::currentDate().year(), QDate::currentDate().month(), 1);
+    invalidateDaysCache();
     emit journalsChanged();
     emit tagsChanged();
     emit daysChanged();
@@ -1654,6 +1656,7 @@ int JournalLibrary::ensurePositionEntries(
 void JournalLibrary::selectDay(const QString &entryId)
 {
     m_selectedEntryId = entryId;
+    invalidateDaysCache();
     emit selectionChanged();
     emit daysChanged();
     emit itemsChanged();
@@ -1826,6 +1829,7 @@ void JournalLibrary::setItemTag(const QString &itemId, const QString &tag)
     item->tag = next;
     entry->updatedAt = nowTp();
     schedulePersist();
+    invalidateDaysCache();
     emit tagsChanged();
     emit daysChanged();
 }
@@ -1879,6 +1883,7 @@ void JournalLibrary::setItemReview(const QString &itemId, const QString &verdict
     }
     entry->updatedAt = nowTp();
     persistActive();
+    invalidateDaysCache();
     emit itemsChanged();
     emit daysChanged();
     emit calendarChanged();

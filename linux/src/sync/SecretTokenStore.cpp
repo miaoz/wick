@@ -98,7 +98,10 @@ const SecretSchema& schema() {
             {"service", SECRET_SCHEMA_ATTRIBUTE_STRING},
             {"account", SECRET_SCHEMA_ATTRIBUTE_STRING},
             {nullptr, static_cast<SecretSchemaAttributeType>(0)},
-        }
+        },
+        0,                                   // reserved (gint)
+        nullptr, nullptr, nullptr, nullptr,  // reserved1 .. reserved4
+        nullptr, nullptr, nullptr,           // reserved5 .. reserved7
     };
     return s;
 }

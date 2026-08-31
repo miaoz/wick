@@ -194,3 +194,36 @@ macOS 坑对照验证：无限呼吸动画（不存在）、关窗不释放视�
 1. **跨端删除传播的两处正确性 bug**（P0-1/P0-2，必须立即修）；
 2. **大日记本下 Repeater 全量重建的性能 / IME 悬崖**（热点 1，结构性，值得尽快做）；
 3. **app 层零测试**（2175 行的 JournalLibrary 是最大的裸奔点）。
+
+
+---
+
+## 八、复审与修复记录（2026-08-31 第二轮）
+
+### 复审对象
+
+提交 `b47c5f9 fix(linux): resolve review findings across sync, trading, and UI`（23 文件，+1011/-327）。
+
+### 复审结论
+
+报告 P0 全部正确修复：远端删除收敛链路（`SyncWorker::syncActive` 消费 `remoteJournalDeletions()` + `JournalLibrary::deleteJournalFromRemote` 事务化删除/末本播种/ack-retry 语义，对齐 macOS Coordinator）、`pendingTradingSnapshotDeletions` 编解码（键名与 `JournalLocalSource.swift` 逐字段一致，附往返测试）、挂件 `langProcess` 幽灵引用删除、`WICK_VERSION` 编译定义贯通。P1/P2 落地：`refreshTradingPositions` 补发 `daysChanged`、通知 id 跟踪（含 `NotificationClosed` 清理）、`journals()` mtime 失效缓存、`ExchangeCoordinator` 改 `exchangeBindingFor` 直查、搜索 150ms 防抖、图片并入 days 模型、缩略图 `sourceSize`、ExchangeClients 去 Qt 化下沉 `wick_core`（三所解析新增 65 个 CHECK）、`atomicWriteFile`、`-Wall -Wextra`。另顺带修复 `ProgressPanel.qml` 上一提交遗留的多余 `}`（原文件 44 开 45 合，面板无法加载）。
+
+复审验证：增量构建通过，6/6 CTest 通过。
+
+### 复审新发现问题及修复（本轮已修）
+
+| # | 问题 | 修复 |
+|---|---|---|
+| 1 | **days 缓存失效不完整**：`languageChanged`/`bootstrap`/`selectDay`/`setItemTag`/`setItemReview` 五处发 `daysChanged` 但未失效缓存 → 点选高亮不动、打标签/复盘/切语言后时间线拿旧数据 | 五处各补 `invalidateDaysCache()`（`JournalLibrary.cpp`），现全部 8 个 `daysChanged` 发射点均有失效 |
+| 2 | **`pullAllInternal` 对活跃本二次同步且改走磁盘读**：forced 路径读到 ≤400ms 防抖前的旧盘内容，可能把比 baseline 旧的内容判为本地回退推上去 | 循环内跳过活跃本（`SyncWorker.cpp`），活跃本已由 `syncOnce()` 内存态同步 |
+| 3 | 非活跃本图片同步仍 marshal 回 GUI 读盘（热点 3 只修了一半） | `syncedImageFilenames`/`syncedImageData`/`hasSyncedImage`/`storeSyncedImage` 四个代理方法补 forced 磁盘直读分支（复用 `JournalImageFilename::isValid` 校验 + `atomicWriteFile`），同步期 GUI 线程不再做磁盘 I/O |
+| 4 | `itemImageFilenames` Q_INVOKABLE 死代码（QML 已改用 `modelData.images`） | 删除声明与定义 |
+| 5 | `-Wextra` 新暴露 `SecretTokenStore.cpp` 8 条 missing-field-initializers 警告 | 显式补齐 reserved 字段初始化（首字段为 gint 用 0） |
+
+本轮验证：构建零警告，6/6 CTest 通过。
+
+### 有意保留 / 遗留事项
+
+- `setItemReviewNote` 维持零信号：该路径逐击键调用（`DayPage.qml:755`），发 `daysChanged` 会触发 Repeater 全量重建、销毁正在输入的 TextArea（IME 丢失）；下方备注 label 短暂滞后，下次结构性变更自愈。根治依赖时间线虚拟化。
+- 未动项（路线图 P2/P3）：DayPage Repeater→ListView 虚拟化与 days 模型化、同步周期退避 + state 脏才落盘、冲突解决 UI 接线、`importArchive` 事务闭环、L10n 层、剩余硬编码色、关窗 `terminate()` 竞态。
+- `SyncWorker` 的远端删除集成路径无自动化测试（app 层无测试设施），建议后续补。

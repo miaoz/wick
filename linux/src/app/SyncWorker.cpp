@@ -127,6 +127,17 @@ public:
         const auto id = syncJournalID();
         if (!id)
             return {};
+        if (m_forced) {
+            const auto dir = wick::JournalPaths::defaultPaths().journalDirectory(*id);
+            wick::JournalFileStore store(dir);
+            store.load();
+            std::set<std::string> out;
+            for (const auto &e : store.entries)
+                for (const auto &item : e.items)
+                    for (const auto &f : item.imageFilenames)
+                        out.insert(f);
+            return out;
+        }
         return blocking([this, id] { return m_library->imageFilenamesFor(*id); });
     }
 
@@ -135,6 +146,12 @@ public:
         const auto id = syncJournalID();
         if (!id)
             return std::nullopt;
+        if (m_forced) {
+            if (!wick::JournalImageFilename::isValid(filename))
+                return std::nullopt;
+            return wick::readFileBytes(
+                wick::JournalPaths::defaultPaths().imagesDirectory(*id) / filename);
+        }
         return blocking([this, id, filename] { return m_library->imageDataFor(*id, filename); });
     }
 
@@ -143,6 +160,13 @@ public:
         const auto id = syncJournalID();
         if (!id)
             return false;
+        if (m_forced) {
+            if (!wick::JournalImageFilename::isValid(filename))
+                return false;
+            std::error_code ec;
+            return std::filesystem::exists(
+                wick::JournalPaths::defaultPaths().imagesDirectory(*id) / filename, ec);
+        }
         return blocking([this, id, filename] { return m_library->hasImageFor(*id, filename); });
     }
 
@@ -150,6 +174,13 @@ public:
                           const wick::Uuid &journalID) override
     {
         const std::string copy(data);
+        if (m_forced) {
+            if (!wick::JournalImageFilename::isValid(filename))
+                return;
+            wick::atomicWriteFile(
+                wick::JournalPaths::defaultPaths().imagesDirectory(journalID) / filename, copy);
+            return;
+        }
         blocking([this, filename, copy, journalID] {
             m_library->storeSyncedImage(filename, copy, journalID);
         });
@@ -305,10 +336,21 @@ void SyncWorker::pullAllInternal()
     if (!m_engine || !m_backend || !m_backend->isAuthorized() || !m_library)
         return;
     std::vector<wick::Uuid> ids;
+    std::optional<wick::Uuid> activeId;
     QMetaObject::invokeMethod(
-        m_library, [this, &ids]() { ids = m_library->journalIds(); }, Qt::BlockingQueuedConnection);
+        m_library,
+        [this, &ids, &activeId]() {
+            ids = m_library->journalIds();
+            activeId = m_library->syncJournalID();
+        },
+        Qt::BlockingQueuedConnection);
     for (const auto &id : ids) {
         if (m_engine->isJournalTombstoned(id))
+            continue;
+        // The active journal was just synced from in-memory state by syncOnce();
+        // re-syncing it here would read a stale disk snapshot (400 ms debounce
+        // window) and could push a transient regression.
+        if (activeId && id == *activeId)
             continue;
         m_proxy->setForcedJournal(id);
         try {

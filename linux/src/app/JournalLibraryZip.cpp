@@ -73,17 +73,6 @@ QUrl JournalLibrary::imageFileUrl(const QString &filename) const
     return QUrl::fromLocalFile(QString::fromStdString(path->string()));
 }
 
-QStringList JournalLibrary::itemImageFilenames(const QString &itemId) const
-{
-    QStringList images;
-    const auto *item = findItem(itemId);
-    if (!item)
-        return images;
-    for (const auto &name : item->imageFilenames)
-        images.push_back(qs(name));
-    return images;
-}
-
 QString JournalLibrary::addImageFromUrl(const QString &itemId, const QUrl &fileUrl)
 {
     if (isReadOnly() || !m_store)
