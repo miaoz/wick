@@ -28,9 +28,9 @@
 - Automatic backup (`journal.json.bak` and rolling snapshots) and zip import/export.
 - Optional multi-device synchronization via Dropbox (OAuth PKCE, local-first conflict resolution).
 
-### 3. Tear-Off Almanac (撕页黄历)
-- Integrated macroeconomic releases and corporate earnings calendar for US, HK, and CN markets.
-- Optional realistic tear-off calendar easter egg with 2D verlet paper physics and synthesized paper tearing sound effects.
+### 3. Trading Calendar & Almanac (交易日历与黄历)
+- **Functional Trading Calendar** (macOS / Linux / iOS): Integrated macroeconomic releases, corporate earnings calendar for US, HK, and CN markets, monthly overview, and daily trader's almanac (lucky/avoid tokens).
+- **Physical Tear-Off Almanac Easter Egg** (macOS / iOS): Realistic 2D verlet paper physics, synthesized tearing sound effects, and floating desktop window.
 
 ### 4. Exchange Receipts (仓位单据)
 - Direct, read-only REST connection to crypto exchanges:

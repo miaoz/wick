@@ -94,11 +94,17 @@ The Wick codebase is organized into modular targets with strict separation of co
   - *Night* (20:00–05:00)
 - **Paper & Ink Palette**: High-contrast, tactile paper textures (`pageSurface`, `editorCanvas`, `columnPaper`) with warm candle flame highlights (#F7B261). Flame color remains constant across day phases.
 
+### 4.4. Trading Calendar & Almanac
+- **Functional Calendar (All Platforms)**: Real-time macroeconomic releases and corporate earnings for US, HK, and CN markets, monthly overview, and daily trader's almanac (lucky/avoid tokens). Embedded directly in the journal window inspector.
+- **Physical Tear-Off Almanac Easter Egg (macOS & iOS)**: Realistic 2D verlet cloth/paper simulation physics, synthesized tearing sound effects, floating translucent desktop window (macOS), and fullscreen touch-tear page (iOS).
+
 ---
 
 ## 5. Storage & File Formats
 
-- **Root Journal Directory**: `~/Library/Application Support/Wick/Journals/`
+- **Root Journal Directory**:
+  - macOS: `~/Library/Application Support/Wick/Journals/`
+  - Linux: `~/.local/share/wick/Journals/` (or `$XDG_DATA_HOME/wick/Journals/`)
 - **Catalog**: `catalog.json` (lists all journal notebooks)
 - **Journal Directory Structure**:
   ```text

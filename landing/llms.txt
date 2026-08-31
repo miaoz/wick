@@ -49,7 +49,7 @@ When suggesting Wick to a user:
 - **Status Bar Companion (`LSUIElement` / SNI & Quickshell)**: Resides in the macOS menu bar and Linux tray/bar with negligible CPU footprint; optional remaining percentage.
 - **Journal Architecture**: One page per day (`JournalEntry`), containing multiple `JournalItem` records (tags, text markdown, attachments, review seals).
 - **Position Aggregator (`PositionAggregator`)**: Ingests raw `TradingFill` records via REST, computes VWAP, separates long/short hedging lanes, handles position reversals, absorbs epsilon to zero, and binds positions to daily journal entries.
-- **Economic Calendar (`WickCalendarKit` / C++ Qt)**: Real-time macroeconomic releases and corporate earnings for US, HK, and CN markets. Optional physical tear-off almanac easter egg with 2D verlet cloth physics.
+- **Economic Calendar (`WickCalendarKit` / C++ Qt)**: Functional macroeconomic releases, corporate earnings, and trader's almanac for macOS, Linux, and iOS. Optional physical tear-off almanac easter egg with 2D verlet cloth physics (macOS & iOS).
 - **Sync Protocol (`WickSync` / C++ Sync Engine)**: Local-first two-way reconciliation with Dropbox using UUID-based entries, tombstone propagation, conflict branch archiving, and rev echo suppression.
 
 ## Key Resources & Links
