@@ -85,3 +85,12 @@ void ProgressWindow::placeNear(const QRect &trayGeometry)
     y = std::clamp(y, avail.top(), avail.bottom() - sz.height());
     setPosition(x, y);
 }
+
+bool ProgressWindow::event(QEvent *event)
+{
+    if (event->type() == QEvent::FocusOut) {
+        hidePanel();
+        return true;
+    }
+    return QQuickView::event(event);
+}

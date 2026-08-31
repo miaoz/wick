@@ -38,7 +38,6 @@ Panel {
       var str = String(text() || "").trim()
       if (str.length > 0) root.language = str
     }
-    onFileChanged: reload()
     onLoadFailed: {}
   }
 
@@ -104,7 +103,6 @@ Panel {
     precision: SystemClock.Minutes
     onDateChanged: {
       root.now = date
-      langProcess.running = true
     }
   }
 

@@ -12,16 +12,22 @@
 
 #include <QDate>
 #include <QDateTime>
+#include <QEventLoop>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMetaObject>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QUrl>
 #include <nlohmann/json.hpp>
-#include <fstream>
 #include <set>
 
 using wick::BinanceFuturesClient;
 using wick::ExchangeHttpError;
+using wick::ExchangeHttpResponse;
+using wick::ExchangeHttpRequest;
 using wick::ExchangeVenue;
 using wick::FundingAttributor;
 using wick::FundingEvent;
@@ -67,6 +73,30 @@ QString venueTitle(ExchangeVenue v)
     }
 }
 
+ExchangeHttpResponse qtExchangeTransport(const ExchangeHttpRequest &req)
+{
+    QNetworkAccessManager nam;
+    QNetworkRequest qreq(QUrl(QString::fromStdString(req.url)));
+    qreq.setTransferTimeout(20000);
+    for (const auto &h : req.headers)
+        qreq.setRawHeader(QByteArray::fromStdString(h.first), QByteArray::fromStdString(h.second));
+    QNetworkReply *reply = nullptr;
+    if (req.method == "POST")
+        reply = nam.post(qreq, QByteArray::fromStdString(req.body));
+    else
+        reply = nam.get(qreq);
+    QEventLoop loop;
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+    ExchangeHttpResponse out;
+    out.status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    out.body = reply->readAll().toStdString();
+    if (reply->error() != QNetworkReply::NoError && out.status == 0)
+        out.error = reply->errorString().toStdString();
+    reply->deleteLater();
+    return out;
+}
+
 } // namespace
 
 class ExchangeWorker : public QObject
@@ -80,6 +110,7 @@ public slots:
             std::vector<FundingEvent> funding;
             if (venue == QLatin1String("hyperliquid")) {
                 HyperliquidInfoClient c;
+                c.transport = qtExchangeTransport;
                 c.user = blob.toStdString();
                 fills = c.fetchFills(fromMs, toMs);
                 try {
@@ -91,6 +122,7 @@ public slots:
                 const auto json = nlohmann::json::parse(blob.toStdString());
                 if (venue == QLatin1String("okx")) {
                     OKXSwapClient c;
+                    c.transport = qtExchangeTransport;
                     c.apiKey = json.value("apiKey", "");
                     c.secret = json.value("secret", "");
                     c.passphrase = json.value("passphrase", "");
@@ -102,6 +134,7 @@ public slots:
                     }
                 } else {
                     BinanceFuturesClient c;
+                    c.transport = qtExchangeTransport;
                     c.apiKey = json.value("apiKey", "");
                     c.secret = json.value("secret", "");
                     fills = c.fetchFills(fromMs, toMs);
@@ -208,48 +241,42 @@ bool ExchangeCoordinator::configured() const
 
 QString ExchangeCoordinator::venue() const
 {
-    if (!m_library)
+    if (!m_library || m_targetId.isEmpty())
         return {};
-    for (const auto &row : m_library->journals()) {
-        const auto map = row.toMap();
-        if (map.value(QStringLiteral("id")).toString() == m_targetId)
-            return map.value(QStringLiteral("venue")).toString();
-    }
-    return {};
+    const auto parsed = parseId(m_targetId);
+    if (!parsed)
+        return {};
+    const auto binding = m_library->exchangeBindingFor(*parsed);
+    if (!binding)
+        return {};
+    return QString::fromStdString(std::string(wick::toString(binding->venue)));
 }
 
 QString ExchangeCoordinator::accountLabel() const
 {
-    if (!m_library)
+    if (!m_library || m_targetId.isEmpty())
         return {};
-    for (const auto &row : m_library->journals()) {
-        const auto map = row.toMap();
-        if (map.value(QStringLiteral("id")).toString() == m_targetId)
-            return map.value(QStringLiteral("accountLabel")).toString();
-    }
-    return {};
+    const auto parsed = parseId(m_targetId);
+    if (!parsed)
+        return {};
+    const auto binding = m_library->exchangeBindingFor(*parsed);
+    if (!binding)
+        return {};
+    return QString::fromStdString(binding->accountLabel);
 }
 
 bool ExchangeCoordinator::isConfigured(const QString &journalId) const
 {
     if (!m_library || journalId.isEmpty())
         return false;
-    QString venue;
-    QString label;
-    for (const auto &row : m_library->journals()) {
-        const auto map = row.toMap();
-        if (map.value(QStringLiteral("id")).toString() == journalId) {
-            if (!map.value(QStringLiteral("exchangeBound")).toBool())
-                return false;
-            venue = map.value(QStringLiteral("venue")).toString();
-            label = map.value(QStringLiteral("accountLabel")).toString();
-            break;
-        }
-    }
-    if (venue.isEmpty())
+    const auto parsed = parseId(journalId);
+    if (!parsed)
         return false;
-    if (venue == QLatin1String("hyperliquid"))
-        return HyperliquidInfoClient::normalizedAddress(label.toStdString()).has_value();
+    const auto binding = m_library->exchangeBindingFor(*parsed);
+    if (!binding)
+        return false;
+    if (binding->venue == ExchangeVenue::hyperliquid)
+        return HyperliquidInfoClient::normalizedAddress(binding->accountLabel).has_value();
     return storeFor(journalId).load().has_value();
 }
 
@@ -429,12 +456,8 @@ void ExchangeCoordinator::onWorkerFinished(const QString &journalId, const QStri
 
     if (!snapshotJson.isEmpty()) {
         const auto tradingFile = m_library->paths().tradingJSON(*parsed);
-        std::error_code ec;
-        std::filesystem::create_directories(tradingFile.parent_path(), ec);
-        std::ofstream out(tradingFile, std::ios::binary | std::ios::trunc);
-        if (out) {
-            out.write(snapshotJson.toUtf8().constData(), snapshotJson.toUtf8().size());
-        }
+        const auto utf8 = snapshotJson.toUtf8();
+        wick::atomicWriteFile(tradingFile, std::string_view(utf8.constData(), utf8.size()));
     }
 
     const auto snapOpt = TradingPositionSnapshot::decode(snapshotJson.toStdString());

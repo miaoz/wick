@@ -15,12 +15,16 @@
 
 #include <chrono>
 
+#ifndef WICK_VERSION
+#define WICK_VERSION "0.1.0"
+#endif
+
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("秉烛"));
     app.setApplicationDisplayName(QStringLiteral("秉烛"));
-    app.setApplicationVersion(QStringLiteral("0.1.0"));
+    app.setApplicationVersion(QStringLiteral(WICK_VERSION));
     app.setOrganizationName(QStringLiteral("wick"));
     app.setOrganizationDomain(QStringLiteral("wick"));
     app.setDesktopFileName(QStringLiteral("wick"));
@@ -55,7 +59,6 @@ int main(int argc, char *argv[])
 
     WickIpc ipc;
     ipc.listen();
-    DropboxAuthSession::ensureMimeDefault();
     QObject::connect(&ipc, &WickIpc::openJournalRequested, &tray, &TrayController::openJournal);
     QObject::connect(&ipc, &WickIpc::openSettingsRequested, &tray, &TrayController::openSettings);
     QObject::connect(&ipc, &WickIpc::quitRequested, &tray, &TrayController::quitApp);

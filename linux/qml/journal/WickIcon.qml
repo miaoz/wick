@@ -455,5 +455,23 @@ Item {
                 }
             }
         }
+
+        // 23. SPARKLES
+        Shape {
+            visible: root.name === "sparkles" || root.name === "sparkle"
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: "transparent"
+                strokeWidth: 0
+                fillColor: root.color
+                capStyle: ShapePath.RoundCap
+                joinStyle: ShapePath.RoundJoin
+                PathSvg {
+                    path: "M 8.0,1.5 C 8.0,5.0 9.0,6.0 12.5,8.0 C 9.0,10.0 8.0,11.0 8.0,14.5 C 8.0,11.0 7.0,10.0 3.5,8.0 C 7.0,6.0 8.0,5.0 8.0,1.5 Z M 13.0,1.5 C 13.0,3.0 13.5,3.5 15.0,4.5 C 13.5,5.5 13.0,6.0 13.0,7.5 C 13.0,6.0 12.5,5.5 11.0,4.5 C 12.5,3.5 13.0,3.0 13.0,1.5 Z"
+                }
+            }
+        }
     }
 }

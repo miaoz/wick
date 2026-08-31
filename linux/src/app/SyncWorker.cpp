@@ -5,6 +5,8 @@
 #include "FakeSyncBackend.h"
 #include "JournalLibrary.h"
 #include "JournalLocalSource.h"
+#include "JournalPaths.h"
+#include "JournalStore.h"
 #include "JournalSyncEngine.h"
 
 #include <QDateTime>
@@ -54,6 +56,16 @@ public:
         const auto id = syncJournalID();
         if (!id)
             return {};
+        if (m_forced) {
+            const auto dir = wick::JournalPaths::defaultPaths().journalDirectory(*id);
+            wick::JournalFileStore store(dir);
+            store.load();
+            std::map<wick::Uuid, wick::JournalEntry> out;
+            for (const auto &e : store.entries) {
+                out[e.id] = e;
+            }
+            return out;
+        }
         return blocking([this, id] { return m_library->entrySnapshotsFor(*id); });
     }
 
@@ -62,6 +74,16 @@ public:
         const auto id = syncJournalID();
         if (!id)
             return std::nullopt;
+        if (m_forced) {
+            const auto dir = wick::JournalPaths::defaultPaths().journalDirectory(*id);
+            wick::JournalFileStore store(dir);
+            store.load();
+            for (const auto &e : store.entries) {
+                if (e.id == entryID)
+                    return e;
+            }
+            return std::nullopt;
+        }
         return blocking([this, id, entryID] { return m_library->entrySnapshotFor(*id, entryID); });
     }
 
@@ -239,25 +261,29 @@ void SyncWorker::syncActive()
     emit syncingChanged(true);
     emit statusTextChanged(zh ? QStringLiteral("同步中…") : QStringLiteral("Syncing…"));
 
-    // Self-healing: if a journal legitimately exists locally, clear any stale/erroneous tombstone
-    if (m_library) {
-        std::vector<wick::Uuid> localIds;
-        QMetaObject::invokeMethod(
-            m_library, [this, &localIds]() { localIds = m_library->journalIds(); }, Qt::BlockingQueuedConnection);
-        for (const auto &id : localIds) {
-            if (m_engine->isJournalTombstoned(id)) {
-                m_engine->clearJournalTombstone(id);
-                try {
-                    m_backend->deletePath(wick::JournalSyncLayout::journalTombstonePath(id));
-                } catch (...) {
-                }
-            }
-        }
-    }
-
     m_proxy->setForcedJournal(std::nullopt);
     try {
         m_engine->syncOnce();
+
+        // Apply remote deletions discovered by the sync engine
+        const auto deletions = m_engine->remoteJournalDeletions();
+        for (const auto &id : deletions) {
+            JournalLibrary::RemoteDeleteResult res = JournalLibrary::RemoteDeleteResult::notFound;
+            QMetaObject::invokeMethod(
+                m_library,
+                [this, id, &res]() {
+                    res = m_library->deleteJournalFromRemote(id);
+                },
+                Qt::BlockingQueuedConnection);
+
+            if (res == JournalLibrary::RemoteDeleteResult::deleted
+                || res == JournalLibrary::RemoteDeleteResult::notFound) {
+                m_engine->acknowledgeRemoteJournalDeletion(id);
+            } else {
+                qWarning("秉烛: remote journal deletion of %s pending retry", id.toString().c_str());
+            }
+        }
+
         pullAllInternal();
         autoImport();
     } catch (const std::exception &e) {

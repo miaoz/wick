@@ -14,6 +14,7 @@
 #include <cmath>
 #include <filesystem>
 #include <set>
+#include <unordered_map>
 #include <unordered_set>
 #include <variant>
 
@@ -225,8 +226,10 @@ void JournalLibrary::refreshTradingPositions()
             }
         }
     }
+    invalidateDaysCache();
     emit itemsChanged();
     emit journalsChanged();
+    emit daysChanged();
     emit calendarChanged();
 }
 
@@ -488,28 +491,45 @@ QVariantList JournalLibrary::journals() const
         row.insert(QStringLiteral("id"), qs(j.id.toString()));
         row.insert(QStringLiteral("name"), qs(j.name));
         int count = 0;
-        if (m_store && j.id == m_catalog.activeJournalID)
-            count = static_cast<int>(m_store->entries.size());
-        else
-            count = JournalFileStore::entryCountOnDisk(m_paths.journalDirectory(j.id));
-        row.insert(QStringLiteral("entryCount"), count);
-        row.insert(QStringLiteral("isActive"), j.id == m_catalog.activeJournalID);
-
         int posCount = 0;
-        if (j.id == m_catalog.activeJournalID) {
+        if (m_store && j.id == m_catalog.activeJournalID) {
+            count = static_cast<int>(m_store->entries.size());
             posCount = static_cast<int>(m_tradingPositions.size());
         } else {
-            const auto path = m_paths.tradingJSON(j.id);
+            auto &cache = m_inactiveCountsCache[j.id];
+            const auto journalFile = m_paths.journalJSON(j.id);
             std::error_code ec;
-            if (std::filesystem::exists(path, ec)) {
-                const auto bytes = wick::readFileBytes(path);
-                if (bytes) {
-                    const auto snap = wick::TradingPositionSnapshot::decode(*bytes);
-                    if (snap)
-                        posCount = static_cast<int>(snap->positions.size());
+            const auto jMtime = std::filesystem::last_write_time(journalFile, ec);
+            if (!ec) {
+                if (jMtime != cache.journalMtime) {
+                    cache.journalMtime = jMtime;
+                    cache.entryCount = JournalFileStore::entryCountOnDisk(m_paths.journalDirectory(j.id));
                 }
+            } else {
+                cache.entryCount = 0;
             }
+            count = cache.entryCount;
+
+            const auto tradingFile = m_paths.tradingJSON(j.id);
+            const auto tMtime = std::filesystem::last_write_time(tradingFile, ec);
+            if (!ec) {
+                if (tMtime != cache.tradingMtime) {
+                    cache.tradingMtime = tMtime;
+                    const auto bytes = wick::readFileBytes(tradingFile);
+                    if (bytes) {
+                        const auto snap = wick::TradingPositionSnapshot::decode(*bytes);
+                        cache.positionsCount = snap ? static_cast<int>(snap->positions.size()) : 0;
+                    } else {
+                        cache.positionsCount = 0;
+                    }
+                }
+            } else {
+                cache.positionsCount = 0;
+            }
+            posCount = cache.positionsCount;
         }
+        row.insert(QStringLiteral("entryCount"), count);
+        row.insert(QStringLiteral("isActive"), j.id == m_catalog.activeJournalID);
         row.insert(QStringLiteral("positionsCount"), posCount);
 
         const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
@@ -573,6 +593,9 @@ QVariantList JournalLibrary::tags() const
 
 QVariantList JournalLibrary::days() const
 {
+    if (m_cachedDays)
+        return *m_cachedDays;
+
     QVariantList out;
     if (!m_store)
         return out;
@@ -696,6 +719,7 @@ QVariantList JournalLibrary::days() const
         row.insert(QStringLiteral("isSelected"), qs(e->id.toString()) == m_selectedEntryId);
         out.push_back(row);
     }
+    m_cachedDays = out;
     return out;
 }
 
@@ -818,6 +842,12 @@ QVariantList JournalLibrary::itemsForEntry(const JournalEntry &entry) const
             ++posIdx;
         }
         row.insert(QStringLiteral("positions"), posList);
+
+        QStringList imageFilenames;
+        for (const auto &fn : item.imageFilenames)
+            imageFilenames.append(qs(fn));
+        row.insert(QStringLiteral("images"), imageFilenames);
+
         out.push_back(row);
     }
     return out;
@@ -1130,6 +1160,7 @@ void JournalLibrary::setSearchText(const QString &text)
     if (text == m_searchText)
         return;
     m_searchText = text;
+    invalidateDaysCache();
     emit searchTextChanged();
     emit daysChanged();
     emit itemsChanged();
@@ -1161,8 +1192,14 @@ void JournalLibrary::ensureSelection()
     m_selectedEntryId.clear();
 }
 
+void JournalLibrary::invalidateDaysCache()
+{
+    m_cachedDays.reset();
+}
+
 void JournalLibrary::rebuildAfterStructuralChange()
 {
+    invalidateDaysCache();
     emit journalsChanged();
     emit tagsChanged();
     emit daysChanged();
@@ -1389,6 +1426,98 @@ bool JournalLibrary::deleteJournal(const QString &id)
     rebuildAfterStructuralChange();
     emit journalDeletedLocally(*parsed);
     return true;
+}
+
+QString JournalLibrary::defaultJournalName() const
+{
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
+    return zh ? QStringLiteral("我的日记") : QStringLiteral("My Journal");
+}
+
+JournalLibrary::RemoteDeleteResult JournalLibrary::deleteJournalFromRemote(const Uuid &id)
+{
+    if (m_catalogReadOnly)
+        return RemoteDeleteResult::refusedReadOnly;
+    bool found = false;
+    for (const auto &j : m_catalog.journals) {
+        if (j.id == id) {
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+        return RemoteDeleteResult::notFound;
+
+    flushNow();
+    const auto originalCatalog = m_catalog;
+    const bool wasActive = (m_catalog.activeJournalID == id);
+    const auto dir = m_paths.journalDirectory(id);
+    const auto quarantine =
+        m_paths.librariesRoot / (".WickJournalQuarantine-" + Uuid::generate().toString());
+
+    std::error_code ec;
+    bool moved = false;
+    if (std::filesystem::exists(dir, ec)) {
+        std::filesystem::rename(dir, quarantine, ec);
+        if (ec)
+            return RemoteDeleteResult::ioFailure;
+        moved = true;
+    }
+
+    m_catalog.journals.erase(std::remove_if(m_catalog.journals.begin(), m_catalog.journals.end(),
+                                            [&](const JournalInfo &j) { return j.id == id; }),
+                             m_catalog.journals.end());
+
+    if (m_catalog.journals.empty()) {
+        // Last journal deleted by a peer: seed a fresh pure-local default journal
+        JournalInfo info;
+        info.id = Uuid::generate();
+        info.name = ss(uniquifyName(defaultJournalName()));
+        info.createdAt = nowTp();
+        info.updatedAt = info.createdAt;
+        m_paths.ensureJournalDirectories(info.id);
+        JournalFileStore seed(m_paths.journalDirectory(info.id));
+        seed.ensureDirectories();
+        seed.entries.clear();
+        seed.persist();
+
+        m_catalog.journals.push_back(info);
+        m_catalog.activeJournalID = info.id;
+    } else if (wasActive) {
+        auto best = m_catalog.journals.begin();
+        for (auto it = m_catalog.journals.begin(); it != m_catalog.journals.end(); ++it) {
+            if (it->updatedAt > best->updatedAt)
+                best = it;
+        }
+        m_catalog.activeJournalID = best->id;
+    }
+
+    if (!writeCatalog()) {
+        m_catalog = originalCatalog;
+        if (moved)
+            std::filesystem::rename(quarantine, dir, ec);
+        return RemoteDeleteResult::ioFailure;
+    }
+    if (moved)
+        std::filesystem::remove_all(quarantine, ec);
+
+    if (wasActive || m_catalog.journals.size() == 1) {
+        bindActive(m_catalog.activeJournalID);
+        emit activeJournalChanged();
+        emit readOnlyChanged();
+        emit bannersChanged();
+    }
+    rebuildAfterStructuralChange();
+    return RemoteDeleteResult::deleted;
+}
+
+std::optional<JournalExchangeBinding> JournalLibrary::exchangeBindingFor(const Uuid &id) const
+{
+    for (const auto &j : m_catalog.journals) {
+        if (j.id == id)
+            return j.exchangeBinding;
+    }
+    return std::nullopt;
 }
 
 bool JournalLibrary::moveJournal(int fromIndex, int toIndex)
@@ -1769,7 +1898,6 @@ void JournalLibrary::setItemReviewNote(const QString &itemId, const QString &not
     item->review->updatedAt = nowTp();
     entry->updatedAt = nowTp();
     schedulePersist();
-    emit itemsChanged();
 }
 
 void JournalLibrary::selectCalendarDay(const QString &dayKey)

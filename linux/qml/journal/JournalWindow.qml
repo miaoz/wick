@@ -202,6 +202,13 @@ Rectangle {
                     border.color: theme.rule
                     border.width: 1
 
+                    Timer {
+                        id: searchDebounce
+                        interval: 150
+                        repeat: false
+                        onTriggered: journalLibrary.searchText = searchField.text
+                    }
+
                     TextField {
                         id: searchField
                         anchors.fill: parent
@@ -214,7 +221,7 @@ Rectangle {
                         font.pixelSize: 12
                         background: Item {}
                         readOnly: journalLibrary.isCatalogReadOnly
-                        onTextChanged: journalLibrary.searchText = text
+                        onTextChanged: searchDebounce.restart()
                     }
                     Connections {
                         target: journalLibrary
@@ -358,6 +365,17 @@ Rectangle {
         property string targetId: ""
         property string targetName: ""
 
+        MouseArea {
+            anchors.fill: parent
+            onClicked: journalDialog.visible = false
+        }
+
+        Shortcut {
+            enabled: journalDialog.visible
+            sequence: "Escape"
+            onActivated: journalDialog.visible = false
+        }
+
         Rectangle {
             width: 320
             height: journalDialog.mode === "delete" ? 150 : 140
@@ -365,6 +383,10 @@ Rectangle {
             color: theme.paperHi
             border.color: theme.rule
             anchors.centerIn: parent
+
+            MouseArea {
+                anchors.fill: parent
+            }
 
             ColumnLayout {
                 anchors.fill: parent

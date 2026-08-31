@@ -40,6 +40,14 @@ ReminderScheduler::ReminderScheduler(AppSettings *settings,
         this,
         SLOT(onNotificationAction(uint,QString))
     );
+    QDBusConnection::sessionBus().connect(
+        QStringLiteral("org.freedesktop.Notifications"),
+        QStringLiteral("/org/freedesktop/Notifications"),
+        QStringLiteral("org.freedesktop.Notifications"),
+        QStringLiteral("NotificationClosed"),
+        this,
+        SLOT(onNotificationClosed(uint,uint))
+    );
 
     reschedule();
 }
@@ -94,8 +102,10 @@ void ReminderScheduler::fire()
              << static_cast<qint32>(8000);        // timeout (ms)
 
         QDBusReply<uint> reply = iface.callWithArgumentList(QDBus::AutoDetect, QStringLiteral("Notify"), args);
-        if (reply.isValid())
+        if (reply.isValid()) {
             dbusSent = true;
+            m_sentNotificationIds.insert(reply.value());
+        }
     }
 
     if (!dbusSent && m_tray)
@@ -104,8 +114,15 @@ void ReminderScheduler::fire()
     reschedule();
 }
 
-void ReminderScheduler::onNotificationAction(uint, const QString &action)
+void ReminderScheduler::onNotificationAction(uint id, const QString &action)
 {
+    if (m_sentNotificationIds.find(id) == m_sentNotificationIds.end())
+        return;
     if (action == QLatin1String("default") || action == QLatin1String("open"))
         emit openJournalRequested();
+}
+
+void ReminderScheduler::onNotificationClosed(uint id, uint /*reason*/)
+{
+    m_sentNotificationIds.erase(id);
 }

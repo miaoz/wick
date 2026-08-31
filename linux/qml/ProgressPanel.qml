@@ -82,8 +82,8 @@ Rectangle {
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
                     GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.45; color: "#FFB25E" }
-                    GradientStop { position: 1.0; color: "#FFE0A8" }
+                    GradientStop { position: 0.45; color: paper.ember }
+                    GradientStop { position: 1.0; color: paper.emberHi }
                 }
             }
         }
@@ -270,7 +270,6 @@ Rectangle {
                 font.pixelSize: 11
                 font.family: paper.fontPrint
             }
-        }
         }
     }
 }

@@ -19,6 +19,9 @@ public:
     void hidePanel();
     bool panelVisible() const;
 
+protected:
+    bool event(QEvent *event) override;
+
 private:
     void placeNear(const QRect &trayGeometry);
 };

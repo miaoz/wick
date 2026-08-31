@@ -81,7 +81,7 @@ void clearDev(const std::string& service, const std::string& account) {
     writeMap(devSecretsPath(), j);
 }
 
-[[noreturn]] void throwCannotStore(const std::string& detail) {
+[[maybe_unused]] [[noreturn]] static void throwCannotStore(const std::string& detail) {
     throw std::runtime_error(
         "Cannot store Dropbox refresh token (" + detail
         + "). Install/start libsecret (gnome-keyring or KWallet), or set WICK_DEV_SECRETS=1 "

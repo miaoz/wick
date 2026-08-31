@@ -460,11 +460,19 @@ json encodeDevice(const JournalDeviceSyncState& s) {
     for (const auto& id : s.unackedRemoteDeletions) unacked.push_back(id.toString());
     json processed = json::array();
     for (const auto& id : s.processedJournalTombstones) processed.push_back(id.toString());
+    json pendingTrading = json::array();
+    for (const auto& t : s.pendingTradingSnapshotDeletions) {
+        pendingTrading.push_back(json{
+            {"journalID", t.journalID.toString()},
+            {"deletedAtMilliseconds", t.deletedAtMilliseconds},
+            {"deviceID", t.deviceID}
+        });
+    }
     return json{
         {"pendingJournalDeletions", pending},
         {"unackedRemoteDeletions", unacked},
         {"processedJournalTombstones", processed},
-        {"pendingTradingSnapshotDeletions", json::array()},
+        {"pendingTradingSnapshotDeletions", pendingTrading},
     };
 }
 
@@ -487,6 +495,22 @@ JournalDeviceSyncState decodeDevice(const json& j) {
             if (id.is_string()) {
                 if (auto u = Uuid::parse(id.get<std::string>())) s.processedJournalTombstones.push_back(*u);
             }
+        }
+    }
+    if (j.contains("pendingTradingSnapshotDeletions") && j["pendingTradingSnapshotDeletions"].is_array()) {
+        for (const auto& t : j["pendingTradingSnapshotDeletions"]) {
+            if (!t.is_object()) continue;
+            JournalTradingSnapshotTombstone tomb;
+            if (t.contains("journalID") && t["journalID"].is_string()) {
+                if (auto u = Uuid::parse(t["journalID"].get<std::string>())) tomb.journalID = *u;
+            }
+            if (t.contains("deletedAtMilliseconds") && t["deletedAtMilliseconds"].is_number_integer()) {
+                tomb.deletedAtMilliseconds = t["deletedAtMilliseconds"].get<std::int64_t>();
+            }
+            if (t.contains("deviceID") && t["deviceID"].is_string()) {
+                tomb.deviceID = t["deviceID"].get<std::string>();
+            }
+            s.pendingTradingSnapshotDeletions.push_back(tomb);
         }
     }
     return s;

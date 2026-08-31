@@ -1,11 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 
 # Prefer Qt 6.8 (Debian 13 / Omarchy). 6.4 is the floor if 6.8 is not findable.
-project(wick VERSION 0.1.0 LANGUAGES C CXX)
+project(wick VERSION 1.10.33 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+add_compile_options(-Wall -Wextra)
 
 find_package(OpenSSL REQUIRED)
 
@@ -22,6 +24,9 @@ FetchContent_MakeAvailable(nlohmann_json)
 
 # miniz 3.0.2 split sources (same files the local CTest run used).
 # Vendoring via push_files exceeded payload size; FetchContent keeps the tree small.
+if(POLICY CMP0169)
+  cmake_policy(SET CMP0169 OLD)
+endif()
 FetchContent_Declare(
   miniz
   URL https://github.com/richgel999/miniz/archive/refs/tags/3.0.2.tar.gz
@@ -67,6 +72,7 @@ add_library(wick_core STATIC
     src/trading/PositionAggregator.cpp
     src/trading/FundingAttributor.cpp
     src/trading/PositionEntryPlanner.cpp
+    src/trading/ExchangeClients.cpp
     src/sync/FakeSyncBackend.cpp
     src/sync/JournalDayMerge.cpp
     src/sync/JournalSyncState.cpp
@@ -167,8 +173,6 @@ qt_add_executable(wick
     src/app/WickIpc.h
     src/app/ExchangeCoordinator.cpp
     src/app/ExchangeCoordinator.h
-    src/trading/ExchangeClients.cpp
-    src/trading/ExchangeClients.h
     src/sync/DropboxSyncBackend.cpp
     src/sync/DropboxSyncBackend.h
     resources/resources.qrc
@@ -193,6 +197,7 @@ target_link_libraries(wick PRIVATE
 target_compile_definitions(wick PRIVATE
     QT_NO_CAST_FROM_ASCII
     QT_NO_NARROWING_CONVERSIONS_IN_CONNECT
+    WICK_VERSION="${PROJECT_VERSION}"
 )
 
 set_target_properties(wick PROPERTIES

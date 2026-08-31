@@ -121,12 +121,22 @@ public:
     bool inspectorVisible() const { return m_inspectorVisible; }
     void setInspectorVisible(bool visible);
 
+    enum class RemoteDeleteResult {
+        deleted,
+        notFound,
+        refusedReadOnly,
+        ioFailure
+    };
+
     Q_INVOKABLE void selectJournal(const QString &id);
     Q_INVOKABLE void addJournal(const QString &name);
     Q_INVOKABLE bool renameJournal(const QString &id, const QString &name);
     Q_INVOKABLE bool deleteJournal(const QString &id);
+    RemoteDeleteResult deleteJournalFromRemote(const wick::Uuid &id);
     Q_INVOKABLE bool moveJournal(int fromIndex, int toIndex);
     void setExchangeBinding(const wick::Uuid &id, std::optional<wick::JournalExchangeBinding> binding);
+    std::optional<wick::JournalExchangeBinding> exchangeBindingFor(const wick::Uuid &id) const;
+    QString defaultJournalName() const;
     int ensurePositionEntries(const wick::Uuid &journalID,
                               const std::vector<std::pair<QDate, std::vector<wick::JournalItem>>> &skeletons);
     bool hasJournal(const wick::Uuid &id) const;
@@ -248,10 +258,21 @@ private:
     void emitPageAndCalendar();
     void touchActiveJournalMetadata();
     QString recoverCatalogFromScratch();
+    void invalidateDaysCache();
+
+    struct InactiveCountsCache {
+        std::filesystem::file_time_type journalMtime{};
+        int entryCount = 0;
+        std::filesystem::file_time_type tradingMtime{};
+        int positionsCount = 0;
+    };
 
     wick::JournalPaths m_paths;
     wick::JournalCatalogSnapshot m_catalog;
     std::unique_ptr<wick::JournalFileStore> m_store;
+
+    mutable std::optional<QVariantList> m_cachedDays;
+    mutable std::map<wick::Uuid, InactiveCountsCache> m_inactiveCountsCache;
 
     QString m_selectedEntryId;
     QString m_searchText;

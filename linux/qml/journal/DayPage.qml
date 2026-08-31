@@ -504,9 +504,9 @@ Rectangle {
                                             Flow {
                                                 Layout.fillWidth: true
                                                 spacing: 8
-                                                visible: library.itemImageFilenames(itemBlock.modelData.itemId).length > 0
+                                                visible: (itemBlock.modelData.images || []).length > 0
                                                 Repeater {
-                                                    model: library.itemImageFilenames(itemBlock.modelData.itemId)
+                                                    model: itemBlock.modelData.images || []
                                                     delegate: Item {
                                                         id: thumb
                                                         required property string modelData
@@ -516,6 +516,8 @@ Rectangle {
                                                         Image {
                                                             anchors.fill: parent
                                                             source: library.imageFileUrl(thumb.modelData)
+                                                            sourceSize.width: 144
+                                                            sourceSize.height: 144
                                                             fillMode: Image.PreserveAspectCrop
                                                             asynchronous: true
                                                         }
@@ -529,7 +531,7 @@ Rectangle {
                                                             anchors.fill: parent
                                                             cursorShape: Qt.PointingHandCursor
                                                             onClicked: {
-                                                                const imgs = library.itemImageFilenames(itemBlock.modelData.itemId)
+                                                                const imgs = itemBlock.modelData.images || []
                                                                 page.openLightbox(imgs, thumb.index)
                                                             }
                                                         }

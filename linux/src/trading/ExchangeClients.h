@@ -2,12 +2,6 @@
 
 #include "TradingModels.h"
 
-#include <QByteArray>
-#include <QList>
-#include <QPair>
-#include <QString>
-#include <QUrl>
-
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -27,21 +21,19 @@ struct ExchangeHttpError : std::runtime_error {
 };
 
 struct ExchangeHttpRequest {
-    QString method = QStringLiteral("GET");
-    QUrl url;
-    QList<QPair<QByteArray, QByteArray>> headers;
-    QByteArray body;
+    std::string method = "GET";
+    std::string url;
+    std::vector<std::pair<std::string, std::string>> headers;
+    std::string body;
 };
 
 struct ExchangeHttpResponse {
     int status = 0;
-    QByteArray body;
-    QString error;
+    std::string body;
+    std::string error;
 };
 
 using ExchangeTransport = std::function<ExchangeHttpResponse(const ExchangeHttpRequest &)>;
-
-ExchangeHttpResponse qtExchangeTransport(const ExchangeHttpRequest &req);
 
 std::int64_t exchangeNowMs();
 
@@ -49,7 +41,7 @@ struct BinanceFuturesClient {
     std::string apiKey;
     std::string secret;
     std::string baseURL = "https://fapi.binance.com";
-    ExchangeTransport transport = qtExchangeTransport;
+    ExchangeTransport transport;
     std::int64_t chunkMs = 7LL * 24 * 3600 * 1000;
     int pageLimit = 1000;
 
@@ -63,7 +55,7 @@ struct OKXSwapClient {
     std::string secret;
     std::string passphrase;
     std::string baseURL = "https://www.okx.com";
-    ExchangeTransport transport = qtExchangeTransport;
+    ExchangeTransport transport;
     int pageLimit = 100;
     int minPageIntervalMs = 220;
 
@@ -77,7 +69,7 @@ struct OKXSwapClient {
 struct HyperliquidInfoClient {
     std::string user;
     std::string baseURL = "https://api.hyperliquid.xyz";
-    ExchangeTransport transport = qtExchangeTransport;
+    ExchangeTransport transport;
     int pageLimit = 2000;
 
     static std::optional<std::string> normalizedAddress(const std::string &raw);

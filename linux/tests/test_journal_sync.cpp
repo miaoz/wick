@@ -792,6 +792,28 @@ static void testTradingSnapshotUploadsAndDownloadsBetweenPeers() {
     CHECK(b.tradingSnapshot->payload == doc.payload);
 }
 
+static void testDeviceStateTradingSnapshotDeletionsPersist() {
+    Harness h;
+    const auto dir = h.tempRoot / "device_state_test";
+    std::filesystem::create_directories(dir);
+    JournalSyncStateStore store(dir);
+
+    JournalDeviceSyncState ds;
+    JournalTradingSnapshotTombstone tomb;
+    tomb.journalID = h.journalID;
+    tomb.deletedAtMilliseconds = 1725000000000;
+    tomb.deviceID = "test-device";
+    ds.pendingTradingSnapshotDeletions.push_back(tomb);
+
+    store.saveDeviceState(ds);
+
+    const auto loaded = store.loadDeviceState();
+    CHECK(loaded.pendingTradingSnapshotDeletions.size() == 1);
+    CHECK(loaded.pendingTradingSnapshotDeletions[0].journalID == h.journalID);
+    CHECK(loaded.pendingTradingSnapshotDeletions[0].deletedAtMilliseconds == 1725000000000);
+    CHECK(loaded.pendingTradingSnapshotDeletions[0].deviceID == "test-device");
+}
+
 int main() {
     testMerge();
     testFakeBackend();
@@ -817,6 +839,7 @@ int main() {
     testStatePersistsAcrossEngineInstances();
     testExpiredCursorResetsAndRecovers();
     testTradingSnapshotUploadsAndDownloadsBetweenPeers();
+    testDeviceStateTradingSnapshotDeletionsPersist();
 
     std::cerr << "passed " << g_passes << "  failed " << g_fails << "\n";
     return g_fails ? 1 : 0;
