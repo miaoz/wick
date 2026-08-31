@@ -4,6 +4,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -175,6 +176,32 @@ void SecretTokenStore::save(const std::string& token) {
         saveDev(service_, account_, token);
         return;
     }
+    // Verify the store really persisted: a Secret Service daemon can ack a
+    // store yet never write it through (e.g. restarted mid-session with a
+    // stale in-memory keyring), silently stranding the account on next
+    // launch. Fall back to the dev file when the round-trip fails.
+    {
+        GError* verifyError = nullptr;
+        gchar* readBack = secret_password_lookup_sync(&schema(), nullptr, &verifyError,
+                                                      "service", service_.c_str(),
+                                                      "account", account_.c_str(),
+                                                      nullptr);
+        const bool verified = !verifyError && readBack && token == readBack;
+        if (verifyError)
+            g_error_free(verifyError);
+        if (readBack)
+            secret_password_free(readBack);
+        if (!verified) {
+            std::fprintf(stderr,
+                         "Wick: secret store write did not round-trip; using dev-secrets fallback\n");
+            saveDev(service_, account_, token);
+            return;
+        }
+    }
+    // Single source of truth: a stale dev copy must not outlive a verified
+    // keyring store, or load() could resurrect an old token after a keyring
+    // loss.
+    clearDev(service_, account_);
 #else
     saveDev(service_, account_, token);
 #endif

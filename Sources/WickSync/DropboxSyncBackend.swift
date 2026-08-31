@@ -186,6 +186,7 @@ public final class DropboxSyncBackend: JournalSyncBackend {
             return try await task.value
         } catch let error as SyncBackendError {
             if error == .needsAuth {
+                NSLog("Wick sync: Dropbox refresh token rejected (invalid_grant); signing out")
                 signOut()
             }
             throw error

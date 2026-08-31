@@ -266,12 +266,16 @@ void SyncWorker::startEngine()
 
 void SyncWorker::queueJournalDeletion(const QString &idStr)
 {
-    if (!m_engine || !m_backend || !m_backend->isAuthorized())
+    if (!m_engine)
         return;
     const auto id = wick::Uuid::parse(idStr.toStdString());
     if (!id)
         return;
+    // Queue first: the pending tombstone is persisted device state and must
+    // survive offline/unauthorized periods. The flush below is best-effort.
     m_engine->queueJournalDeletion(*id);
+    if (!m_backend || !m_backend->isAuthorized())
+        return;
     try {
         m_engine->syncOnce();
     } catch (...) {
@@ -284,11 +288,18 @@ void SyncWorker::syncActive()
         return;
     if (auto *dropbox = dynamic_cast<wick::DropboxSyncBackend *>(m_backend.get()))
         dropbox->reloadFromStore();
-    if (!m_backend->isAuthorized())
+    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
+    if (!m_backend->isAuthorized()) {
+        // Never no-op silently: the UI must flip back to the connect state
+        // instead of showing a stale "synced" label forever.
+        qWarning("wick: sync skipped - no Dropbox refresh token in the secret store; "
+                 "reporting signed-out state");
+        emit authorizedChanged(false, {});
+        emit statusTextChanged(zh ? QStringLiteral("需要登录") : QStringLiteral("Login required"));
         return;
+    }
 
     m_isSyncing = true;
-    const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
     emit syncingChanged(true);
     emit statusTextChanged(zh ? QStringLiteral("同步中…") : QStringLiteral("Syncing…"));
 
@@ -311,14 +322,14 @@ void SyncWorker::syncActive()
                 || res == JournalLibrary::RemoteDeleteResult::notFound) {
                 m_engine->acknowledgeRemoteJournalDeletion(id);
             } else {
-                qWarning("秉烛: remote journal deletion of %s pending retry", id.toString().c_str());
+                qWarning("wick: remote journal deletion of %s pending retry", id.toString().c_str());
             }
         }
 
         pullAllInternal();
         autoImport();
     } catch (const std::exception &e) {
-        qWarning("秉烛: sync failed: %s", e.what());
+        qWarning("wick: sync failed: %s", e.what());
     }
 
     m_isSyncing = false;
@@ -356,7 +367,7 @@ void SyncWorker::pullAllInternal()
         try {
             m_engine->syncOnce();
         } catch (const std::exception &e) {
-            qWarning("秉烛: sync %s failed: %s", id.toString().c_str(), e.what());
+            qWarning("wick: sync %s failed: %s", id.toString().c_str(), e.what());
         }
     }
     m_proxy->setForcedJournal(std::nullopt);
@@ -372,9 +383,16 @@ void SyncWorker::signOut()
 
 void SyncWorker::emitStatus()
 {
-    if (!m_engine || !m_backend || !m_backend->isAuthorized()) {
+    if (!m_engine || !m_backend)
+        return;
+    if (!m_backend->isAuthorized()) {
         emit syncingChanged(false);
-        emit statusTextChanged({});
+        const bool zh = AppSettings::instance() ? AppSettings::instance()->isChinese() : true;
+        emit statusTextChanged(zh ? QStringLiteral("需要登录") : QStringLiteral("Login required"));
+        // Surface mid-session credential loss (e.g. a refresh rejected with
+        // invalid_grant wiped the stored token) instead of leaving the last
+        // successful sync label on screen.
+        emit authorizedChanged(false, {});
         return;
     }
     using S = wick::JournalSyncEngine::Status;
@@ -448,7 +466,7 @@ int SyncWorker::autoImport()
             },
             Qt::BlockingQueuedConnection);
         ++imported;
-        qInfo("秉烛: auto-imported remote journal \"%s\"", manifest.journalName.c_str());
+        qInfo("wick: auto-imported remote journal \"%s\"", manifest.journalName.c_str());
     }
     return imported;
 }

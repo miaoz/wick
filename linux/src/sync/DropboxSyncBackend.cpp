@@ -15,6 +15,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cstdio>
 #include <utility>
 
 namespace wick {
@@ -193,8 +194,12 @@ std::string DropboxSyncBackend::validAccessToken() {
         apply(response);
         return response.accessToken;
     } catch (const SyncBackendError& e) {
-        if (e.kind == SyncBackendError::Kind::needsAuth)
+        if (e.kind == SyncBackendError::Kind::needsAuth) {
+            std::fprintf(stderr,
+                         "Wick sync: Dropbox refresh token rejected (invalid_grant); "
+                         "clearing stored credentials\n");
             signOut();
+        }
         throw;
     }
 }
