@@ -231,6 +231,15 @@ final class SyncCoordinator: ObservableObject {
     private func autoImportRemoteJournals(_ manifests: [JournalSyncManifest]) {
         guard AppSettings.shared.syncEnabled, backend.isAuthorized else { return }
         for manifest in manifests {
+            // Heal stale ignore markers (e.g. recorded by the retired reactive
+            // deletion tracking): the journal is alive on the remote and no
+            // deletion of it is pending or processed on this device, so the
+            // marker would block re-import forever.
+            if ignoredRemoteJournalIDs.contains(manifest.journalID),
+               !engine.isJournalTombstoned(manifest.journalID) {
+                ignoredRemoteJournalIDs.remove(manifest.journalID)
+                persistIgnoredJournals()
+            }
             guard !ignoredRemoteJournalIDs.contains(manifest.journalID),
                   !engine.isJournalTombstoned(manifest.journalID),
                   !JournalStore.shared.journals.contains(where: { $0.id == manifest.journalID })

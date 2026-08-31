@@ -66,6 +66,8 @@ node --test                # 落地页中间件回归
 - 远端变更一轮收为 `[JournalSyncMutation]` 一次 `applySyncedChanges`（PF-01）；下发前 `prepareForRemoteApply` 触发编辑器 flush + 新鲜度重读（ED-01）；成功 apply 发 `JournalRemoteApply`，编辑器只对干净 draft rebase；`resolveConflict(.local)` 同样先 flush。
 - 远端 manifest v1 会被本设备先升 v2 再重建；旧设备须清数据再装 v2。回调 scheme 只在打包 `.app` 注册（`swift run` 收不到）；App secret 永不入仓库。
 - Dropbox 401 已由 `performAuthorized` 处理（作废缓存 token → 刷新重试一次 → 再 401 才 `needsAuth`），勿回退成直接抛错。
+- 凭证丢失（refresh token 不在持久存储中）**必须显式表现为未连接**：Linux `SyncWorker` 在未授权时 emit `authorizedChanged(false)` + 「需要登录」并记日志，禁止静默空转同步（UI 会停留在假的「已同步」）。refresh 遭 `invalid_grant` 会 signOut 清凭证（双端有意设计，有日志）。Linux `SecretTokenStore::save` 有写后读回校验，keyring 不持久化时自动落 0600 dev-secrets 文件，勿绕过。
+- `ignoredRemoteJournalIDs`（macOS/iOS 协调器）只拦「本地已删/对端已删」的本；远端仍活着（有 manifest、本端无墓碑/待删）的 id 视为陈旧标记，auto-import 前必须解除——否则一次幻影删除会永久挡住重新导入，iOS 没有手动 adopt UI。
 
 **交易数值口径（易错）**
 

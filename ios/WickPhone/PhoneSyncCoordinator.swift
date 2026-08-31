@@ -208,6 +208,15 @@ final class PhoneSyncCoordinator: ObservableObject {
         guard syncEnabled, backend.isAuthorized else { return }
         let store = PhoneJournalStore.shared
         for manifest in manifests {
+            // Heal stale ignore markers (e.g. recorded by the retired reactive
+            // deletion tracking): the journal is alive on the remote and no
+            // deletion of it is pending or processed on this device, so the
+            // marker would block re-import forever.
+            if ignoredRemoteJournalIDs.contains(manifest.journalID),
+               !engine.isJournalTombstoned(manifest.journalID) {
+                ignoredRemoteJournalIDs.remove(manifest.journalID)
+                persistIgnoredJournals()
+            }
             guard !ignoredRemoteJournalIDs.contains(manifest.journalID),
                   !engine.isJournalTombstoned(manifest.journalID),
                   !store.journals.contains(where: { $0.id == manifest.journalID })
