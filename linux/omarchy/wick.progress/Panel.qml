@@ -20,7 +20,7 @@ Panel {
     return isChinese ? zh : en
   }
 
-  readonly property color foreground: bar ? bar.foreground : Color.foreground
+  readonly property color foreground: (bar && bar.barForeground !== undefined) ? bar.barForeground : ((bar && bar.foreground !== undefined) ? bar.foreground : Color.foreground)
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color stain: Qt.darker(foreground, 2.4)

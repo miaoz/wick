@@ -228,14 +228,22 @@ QIcon TrayController::makeCandleIcon() const
     const int textW = showPct ? static_cast<int>(px * 1.7) : 0;
     const int canvasW = px + textW;
 
+    QColor fg = QApplication::palette().color(QPalette::WindowText);
+    if (!fg.isValid() || fg.alpha() == 0)
+        fg = QColor(0xFF, 0xFF, 0xFF);
+
     QPixmap colored(canvasW, px);
     colored.fill(Qt::transparent);
     {
         QPainter p(&colored);
         p.setRenderHint(QPainter::Antialiasing, true);
         renderer.render(&p, QRectF(0, 0, px, px));
+        p.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        p.fillRect(QRect(0, 0, px, px), fg);
+        p.setCompositionMode(QPainter::CompositionMode_SourceOver);
+
         if (showPct) {
-            p.setPen(QColor(0xFF, 0xFF, 0xFF));
+            p.setPen(fg);
             QFont f = p.font();
             f.setPixelSize(qMax(8, px * 9 / 22));
             f.setBold(true);

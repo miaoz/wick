@@ -2,7 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18">
   <!-- Template silhouette ported from Sources/WickCore/MenuBarIcon.swift
        (18×18 black-on-transparent; Cocoa y-up → SVG y-down). -->
-  <g fill="#FFFFFF" fill-rule="evenodd">
+  <g fill="currentColor" fill-rule="evenodd">
     <!-- Flame — upright teardrop (center 9,14 cocoa; width 4.2 height 5.4) -->
     <path d="M9 1.3
              C6.795 3.46, 7.425 5.728, 9 6.7
