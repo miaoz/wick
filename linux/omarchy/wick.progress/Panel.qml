@@ -20,12 +20,13 @@ Panel {
     return isChinese ? zh : en
   }
 
-  readonly property color barIconColor: (bar && bar.barForeground !== undefined) ? bar.barForeground : ((bar && bar.foreground !== undefined) ? bar.foreground : Color.foreground)
-  readonly property color foreground: Color.foreground
-  readonly property color dim: Qt.darker(foreground, 1.55)
+  readonly property color barIconColor: (bar && bar.barForeground !== undefined) ? bar.barForeground : ((bar && bar.foreground !== undefined) ? bar.foreground : "#ffffff")
+  readonly property color paperBg: "#1f1f28"
+  readonly property color foreground: "#dcd7ba"
+  readonly property color dim: Qt.rgba(220 / 255, 215 / 255, 186 / 255, 0.65)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
-  readonly property color stain: Qt.darker(foreground, 2.4)
-  readonly property color stainHot: Color.accent
+  readonly property color stain: Qt.rgba(220 / 255, 215 / 255, 186 / 255, 0.25)
+  readonly property color stainHot: "#e87d3e"
 
   property FileView langFile: FileView {
     id: langFile
@@ -151,8 +152,8 @@ Panel {
     Rectangle {
       anchors.fill: parent
       radius: Style.space(3)
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
-      border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.16)
+      color: Qt.rgba(1, 1, 1, 0.08)
+      border.color: Qt.rgba(1, 1, 1, 0.16)
       border.width: 1
       clip: true
 
@@ -163,7 +164,7 @@ Panel {
           width: 1
           height: parent.height
           x: (index / strip.ticks) * parent.width
-          color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+          color: Qt.rgba(1, 1, 1, 0.14)
           visible: index > 0
         }
       }
@@ -172,7 +173,7 @@ Panel {
         id: charFill
         width: Math.max(0, Math.min(1, strip.elapsed)) * parent.width
         height: parent.height
-        color: Qt.rgba(root.stainHot.r, root.stainHot.g, root.stainHot.b, 0.45)
+        color: Qt.rgba(232 / 255, 125 / 255, 62 / 255, 0.45)
       }
 
       Rectangle {
@@ -180,7 +181,7 @@ Panel {
         width: 3
         height: parent.height
         x: charFill.width - 1
-        color: root.stainHot
+        color: "#e87d3e"
       }
     }
   }
@@ -201,6 +202,16 @@ Panel {
       onCloseRequested: root.close()
       onTabRequested: function (direction) {
         root.switchPanel(direction)
+      }
+
+      Rectangle {
+        anchors.fill: parent
+        anchors.margins: -Style.spacing.popupPadding
+        color: root.paperBg
+        border.color: "#363646"
+        border.width: 1
+        radius: Style.cornerRadius
+        z: -1
       }
 
       Column {
