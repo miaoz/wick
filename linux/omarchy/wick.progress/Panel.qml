@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -20,13 +21,13 @@ Panel {
     return isChinese ? zh : en
   }
 
-  readonly property color barIconColor: (bar && bar.barForeground !== undefined) ? bar.barForeground : ((bar && bar.foreground !== undefined) ? bar.foreground : "#ffffff")
-  readonly property color paperBg: "#1f1f28"
-  readonly property color foreground: "#dcd7ba"
-  readonly property color dim: Qt.rgba(220 / 255, 215 / 255, 186 / 255, 0.65)
+  readonly property color foreground: Color.popups.text || Color.foreground
+  readonly property color dim: Color.muted || Qt.rgba(foreground.r, foreground.g, foreground.b, 0.65)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
-  readonly property color stain: Qt.rgba(220 / 255, 215 / 255, 186 / 255, 0.25)
-  readonly property color stainHot: "#e87d3e"
+  readonly property color stain: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.25)
+  readonly property color stainHot: Color.accent
+  readonly property color cardBg: Color.popups.background
+  readonly property color cardBorder: Color.popups.border
 
   property FileView langFile: FileView {
     id: langFile
@@ -110,21 +111,24 @@ Panel {
   Component {
     id: candleIcon
     Item {
-      Image {
-        id: candleImage
-        anchors.fill: parent
-        source: Qt.resolvedUrl("candle.svg")
-        fillMode: Image.PreserveAspectFit
-        sourceSize.width: Math.round(width * Screen.devicePixelRatio)
-        sourceSize.height: Math.round(height * Screen.devicePixelRatio)
-        visible: false
+      anchors.fill: parent
+      Shape {
+        anchors.centerIn: parent
+        width: 18
+        height: 18
+        scale: Math.min(parent.width, parent.height) / 18
+        transformOrigin: Item.Center
+        antialiasing: true
         layer.enabled: true
-      }
-      MultiEffect {
-        anchors.fill: candleImage
-        source: candleImage
-        colorization: 1.0
-        colorizationColor: root.barIconColor
+        layer.samples: 4
+
+        ShapePath {
+          fillColor: root.barForeground
+          strokeWidth: 0
+          PathSvg {
+            path: "M9 1.4 C7.6 3.1 6.6 4.6 6.6 6.1 C6.6 7.8 7.7 9 9 9 C10.3 9 11.4 7.8 11.4 6.1 C11.4 4.6 10.4 3.1 9 1.4 Z M8.5 9.2 H9.5 V11.2 H8.5 Z M5.6 11.2 L12.4 11.2 L12.8 15.6 Q12.85 16.6 11.6 16.6 L6.4 16.6 Q5.15 16.6 5.2 15.6 Z"
+          }
+        }
       }
     }
   }
@@ -152,8 +156,8 @@ Panel {
     Rectangle {
       anchors.fill: parent
       radius: Style.space(3)
-      color: Qt.rgba(1, 1, 1, 0.08)
-      border.color: Qt.rgba(1, 1, 1, 0.16)
+      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+      border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.16)
       border.width: 1
       clip: true
 
@@ -164,7 +168,7 @@ Panel {
           width: 1
           height: parent.height
           x: (index / strip.ticks) * parent.width
-          color: Qt.rgba(1, 1, 1, 0.14)
+          color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.14)
           visible: index > 0
         }
       }
@@ -173,7 +177,7 @@ Panel {
         id: charFill
         width: Math.max(0, Math.min(1, strip.elapsed)) * parent.width
         height: parent.height
-        color: Qt.rgba(232 / 255, 125 / 255, 62 / 255, 0.45)
+        color: Qt.rgba(root.stainHot.r, root.stainHot.g, root.stainHot.b, 0.45)
       }
 
       Rectangle {
@@ -181,7 +185,7 @@ Panel {
         width: 3
         height: parent.height
         x: charFill.width - 1
-        color: "#e87d3e"
+        color: root.stainHot
       }
     }
   }
@@ -207,8 +211,16 @@ Panel {
       Rectangle {
         anchors.fill: parent
         anchors.margins: -Style.spacing.popupPadding
-        color: root.paperBg
-        border.color: "#363646"
+        color: Color.background
+        radius: Style.cornerRadius
+        z: -2
+      }
+
+      Rectangle {
+        anchors.fill: parent
+        anchors.margins: -Style.spacing.popupPadding
+        color: root.cardBg
+        border.color: root.cardBorder
         border.width: 1
         radius: Style.cornerRadius
         z: -1
