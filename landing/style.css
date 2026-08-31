@@ -486,7 +486,8 @@ main.container { position: relative; z-index: 1; }
   gap: 14px;
   flex-wrap: wrap;
 }
-.apple-icon {
+.apple-icon,
+.linux-icon {
   width: 17px; height: 17px;
   fill: currentColor;
   transform: translateY(-1px);

@@ -222,7 +222,7 @@ describe("4. JSON-LD Structured Data in landing/index.html", () => {
     assert.ok(softwareApp.description && softwareApp.description.length > 20);
     assert.equal(softwareApp.url, "https://wick.bitfroth.com/");
     assert.equal(softwareApp.applicationCategory, "FinanceApplication");
-    assert.equal(softwareApp.operatingSystem, "macOS 13.0 or later");
+    assert.equal(softwareApp.operatingSystem, "macOS 13.0 or later, Linux");
     assert.equal(softwareApp.downloadUrl, "https://dl.bitfroth.com/wick/Wick.zip");
     assert.deepEqual(softwareApp.offers, {
       "@type": "Offer",

@@ -2,11 +2,12 @@
 
 [![Build and Release](https://github.com/miaoz/wick/actions/workflows/release.yml/badge.svg)](https://github.com/miaoz/wick/actions/workflows/release.yml)
 [![Latest Release](https://img.shields.io/github/v/release/miaoz/wick)](https://github.com/miaoz/wick/releases/latest)
-[![Platform](https://img.shields.io/badge/platform-macOS%2013%2B%20%7C%20iOS%2016%2B-black)](https://github.com/miaoz/wick)
+[![Platform](https://img.shields.io/badge/platform-macOS%2013%2B%20%7C%20Linux%20%7C%20iOS%2016%2B-black)](https://github.com/miaoz/wick)
 [![Swift](https://img.shields.io/badge/Swift-6.1%2B-F05138)](https://www.swift.org)
+[![Qt](https://img.shields.io/badge/Qt-6.4%2B-41CD52)](https://www.qt.io)
 
-**Wick**（中文名「**秉烛日记**」，英文名「**Wick**」）是一款专为交易者与记录者打造的原生应用（macOS / iOS）：
-- **macOS 菜单栏**：在状态栏显示蜡烛图标，点击后弹出面板，实时展示**日 / 周 / 月 / 年**还剩多少时间；
+**Wick**（中文名「**秉烛日记**」，英文名「**Wick**」）是一款专为交易者与记录者打造的原生应用（macOS / Linux / iOS）：
+- **状态栏 / 顶栏**：macOS 菜单栏与 Linux 状态栏 / Omarchy 顶栏显示蜡烛图标，实时展示**日 / 周 / 月 / 年**还剩多少时间；
 - **日记（一天一页纸）**：一天一篇日记、篇内多条目（标签 + 正文 + 图片），条目级检索、复盘白文方章与全套字体自适应排版，可把**交易所仓位**挂到对应日记条目上；
 - **交易日历（彩蛋）**：撕页物理「黄历」（全球宏观 + 财报），桌面透明贴窗与手机撕页交互。
 
@@ -16,33 +17,33 @@
 
 ## 功能
 
-- **菜单栏常驻**：基于 `MenuBarExtra` 的原生体验，不占用 Dock；可选显示今日剩余百分比
+- **菜单栏 / 状态栏常驻**：macOS 基于 `MenuBarExtra` 原生体验，Linux 支持系统托盘（SNI）与 Omarchy / Quickshell 顶栏蜡烛插件；可选显示今日剩余百分比
 - **时间进度**：日、周、月、年的剩余百分比、剩余时长与结束时间，每秒刷新；可设周从周一开始
 - **日记**：一天一篇日记、篇内多条目（标签 + 正文 + 图片），条目级检索、可选每日提醒；秉烛主窗 = 全宽顶栏 + 手动三栏（导航 / 日期列表 / 编辑页）+ 可选检查器
 - **多日记本**：在栏一（导航）的「日记本」节中切换（点行）、新建（节头右侧 + 钮）、重命名 / 删除（日记本行右键菜单，删除仅限非最后一本）；旧版单日记数据首次启动自动迁移
 - **数据安全**：退出/关窗强制落盘、`journal.json.bak` 与滚动备份、加载失败只读保护、导出/导入 zip
 - **Dropbox 同步（可选）**：本地存储始终是唯一真源，同步引擎按「天」与 Dropbox 双向对账；日记本改名跨设备同步；删除以墓碑传播、冲突保留双方内容、远端文件意外丢失自动回传；可另行开启仓位快照同步供其他设备只读展示；OAuth PKCE 登录，不在客户端内置 App secret
 - **交易日历（彩蛋）**：设置 →「交易日历」开启后，日记窗口顶栏的日历按钮召唤撕页「黄历」——每页展示当日全球宏观事件与财报，拖拽撕纸即翻到次日；无边框透明窗口可贴在桌面上（详见 [交易日历](#交易日历)）
-- **交易所仓位（可选）**：每个日记本可绑定一个账号（Binance USDⓈ-M / OKX 永续 / Hyperliquid）。只读凭据仅存本机（打包应用走钥匙串，`swift run` 走本地文件以免每次重编译弹密码），仓位按「开仓日期 + 标签」挂到条目上；缺少匹配标签时自动补建条目（详见 [交易所仓位同步](#交易所仓位同步)）
-- **登录启动**：可选「登录时启动」（`SMAppService`）
+- **交易所仓位（可选）**：每个日记本可绑定一个账号（Binance USDⓈ-M / OKX 永续 / Hyperliquid）。只读凭据仅存本机（macOS 走钥匙串，Linux 走 libsecret，开发态走安全本地文件），仓位按「开仓日期 + 标签」挂到条目上；缺少匹配标签时自动补建条目（详见 [交易所仓位同步](#交易所仓位同步)）
+- **登录启动**：可选「登录时启动」（macOS `SMAppService` / Linux `systemd --user`）
 - **秉烛主题**：面板与日记配色随一天的时间流动（晨光 / 白昼 / 暮色 / 夜幕四相位平滑过渡），纸面墨迹的设计语言，亮 / 暗 / 跟随系统外观三档可选
 - **字体**：设置里可从设备已安装的字体中任选一套，全局换用（日记、设置、交易日历、编辑器输入）；不选即默认系统外观
 - **设置**：语言、外观、字体、提醒、菜单栏百分比、数据目录、版本与检查更新（GitHub Releases）
-- **Universal 二进制**：同时支持 Apple Silicon 与 Intel Mac
-- **开箱可分发**：本地一键打 zip；推送 tag 后由 GitHub Actions 自动发版
+- **多平台分发**：macOS Universal 二进制（Apple Silicon + Intel）+ Linux 通用 tar.gz / Arch 独立安装包；推送 tag 后由 GitHub Actions 自动构建全平台分发包
 
 ## 系统要求
 
-| 项目 | 要求 |
-| --- | --- |
-| 系统 | macOS 13 Ventura 或更高 |
-| 架构 | Apple Silicon 或 Intel（Universal 包） |
-| 开发 | Xcode 16+ / Swift 6.1+（推荐 Xcode 26、Swift 6.3，与 CI 一致） |
+| 平台 | 系统要求 | 架构 | 说明 |
+| --- | --- | --- | --- |
+| **macOS** | macOS 13 Ventura 或更高 | Apple Silicon (arm64) / Intel (x86_64) | Swift 6.1+ / SwiftUI + AppKit 原生 Universal 包 |
+| **Linux** | Arch Linux / Omarchy / Ubuntu 22.04+ / Fedora 38+ 等 | x86_64 | Qt 6.4+ (QtQuick, Svg, Network) / C++20 |
+| **iOS** | iOS 16.0 或更高 | iPhone (arm64) | 移动端 Companion 应用（真机调试/源码构建） |
 
 ## 安装
 
-### 预编译包（推荐）
+### macOS
 
+#### 预编译包（推荐）
 1. 打开 [Releases](https://github.com/miaoz/wick/releases/latest)
 2. 下载 `Wick-macOS-<version>.zip`
 3. 解压后将 `Wick.app` 拖到「应用程序」
@@ -50,13 +51,38 @@
 
 > **说明：** 发布包使用 ad-hoc 签名，**尚未**使用 Apple Developer ID 签名或公证。因此首次打开可能需要手动允许。
 
-### 从源码安装
-
+#### 从源码安装
 ```bash
 git clone https://github.com/miaoz/wick.git
 cd wick
 ./scripts/package_app.sh
 open dist/Wick.app
+```
+
+### Linux
+
+#### Arch Linux / Omarchy（推荐）
+从 [Releases](https://github.com/miaoz/wick/releases/latest) 下载 `.pkg.tar.zst` 后一键安装：
+```bash
+sudo pacman -U wick-<version>-1-x86_64.pkg.tar.zst
+```
+
+#### 通用 Linux 安装包
+从 [Releases](https://github.com/miaoz/wick/releases/latest) 下载 `Wick-Linux-<version>.tar.gz`：
+```bash
+tar -xzf Wick-Linux-<version>.tar.gz
+cd Wick-Linux-<version>
+./install.sh          # 用户目录安装 (~/.local)
+# 或 sudo ./install.sh # 系统全局安装 (/usr/local)
+```
+
+#### 从源码编译 Linux 版
+```bash
+# 依赖: cmake, ninja, gcc/g++, qt6-base, qt6-declarative, qt6-svg, libsecret, openssl
+git clone https://github.com/miaoz/wick.git
+cd wick
+make package-linux
+# 产物生成在 dist/ 目录下 (tar.gz, zip 与 Arch pkg.tar.zst)
 ```
 
 ## 使用
@@ -170,13 +196,15 @@ VERSION=1.3.1 BUILD=6 ./scripts/package_zip.sh
 
 | 命令 | 说明 |
 | --- | --- |
-| `swift run` / `swift build` | SwiftPM 宿主架构构建，适合开发调试 |
-| `./build.sh` / `make` | 分别编译 `arm64` 与 `x86_64`，经 `lipo` 合并为 Universal `.app` |
-| `./scripts/package_app.sh` | 生成 `dist/Wick.app`（含图标与 `Info.plist`） |
-| `./scripts/package_zip.sh` | 在 `.app` 基础上打包 zip |
+| `swift run` / `swift build` | macOS: SwiftPM 宿主架构构建，适合开发调试 |
+| `./build.sh` / `make` | macOS: 分别编译 `arm64` 与 `x86_64`，经 `lipo` 合并为 Universal `.app` |
+| `./scripts/package_app.sh` | macOS: 生成 `dist/Wick.app`（含图标与 `Info.plist`） |
+| `./scripts/package_zip.sh` | macOS: 在 `.app` 基础上打包 zip |
+| `make package-linux` | Linux: 编译 Release 产物、运行 CTest 并生成通用 tar.gz、zip 与 Arch `.pkg.tar.zst` |
+| `./scripts/package_linux.sh` | Linux: 打包流水线脚本 |
 | `./scripts/generate_icon_assets.sh` | 从脚本重新生成 `assets/AppIcon*` |
 
-> `swift build` 默认只产出当前架构；项目把 `./build.sh` / `make` 作为正式打包入口，以确保 Universal 二进制。
+> `swift build` 默认只产出当前架构；项目把 `./build.sh` / `make` 作为 macOS 正式打包入口，以确保 Universal 二进制。
 
 ### 图标资源
 
@@ -191,26 +219,28 @@ VERSION=1.3.1 BUILD=6 ./scripts/package_zip.sh
 
 ## 持续集成与发版
 
-仓库使用 [GitHub Actions](.github/workflows/release.yml) 自动打包：
+仓库使用 [GitHub Actions](.github/workflows/release.yml) 自动打包全平台版本：
 
 | 触发 | 结果 |
 | --- | --- |
-| `push` / `pull_request` 到 `main` | 构建 zip，上传为 workflow artifact |
-| 推送 tag `v*`（如 `v1.2.0`） | 构建 zip，并创建 [GitHub Release](https://github.com/miaoz/wick/releases) |
+| `push` / `pull_request` 到 `main` | 构建 macOS zip 与 Linux 通用包/Arch 包，上传为 workflow artifact |
+| 推送 tag `v*`（如 `v1.10.32`） | 构建多平台分发包，创建 [GitHub Release](https://github.com/miaoz/wick/releases) 并同步至 R2 直链 |
 | `workflow_dispatch` | 手动触发构建 |
 
-CI 使用 **`macos-26`** runner，优先选用 **Xcode 26.6**（与当前主开发环境对齐；若镜像无 26.6 则回退到最新 Xcode 26.x）。打包路径与本地相同：`./scripts/package_zip.sh`。
+CI 矩阵包含 **`macos-26`**（Xcode 26.6）、**Ubuntu 24.04** 与 **Arch Linux** 容器。
 
 ### 发布新版本
 
 ```bash
 git checkout main
 git pull
-git tag v1.2
-git push origin v1.2
+./scripts/set_version.sh 1.10.32 1  # 自动同步 macOS/iOS/Linux 版本号
+git commit -am "chore: bump version to 1.10.32"
+git tag v1.10.32
+git push origin v1.10.32
 ```
 
-完成后在 [Releases](https://github.com/miaoz/wick/releases) 下载 `Wick-macOS-<version>.zip`。
+完成后在 [Releases](https://github.com/miaoz/wick/releases) 下载 `Wick-macOS-<version>.zip`、`Wick-Linux-<version>.tar.gz` 或 `wick-<version>-1-x86_64.pkg.tar.zst`。
 
 ## 项目结构
 
@@ -242,18 +272,27 @@ wick/
 │   ├── JournalStore.swift        # 本地持久化、备份、导入导出（尾部为同步桥接扩展）
 │   ├── JournalRootView.swift     # 日记主窗（全宽顶栏 + 手动三栏 + 可选检查器）
 │   ├── SyncCoordinator.swift     # 同步生命周期、连接/断开、退出前最终同步
-│   ├── ExchangePositionCoordinator.swift / ExchangeSettingsContent.swift / JournalExchangePositions.swift  # 交易所仓位同步（生命周期 / 设置 UI / 条目卡片展示）
-│   ├── TradingCalendarWindowController.swift / FallingPageOverlay.swift  # 日历彩蛋窗口与碎纸叠加窗（macOS 专属）
+│   ├── ExchangePositionCoordinator.swift / ExchangeSettingsContent.swift / JournalExchangePositions.swift  # 交易所仓位同步
+│   ├── TradingCalendarWindowController.swift / FallingPageOverlay.swift  # 日历彩蛋窗口与碎纸叠加窗
 │   ├── JournalReminderScheduler.swift  # 每日提醒
 │   ├── AppSettings.swift         # 语言、外观、提醒、登录项、同步开关等
 │   └── MenuBarIcon.swift         # 菜单栏模板图标
-├── Sources/Wick/main.swift       # 可执行入口
+├── Sources/Wick/main.swift       # macOS 可执行入口
+├── linux/                        # Linux 原生客户端（C++20 + Qt 6 / QML）
+│   ├── CMakeLists.txt            # CMake 构建清单（编译 wick 二进制与 6 个 CTest 单元测试）
+│   ├── src/core/                 # 日记模型、目录管理、归档 zip 导入导出、同步数据格式
+│   ├── src/sync/                 # Dropbox API v2 (PKCE)、JournalSyncEngine、SecretTokenStore (libsecret)
+│   ├── src/trading/              # Binance/OKX/Hyperliquid REST 客户端、仓位聚合与标签匹配
+│   ├── src/app/                  # JournalLibrary、ExchangeCoordinator、SyncWorker、MacroCalendarStore
+│   ├── qml/                      # QML 原生界面（日记主窗、三栏布局、设置窗口、进度面板、黄历与单据）
+│   ├── omarchy/wick.progress/    # Omarchy / Quickshell 顶栏蜡烛与时间弧光插件
+│   └── packaging/                # PKGBUILD (Arch)、install.sh / uninstall.sh (通用脚本)、wick.service
 ├── ios/                          # iPhone 客户端（v0，仅中文 UI，真机调试；链接 WickSync + WickCalendarKit）
-├── Tests/                        # WickTests + WickSyncTests + WickCalendarKitTests + WickTradingTests 单元测试
+├── Tests/                        # macOS/iOS 单元测试 (SwiftPM)
 ├── assets/                       # 应用图标
-├── scripts/                      # 图标生成与打包
-├── build.sh / Makefile           # 默认构建入口
-└── .github/workflows/            # CI / Release
+├── scripts/                      # 多平台打包与发版脚本 (package_app.sh, package_linux.sh, set_version.sh)
+├── build.sh / Makefile           # 多平台统一 Makefile
+└── .github/workflows/            # CI / Release (macOS + Linux + Cloudflare Pages)
 ```
 
 ## 贡献

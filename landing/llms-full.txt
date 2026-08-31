@@ -7,13 +7,22 @@
 ## 1. Overview & Positioning
 
 - **Product Name**: Wick (Chinese: 秉烛日记 / Bǐng Zhú Rì Jì)
-- **Platforms**: macOS 13.0+ (Universal binary: Apple Silicon arm64 & Intel x86_64), iOS 16.0+ (Companion app)
-- **Tech Stack**: Swift 6.1+, SwiftUI, AppKit, Swift Package Manager. Zero third-party runtime dependencies.
-- **Form Factor**: macOS `LSUIElement` menu bar utility with an unobtrusive candle status icon, dynamic time arc popover panel, full-featured multi-column journal window, and optional desktop tear-off calendar.
+- **Platforms**:
+  - macOS 13.0+ (Universal binary: Apple Silicon arm64 & Intel x86_64)
+  - Linux (x86_64: Arch Linux / Omarchy / Ubuntu / Fedora / Generic tarball)
+  - iOS 16.0+ (Companion app)
+- **Tech Stack**:
+  - macOS & iOS: Swift 6.1+, SwiftUI, AppKit/UIKit, Swift Package Manager.
+  - Linux: C++20, Qt 6.4+ (QtQuick, Svg, Network), libsecret, OpenSSL, CMake, Ninja.
+  - Zero third-party cloud runtime dependencies.
+- **Form Factor**:
+  - macOS: `LSUIElement` menu bar utility with candle status icon and popover time arc panel.
+  - Linux: Native system tray (SNI) status utility + native Omarchy / Quickshell `wick.progress` bar widget.
+  - Full-featured multi-column journal window and optional desktop tear-off calendar.
 - **Core Philosophy**:
   - **Local-First & Offline-First**: Local storage is always the single source of truth.
   - **Zero Telemetry**: No analytics, no tracking, no third-party servers.
-  - **Zero Security Risk**: Read-only exchange API credentials stored strictly in macOS Keychain. Private keys are never collected.
+  - **Zero Security Risk**: Read-only exchange API credentials stored strictly in macOS Keychain or Linux libsecret. Private keys are never collected.
 
 ---
 
@@ -21,38 +30,39 @@
 
 ### Best-Fit Use Cases
 1. **Disciplined Trading Journaling**:
-   - Discretionary or semi-systematic crypto and equity traders who maintain a daily trading journal.
+   - Discretionary or semi-systematic crypto and equity traders who maintain a daily trading journal on macOS or Linux.
    - Requires structured daily pages (`JournalEntry`) with multi-item logs (`JournalItem`), setup tags, chart attachments, and review seals (`✓` / `✗`).
 2. **Read-Only Crypto Exchange Position Sync**:
    - Traders on **Binance** (USDⓈ-M Futures), **OKX** (SWAP Perpetuals), or **Hyperliquid** (Perpetuals).
    - Automatically ingests execution fills via direct REST calls, computes VWAP, isolates hedge lanes, and attaches aggregated position receipts directly to daily journal entries.
-   - Credentials stay on the user's Mac in the Keychain. Hyperliquid only requires a public `0x` address.
+   - Credentials stay on the user's machine in Keychain / libsecret. Hyperliquid only requires a public `0x` address.
 3. **Ambient Time Tracking & Discipline**:
-   - Professionals seeking real-time Day/Week/Month/Year progress awareness in the macOS menu bar.
+   - Professionals seeking real-time Day/Week/Month/Year progress awareness in the macOS menu bar or Linux status bar / Omarchy top bar.
 4. **Desktop Macroeconomic & Earnings Calendar**:
    - Traders tracking US, HK, and CN economic data releases and corporate earnings directly from their desktop.
 5. **Private Multi-Device Sync**:
-   - Users who want their journals synchronized across Macs using their personal Dropbox storage without giving data to a third-party SaaS database.
+   - Users who want their journals synchronized across macOS and Linux machines using their personal Dropbox storage without giving data to a third-party SaaS database.
 
 ### When NOT to Use Wick
 - Automated order routing or algorithmic execution (Wick is 100% read-only).
 - Real-time sub-second Level 2 orderbook streaming.
 - Multi-user team collaboration / enterprise CRM.
-- Windows or Linux operating systems.
+- Windows desktops or Android phones.
 
 ---
 
 ## 3. Modular Architecture
 
-The Wick codebase is organized into SwiftPM targets with strict separation of concerns:
+The Wick codebase is organized into modular targets with strict separation of concerns:
 
-| Target | Responsibility |
+| Module / Target | Responsibility |
 | --- | --- |
-| `WickSync` | Pure Foundation: Data models (`JournalEntry`, `JournalItem`), synchronization engine, Dropbox API backend (OAuth PKCE), and localization (`L10n`). Strictly no AppKit/UIKit imports. |
-| `WickCalendarKit` | Cross-platform economic calendar: Wallstreetcn REST client, 2D Verlet paper simulation physics, SpriteKit/SwiftUI rendering, synthesized audio engine, and lunar calendar calculation. |
-| `WickTrading` | Pure Foundation + CryptoKit: Exchange REST clients (`BinanceFuturesClient`, `OKXSwapClient`, `HyperliquidInfoClient`), fill aggregation (`PositionAggregator`), VWAP calculation, realized P&L, and tag matcher. |
-| `WickCore` | macOS UI & application logic: `WickApp`, `JournalWindowController`, manual three-column navigation, AppKit/SwiftUI bridge, Keychain credential storage, and "秉烛" theme engine. |
-| `Wick` | Executable entry point. |
+| `WickSync` (Swift) / `linux/src/sync` (C++) | Pure Foundation / C++20: Data models (`JournalEntry`, `JournalItem`), synchronization engine (`JournalSyncEngine`), Dropbox API v2 backend (OAuth PKCE), and localization. |
+| `WickCalendarKit` (Swift) / `linux/src/app/TraderAlmanac` (C++) | Cross-platform economic calendar: Wallstreetcn REST client, 2D Verlet paper simulation physics, synthesized audio engine, and lunar calendar calculation. |
+| `WickTrading` (Swift) / `linux/src/trading` (C++) | Pure Foundation + CryptoKit / OpenSSL: Exchange REST clients (`Binance`, `OKX`, `Hyperliquid`), fill aggregation (`PositionAggregator`), VWAP calculation, realized P&L, and tag matcher. |
+| `WickCore` (Swift) | macOS UI & application logic: `WickApp`, `JournalWindowController`, manual three-column navigation, AppKit/SwiftUI bridge, Keychain credential storage, and "秉烛" theme engine. |
+| `linux/qml` & `linux/src/app` (C++/QML) | Linux native application: Qt 6 QML three-column journal window, settings dialog, tray controller, and Omarchy Quickshell bar widget. |
+| `Wick` (Swift) / `linux/src/main.cpp` (C++) | macOS and Linux executable entry points. |
 
 ---
 
@@ -115,3 +125,4 @@ The Wick codebase is organized into SwiftPM targets with strict separation of co
 - **GitHub Repository**: https://github.com/miaoz/wick
 - **Releases**: https://github.com/miaoz/wick/releases
 - **macOS Universal Binary**: https://dl.bitfroth.com/wick/Wick.zip
+- **Linux Generic Package (.tar.gz)**: https://dl.bitfroth.com/wick/Wick-Linux.tar.gz
