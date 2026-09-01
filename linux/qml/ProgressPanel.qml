@@ -33,61 +33,6 @@ Rectangle {
     readonly property string fontPrint: theme.fontPrint
     readonly property string fontMono: theme.fontMono
 
-    component BurnStrip: Item {
-        id: strip
-        property real elapsed: 0
-        property int ticks: 24
-        property bool showEmber: true
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 3
-            color: paper.paperHi
-            border.color: Qt.rgba(240 / 255, 227 / 255, 198 / 255, 0.14)
-            border.width: 1
-            clip: true
-
-            // Remaining paper ticks (刻度).
-            Repeater {
-                model: Math.max(strip.ticks, 1)
-                Rectangle {
-                    required property int index
-                    width: 1
-                    height: parent.height
-                    x: (index / strip.ticks) * parent.width
-                    color: Qt.rgba(240 / 255, 227 / 255, 198 / 255, 0.14)
-                    visible: index > 0
-                }
-            }
-
-            // Elapsed = 烛光烘过的渍. No flame animation in stage 0.
-            Rectangle {
-                id: charFill
-                width: Math.max(0, Math.min(1, strip.elapsed)) * parent.width
-                height: parent.height
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: paper.stain1 }
-                    GradientStop { position: 0.55; color: paper.stain1 }
-                    GradientStop { position: 1.0; color: paper.stain2 }
-                }
-            }
-
-            Rectangle {
-                visible: strip.showEmber && strip.elapsed > 0.002 && strip.elapsed < 0.998
-                width: 3
-                height: parent.height + 2
-                y: -1
-                x: charFill.width - 1
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.45; color: paper.ember }
-                    GradientStop { position: 1.0; color: paper.emberHi }
-                }
-            }
-        }
-    }
 
     ColumnLayout {
         id: content
@@ -143,7 +88,8 @@ Rectangle {
                 Layout.preferredHeight: 34
                 elapsed: timeProgress.dayElapsed
                 ticks: 24
-                showEmber: true
+                showsFlame: true
+                theme: theme
             }
 
             RowLayout {
@@ -188,7 +134,7 @@ Rectangle {
                     Layout.preferredHeight: 12
                     elapsed: timeProgress.weekElapsed
                     ticks: 7
-                    showEmber: true
+                    theme: theme
                 }
                 Text {
                     text: timeProgress.weekPercentText
@@ -216,7 +162,7 @@ Rectangle {
                     Layout.preferredHeight: 12
                     elapsed: timeProgress.monthElapsed
                     ticks: timeProgress.monthTicks
-                    showEmber: true
+                    theme: theme
                 }
                 Text {
                     text: timeProgress.monthPercentText
@@ -244,7 +190,7 @@ Rectangle {
                     Layout.preferredHeight: 12
                     elapsed: timeProgress.yearElapsed
                     ticks: 12
-                    showEmber: true
+                    theme: theme
                 }
                 Text {
                     text: timeProgress.yearPercentText

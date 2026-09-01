@@ -256,46 +256,15 @@ Rectangle {
                                 Layout.topMargin: 12
                                 Layout.preferredHeight: daySection.modelData.isToday ? 28 : 8
 
-                                Rectangle {
-                                    id: burnTrack
+                                BurnStrip {
+                                    id: dayBurnStrip
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     height: 8
-                                    radius: 3
-                                    color: theme.paperHi
-                                    border.color: theme.rule
-                                    clip: true
-
-                                    Repeater {
-                                        model: 24
-                                        Rectangle {
-                                            required property int index
-                                            width: 1
-                                            height: burnTrack.height
-                                            x: (index / 24) * burnTrack.width
-                                            color: theme.rule
-                                            visible: index > 0
-                                        }
-                                    }
-
-                                    Rectangle {
-                                        id: burnFill
-                                        width: Math.max(0, Math.min(1, daySection.modelData.burnElapsed)) * burnTrack.width
-                                        height: burnTrack.height
-                                        gradient: Gradient {
-                                            orientation: Gradient.Horizontal
-                                            GradientStop { position: 0.0; color: theme.stain1 }
-                                            GradientStop { position: 1.0; color: theme.stain2 }
-                                        }
-                                    }
-                                    Rectangle {
-                                        visible: daySection.modelData.isToday && daySection.modelData.burnElapsed > 0.002
-                                                 && daySection.modelData.burnElapsed < 0.998
-                                        width: 3
-                                        height: burnTrack.height
-                                        x: burnFill.width - 1
-                                        color: theme.ember
-                                    }
+                                    elapsed: daySection.modelData.burnElapsed
+                                    ticks: 24
+                                    showsFlame: daySection.modelData.isToday
+                                    theme: page.theme
                                 }
 
                                 RowLayout {
@@ -304,7 +273,7 @@ Rectangle {
                                     anchors.right: parent.right
                                     anchors.bottom: parent.bottom
                                     Text {
-                                        text: Math.round(daySection.modelData.burnElapsed * 100) + "% 已过"
+                                        text: Math.round(daySection.modelData.burnElapsed * 100) + "% " + page.t("已过", "elapsed")
                                         color: theme.ink3
                                         font.family: theme.fontMono
                                         font.pixelSize: 9

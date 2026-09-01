@@ -146,17 +146,21 @@ Panel {
     id: strip
     property real elapsed: 0
     property int ticks: 24
+    property bool showsFlame: false
     property int stripHeight: Style.space(12)
 
     implicitHeight: stripHeight
     height: stripHeight
 
+    readonly property real fraction: Math.max(0, Math.min(1, strip.elapsed))
+    readonly property real frontier: width * fraction
+    readonly property bool isFrontierActive: fraction > 0.002
+
     Rectangle {
+      id: baseTrack
       anchors.fill: parent
       radius: Style.space(3)
       color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
-      border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.16)
-      border.width: 1
       clip: true
 
       Repeater {
@@ -171,19 +175,149 @@ Panel {
         }
       }
 
-      Rectangle {
-        id: charFill
-        width: Math.max(0, Math.min(1, strip.elapsed)) * parent.width
-        height: parent.height
-        color: Qt.rgba(root.stainHot.r, root.stainHot.g, root.stainHot.b, 0.45)
+      Canvas {
+        id: omStainCanvas
+        anchors.fill: parent
+        antialiasing: true
+        visible: strip.isFrontierActive
+        onPaint: {
+          var ctx = getContext("2d")
+          ctx.reset()
+          ctx.clearRect(0, 0, width, height)
+          var fx = width * strip.fraction
+          if (fx <= 0.5) return
+          var seed = 7
+          function wobble(t) {
+            return Math.sin(t * 9 + seed) * 1.05 + Math.sin(t * 23 + seed * 3.1) * 0.65 + Math.sin(t * 41 + seed * 1.7) * 0.35
+          }
+          ctx.beginPath()
+          ctx.moveTo(0, 0)
+          ctx.lineTo(fx + wobble(0), 0)
+          var steps = 24
+          for (var s = 1; s <= steps; s++) {
+            var t = s / steps
+            ctx.lineTo(fx + wobble(t), height * t)
+          }
+          ctx.lineTo(0, height)
+          ctx.closePath()
+          var grad = ctx.createLinearGradient(0, 0, fx, 0)
+          grad.addColorStop(0.0, Qt.rgba(root.stainHot.r, root.stainHot.g, root.stainHot.b, 0.20))
+          grad.addColorStop(1.0, Qt.rgba(root.stainHot.r, root.stainHot.g, root.stainHot.b, 0.55))
+          ctx.fillStyle = grad
+          ctx.fill()
+        }
+        Connections {
+          target: strip
+          function onFractionChanged() { omStainCanvas.requestPaint() }
+          function onWidthChanged() { omStainCanvas.requestPaint() }
+          function onHeightChanged() { omStainCanvas.requestPaint() }
+        }
       }
+    }
+
+    // Outer enclosing frame
+    Rectangle {
+      anchors.fill: parent
+      radius: Style.space(3)
+      color: "transparent"
+      border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.16)
+      border.width: 1
+    }
+
+    // Warm halo
+    Canvas {
+      id: omHaloCanvas
+      property real haloSize: Math.max(strip.height * 2.8, 16)
+      width: haloSize
+      height: haloSize
+      x: strip.frontier - width / 2
+      y: (strip.height - height) / 2
+      visible: strip.isFrontierActive
+      antialiasing: true
+      onPaint: {
+        var ctx = getContext("2d")
+        ctx.reset()
+        ctx.clearRect(0, 0, width, height)
+        var cx = width / 2
+        var cy = height / 2
+        var r = width / 2
+        var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
+        g.addColorStop(0.0, Qt.rgba(root.stainHot.r, root.stainHot.g, root.stainHot.b, 0.4))
+        g.addColorStop(1.0, "transparent")
+        ctx.fillStyle = g
+        ctx.beginPath()
+        ctx.arc(cx, cy, r, 0, 2 * Math.PI)
+        ctx.fill()
+      }
+      onWidthChanged: omHaloCanvas.requestPaint()
+      onHeightChanged: omHaloCanvas.requestPaint()
+    }
+
+    // Ember line
+    Item {
+      visible: strip.isFrontierActive
+      width: 2.5
+      height: strip.height + 2
+      x: strip.frontier - width / 2
+      y: -1
 
       Rectangle {
-        visible: strip.elapsed > 0.002 && strip.elapsed < 0.998
-        width: 3
-        height: parent.height
-        x: charFill.width - 1
-        color: root.stainHot
+        anchors.fill: parent
+        radius: 1
+        gradient: Gradient {
+          orientation: Gradient.Horizontal
+          GradientStop { position: 0.0; color: Qt.rgba(root.stainHot.r, root.stainHot.g, root.stainHot.b, 0.25) }
+          GradientStop { position: 0.5; color: root.stainHot }
+          GradientStop { position: 1.0; color: root.foreground }
+        }
+      }
+    }
+
+    // Flame dot
+    Item {
+      id: omFlameContainer
+      visible: strip.showsFlame && strip.isFrontierActive
+      property real flameW: Math.max(8, Math.min(12, strip.height * 0.9))
+      property real flameH: flameW * 1.15
+      width: flameW
+      height: flameH
+      x: strip.frontier - width / 2
+      y: (strip.height - height) / 2
+
+      Canvas {
+        id: omFlameCanvas
+        anchors.fill: parent
+        anchors.margins: -4
+        antialiasing: true
+        onPaint: {
+          var ctx = getContext("2d")
+          ctx.reset()
+          ctx.clearRect(0, 0, width, height)
+          var pad = 4
+          var w = width - 2 * pad
+          var h = height - 2 * pad
+          ctx.save()
+          ctx.translate(pad, pad)
+
+          ctx.beginPath()
+          ctx.moveTo(w * 0.5, 0)
+          ctx.bezierCurveTo(w * -0.05, h * 0.42, w * 0.12, h * 0.8, w * 0.5, h)
+          ctx.bezierCurveTo(w * 0.88, h * 0.8, w * 1.05, h * 0.42, w * 0.5, 0)
+          ctx.closePath()
+
+          var grad = ctx.createRadialGradient(w * 0.5, h * 0.35, 0, w * 0.5, h * 0.5, Math.max(w, h) * 0.65)
+          grad.addColorStop(0.0, "#FFF0C7")
+          grad.addColorStop(0.45, root.stainHot)
+          grad.addColorStop(1.0, root.stainHot)
+
+          ctx.shadowColor = root.stainHot
+          ctx.shadowBlur = 5
+          ctx.fillStyle = grad
+          ctx.fill()
+          ctx.restore()
+        }
+        onWidthChanged: omFlameCanvas.requestPaint()
+        onHeightChanged: omFlameCanvas.requestPaint()
       }
     }
   }
@@ -276,6 +410,7 @@ Panel {
           stripHeight: Style.space(34)
           elapsed: root.dayElapsed
           ticks: 24
+          showsFlame: true
         }
 
         Row {

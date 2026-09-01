@@ -2,6 +2,7 @@
   <qresource prefix="/">
     <file alias="qml/ProgressPanel.qml">../qml/ProgressPanel.qml</file>
     <file alias="qml/journal/Theme.qml">../qml/journal/Theme.qml</file>
+    <file alias="qml/journal/BurnStrip.qml">../qml/journal/BurnStrip.qml</file>
     <file alias="qml/journal/JournalWindow.qml">../qml/journal/JournalWindow.qml</file>
     <file alias="qml/journal/NavColumn.qml">../qml/journal/NavColumn.qml</file>
     <file alias="qml/journal/DayList.qml">../qml/journal/DayList.qml</file>

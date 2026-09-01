@@ -81,6 +81,16 @@ QtObject {
         return Qt.rgba(c.r, c.g, c.b, a)
     }
 
+    function _lerpColor(c1Val, c2Val, t) {
+        var c1 = Qt.color(c1Val)
+        var c2 = Qt.color(c2Val)
+        var r = c1.r + (c2.r - c1.r) * t
+        var g = c1.g + (c2.g - c1.g) * t
+        var b = c1.b + (c2.b - c1.b) * t
+        var a = c1.a + (c2.a - c1.a) * t
+        return Qt.rgba(r, g, b, a)
+    }
+
     function _omarchyPalette(oc) {
         var mode = oc.mode || "dark"
         var isDark = mode !== "light"
@@ -101,6 +111,11 @@ QtObject {
         var green = oc.green || "#9ece6a"
         var emberHiColor = oc.bright_yellow || oc.bright_cyan || oc.bright_blue || accent
 
+        // Calculate candle stain gradient colors for system themes
+        var stainWarm = oc.orange || oc.yellow || accent
+        var autoStain1 = isDark ? _lerpColor(darkBg, stainWarm, 0.18) : _lerpColor(bg, stainWarm, 0.14)
+        var autoStain2 = isDark ? _lerpColor(darkBg, stainWarm, 0.44) : _lerpColor(bg, stainWarm, 0.34)
+
         if (isDark) {
             return {
                 desk: darkerBg,
@@ -119,8 +134,8 @@ QtObject {
                 cinnabarSoft: _rgba(red, 0.14),
                 dai: green,
                 daiSoft: _rgba(green, 0.14),
-                stain1: darkBg,
-                stain2: darkerBg,
+                stain1: oc.stain1 ? oc.stain1 : autoStain1,
+                stain2: oc.stain2 ? oc.stain2 : autoStain2,
                 char1: "#0C0703",
                 sealInk: "#F7E7D2",
                 receipt: lighterBg,
@@ -147,8 +162,8 @@ QtObject {
                 cinnabarSoft: _rgba(red, 0.14),
                 dai: green,
                 daiSoft: _rgba(green, 0.14),
-                stain1: darkBg,
-                stain2: darkerBg,
+                stain1: oc.stain1 ? oc.stain1 : autoStain1,
+                stain2: oc.stain2 ? oc.stain2 : autoStain2,
                 char1: "#191008",
                 sealInk: "#F7E7D2",
                 receipt: lighterBg,
