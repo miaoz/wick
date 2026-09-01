@@ -408,13 +408,27 @@ private struct ItemRowView: View {
             }
 
             // Body editor
-            TextEditor(text: $item.body)
-                .font(PhoneFont.paper(13.5))
-                .lineSpacing(PhoneFont.paperLineSpacing(13.5))
-                .foregroundColor(PhoneTheme.inkPrimary)
-                .scrollContentBackground(.hidden)
-                .frame(minHeight: 56)
-                .onChange(of: item.body) { _ in onChange() }
+            let bodyFont = PhoneFont.paperUIFont(13.5)
+            let bodyLineSpacing = PhoneFont.adaptiveLineSpacing(for: bodyFont)
+
+            PhoneTextEditor(
+                text: $item.body,
+                font: bodyFont,
+                lineSpacing: bodyLineSpacing,
+                minHeight: 56,
+                maxHeight: nil,
+                onChange: onChange
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            .overlay(alignment: .topLeading) {
+                if item.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(L10n.string(.journalBodyPlaceholder, language: language))
+                        .font(PhoneFont.paper(13.5))
+                        .lineSpacing(bodyLineSpacing)
+                        .foregroundColor(PhoneTheme.inkTertiary)
+                        .allowsHitTesting(false)
+                }
+            }
 
             // Images horizontal scroll with tap-to-preview
             if !item.imageFilenames.isEmpty {
