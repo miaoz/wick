@@ -5,7 +5,7 @@
 #include <QVariantList>
 #include <QNetworkAccessManager>
 
-/// Inspector feed: WallStreetCN macro + earnings (same endpoints as macOS).
+/// Inspector feed: WallStreetCN (Chinese) or biquote + Nasdaq (English).
 class MacroCalendarStore : public QObject
 {
     Q_OBJECT
@@ -48,12 +48,17 @@ private:
     void applyAlmanac();
     void parseMacro(const QByteArray &body);
     void parseEarnings(const QByteArray &body);
+    void parseBiquote(const QByteArray &body);
+    void parseNasdaq(const QByteArray &body);
+    bool isEnglish() const;
 
     QNetworkAccessManager m_nam;
     bool m_loading = false;
     bool m_sortImportance = false;
     bool m_weekend = false;
+    bool m_reloadQueued = false;
     int m_pending = 0;
+    int m_generation = 0;
     QString m_error;
     QVariantList m_events;
     QVariantList m_earnings;

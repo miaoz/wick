@@ -23,6 +23,30 @@ enum MacroEventPaging {
 public enum MacroCalendarTab {
     case macro
     case earnings
+
+    /// Display name of the live feed for this tab in `language`.
+    func sourceName(language: AppLanguage) -> String {
+        switch (self, language) {
+        case (_, .chinese):
+            return L10n.string(.calendarSourceWallStreetCN, language: language)
+        case (.macro, .english):
+            return L10n.string(.calendarSourceBiquote, language: language)
+        case (.earnings, .english):
+            return L10n.string(.calendarSourceNasdaq, language: language)
+        }
+    }
+
+    /// Footer / settings attribution, e.g. "宏观数据源 · 华尔街见闻" / "Earnings · Nasdaq".
+    func attribution(language: AppLanguage) -> String {
+        let format: String
+        switch self {
+        case .macro:
+            format = L10n.string(.calendarMacroSourceFormat, language: language)
+        case .earnings:
+            format = L10n.string(.calendarEarningsSourceFormat, language: language)
+        }
+        return String(format: format, sourceName(language: language))
+    }
 }
 
 /// The "printed page" for a single trading-calendar day, drawn in himekuri's「黄历」
@@ -131,7 +155,7 @@ struct MacroDayPageView: View {
 
     private var masthead: some View {
         VStack(spacing: 2 * s) {
-            Text("公历 \(year)年\(month)月\(day)日 · 周\(weekdayName)")
+            Text(gregorianLine)
                 .font(TradingCalendarTheme.mincho(9 * s))
                 .tracking(0.6 * s)
                 .foregroundStyle(TradingCalendarTheme.ink.opacity(0.85))
@@ -172,7 +196,7 @@ struct MacroDayPageView: View {
                     .foregroundStyle(accent)
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
-                Text("第\(dayOfYear)天 · 剩\(daysLeft)天")
+                Text(String(format: L10n.string(.calendarDayProgressFormat, language: language), dayOfYear, daysLeft))
                     .font(TradingCalendarTheme.mincho(6.5 * s))
                     .foregroundStyle(TradingCalendarTheme.dimInk)
             }
@@ -221,7 +245,7 @@ struct MacroDayPageView: View {
 
             Spacer(minLength: 6 * s)
 
-            Text("\(lunarGanzhi)年 · 属\(lunarZodiac)")
+            Text(lunarYearLine)
                 .font(TradingCalendarTheme.mincho(7.5 * s))
                 .foregroundStyle(TradingCalendarTheme.dimInk)
         }
@@ -742,7 +766,7 @@ struct MacroDayPageView: View {
 
     private var footer: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text("宏观数据源 · WallStreetCN")
+            Text(tab.attribution(language: language))
                 .font(TradingCalendarTheme.mincho(6.5 * s))
                 .foregroundStyle(TradingCalendarTheme.faintInk)
             Spacer()
@@ -787,6 +811,36 @@ struct MacroDayPageView: View {
     }
     private var lunarZodiac: String {
         LunarCalendar.zodiac(lunar?.year ?? year)
+    }
+
+    private var gregorianLine: String {
+        switch language {
+        case .chinese:
+            return String(
+                format: L10n.string(.calendarGregorianFormat, language: language),
+                year, month, day, weekdayName
+            )
+        case .english:
+            let formatter = DateFormatter()
+            formatter.locale = language.locale
+            formatter.dateFormat = "EEE, MMM d, yyyy"
+            return formatter.string(from: date)
+        }
+    }
+
+    private var lunarYearLine: String {
+        switch language {
+        case .chinese:
+            return String(
+                format: L10n.string(.calendarLunarYearFormat, language: language),
+                lunarGanzhi, lunarZodiac
+            )
+        case .english:
+            return String(
+                format: L10n.string(.calendarLunarYearFormat, language: language),
+                lunarGanzhi
+            )
+        }
     }
 
     private var weekdayName: String {

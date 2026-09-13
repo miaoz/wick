@@ -68,7 +68,10 @@ struct HomeView: View {
                 }
             }
             .onAppear {
-                calendarStore.loadIfNeeded(for: Date())
+                calendarStore.loadIfNeeded(for: Date(), language: language)
+            }
+            .onChange(of: language) { newLanguage in
+                calendarStore.loadIfNeeded(for: Date(), language: newLanguage)
             }
         }
     }

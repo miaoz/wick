@@ -93,8 +93,8 @@ public struct TradingCalendarRootView: View {
             // Pin the day on top: a pad that is never torn keeps showing this
             // same page tomorrow instead of flipping itself at midnight.
             TearOffState.saveDisplayedDate(currentDate)
-            store.loadIfNeeded(for: currentDate)
-            store.loadIfNeeded(for: nextDate)
+            store.loadIfNeeded(for: currentDate, language: language)
+            store.loadIfNeeded(for: nextDate, language: language)
             TradingCalendarTheme.pnlConvention = envPnlConvention
             refreshPageTexture()
             resetDragState()
@@ -113,7 +113,12 @@ public struct TradingCalendarRootView: View {
             }
         }
         .onChange(of: currentDate) { _ in
-            store.loadIfNeeded(for: nextDate)
+            store.loadIfNeeded(for: nextDate, language: language)
+            refreshPageTexture()
+        }
+        .onChange(of: language) { _ in
+            store.loadIfNeeded(for: currentDate, language: language)
+            store.loadIfNeeded(for: nextDate, language: language)
             refreshPageTexture()
         }
         .onChange(of: currentEvents) { _ in
@@ -171,8 +176,8 @@ public struct TradingCalendarRootView: View {
             TearOffState.saveDisplayedDate(currentDate)
             tornCount = 0
             eventsPage = 0
-            store.loadIfNeeded(for: currentDate)
-            store.loadIfNeeded(for: nextDate)
+            store.loadIfNeeded(for: currentDate, language: language)
+            store.loadIfNeeded(for: nextDate, language: language)
             refreshPageTexture()
         }
         #if os(macOS)

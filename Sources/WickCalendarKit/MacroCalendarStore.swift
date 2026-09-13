@@ -15,8 +15,8 @@ public enum MacroCalendarFormat {
 
 /// `@MainActor` store for the global-macro trading calendar.
 ///
-/// Fetches events per local day from `MacroCalendarClient` (akshare `macro_info_ws`),
-/// keeps them in memory, and persists a JSON cache under
+/// Fetches events per local day from WallStreetCN (Chinese) or biquote + Nasdaq
+/// (English), keeps them in memory, and persists a JSON cache under
 /// `~/Library/Application Support/Wick/MacroCalendarCache/` so past days stay readable offline.
 /// Cached data is shown immediately while a background refresh updates it.
 ///
@@ -50,6 +50,10 @@ public final class MacroCalendarStore: ObservableObject {
     /// Single-flight keys: `"<dayKey>|<feed>"` for in-flight fetches.
     private var inFlight: Set<String> = []
     private let cacheDirectory: URL
+    /// Feed language. Chinese → WallStreetCN; English → biquote + Nasdaq.
+    /// Cache keys are suffixed so a language switch cannot surface the other
+    /// feed's titles.
+    private var language: AppLanguage = .chinese
 
     #if DEBUG
     /// Test seams substituting the network fetches.
@@ -95,8 +99,10 @@ public final class MacroCalendarStore: ObservableObject {
 
     /// Loads a day's events and earnings: seeds from disk cache, then refreshes
     /// whichever feed is stale in the background. Not-expired feeds are left
-    /// untouched (no network).
-    public func loadIfNeeded(for date: Date) {
+    /// untouched (no network). `language` selects WallStreetCN vs the English
+    /// biquote/Nasdaq pair; the default keeps existing call sites on Chinese.
+    public func loadIfNeeded(for date: Date, language: AppLanguage = .chinese) {
+        adoptLanguage(language)
         let key = dayKey(for: date)
         var seededFromCache = false
         if days[key] == nil {
@@ -111,10 +117,10 @@ public final class MacroCalendarStore: ObservableObject {
             seededFromCache = true
         }
         if feedIsStale(.macro, key: key, date: date) {
-            startFetch(.macro, key: key, date: date)
+            startFetch(.macro, key: key, date: date, language: language)
         }
         if feedIsStale(.earnings, key: key, date: date) {
-            startFetch(.earnings, key: key, date: date)
+            startFetch(.earnings, key: key, date: date, language: language)
         }
         if seededFromCache {
             objectWillChange.send()
@@ -122,13 +128,20 @@ public final class MacroCalendarStore: ObservableObject {
     }
 
     /// Explicit refresh of both feeds for a day, bypassing the TTL.
-    public func reload(for date: Date) {
+    public func reload(for date: Date, language: AppLanguage = .chinese) {
+        adoptLanguage(language)
         let key = dayKey(for: date)
         if days[key] == nil {
             days[key] = DayState()
         }
-        startFetch(.macro, key: key, date: date)
-        startFetch(.earnings, key: key, date: date)
+        startFetch(.macro, key: key, date: date, language: language)
+        startFetch(.earnings, key: key, date: date, language: language)
+        objectWillChange.send()
+    }
+
+    private func adoptLanguage(_ language: AppLanguage) {
+        guard language != self.language else { return }
+        self.language = language
         objectWillChange.send()
     }
 
@@ -147,7 +160,7 @@ public final class MacroCalendarStore: ObservableObject {
         return Date().timeIntervalSince(fetchedAt) >= ttl
     }
 
-    private func startFetch(_ feed: Feed, key: String, date: Date) {
+    private func startFetch(_ feed: Feed, key: String, date: Date, language: AppLanguage) {
         let flightKey = "\(key)|\(feed.rawValue)"
         guard !inFlight.contains(flightKey) else { return }
         inFlight.insert(flightKey)
@@ -160,18 +173,18 @@ public final class MacroCalendarStore: ObservableObject {
                     self.objectWillChange.send()
                 }
             }
-            await self?.fetch(feed: feed, key: key, for: date)
+            await self?.fetch(feed: feed, key: key, for: date, language: language)
         }
     }
 
     /// Fetches ONE feed. Success updates that feed's cache and `fetchedAt`;
     /// failure keeps any existing disk cache and only surfaces an error when
     /// there is nothing to show.
-    private func fetch(feed: Feed, key: String, for date: Date) async {
+    private func fetch(feed: Feed, key: String, for date: Date, language: AppLanguage) async {
         do {
             switch feed {
             case .macro:
-                let result = try await fetchMacroEvents(for: date)
+                let result = try await fetchMacroEvents(for: date, language: language)
                 var state = days[key] ?? DayState()
                 state.events = result
                 state.error = nil
@@ -179,7 +192,7 @@ public final class MacroCalendarStore: ObservableObject {
                 days[key] = state
                 writeCache(result, key: key)
             case .earnings:
-                let result = try await fetchEarningsReports(for: date)
+                let result = try await fetchEarningsReports(for: date, language: language)
                 var state = days[key] ?? DayState()
                 state.earnings = result
                 state.earningsError = nil
@@ -201,28 +214,42 @@ public final class MacroCalendarStore: ObservableObject {
         objectWillChange.send()
     }
 
-    private func fetchMacroEvents(for date: Date) async throws -> [MacroCalendarEvent] {
+    private func fetchMacroEvents(for date: Date, language: AppLanguage) async throws -> [MacroCalendarEvent] {
         #if DEBUG
         if let fetcher = Self.eventsFetcher {
             return try await fetcher(date)
         }
         #endif
-        return try await MacroCalendarClient.events(for: date, calendar: MacroCalendarClient.chinaCalendar)
+        switch language {
+        case .chinese:
+            return try await MacroCalendarClient.events(for: date, calendar: MacroCalendarClient.chinaCalendar)
+        case .english:
+            return try await BiquoteMacroCalendarClient.events(for: date, calendar: MacroCalendarClient.chinaCalendar)
+        }
     }
 
-    private func fetchEarningsReports(for date: Date) async throws -> [EarningsReport] {
+    private func fetchEarningsReports(for date: Date, language: AppLanguage) async throws -> [EarningsReport] {
         #if DEBUG
         if let fetcher = Self.earningsFetcher {
             return try await fetcher(date)
         }
         #endif
-        return try await EarningsCalendarClient.reports(for: date, calendar: MacroCalendarClient.chinaCalendar)
+        switch language {
+        case .chinese:
+            return try await EarningsCalendarClient.reports(for: date, calendar: MacroCalendarClient.chinaCalendar)
+        case .english:
+            return try await NasdaqEarningsCalendarClient.reports(for: date, calendar: MacroCalendarClient.chinaCalendar)
+        }
     }
 
     // MARK: - Disk cache
 
     private func dayKey(for date: Date) -> String {
-        JournalDayKey.make(from: date, timeZone: MacroCalendarClient.chinaCalendar.timeZone)
+        let day = JournalDayKey.make(from: date, timeZone: MacroCalendarClient.chinaCalendar.timeZone)
+        switch language {
+        case .chinese: return day
+        case .english: return "\(day).en"
+        }
     }
 
     private func cacheURL(for key: String) -> URL {

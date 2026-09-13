@@ -58,7 +58,7 @@ private struct FlatCalendarView: View {
                     onNextDay: { shiftDate(by: 1) },
                     onToday: {
                         selectedDate = Date()
-                        calendarStore.loadIfNeeded(for: selectedDate)
+                        calendarStore.loadIfNeeded(for: selectedDate, language: language)
                     }
                 )
 
@@ -145,14 +145,20 @@ private struct FlatCalendarView: View {
         }
         .background(PhoneTheme.paper.ignoresSafeArea())
         .onAppear {
-            calendarStore.loadIfNeeded(for: selectedDate)
+            calendarStore.loadIfNeeded(for: selectedDate, language: language)
+        }
+        .onChange(of: language) { newLanguage in
+            calendarStore.loadIfNeeded(for: selectedDate, language: newLanguage)
+        }
+        .onChange(of: selectedDate) { newDate in
+            calendarStore.loadIfNeeded(for: newDate, language: language)
         }
     }
 
     private func shiftDate(by delta: Int) {
         if let newDate = Calendar.current.date(byAdding: .day, value: delta, to: selectedDate) {
             selectedDate = newDate
-            calendarStore.loadIfNeeded(for: selectedDate)
+            calendarStore.loadIfNeeded(for: selectedDate, language: language)
             let gen = UIImpactFeedbackGenerator(style: .light)
             gen.impactOccurred()
         }
@@ -281,10 +287,10 @@ private struct FlatCalendarHeroCard: View {
             HStack(alignment: .center, spacing: 14) {
                 // Left Column: Day count & progress
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(language == .chinese ? "第 \(dayOfYear) 天" : "Day \(dayOfYear)")
+                    Text(String(format: L10n.string(.calendarDayOfYearFormat, language: language), dayOfYear))
                         .font(PhoneFont.paper(12, weight: .medium))
                         .foregroundColor(PhoneTheme.inkSecondary)
-                    Text(language == .chinese ? "余 \(daysLeft) 天" : "\(daysLeft) days left")
+                    Text(String(format: L10n.string(.calendarDaysLeftFormat, language: language), daysLeft))
                         .font(PhoneFont.paper(10.5))
                         .foregroundColor(PhoneTheme.inkTertiary)
                 }

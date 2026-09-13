@@ -170,5 +170,18 @@ final class TimeProgressTests: XCTestCase {
 
         XCTAssertEqual(L10n.string(.weekStartsOnMonday, language: .chinese), "每周从周一开始")
         XCTAssertEqual(L10n.string(.weekStartsOnMonday, language: .english), "Week starts on Monday")
+
+        XCTAssertEqual(
+            String(format: L10n.string(.calendarGregorianFormat, language: .chinese), 2026, 9, 14, "一"),
+            "公历 2026年9月14日 · 周一"
+        )
+        XCTAssertEqual(
+            String(format: L10n.string(.calendarDayProgressFormat, language: .english), 257, 108),
+            "Day 257 · 108 left"
+        )
+        XCTAssertEqual(L10n.string(.calendarMacroSourceFormat, language: .english), "Macro · %@")
+        XCTAssertEqual(L10n.string(.inspectorLuckyLabel, language: .english), "LUCKY")
+        XCTAssertEqual(L10n.string(.inspectorShaLabel, language: .english), "AVOID")
+        XCTAssertEqual(L10n.string(.calendarDataFeedSubtitle, language: .english), "biquote + Nasdaq REST cache")
     }
 }

@@ -126,24 +126,51 @@ Rectangle {
             }
         }
 
-        // 吉神 / 煞方行
+        // 吉神 / 煞方：中文挤在一行，英文各自单独一行以免溢出
         Text {
-            visible: calendarStore && (calendarStore.lucky.length > 0 || calendarStore.sha.length > 0)
+            visible: (appSettings && appSettings.isChinese)
+                     && calendarStore
+                     && (calendarStore.lucky.length > 0 || calendarStore.sha.length > 0)
             Layout.fillWidth: true
             text: {
                 if (!calendarStore)
                     return ""
                 var bits = []
                 if (calendarStore.lucky.length > 0)
-                    bits.push(((appSettings && appSettings.isChinese) ? "吉神 " : "Lucky: ") + calendarStore.lucky)
+                    bits.push("吉神 " + calendarStore.lucky)
                 if (calendarStore.sha.length > 0)
-                    bits.push(((appSettings && appSettings.isChinese) ? "煞方 " : "Sha: ") + calendarStore.sha)
+                    bits.push("煞方 " + calendarStore.sha)
                 return bits.join("  ·  ")
             }
             color: theme.ink3
             font.family: theme.fontPrint
             font.pixelSize: 9
             elide: Text.ElideRight
+        }
+        ColumnLayout {
+            visible: !(appSettings && appSettings.isChinese)
+                     && calendarStore
+                     && (calendarStore.lucky.length > 0 || calendarStore.sha.length > 0)
+            Layout.fillWidth: true
+            spacing: 2
+            Text {
+                visible: calendarStore && calendarStore.lucky.length > 0
+                Layout.fillWidth: true
+                text: calendarStore ? ("LUCKY " + calendarStore.lucky) : ""
+                color: theme.ink3
+                font.family: theme.fontPrint
+                font.pixelSize: 9
+                elide: Text.ElideRight
+            }
+            Text {
+                visible: calendarStore && calendarStore.sha.length > 0
+                Layout.fillWidth: true
+                text: calendarStore ? ("AVOID " + calendarStore.sha) : ""
+                color: theme.ink3
+                font.family: theme.fontPrint
+                font.pixelSize: 9
+                elide: Text.ElideRight
+            }
         }
 
         // 栏目签条：宏观 / 财报 + 排序按钮

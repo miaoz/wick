@@ -240,11 +240,11 @@ struct SettingsView: View {
                     // 4. Trading Calendar & Easter Egg
                     SettingsCard(title: L10n.string(.tradingCalendar, language: language)) {
                         SettingsRow(
-                            title: language == .chinese ? "数据源" : "Data Feed",
-                            subtitle: language == .chinese ? "华尔街见闻 REST 直连缓存" : "WallStreetCN REST cache",
+                            title: L10n.string(.calendarDataFeedTitle, language: language),
+                            subtitle: L10n.string(.calendarDataFeedSubtitle, language: language),
                             isLast: false
                         ) {
-                            Text(language == .chinese ? "实时在线" : "Online")
+                            Text(L10n.string(.calendarDataFeedOnline, language: language))
                                 .font(PhoneFont.paper(11, weight: .medium))
                                 .foregroundColor(PhoneTheme.inkTertiary)
                         }

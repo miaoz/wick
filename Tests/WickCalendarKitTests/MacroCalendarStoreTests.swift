@@ -243,5 +243,27 @@ final class MacroCalendarStoreTests: XCTestCase {
         XCTAssertNotNil(store.errorText(for: Date()))
         XCTAssertFalse(store.isLoading(for: Date()))
     }
+
+    func testEnglishLanguageUsesSeparateCacheFiles() async {
+        MacroCalendarStore.eventsFetcher = { _ in
+            [MacroCalendarEvent(id: "1", time: Date(), country: "US", title: "CPI", importance: 3, actual: 2.1, forecast: 2.0, previous: 2.2, link: nil)]
+        }
+        MacroCalendarStore.earningsFetcher = { _ in [] }
+        MacroCalendarStore.todayTTL = 3600
+        let date = Date()
+
+        store.loadIfNeeded(for: date, language: .chinese)
+        await waitUntil { self.store.events(for: date).count == 1 }
+
+        store.loadIfNeeded(for: date, language: .english)
+        await waitUntil { !self.store.isLoading(for: date) }
+
+        let day = JournalDayKey.make(from: date, timeZone: MacroCalendarClient.chinaCalendar.timeZone)
+        let zh = cacheRoot.appendingPathComponent("\(day).json")
+        let en = cacheRoot.appendingPathComponent("\(day).en.json")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: zh.path), "Chinese cache must keep the unsuffixed name")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: en.path), "English cache must be isolated under .en")
+        XCTAssertEqual(store.events(for: date).count, 1)
+    }
 }
 

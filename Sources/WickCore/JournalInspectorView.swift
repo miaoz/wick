@@ -38,10 +38,13 @@ struct JournalInspectorView: View {
         .frame(maxHeight: .infinity, alignment: .top)
         .background(palette.columnPaper.color)
         .onAppear {
-            calendarStore.loadIfNeeded(for: Date())
+            calendarStore.loadIfNeeded(for: Date(), language: settings.language)
+        }
+        .onChange(of: settings.language) { newLanguage in
+            calendarStore.loadIfNeeded(for: Date(), language: newLanguage)
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
-            calendarStore.loadIfNeeded(for: Date())
+            calendarStore.loadIfNeeded(for: Date(), language: settings.language)
         }
     }
 

@@ -297,6 +297,21 @@ public enum L10n {
         case earningsTimeTbd
         case macroEventsFlipHintTouch
         case calendarShareThisPage
+        case calendarGregorianFormat
+        case calendarDayProgressFormat
+        case calendarDayOfYearFormat
+        case calendarDaysLeftFormat
+        case calendarLunarYearFormat
+        case calendarMacroSourceFormat
+        case calendarEarningsSourceFormat
+        case calendarSourceWallStreetCN
+        case calendarSourceBiquote
+        case calendarSourceNasdaq
+        case calendarDataFeedTitle
+        case calendarDataFeedSubtitle
+        case calendarDataFeedOnline
+        case inspectorLuckyLabel
+        case inspectorShaLabel
 
         // Settings extras
         case appearanceAndLanguageSection
@@ -604,6 +619,21 @@ public enum L10n {
             case .earningsTimeTbd: return "未定"
             case .macroEventsFlipHintTouch: return "轻点翻页 · 点栏目切换"
             case .calendarShareThisPage: return "分享本页…"
+            case .calendarGregorianFormat: return "公历 %d年%d月%d日 · 周%@"
+            case .calendarDayProgressFormat: return "第%d天 · 剩%d天"
+            case .calendarDayOfYearFormat: return "第 %d 天"
+            case .calendarDaysLeftFormat: return "余 %d 天"
+            case .calendarLunarYearFormat: return "%@年 · 属%@"
+            case .calendarMacroSourceFormat: return "宏观数据源 · %@"
+            case .calendarEarningsSourceFormat: return "财报数据源 · %@"
+            case .calendarSourceWallStreetCN: return "华尔街见闻"
+            case .calendarSourceBiquote: return "biquote"
+            case .calendarSourceNasdaq: return "Nasdaq"
+            case .calendarDataFeedTitle: return "数据源"
+            case .calendarDataFeedSubtitle: return "华尔街见闻 REST 直连缓存"
+            case .calendarDataFeedOnline: return "实时在线"
+            case .inspectorLuckyLabel: return "吉神"
+            case .inspectorShaLabel: return "煞方"
 
             case .appearanceAndLanguageSection: return "外观与语言"
             case .journalAndReminderSection: return "日记与提醒"
@@ -912,6 +942,21 @@ public enum L10n {
             case .earningsTimeTbd: return "TBD"
             case .macroEventsFlipHintTouch: return "Tap to flip · tap a tab to switch"
             case .calendarShareThisPage: return "Share This Page…"
+            case .calendarGregorianFormat: return "Gregorian %d-%d-%d · %@"
+            case .calendarDayProgressFormat: return "Day %d · %d left"
+            case .calendarDayOfYearFormat: return "Day %d"
+            case .calendarDaysLeftFormat: return "%d days left"
+            case .calendarLunarYearFormat: return "Year %@"
+            case .calendarMacroSourceFormat: return "Macro · %@"
+            case .calendarEarningsSourceFormat: return "Earnings · %@"
+            case .calendarSourceWallStreetCN: return "WallStreetCN"
+            case .calendarSourceBiquote: return "biquote"
+            case .calendarSourceNasdaq: return "Nasdaq"
+            case .calendarDataFeedTitle: return "Data Feed"
+            case .calendarDataFeedSubtitle: return "biquote + Nasdaq REST cache"
+            case .calendarDataFeedOnline: return "Online"
+            case .inspectorLuckyLabel: return "LUCKY"
+            case .inspectorShaLabel: return "AVOID"
 
             case .appearanceAndLanguageSection: return "Appearance & Language"
             case .journalAndReminderSection: return "Journal & Reminders"

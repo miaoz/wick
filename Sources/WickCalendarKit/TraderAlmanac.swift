@@ -899,35 +899,56 @@ public struct TraderAlmanacMetaRow: View {
     }
 
     public var body: some View {
-        HStack(spacing: 8) {
-            if let lucky = entry.luckyText(language: language) {
-                HStack(spacing: 3) {
-                    Text(language == .chinese ? "吉神" : "LUCKY")
-                        .font(font)
-                        .foregroundStyle(accentColor)
-                    Text(lucky)
-                        .font(font)
-                        .foregroundStyle(textInk)
-                        .lineLimit(1)
+        let lucky = entry.luckyText(language: language)
+        let sha = entry.shaText(language: language)
+        Group {
+            if language == .english {
+                // English labels + phrases overflow a single inspector row.
+                VStack(alignment: .leading, spacing: 2) {
+                    luckyLine(lucky)
+                    shaLine(sha)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: 8) {
+                    luckyLine(lucky)
+                    if lucky != nil && sha != nil {
+                        Text("·")
+                            .font(font)
+                            .foregroundStyle(textInk.opacity(0.5))
+                    }
+                    shaLine(sha)
                 }
             }
+        }
+    }
 
-            if entry.luckyText(language: language) != nil && entry.shaText(language: language) != nil {
-                Text("·")
+    @ViewBuilder
+    private func luckyLine(_ lucky: String?) -> some View {
+        if let lucky {
+            HStack(spacing: 3) {
+                Text(L10n.string(.inspectorLuckyLabel, language: language))
                     .font(font)
-                    .foregroundStyle(textInk.opacity(0.5))
+                    .foregroundStyle(accentColor)
+                Text(lucky)
+                    .font(font)
+                    .foregroundStyle(textInk)
+                    .lineLimit(1)
             }
+        }
+    }
 
-            if let sha = entry.shaText(language: language) {
-                HStack(spacing: 3) {
-                    Text(language == .chinese ? "煞方" : "AVOID")
-                        .font(font)
-                        .foregroundStyle(textInk.opacity(0.7))
-                    Text(sha)
-                        .font(font)
-                        .foregroundStyle(textInk)
-                        .lineLimit(1)
-                }
+    @ViewBuilder
+    private func shaLine(_ sha: String?) -> some View {
+        if let sha {
+            HStack(spacing: 3) {
+                Text(L10n.string(.inspectorShaLabel, language: language))
+                    .font(font)
+                    .foregroundStyle(textInk.opacity(0.7))
+                Text(sha)
+                    .font(font)
+                    .foregroundStyle(textInk)
+                    .lineLimit(1)
             }
         }
     }

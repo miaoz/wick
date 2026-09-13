@@ -54,6 +54,50 @@ std::optional<double> jsonNumber(const QJsonValue &v)
     return ok ? std::optional<double>(d) : std::nullopt;
 }
 
+std::optional<double> nasdaqMoney(const QString &raw)
+{
+    QString s = raw.trimmed();
+    if (s.isEmpty() || s.compare(QLatin1String("N/A"), Qt::CaseInsensitive) == 0)
+        return std::nullopt;
+    s.remove(QLatin1Char('$'));
+    s.remove(QLatin1Char(','));
+    const bool negative = s.startsWith(QLatin1Char('(')) && s.endsWith(QLatin1Char(')'));
+    if (negative)
+        s = s.mid(1, s.size() - 2).trimmed();
+    bool ok = false;
+    const double d = s.toDouble(&ok);
+    if (!ok)
+        return std::nullopt;
+    return negative ? -d : d;
+}
+
+int biquoteImportance(const QJsonValue &v)
+{
+    if (v.isDouble()) {
+        const int n = v.toInt();
+        return qBound(0, n, 3);
+    }
+    const QString s = v.toString().trimmed().toLower();
+    if (s == QLatin1String("high"))
+        return 3;
+    if (s == QLatin1String("medium"))
+        return 2;
+    if (s == QLatin1String("low"))
+        return 1;
+    bool ok = false;
+    const int n = s.toInt(&ok);
+    return ok ? qBound(0, n, 3) : 0;
+}
+
+QPair<QString, QString> biquoteDateQuery(const QDate &day)
+{
+    const auto range = chinaDayRange(day);
+    const QDate from = QDateTime::fromSecsSinceEpoch(range.first, Qt::UTC).date();
+    const QDate last = QDateTime::fromSecsSinceEpoch(range.second - 1, Qt::UTC).date();
+    return {from.toString(QStringLiteral("yyyy-MM-dd")),
+            last.addDays(1).toString(QStringLiteral("yyyy-MM-dd"))};
+}
+
 } // namespace
 
 MacroCalendarStore::MacroCalendarStore(QObject *parent)
@@ -62,10 +106,24 @@ MacroCalendarStore::MacroCalendarStore(QObject *parent)
     applyAlmanac();
     if (auto *app = AppSettings::instance()) {
         connect(app, &AppSettings::languageChanged, this, [this]() {
+            ++m_generation;
+            m_events.clear();
+            m_earnings.clear();
+            m_error.clear();
             applyAlmanac();
             emit changed();
+            if (m_loading)
+                m_reloadQueued = true;
+            else
+                loadIfNeeded();
         });
     }
+}
+
+bool MacroCalendarStore::isEnglish() const
+{
+    auto *app = AppSettings::instance();
+    return app && !app->isChinese();
 }
 
 void MacroCalendarStore::loadIfNeeded()
@@ -107,19 +165,44 @@ void MacroCalendarStore::setSortByImportance(bool on)
 void MacroCalendarStore::fetchMacro()
 {
     const auto range = chinaDayRange(QDate::currentDate());
-    QUrl url(QStringLiteral("https://api-one-wscn.awtmt.com/apiv1/finance/macrodatas"));
+    const int generation = m_generation;
+    const bool english = isEnglish();
+    QUrl url;
     QUrlQuery q;
-    q.addQueryItem(QStringLiteral("start"), QString::number(range.first));
-    q.addQueryItem(QStringLiteral("end"), QString::number(range.second));
+    if (english) {
+        url = QUrl(QStringLiteral("https://biquote.io/api/calendar"));
+        const auto query = biquoteDateQuery(QDate::currentDate());
+        q.addQueryItem(QStringLiteral("from"), query.first);
+        q.addQueryItem(QStringLiteral("to"), query.second);
+    } else {
+        url = QUrl(QStringLiteral("https://api-one-wscn.awtmt.com/apiv1/finance/macrodatas"));
+        q.addQueryItem(QStringLiteral("start"), QString::number(range.first));
+        q.addQueryItem(QStringLiteral("end"), QString::number(range.second));
+    }
     url.setQuery(q);
     QNetworkRequest req(url);
     req.setRawHeader("User-Agent", "Wick/MacroCalendar");
+    req.setRawHeader("Accept", "application/json");
     req.setTransferTimeout(15000);
     QNetworkReply *reply = m_nam.get(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, range]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, range, generation, english]() {
         reply->deleteLater();
+        if (generation != m_generation) {
+            finish();
+            return;
+        }
         if (reply->error() != QNetworkReply::NoError && reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 0) {
-            m_error = QStringLiteral("宏观日历网络错误");
+            m_error = english ? QStringLiteral("Macro calendar network error")
+                              : QStringLiteral("宏观日历网络错误");
+        } else if (english) {
+            parseBiquote(reply->readAll());
+            QVariantList clipped;
+            for (const auto &row : m_events) {
+                const qint64 t = row.toMap().value(QStringLiteral("unix")).toLongLong();
+                if (t >= range.first && t < range.second)
+                    clipped.push_back(row);
+            }
+            m_events = clipped;
         } else {
             parseMacro(reply->readAll());
             QVariantList clipped;
@@ -137,27 +220,46 @@ void MacroCalendarStore::fetchMacro()
 void MacroCalendarStore::fetchEarnings()
 {
     const auto range = chinaDayRange(QDate::currentDate());
-    QUrl url(QStringLiteral("https://api-ddc-wscn.awtmt.com/finance/report/list"));
+    const int generation = m_generation;
+    const bool english = isEnglish();
+    QUrl url;
     QUrlQuery q;
-    q.addQueryItem(QStringLiteral("start"), QString::number(range.first));
-    q.addQueryItem(QStringLiteral("end"), QString::number(range.second));
-    q.addQueryItem(QStringLiteral("country"), QStringLiteral("US,HK,CN"));
+    if (english) {
+        url = QUrl(QStringLiteral("https://api.nasdaq.com/api/calendar/earnings"));
+        q.addQueryItem(QStringLiteral("date"), QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd")));
+    } else {
+        url = QUrl(QStringLiteral("https://api-ddc-wscn.awtmt.com/finance/report/list"));
+        q.addQueryItem(QStringLiteral("start"), QString::number(range.first));
+        q.addQueryItem(QStringLiteral("end"), QString::number(range.second));
+        q.addQueryItem(QStringLiteral("country"), QStringLiteral("US,HK,CN"));
+    }
     url.setQuery(q);
     QNetworkRequest req(url);
     req.setRawHeader("User-Agent", "Wick/MacroCalendar");
+    req.setRawHeader("Accept", "application/json");
     req.setTransferTimeout(15000);
     QNetworkReply *reply = m_nam.get(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, range]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, range, generation, english]() {
         reply->deleteLater();
-        if (reply->error() == QNetworkReply::NoError || reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() >= 200)
-            parseEarnings(reply->readAll());
-        QVariantList clipped;
-        for (const auto &row : m_earnings) {
-            const qint64 t = row.toMap().value(QStringLiteral("unix")).toLongLong();
-            if (t >= range.first && t < range.second)
-                clipped.push_back(row);
+        if (generation != m_generation) {
+            finish();
+            return;
         }
-        m_earnings = clipped;
+        if (reply->error() == QNetworkReply::NoError || reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() >= 200) {
+            if (english)
+                parseNasdaq(reply->readAll());
+            else
+                parseEarnings(reply->readAll());
+        }
+        if (!english) {
+            QVariantList clipped;
+            for (const auto &row : m_earnings) {
+                const qint64 t = row.toMap().value(QStringLiteral("unix")).toLongLong();
+                if (t >= range.first && t < range.second)
+                    clipped.push_back(row);
+            }
+            m_earnings = clipped;
+        }
         finish();
     });
 }
@@ -268,6 +370,104 @@ void MacroCalendarStore::parseEarnings(const QByteArray &body)
     m_earnings = out;
 }
 
+void MacroCalendarStore::parseBiquote(const QByteArray &body)
+{
+    const auto doc = QJsonDocument::fromJson(body);
+    if (!doc.isArray()) {
+        m_events.clear();
+        return;
+    }
+    QVariantList out;
+    QSet<QString> seen;
+    const auto items = doc.array();
+    for (const auto &v : items) {
+        const auto o = v.toObject();
+        const QString timeRaw = o.value(QStringLiteral("time")).toString();
+        const QDateTime dt = QDateTime::fromString(timeRaw, Qt::ISODate);
+        if (!dt.isValid())
+            continue;
+        const QString title = o.value(QStringLiteral("name")).toString().trimmed();
+        if (title.isEmpty())
+            continue;
+        QString id = o.value(QStringLiteral("id")).toString().trimmed();
+        if (id.isEmpty())
+            id = o.value(QStringLiteral("eventId")).toString().trimmed();
+        const qint64 publicDate = dt.toSecsSinceEpoch();
+        if (id.isEmpty())
+            id = QString::number(publicDate) + QLatin1Char('-') + title;
+        const QString country = o.value(QStringLiteral("countryCode")).toString().trimmed();
+        const QString dedup = QString::number(publicDate) + QLatin1Char('|') + country + QLatin1Char('|') + title;
+        if (seen.contains(dedup))
+            continue;
+        seen.insert(dedup);
+
+        QVariantMap row;
+        row.insert(QStringLiteral("id"), id);
+        row.insert(QStringLiteral("time"), dt.toTimeZone(shanghai()).toString(QStringLiteral("HH:mm")));
+        row.insert(QStringLiteral("unix"), publicDate);
+        row.insert(QStringLiteral("country"), country);
+        row.insert(QStringLiteral("title"), title);
+        row.insert(QStringLiteral("importance"), biquoteImportance(o.value(QStringLiteral("importance"))));
+        const auto actual = jsonNumber(o.value(QStringLiteral("actual")));
+        const auto forecast = jsonNumber(o.value(QStringLiteral("forecast")));
+        auto previous = jsonNumber(o.value(QStringLiteral("revisedPrevious")));
+        if (!previous)
+            previous = jsonNumber(o.value(QStringLiteral("previous")));
+        QStringList bits;
+        if (actual)
+            bits << QStringLiteral("Act ") + QString::number(*actual, 'g', 6);
+        if (forecast)
+            bits << QStringLiteral("Fcst ") + QString::number(*forecast, 'g', 6);
+        if (previous)
+            bits << QStringLiteral("Prev ") + QString::number(*previous, 'g', 6);
+        row.insert(QStringLiteral("values"), bits.join(QStringLiteral("  ")));
+        out.push_back(row);
+    }
+    std::sort(out.begin(), out.end(), [](const QVariant &a, const QVariant &b) {
+        return a.toMap().value(QStringLiteral("time")).toString()
+            < b.toMap().value(QStringLiteral("time")).toString();
+    });
+    m_events = out;
+}
+
+void MacroCalendarStore::parseNasdaq(const QByteArray &body)
+{
+    const auto doc = QJsonDocument::fromJson(body);
+    const auto rowsVal = doc.object().value(QStringLiteral("data")).toObject().value(QStringLiteral("rows"));
+    QVariantList out;
+    if (!rowsVal.isArray()) {
+        m_earnings = out;
+        return;
+    }
+    const qint64 ts = chinaDayRange(QDate::currentDate()).first;
+    const auto rows = rowsVal.toArray();
+    for (const auto &rowV : rows) {
+        const auto o = rowV.toObject();
+        QString symbol = o.value(QStringLiteral("symbol")).toString().trimmed();
+        const QString name = o.value(QStringLiteral("name")).toString().trimmed();
+        if (symbol.isEmpty() || name.isEmpty())
+            continue;
+        if (!symbol.endsWith(QLatin1String(".US")))
+            symbol += QLatin1String(".US");
+        const QString call = o.value(QStringLiteral("time")).toString();
+        QString mark = QStringLiteral("TBD");
+        if (call == QLatin1String("time-pre-market"))
+            mark = QStringLiteral("BMO");
+        else if (call == QLatin1String("time-after-hours"))
+            mark = QStringLiteral("AMC");
+        QVariantMap row;
+        row.insert(QStringLiteral("id"), QString::number(ts) + QLatin1Char('-') + symbol);
+        row.insert(QStringLiteral("unix"), ts);
+        row.insert(QStringLiteral("code"), symbol);
+        row.insert(QStringLiteral("company"), name);
+        row.insert(QStringLiteral("mark"), mark);
+        const auto eps = nasdaqMoney(o.value(QStringLiteral("epsForecast")).toString());
+        row.insert(QStringLiteral("eps"), eps ? (QStringLiteral("EPS ") + QString::number(*eps, 'g', 4)) : QString());
+        out.push_back(row);
+    }
+    m_earnings = out;
+}
+
 void MacroCalendarStore::finish()
 {
     if (--m_pending > 0)
@@ -275,6 +475,10 @@ void MacroCalendarStore::finish()
     m_loading = false;
     applyAlmanac();
     emit changed();
+    if (m_reloadQueued) {
+        m_reloadQueued = false;
+        loadIfNeeded();
+    }
 }
 
 void MacroCalendarStore::applyAlmanac()
