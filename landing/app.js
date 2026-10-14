@@ -245,6 +245,7 @@
   }
 
   function submitWish(email) {
+    if (emailInput) emailInput.setCustomValidity("");
     if (submitBtn) submitBtn.disabled = true;
     if (plusoneBtn) plusoneBtn.disabled = true;
     fetch("/api/wishlist", {
@@ -252,14 +253,20 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: email || "" })
     })
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r.ok) throw new Error("Wishlist unavailable");
+        return r.json();
+      })
       .then(function (res) {
+        if (!res || !res.ok) throw new Error("Wishlist not recorded");
         localStorage.setItem(WISH_STORAGE_KEY, "true");
         showDone(res && res.count);
       })
       .catch(function () {
-        localStorage.setItem(WISH_STORAGE_KEY, "true");
-        showDone();
+        if (emailInput) {
+          emailInput.setCustomValidity(lang === "zh" ? "暂时无法提交，请稍后重试" : "Unable to submit. Please try again later.");
+          emailInput.reportValidity();
+        }
       })
       .finally(function () {
         if (submitBtn) submitBtn.disabled = false;

@@ -71,7 +71,7 @@ fi
 TMP_FILE="$(mktemp)"
 trap 'rm -f "$TMP_FILE"' EXIT
 
-R2_BUCKET="${R2_BUCKET:-application-releases}"
+R2_BUCKET="${WISH_R2_BUCKET:-wick-private}"
 OBJECT_KEY="wick/ios_wishlist.json"
 
 HTTP_STATUS=$(curl -s -w "%{http_code}" -o "$TMP_FILE" \

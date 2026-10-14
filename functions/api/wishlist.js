@@ -1,163 +1,126 @@
-// Cloudflare Pages Function: /api/wishlist
-// Reads and updates wishlist statistics (emails & +1 votes) stored in R2 bucket
-// 'application-releases' (WISH_BUCKET).
-//
-// WEB-01 hardening:
-// - Read-modify-write race: writes are conditional on the R2 object's etag and
-//   retried on conflict, so two concurrent votes cannot silently drop one.
-// - Anti-spam: POST only accepts an allow-listed Origin; emails are capped at
-//   the RFC 5321 maximum length.
-// - Privacy: the submitter's IP is NOT stored (was previously recorded without
-//   disclosure).
-// - Errors never echo internal details to the client.
-
+// Wishlist emails belong in the private wick-private bucket, never the release bucket.
 const KEY = "wick/ios_wishlist.json";
-
-// Only the Wick landing site (and its Pages previews) may submit votes.
 const ALLOWED_ORIGINS = new Set([
-  "https://wick.bitfroth.com",
-  "https://wick-ccc.pages.dev",
-  "https://wick.pages.dev"
+  "https://wick.bitfroth.com", "https://wick-ccc.pages.dev", "https://wick.pages.dev"
 ]);
+const MAX_BODY_BYTES = 1024;
+const MAX_DAILY_SUBMISSIONS = 1000;
 
-const MAX_EMAIL_LENGTH = 254; // RFC 5321
-
-function isAllowedOrigin(origin) {
-  if (!origin) return true; // curl / non-browser clients are not CORS-subject
-  try {
-    return ALLOWED_ORIGINS.has(new URL(origin).origin);
-  } catch {
-    return false;
-  }
-}
-
-function json(payload, status = 200, extraHeaders = {}) {
+function json(payload, status = 200, headers = {}) {
   return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      ...extraHeaders
-    }
+    status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...headers }
   });
 }
-
+function stats(data, recorded) {
+  return { ok: true, count: data.votes + data.emails.length,
+    votes: data.votes, emailCount: data.emails.length,
+    ...(recorded === undefined ? {} : { recorded }) };
+}
 async function readData(env) {
-  if (!env.WISH_BUCKET) return { data: { count: 0, votes: 0, emails: [] }, etag: null };
+  if (!env.WISH_BUCKET) throw new Error("Missing private bucket binding");
   const obj = await env.WISH_BUCKET.get(KEY);
-  if (!obj) return { data: { count: 0, votes: 0, emails: [] }, etag: null };
-  try {
-    const data = await obj.json();
-    if (!Array.isArray(data.emails)) data.emails = [];
-    if (typeof data.votes !== "number") data.votes = 0;
-    return { data, etag: obj.httpEtag };
-  } catch {
-    return { data: { count: 0, votes: 0, emails: [] }, etag: obj.httpEtag };
+  if (!obj) return { data: { votes: 0, emails: [] }, etag: null };
+  const data = await obj.json();
+  // Never replace unreadable or malformed stored registrations with an empty list.
+  if (!data || !Array.isArray(data.emails) || !Number.isSafeInteger(data.votes) || data.votes < 0 ||
+      data.emails.some(it => typeof it !== "string" && (!it || typeof it.email !== "string"))) {
+    throw new Error("Invalid stored wishlist");
   }
+  return { data, etag: obj.etag };
 }
-
-/// Conditional write: fails (returns false) when another writer changed the
-/// object since we read it, letting the caller re-read and re-apply.
-async function writeData(env, data, etag) {
-  if (!env.WISH_BUCKET) return true;
-  try {
-    await env.WISH_BUCKET.put(KEY, JSON.stringify(data, null, 2), {
-      httpMetadata: { contentType: "application/json" },
-      ifMatch: etag ?? undefined
-    });
-    return true;
-  } catch (e) {
-    if (e && (e.name === "PreconditionFailed" || e.name === "InvalidRequest")) {
-      return false;
-    }
-    throw e;
-  }
+function cacheKey(request) {
+  const url = new URL(request.url);
+  url.pathname = "/api/wishlist";
+  url.search = "";
+  return new Request(url, { method: "GET" });
 }
-
 export async function onRequestGet(context) {
-  const { env } = context;
   try {
-    const { data } = await readData(env);
-    const emailsCount = data.emails.length;
-    const votesCount = data.votes;
-    return json({
-      ok: true,
-      count: votesCount + emailsCount,
-      votes: votesCount,
-      emailCount: emailsCount
-    }, 200, { "Cache-Control": "no-cache" });
+    const cache = globalThis.caches?.default;
+    const key = cacheKey(context.request);
+    const cached = await cache?.match(key);
+    if (cached) return new Response(cached.body, cached);
+    const { data } = await readData(context.env);
+    const response = json(stats(data), 200, { "Cache-Control": "public, max-age=60" });
+    if (cache) context.waitUntil(cache.put(key, response.clone()).catch(() => {}));
+    return response;
   } catch {
-    return json({ ok: false, error: "Something went wrong" }, 500);
+    return json({ ok: false, error: "Service temporarily unavailable" }, 503);
   }
 }
-
+async function readSubmission(request) {
+  if (request.headers.get("content-type")?.split(";")[0].trim() !== "application/json") {
+    return { error: "JSON required", status: 415 };
+  }
+  if (Number(request.headers.get("content-length")) > MAX_BODY_BYTES) return { error: "Request too large", status: 413 };
+  const reader = request.body?.getReader();
+  if (!reader) return { error: "Invalid request", status: 400 };
+  const chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_BODY_BYTES) {
+        await reader.cancel();
+        return { error: "Request too large", status: 413 };
+      }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+    const body = JSON.parse(new TextDecoder().decode(bytes));
+    if (!body || Array.isArray(body) || typeof body.email !== "string") return { error: "Invalid request", status: 400 };
+    const email = body.email.trim();
+    if (email.length > 254 || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) return { error: "Invalid email", status: 400 };
+    return { email };
+  } catch {
+    return { error: "Invalid request", status: 400 };
+  } finally { reader.releaseLock(); }
+}
 export async function onRequestPost(context) {
   const { request, env } = context;
+  // Keep production writes behind the zone WAF; pages.dev/preview URLs bypass it.
+  if (new URL(request.url).hostname !== "wick.bitfroth.com") return json({ ok: false, error: "Use the production website" }, 403);
+  if (!ALLOWED_ORIGINS.has(request.headers.get("origin"))) return json({ ok: false, error: "Origin not allowed" }, 403);
+  const submission = await readSubmission(request);
+  if (submission.error) return json({ ok: false, error: submission.error }, submission.status);
   try {
-    if (!isAllowedOrigin(request.headers.get("origin"))) {
-      return json({ ok: false, error: "Origin not allowed" }, 403);
-    }
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      body = {};
-    }
-    const rawEmail = typeof body.email === "string" ? body.email.trim() : "";
-    if (rawEmail.length > MAX_EMAIL_LENGTH) {
-      return json({ ok: false, error: "Email too long" }, 400);
-    }
-    const isEmailValid = rawEmail.length > 3 && rawEmail.includes("@") && rawEmail.includes(".");
-
-    // Read-modify-write with a bounded retry on etag conflict.
-    for (let attempt = 0; attempt < 5; attempt++) {
+    // At most three reads/writes on contention; conditional failures return null in R2.
+    for (let attempt = 0; attempt < 3; attempt++) {
       const { data, etag } = await readData(env);
-      let isNew = false;
-      if (isEmailValid) {
-        const lower = rawEmail.toLowerCase();
-        const exists = data.emails.some(
-          (it) => (typeof it === "string" ? it.toLowerCase() : it.email?.toLowerCase()) === lower
-        );
-        if (!exists) {
-          data.emails.push({ email: rawEmail, createdAt: new Date().toISOString() });
-          isNew = true;
-        }
-      } else {
-        data.votes = (data.votes || 0) + 1;
-        isNew = true;
+      const email = submission.email;
+      if (email && data.emails.some(it => (typeof it === "string" ? it : it.email).toLowerCase() === email.toLowerCase())) {
+        return json(stats(data, false));
       }
-
+      const day = new Date().toISOString().slice(0, 10);
+      const daily = data.submissionDay === day ? data.dailySubmissions : 0;
+      if (!Number.isSafeInteger(daily) || daily < 0) throw new Error("Invalid daily counter");
+      if (daily >= MAX_DAILY_SUBMISSIONS) return json({ ok: false, error: "Daily limit reached, please try tomorrow" }, 429, { "Retry-After": "3600" });
+      if (email) data.emails.push({ email, createdAt: new Date().toISOString() });
+      else data.votes++;
       data.updatedAt = new Date().toISOString();
-      data.count = (data.votes || 0) + data.emails.length;
-
-      const written = await writeData(env, data, etag);
-      if (written) {
-        return json({
-          ok: true,
-          count: data.count,
-          votes: data.votes,
-          emailCount: data.emails.length,
-          recorded: isNew
-        });
-      }
-      // Lost the race — loop re-reads and re-applies.
+      data.count = data.votes + data.emails.length;
+      data.submissionDay = day;
+      data.dailySubmissions = daily + 1;
+      const written = await env.WISH_BUCKET.put(KEY, JSON.stringify(data), {
+        httpMetadata: { contentType: "application/json", cacheControl: "no-store" },
+        onlyIf: etag ? { etagMatches: etag } : new Headers({ "If-None-Match": "*" })
+      });
+      if (written !== null) return json(stats(data, true));
     }
-    return json({ ok: false, error: "Busy, please try again" }, 503);
+    return json({ ok: false, error: "Busy, please try again" }, 503, { "Retry-After": "5" });
   } catch {
-    return json({ ok: false, error: "Something went wrong" }, 500);
+    return json({ ok: false, error: "Service temporarily unavailable" }, 503);
   }
 }
-
 export async function onRequestOptions(context) {
-  const { request } = context;
-  const origin = request.headers.get("origin");
-  const headers = {
+  const origin = context.request.headers.get("origin");
+  return new Response(null, { status: 204, headers: {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
-  };
-  if (origin && isAllowedOrigin(origin)) {
-    headers["Access-Control-Allow-Origin"] = origin;
-    headers["Vary"] = "Origin";
-  }
-  return new Response(null, { headers });
+    "Access-Control-Allow-Headers": "Content-Type", "Vary": "Origin",
+    ...(ALLOWED_ORIGINS.has(origin) ? { "Access-Control-Allow-Origin": origin } : {})
+  } });
 }
