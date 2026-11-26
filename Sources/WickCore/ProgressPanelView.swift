@@ -6,20 +6,57 @@ private enum PanelViewLayout {
     static let width: CGFloat = 360
     static let outerPadding: CGFloat = 12
     static let contentPadding: CGFloat = 18
+    static let stackSpacing: CGFloat = 18
+    static let defaultSettingsScrollHeight: CGFloat = 520
+    static let minSettingsScrollHeight: CGFloat = 180
+    static let settingsScreenMargin: CGFloat = 28
+    static let settingsChromeOverhead: CGFloat = 140
 }
 
 struct ProgressPanelView: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var settings: AppSettings
-    @State private var showsSettings: Bool
+    @State private var internalShowsSettings: Bool
+    private let externalShowsSettings: Binding<Bool>?
     /// False until the probe confirms the panel window is really on screen.
     /// MenuBarExtra keeps the SwiftUI scene alive after dismissal, so the
     /// default must be "hidden": the minute ticks and the hero flame's
     /// breathing only run while the panel is visible (P4 + CPU audit).
     @State private var isPanelVisible = false
+    @State private var availableScreenHeight: CGFloat?
 
-    init(showsSettings: Bool = false) {
-        _showsSettings = State(initialValue: showsSettings)
+    private var showsSettings: Bool {
+        get { externalShowsSettings?.wrappedValue ?? internalShowsSettings }
+        nonmutating set {
+            if let externalShowsSettings {
+                externalShowsSettings.wrappedValue = newValue
+            } else {
+                internalShowsSettings = newValue
+            }
+        }
+    }
+
+    init(showsSettings: Bool = false, availableScreenHeight: CGFloat? = nil) {
+        _internalShowsSettings = State(initialValue: showsSettings)
+        _availableScreenHeight = State(initialValue: availableScreenHeight)
+        self.externalShowsSettings = nil
+    }
+
+    init(showsSettings: Binding<Bool>, availableScreenHeight: CGFloat? = nil) {
+        _internalShowsSettings = State(initialValue: showsSettings.wrappedValue)
+        _availableScreenHeight = State(initialValue: availableScreenHeight)
+        self.externalShowsSettings = showsSettings
+    }
+
+    static func desiredSettingsScrollHeight(forAvailableScreenHeight screenHeight: CGFloat?) -> CGFloat {
+        guard let screenHeight else {
+            return PanelViewLayout.defaultSettingsScrollHeight
+        }
+        let maxScroll = max(
+            PanelViewLayout.minSettingsScrollHeight,
+            screenHeight - PanelViewLayout.settingsScreenMargin - PanelViewLayout.settingsChromeOverhead
+        )
+        return min(PanelViewLayout.defaultSettingsScrollHeight, maxScroll)
     }
 
     var body: some View {
@@ -27,47 +64,58 @@ struct ProgressPanelView: View {
         let theme = PanelTheme.resolve(at: Self.minuteDate(), scheme: colorScheme)
         Group {
             if showsSettings {
-                panelChrome(theme: theme) {
-                    settingsHeader(theme: theme, language: language)
-                    settingsDivider(theme: theme)
-                    ScrollView {
-                        SettingsContentView(theme: theme, language: language)
+                panelCard(theme: theme) {
+                    VStack(alignment: .leading, spacing: PanelViewLayout.stackSpacing) {
+                        settingsHeader(theme: theme, language: language)
+                        settingsDivider(theme: theme)
+                        ScrollView {
+                            SettingsContentView(theme: theme, language: language)
+                        }
+                        .scrollIndicators(.never)
+                        .hidesAppKitScrollers()
+                        .frame(
+                            height: Self.desiredSettingsScrollHeight(
+                                forAvailableScreenHeight: availableScreenHeight
+                            )
+                        )
                     }
-                    .scrollIndicators(.never)
-                    .hidesAppKitScrollers()
-                    .frame(idealHeight: 520, maxHeight: 520)
                 }
             } else {
                 // Header buttons stay outside TimelineView: macOS 26 MenuBarExtra
                 // windows drop clicks on controls nested in a periodic timeline.
-                panelChrome(theme: theme) {
-                    progressHeader(theme: theme, language: language)
-                    settingsDivider(theme: theme)
-                    if isPanelVisible {
-                        TimelineView(.periodic(from: .distantPast, by: 60)) { context in
+                panelCard(theme: theme) {
+                    VStack(alignment: .leading, spacing: PanelViewLayout.stackSpacing) {
+                        progressHeader(theme: theme, language: language)
+                        settingsDivider(theme: theme)
+                        if isPanelVisible {
+                            TimelineView(.periodic(from: .distantPast, by: 60)) { context in
+                                slipContent(
+                                    date: Self.minuteTruncated(context.date),
+                                    theme: theme,
+                                    language: language,
+                                    flameAnimates: true
+                                )
+                            }
+                        } else {
                             slipContent(
-                                date: Self.minuteTruncated(context.date),
+                                date: Self.minuteDate(),
                                 theme: theme,
                                 language: language,
-                                flameAnimates: true
+                                flameAnimates: false
                             )
                         }
-                    } else {
-                        slipContent(
-                            date: Self.minuteDate(),
-                            theme: theme,
-                            language: language,
-                            flameAnimates: false
-                        )
                     }
                 }
             }
         }
         .background {
-            WindowVisibilityProbe(isVisible: $isPanelVisible)
-                .frame(width: 0, height: 0)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+            WindowVisibilityProbe(
+                isVisible: $isPanelVisible,
+                availableScreenHeight: $availableScreenHeight
+            )
+            .frame(width: 0, height: 0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
         .onReceive(NotificationCenter.default.publisher(for: .wickMenuBarPanelDidDismiss)) { _ in
             // Belt and braces: an explicit dismissal must silence the flame
@@ -87,50 +135,51 @@ struct ProgressPanelView: View {
     }
 
     /// Paper slip shell. Kept outside the ticking content so settings can reuse
-    /// it without a `TimelineView`. No implicit `.animation` on this root:
-    /// when progress *is* inside TimelineView, macOS 13 `.animation(value:)`
-    /// leaks into those ticks and every layout change glides around.
-    private func panelChrome<Content: View>(
+    /// it without a `TimelineView`. `TornSlipShape` lives in `.background` so it
+    /// never advertises an unbounded vertical ideal/max size to `MenuBarExtra`.
+    /// No implicit `.animation` on this root: when progress *is* inside
+    /// `TimelineView`, macOS 13 `.animation(value:)` leaks into those ticks and
+    /// every layout change glides around.
+    private func panelCard<Content: View>(
         theme: PanelTheme,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        ZStack(alignment: .topLeading) {
-            TornSlipShape()
-                .fill(
-                    LinearGradient(
-                        colors: theme.backgroundColors,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(alignment: .topLeading) {
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [theme.ambientGlow, theme.ambientGlow.opacity(0)],
-                                center: .center,
-                                startRadius: 4,
-                                endRadius: 180
-                            )
-                        )
-                        .frame(width: 220, height: 220)
-                        .offset(x: -40, y: -70)
-                }
-                .overlay {
-                    TornSlipShape()
-                        .stroke(theme.panelStroke, lineWidth: 1)
-                }
-
-            VStack(alignment: .leading, spacing: 18) {
-                content()
-            }
+        content()
             .padding(PanelViewLayout.contentPadding)
-        }
-        .padding(PanelViewLayout.outerPadding)
-        .frame(width: PanelViewLayout.width, alignment: .topLeading)
-        // The progress slip sizes to its contents. Settings must accept the
-        // panel's available height so the scroll viewport stays on screen.
-        .fixedSize(horizontal: false, vertical: !showsSettings)
+            .frame(
+                width: PanelViewLayout.width - PanelViewLayout.outerPadding * 2,
+                alignment: .topLeading
+            )
+            .background {
+                TornSlipShape()
+                    .fill(
+                        LinearGradient(
+                            colors: theme.backgroundColors,
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(alignment: .topLeading) {
+                        Circle()
+                            .fill(
+                                RadialGradient(
+                                    colors: [theme.ambientGlow, theme.ambientGlow.opacity(0)],
+                                    center: .center,
+                                    startRadius: 4,
+                                    endRadius: 180
+                                )
+                            )
+                            .frame(width: 220, height: 220)
+                            .offset(x: -40, y: -70)
+                    }
+                    .overlay {
+                        TornSlipShape()
+                            .stroke(theme.panelStroke, lineWidth: 1)
+                    }
+            }
+            .padding(PanelViewLayout.outerPadding)
+            .frame(width: PanelViewLayout.width, alignment: .topLeading)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     /// Drop seconds so the day-arc palette is stable between minute ticks.
@@ -1174,10 +1223,10 @@ struct PanelTheme {
 
 // MARK: - Panel visibility (P4)
 
-/// Reports whether this view sits in a visible window. MenuBarExtra `.window`
-/// keeps the SwiftUI scene alive after dismiss; unmounting `TimelineView` and
-/// the hero flame when `isVisible` goes false stops the minute tick and the
-/// flame loop.
+/// Reports whether this view sits in a visible window and the current screen's
+/// visible height. MenuBarExtra `.window` keeps the SwiftUI scene alive after
+/// dismiss; unmounting `TimelineView` and the hero flame when `isVisible` goes
+/// false stops the minute tick and the flame loop.
 ///
 /// Both `isVisible` and `occlusionState` are watched and the verdict is
 /// recomputed from the window: on Sequoia a dismissed MenuBarExtra panel can
@@ -1185,15 +1234,18 @@ struct PanelTheme {
 /// `.visible` (the audit sample caught AppKit still laying it out every frame).
 private struct WindowVisibilityProbe: NSViewRepresentable {
     @Binding var isVisible: Bool
+    @Binding var availableScreenHeight: CGFloat?
 
     func makeNSView(context: Context) -> ProbeView {
         let view = ProbeView()
         view.onChange = { isVisible = $0 }
+        view.onScreenHeightChange = { availableScreenHeight = $0 }
         return view
     }
 
     func updateNSView(_ nsView: ProbeView, context: Context) {
         nsView.onChange = { isVisible = $0 }
+        nsView.onScreenHeightChange = { availableScreenHeight = $0 }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: ProbeView, context: Context) -> CGSize? {
@@ -1202,16 +1254,21 @@ private struct WindowVisibilityProbe: NSViewRepresentable {
 
     final class ProbeView: NSView {
         var onChange: ((Bool) -> Void)?
+        var onScreenHeightChange: ((CGFloat?) -> Void)?
         private var observations: [NSKeyValueObservation] = []
         private var lastReported: Bool?
+        private var lastReportedScreenHeight: CGFloat?
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             observations.removeAll()
+            NotificationCenter.default.removeObserver(self)
             guard let window else {
-                report(false)
+                DispatchQueue.main.async { [weak self] in
+                    self?.syncFromWindow()
+                }
                 return
             }
             observations.append(window.observe(\.isVisible, options: [.initial]) { [weak self] _, _ in
@@ -1220,20 +1277,53 @@ private struct WindowVisibilityProbe: NSViewRepresentable {
             observations.append(window.observe(\.occlusionState) { [weak self] _, _ in
                 DispatchQueue.main.async { self?.syncFromWindow() }
             })
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(screenParametersDidChange(_:)),
+                name: NSWindow.didChangeScreenNotification,
+                object: window
+            )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(screenParametersDidChange(_:)),
+                name: NSApplication.didChangeScreenParametersNotification,
+                object: nil
+            )
+        }
+
+        @objc private func screenParametersDidChange(_ notification: Notification) {
+            DispatchQueue.main.async { [weak self] in
+                self?.syncFromWindow()
+            }
         }
 
         private func syncFromWindow() {
             guard let window else {
                 report(false)
+                reportScreenHeight(nil)
                 return
             }
             report(window.isVisible && window.occlusionState.contains(.visible))
+            let screenHeight = window.screen?.visibleFrame.height
+            reportScreenHeight(screenHeight.flatMap { $0 > 300 ? $0 : nil })
         }
 
         private func report(_ visible: Bool) {
             guard lastReported != visible else { return }
             lastReported = visible
             onChange?(visible)
+        }
+
+        private func reportScreenHeight(_ height: CGFloat?) {
+            switch (lastReportedScreenHeight, height) {
+            case (nil, nil):
+                return
+            case let (lhs?, rhs?) where abs(lhs - rhs) <= 0.5:
+                return
+            default:
+                lastReportedScreenHeight = height
+                onScreenHeightChange?(height)
+            }
         }
     }
 }

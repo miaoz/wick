@@ -18,6 +18,7 @@ MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 ICON_FILE="$ROOT_DIR/assets/AppIcon.icns"
 SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
 ARM64_SCRATCH="$ROOT_DIR/.build/arm64"
 X86_64_SCRATCH="$ROOT_DIR/.build/x86_64"
 UNIVERSAL_DIR="$ROOT_DIR/.build/universal/release"
@@ -47,7 +48,11 @@ build_arch() {
         --product "$APP_NAME" \
         --scratch-path "$scratch" \
         --triple "$triple" \
-        --sdk "$SDKROOT"
+        --sdk "$SDKROOT" \
+        -Xlinker -platform_version \
+        -Xlinker macos \
+        -Xlinker "$MIN_SYSTEM_VERSION" \
+        -Xlinker "$SDK_VERSION"
 }
 
 build_arch arm64 "$ARM64_SCRATCH"
