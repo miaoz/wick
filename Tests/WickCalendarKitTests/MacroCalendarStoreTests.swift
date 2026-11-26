@@ -24,6 +24,22 @@ final class MacroCalendarStoreTests: XCTestCase {
     private var cacheRoot: URL!
     private var store: MacroCalendarStore!
 
+    func testFeedDateMatchesBrowsedLocalDayAcrossMonthBoundary() throws {
+        var local = Calendar(identifier: .gregorian)
+        local.timeZone = try XCTUnwrap(TimeZone(identifier: "Pacific/Auckland"))
+        let december = try XCTUnwrap(local.date(from: DateComponents(year: 2026, month: 12, day: 1)))
+        let november = try XCTUnwrap(local.date(byAdding: .day, value: -1, to: december))
+        let next = try XCTUnwrap(local.date(byAdding: .day, value: 1, to: november))
+
+        for day in [november, next] {
+            let feedDay = MacroCalendarStore.feedDate(forLocalDay: day, timeZone: local.timeZone)
+            XCTAssertEqual(
+                JournalDayKey.make(from: feedDay, timeZone: MacroCalendarClient.chinaCalendar.timeZone),
+                JournalDayKey.make(from: day, timeZone: local.timeZone)
+            )
+        }
+    }
+
     override func setUp() async throws {
         cacheRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("WickCalendarStore-\(UUID().uuidString)", isDirectory: true)

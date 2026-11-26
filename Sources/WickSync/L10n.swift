@@ -264,6 +264,8 @@ public enum L10n {
 
         // Trading calendar
         case tradingCalendar
+        case calendarPreviousDay
+        case calendarNextDay
         case macroEventsSection
         case macroLoading
         case macroLoadFailed
@@ -586,6 +588,8 @@ public enum L10n {
             case .copied: return "已复制"
 
             case .tradingCalendar: return "交易日历"
+            case .calendarPreviousDay: return "前一天"
+            case .calendarNextDay: return "后一天"
             case .macroEventsSection: return "宏观"
             case .macroLoading: return "加载中…"
             case .macroLoadFailed: return "加载失败"
@@ -909,6 +913,8 @@ public enum L10n {
             case .copied: return "Copied"
 
             case .tradingCalendar: return "Trading Calendar"
+            case .calendarPreviousDay: return "Previous day"
+            case .calendarNextDay: return "Next day"
             case .macroEventsSection: return "Macro Events"
             case .macroLoading: return "Loading…"
             case .macroLoadFailed: return "Failed to load"

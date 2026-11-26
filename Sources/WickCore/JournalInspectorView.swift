@@ -1,18 +1,21 @@
 import SwiftUI
 import WickCalendarKit
 
-// MARK: - Inspector · 右栏检查器(今日事件 + 盈亏月历)
+// MARK: - Journal inspector
 
-/// The main window's fourth column (⌥⌘0). Top half: today's macro events /
+/// The main window's fourth column (⌥⌘0). Top half: the selected day's macro events /
 /// earnings printed in the almanac's ink-and-cinnabar language (no dark room,
 /// no tear — the physical pad is the easter egg). Bottom half: the month's
 /// realized-PnL calendar. Only exists when the physical-calendar easter egg
 /// is off; when it's on, the PnL calendar moves to the sidebar top instead.
+@MainActor
 struct JournalInspectorView: View {
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.wickPalette) private var palette
     @ObservedObject private var calendarStore = MacroCalendarStore.shared
 
+    @State private var today = Calendar.current.startOfDay(for: Date())
+    @State private var browsedDay: Date?
     @State private var eventsCollapsed = false
     @State private var pnlCollapsed = false
     @State private var tab: InspectorTab = .macro
@@ -23,6 +26,12 @@ struct JournalInspectorView: View {
     private enum InspectorTab {
         case macro
         case earnings
+    }
+
+    private var displayedDay: Date { browsedDay ?? today }
+
+    private var feedDay: Date {
+        MacroCalendarStore.feedDate(forLocalDay: displayedDay)
     }
 
     var body: some View {
@@ -38,17 +47,23 @@ struct JournalInspectorView: View {
         .frame(maxHeight: .infinity, alignment: .top)
         .background(palette.columnPaper.color)
         .onAppear {
-            calendarStore.loadIfNeeded(for: Date(), language: settings.language)
+            today = Calendar.current.startOfDay(for: Date())
+            calendarStore.loadIfNeeded(for: feedDay, language: settings.language)
+        }
+        .onChange(of: displayedDay) { _ in
+            expandedMacroEventIDs.removeAll()
+            expandedEarningsIDs.removeAll()
+            calendarStore.loadIfNeeded(for: feedDay, language: settings.language)
         }
         .onChange(of: settings.language) { newLanguage in
-            calendarStore.loadIfNeeded(for: Date(), language: newLanguage)
+            calendarStore.loadIfNeeded(for: feedDay, language: newLanguage)
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
-            calendarStore.loadIfNeeded(for: Date(), language: settings.language)
+            today = Calendar.current.startOfDay(for: Date())
         }
     }
 
-    // MARK: 今日事件
+    // MARK: - Trading calendar
 
     private var eventsSection: some View {
         VStack(spacing: 0) {
@@ -60,38 +75,32 @@ struct JournalInspectorView: View {
 
             if !eventsCollapsed {
                 VStack(alignment: .leading, spacing: 8) {
-                    let entry = TraderAlmanac.entry(for: Date(), events: calendarStore.events(for: Date()))
+                    let entry = TraderAlmanac.entry(for: displayedDay, events: calendarStore.events(for: feedDay))
 
-                    // 报头:大日期 + 农历 + 右上角朱砂方印(方案 A)。
-                    HStack(alignment: .center, spacing: 8) {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(inspectorBigDate)
-                                .font(AppFont.ui(24, weight: .black, design: .serif))
-                                .foregroundStyle(palette.textPrimary.color)
-                            if let lunar = LunarLine.string(for: Date()) {
-                                Text(lunar)
-                                    .font(AppFont.paper(10))
-                                    .foregroundStyle(palette.textSecondary.color)
-                                    .lineLimit(1)
-                            }
-                        }
-                        Spacer(minLength: 4)
-                        if let seal = entry.sealText(language: settings.language) {
-                            TraderAlmanacSealBadge(text: seal, accent: palette.pnlUp.color, scale: 1.1, angle: -3)
-                        }
+                    HStack(spacing: 0) {
+                        dateHeading
+                        Spacer(minLength: 6)
+                        dayButton(by: -1)
+                        dayButton(by: 1)
                     }
 
                     // 宜忌双行舒适排布:朱砂「宜」/ 烟墨「忌」小方印 + 宋体小字(秉烛 §03)。
                     VStack(alignment: .leading, spacing: 5) {
-                        TraderYiJiChip(
-                            mark: L10n.string(.inspectorYiLabel, language: settings.language),
-                            text: entry.yiText(language: settings.language),
-                            markBackground: palette.pnlUp.color,
-                            markInk: Color(red: 0.98, green: 0.92, blue: 0.85),
-                            textInk: palette.textSecondary.color,
-                            markFont: AppFont.paper(8.5, weight: .bold),
-                            textFont: AppFont.paper(9.5)
-                        )
+                        HStack(spacing: 6) {
+                            TraderYiJiChip(
+                                mark: L10n.string(.inspectorYiLabel, language: settings.language),
+                                text: entry.yiText(language: settings.language),
+                                markBackground: palette.pnlUp.color,
+                                markInk: Color(red: 0.98, green: 0.92, blue: 0.85),
+                                textInk: palette.textSecondary.color,
+                                markFont: AppFont.paper(8.5, weight: .bold),
+                                textFont: AppFont.paper(9.5)
+                            )
+                            Spacer(minLength: 0)
+                            if let seal = entry.sealText(language: settings.language) {
+                                TraderAlmanacSealBadge(text: seal, accent: palette.pnlUp.color, scale: 1.1, angle: -3)
+                            }
+                        }
 
                         TraderYiJiChip(
                             mark: L10n.string(.inspectorJiLabel, language: settings.language),
@@ -139,13 +148,52 @@ struct JournalInspectorView: View {
         }
     }
 
+    private var dateHeading: some View {
+        let date = Text(inspectorBigDate)
+            .font(AppFont.ui(24, weight: .black, design: .serif))
+            .foregroundStyle(palette.textPrimary.color)
+        let lunar = LunarLine.string(for: displayedDay).map {
+            Text($0)
+                .font(AppFont.paper(10))
+                .foregroundStyle(palette.textSecondary.color)
+        }
+        return ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                date
+                lunar
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                date
+                lunar
+            }
+        }
+    }
+
+    private func dayButton(by days: Int) -> some View {
+        let title = L10n.string(days < 0 ? .calendarPreviousDay : .calendarNextDay, language: settings.language)
+        return Button {
+            let calendar = Calendar.current
+            guard let day = calendar.date(byAdding: .day, value: days, to: displayedDay) else { return }
+            browsedDay = calendar.isDate(day, inSameDayAs: today) ? nil : day
+        } label: {
+            Image(systemName: days < 0 ? "chevron.left" : "chevron.right")
+                .font(AppFont.ui(11, weight: .semibold))
+                .foregroundStyle(palette.textSecondary.color)
+                .frame(width: 24, height: 28, alignment: .trailing)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .help(title)
+    }
+
     private var weekdayStamp: String {
-        Date().formatted(.dateTime.weekday(.abbreviated).locale(settings.locale))
+        displayedDay.formatted(.dateTime.weekday(.abbreviated).locale(settings.locale))
     }
 
     /// 检查器大日期:「8月21日」/ "Aug 21",跟随 App 语言。
     private var inspectorBigDate: String {
-        WickDateFormat.string(from: Date(), template: "MMMd", locale: settings.language.locale)
+        WickDateFormat.string(from: displayedDay, template: "MMMd", locale: settings.language.locale)
     }
 
     /// 宜忌小印:白文小方章(朱砂/烟墨)+ 宋体短语。
@@ -215,7 +263,7 @@ struct JournalInspectorView: View {
 
     @ViewBuilder
     private var rowsContent: some View {
-        if calendarStore.isLoading(for: Date()) {
+        if calendarStore.isLoading(for: feedDay) {
             Text(L10n.string(.macroLoading, language: settings.language))
                 .font(AppFont.preset(.caption))
                 .foregroundStyle(palette.textTertiary.color)
@@ -233,7 +281,7 @@ struct JournalInspectorView: View {
     }
 
     private func macroRows(limit: Int?) -> some View {
-        let rawEvents = calendarStore.events(for: Date())
+        let rawEvents = calendarStore.events(for: feedDay)
         let events = rawEvents.sorted(by: sortOrder)
         return Group {
             if events.isEmpty {
@@ -300,7 +348,7 @@ struct JournalInspectorView: View {
     }
 
     private func earningsRows(limit: Int?) -> some View {
-        let reports = calendarStore.earnings(for: Date())
+        let reports = calendarStore.earnings(for: feedDay)
         return Group {
             if reports.isEmpty {
                 idleChop
@@ -359,7 +407,7 @@ struct JournalInspectorView: View {
 
     /// 闲日章:周末「休市」/ 工作日「本日无事」(秉烛 §06)。
     private var idleChop: some View {
-        let isWeekend = Calendar.current.isDateInWeekend(Date())
+        let isWeekend = Calendar.current.isDateInWeekend(displayedDay)
         let text = L10n.string(isWeekend ? .calendarIdleWeekend : .calendarIdleWeekday, language: settings.language)
         return Text(text)
             .font(AppFont.paper(11, weight: .bold))

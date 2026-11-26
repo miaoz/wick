@@ -75,6 +75,15 @@ public final class MacroCalendarStore: ObservableObject {
         try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
     }
 
+    /// Matches a displayed civil day to the same year, month and day in the feed's time zone.
+    public static func feedDate(forLocalDay date: Date, timeZone: TimeZone = .current) -> Date {
+        let feedCalendar = MacroCalendarClient.chinaCalendar
+        var localCalendar = feedCalendar
+        localCalendar.timeZone = timeZone
+        let day = localCalendar.dateComponents([.year, .month, .day], from: date)
+        return feedCalendar.date(from: day) ?? date
+    }
+
     public func events(for date: Date) -> [MacroCalendarEvent] {
         days[dayKey(for: date)]?.events ?? []
     }
