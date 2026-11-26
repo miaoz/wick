@@ -35,7 +35,7 @@ struct ProgressPanelView: View {
                     }
                     .scrollIndicators(.never)
                     .hidesAppKitScrollers()
-                    .frame(maxHeight: 520)
+                    .frame(idealHeight: 520, maxHeight: 520)
                 }
             } else {
                 // Header buttons stay outside TimelineView: macOS 26 MenuBarExtra
@@ -128,7 +128,9 @@ struct ProgressPanelView: View {
         }
         .padding(PanelViewLayout.outerPadding)
         .frame(width: PanelViewLayout.width, alignment: .topLeading)
-        .fixedSize(horizontal: false, vertical: true)
+        // The progress slip sizes to its contents. Settings must accept the
+        // panel's available height so the scroll viewport stays on screen.
+        .fixedSize(horizontal: false, vertical: !showsSettings)
     }
 
     /// Drop seconds so the day-arc palette is stable between minute ticks.
