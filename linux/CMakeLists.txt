@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 # Prefer Qt 6.8 (Debian 13 / Omarchy). 6.4 is the floor if 6.8 is not findable.
-project(wick VERSION 1.10.33 LANGUAGES C CXX)
+project(wick VERSION 1.10.36 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

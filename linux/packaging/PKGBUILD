@@ -1,7 +1,7 @@
 # Maintainer: miaoz
 # Skeleton for Omarchy / Arch. Build from the linux/ tree (parent of this file).
 pkgname=wick
-pkgver=1.10.33
+pkgver=1.10.36
 pkgrel=1
 pkgdesc="Wick for Linux"
 arch=('x86_64' 'aarch64')
